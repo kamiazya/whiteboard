@@ -352,3 +352,82 @@ fn a_query_at_each_cap_is_read_and_one_past_it_refused() {
     ]);
     assert_eq!(ask(&content)[0], json!("ok"));
 }
+
+fn row(id: &str, frame: bool, x: f64, y: f64, w: f64, h: f64) -> Json {
+    s(vec![json!(id), json!(frame), f(x), f(y), f(w), f(h)])
+}
+
+fn tidy(nodes: Vec<Json>, extra: &[(&str, Json)]) -> Json {
+    let mut fields = vec![("query", json!("tidy")), ("nodes", s(nodes)), ("locked", s(vec![]))];
+    for (key, value) in extra {
+        fields.retain(|(name, _)| name != key);
+        fields.push((key, value.clone()));
+    }
+    ask(&m(&fields))
+}
+
+#[test]
+fn a_tidy_answers_the_boxes_it_moves_and_a_frame_that_grew_carries_its_size() {
+    // Two boxes 3px off one row: the second snaps to the first's top.
+    let board =
+        vec![row("a", false, 0.0, 0.0, 100.0, 40.0), row("b", false, 200.0, 3.0, 100.0, 40.0)];
+    assert_eq!(tidy(board.clone(), &[]), json!(["ok", ["b", hex(200.0), hex(0.0)]]));
+    // With that box locked it is the row, and the other joins it.
+    let locked = tidy(board.clone(), &[("locked", s(vec![json!("b")]))]);
+    assert_eq!(locked, json!(["ok", ["a", hex(0.0), hex(3.0)]]));
+    // A scope that names neither moves nothing; edges may name free ends.
+    assert_eq!(tidy(board.clone(), &[("scope", s(vec![json!("zz")]))]), json!(["ok"]));
+    let edge = s(vec![json!("a"), json!(null)]);
+    assert_eq!(tidy(board, &[("edges", s(vec![edge]))])[0], json!("ok"));
+    // A frame too small for the member it holds grows to hold it.
+    let grown = tidy(
+        vec![row("f", true, 0.0, 0.0, 100.0, 100.0), row("m", false, 10.0, 10.0, 90.0, 50.0)],
+        &[],
+    );
+    let moved = grown.as_array().cloned().unwrap_or_default();
+    assert!(
+        moved.iter().any(|row| row[0] == json!("f") && row.as_array().map(Vec::len) == Some(5))
+    );
+}
+
+#[test]
+fn a_tidy_past_its_caps_or_over_a_box_it_cannot_size_is_refused() {
+    let many = |n: usize| {
+        (0..n).map(|i| row(&format!("n{i}"), false, 0.0, 0.0, 1.0, 1.0)).collect::<Vec<_>>()
+    };
+    assert_eq!(tidy(many(MAX_ELEMENTS + 1), &[]), refused("input-too-large", "too-many-elements"));
+    let ids = |n: usize| s((0..n).map(|i| json!(format!("n{i}"))).collect());
+    // A board at the cap is answered: boxes in a row, clear of each other.
+    let spread: Vec<Json> = (0..MAX_ELEMENTS)
+        .map(|i| {
+            row(
+                &format!("n{i}"),
+                false,
+                400.0 * f64::from(u16::try_from(i).unwrap_or(0)),
+                0.0,
+                100.0,
+                40.0,
+            )
+        })
+        .collect();
+    assert_eq!(tidy(spread, &[("locked", ids(MAX_ELEMENTS))]), json!(["ok"]));
+    let pair = many(2);
+    assert_eq!(
+        tidy(pair.clone(), &[("locked", ids(MAX_ELEMENTS + 1))]),
+        refused("input-too-large", "too-many-elements")
+    );
+    assert_eq!(
+        tidy(pair.clone(), &[("scope", ids(MAX_ELEMENTS + 1))]),
+        refused("input-too-large", "too-many-elements")
+    );
+    let edge = s(vec![json!(null), json!(null)]);
+    assert_eq!(
+        tidy(pair.clone(), &[("edges", s(vec![edge; MAX_ELEMENTS + 1]))]),
+        refused("input-too-large", "too-many-elements")
+    );
+    let nan = vec![row("a", false, 0.0, 0.0, 1.0, 1.0), row("b", false, f64::NAN, 0.0, 1.0, 1.0)];
+    assert_eq!(tidy(nan, &[]), refused("malformed", "non-finite"));
+    // A row that is not six fields is no box.
+    let short = s(vec![json!("a"), json!(false)]);
+    assert_eq!(tidy(vec![short], &[]), refused("malformed", "request"));
+}

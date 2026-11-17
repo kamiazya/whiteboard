@@ -2,8 +2,11 @@ import {
   constantRatioMeasureText,
   type LayoutCore,
   type QueryRequest,
+  tidyBoxes,
+  tidyNodes,
 } from '@kamiazya/whiteboard-canvas-render'
 import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { loadDocument } from '../document-io.js'
@@ -102,5 +105,60 @@ describe('wb_canvas_edit sizing through the layout core', () => {
       ops: [{ op: 'node.add', node: { id: 'g', type: 'group', label: 'frame' } }],
     })
     expect(loads()).toBe(0)
+  })
+})
+
+describe('wb_canvas_edit tidy through the layout core', () => {
+  const board = {
+    nodes: [
+      textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'a' }),
+      textNode({ id: 'b', x: 200, y: 3, width: 100, height: 40, text: 'b' }),
+    ],
+    edges: [],
+  }
+  const tidyOp = [{ op: 'tidy' }] as const
+
+  it('applies the moves the core answers and asks it once, with no measurer needed', async () => {
+    const asked: QueryRequest[] = []
+    const core = fakeLayoutCore({
+      query: {
+        layoutQuery: (request) => {
+          asked.push(request)
+          return { moves: [['b', 200, 0]] }
+        },
+      },
+    })
+    const store = new FakeDocumentStore()
+    const deps = { ...makeDeps(store), layoutCore: async () => core }
+    await seedCanvas(store, board)
+    await createCanvasEditTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [...tidyOp],
+    })
+    const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes.map((n) => [n.id, n.x, n.y])).toEqual([
+      ['a', 0, 0],
+      ['b', 200, 0],
+    ])
+    expect(asked).toHaveLength(1)
+    expect(asked[0]).toMatchObject({ query: 'tidy', locked: [] })
+  })
+
+  it('lands the moves the real core answers on the stored canvas', async () => {
+    const store = new FakeDocumentStore()
+    const deps = { ...makeDeps(store), layoutCore: async () => testLayoutCore() }
+    await seedCanvas(store, board)
+    await createCanvasEditTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [...tidyOp],
+    })
+    const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const direct = tidyNodes(tidyBoxes(board.nodes), { core: testLayoutCore() })
+    expect(direct).toEqual([{ id: 'b', x: 200, y: 0 }])
+    expect(canvas.nodes.find((n) => n.id === 'b')?.y).toBe(0)
   })
 })

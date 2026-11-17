@@ -17,6 +17,7 @@ import type { MutableRefObject } from 'react'
 import { announceOnCanvas } from '../../../lib/canvas-announcer.js'
 import { hasClipboardFragment } from '../../../lib/clipboard-store.js'
 import type { FileRefOption } from '../../../lib/link-entries.js'
+import { requireLayoutCore } from '../../../lib/spatial/require-layout-core.js'
 import type { Point } from '../../../lib/spatial/viewport.js'
 import type { ContextMenuItem } from '../../ui/ContextMenu.js'
 import { tidyMessage } from '../canvas-announcement-text.js'
@@ -117,7 +118,11 @@ export function canvasMenuItems({
       icon: <Sparkles />,
       onSelect: () => {
         const { nodes, edges } = canvasRef.current
-        const moves = tidyNodes(tidyBoxes(nodes), { locked: isLocked, edges })
+        const moves = tidyNodes(tidyBoxes(nodes), {
+          core: requireLayoutCore(),
+          locked: isLocked,
+          edges,
+        })
         applyBoxMoves(moves)
         announceOnCanvas(tidyMessage(nodes, moves))
       },

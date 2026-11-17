@@ -11,6 +11,7 @@ use whiteboard_det::math::{compare_numbers, js_round};
 
 use super::axis::{Axis, round_to_grid};
 use super::units::{TIDY_BAND_PX, Unit, overlaps_with_margin};
+use crate::order::positions;
 
 /// Separation. A centre or far-edge snap is cosmetic and separation is not, so
 /// one that would put a unit inside a neighbour's margin yields. Without this
@@ -166,9 +167,8 @@ pub(super) fn align_bands(units: &mut [Unit], ax: Axis, origin: f64, floor: Opti
 /// grid), so a snapped unit sitting exactly one band from a neighbour must not
 /// re-join it on a later pass.
 fn bands_by(units: &[Unit], anchor: &dyn Fn(&Unit) -> f64) -> Vec<Vec<usize>> {
-    let mut order: Vec<usize> = (0..units.len()).collect();
     let at = |i: usize| units.get(i).map_or(f64::NAN, anchor);
-    order.sort_by(|&a, &b| compare_numbers(at(a), at(b)));
+    let order = positions(units.len(), &|a, b| compare_numbers(at(a), at(b)));
     let mut bands: Vec<Vec<usize>> = Vec::new();
     let mut band: Vec<usize> = Vec::new();
     let mut band_first = 0.0;

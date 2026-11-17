@@ -2,9 +2,10 @@
 // open: which frames scope lets grow, every anchor the margin's yield reads
 // on both axes, what makes a hub swap, and who a unit's root claims.
 import { describe, expect, it } from 'vitest'
+import { tidyNodes } from './test-utils/tidy-core.js'
 import type { TidyNode } from './tidy.js'
-import { tidyNodes } from './tidy.js'
-import { TIDY_MARGIN_PX } from './tidy-units.js'
+
+const TIDY_MARGIN_PX = 32
 
 const box = (
   id: string,

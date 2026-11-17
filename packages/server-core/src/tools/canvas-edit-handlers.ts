@@ -738,7 +738,11 @@ const CANVAS_EDIT_HANDLERS: {
       op.within !== undefined
         ? ctx.s.nodeTargets(index, op.op, { within: op.within })
         : op.scope?.flatMap((id) => ctx.s.nodeTargets(index, op.op, { id }))
+    if (ctx.s.core === undefined) {
+      throw new Error('a tidy op reached the batch without the core that answers it')
+    }
     const moved = tidyNodes(tidyBoxes(ctx.s.nodes), {
+      core: ctx.s.core,
       scope: scope === undefined ? undefined : new Set(scope),
       locked: (id) => ctx.s.nodeLocks.has(id),
       edges: ctx.s.edges,

@@ -25,7 +25,8 @@ type QueryPair = readonly [number, number]
  *   `frameTitleObstacles` and then `labelObstacles`, over the scene's runs that
  *   annotate an element;
  * - `comment-bubble`: `placeCommentBubble`;
- * - `outline-content-box`: `outlineContentBox` over the bundled silhouettes.
+ * - `outline-content-box`: `outlineContentBox` over the bundled silhouettes;
+ * - `tidy`: `tidyNodes` over the board's boxes, as the moves it makes.
  */
 export type QueryRequest =
   | (CanvasLayoutRequest & { readonly query: 'edges' | 'scene-digest' })
@@ -64,21 +65,36 @@ export type QueryRequest =
       readonly obstacles: readonly QueryBox[]
     }
   | { readonly query: 'outline-content-box'; readonly shape?: string; readonly box: QueryBox }
+  | {
+      readonly query: 'tidy'
+      /** Each box: its id, whether it is a frame, and `x, y, w, h`. */
+      readonly nodes: readonly (readonly [string, boolean, number, number, number, number])[]
+      readonly scope?: readonly string[]
+      readonly locked: readonly string[]
+      /** The edges by the ids their ends name; null is a free end. */
+      readonly edges?: readonly (readonly [string | null, string | null])[]
+    }
 
 /** A number, or a list of them, as the core answers a geometry or sizing query. */
 export type QueryNumbers = number | readonly QueryNumbers[]
 
 /**
  * The core's answer to a query: an edge layer and what the layout reported
- * beside it, a scene digest as the JSON text the core wrote, the numbers of any other query (each double exactly as computed),
+ * beside it, a scene digest as the JSON text the core wrote, a tidy's moves, the numbers of any other query (each double exactly as computed),
  * or what it refused, which a caller answers on its own terms (each query says
  * how), having no scene to draw a refusal in.
  */
 export type QueryAnswer =
   | { readonly nodes: readonly SceneNode[]; readonly degradations: readonly CoreDegradation[] }
   | { readonly digest: string; readonly degradations: readonly CoreDegradation[] }
+  | { readonly moves: readonly TidyWireMove[] }
   | { readonly numbers: readonly QueryNumbers[] }
   | { readonly refused: LayoutRefusal }
+
+/** A box a tidy moves: `[id, x, y]`, or `[id, x, y, w, h]` for a frame that grew. */
+type TidyWireMove =
+  | readonly [string, number, number]
+  | readonly [string, number, number, number, number]
 
 /**
  * The Rust core's query entry, as `@kamiazya/whiteboard-core-wasm`'s

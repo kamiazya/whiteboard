@@ -1,4 +1,4 @@
-//! One-tap tidy, ported from `packages/canvas-render/src/tidy*.ts`: deterministic
+//! One-tap tidy, ported from the TypeScript `tidyNodes` (since deleted): deterministic
 //! normalization that respects the author's rough topology instead of re-laying
 //! the canvas out wholesale.
 //!
@@ -34,7 +34,8 @@
 //! and stand as fixed obstacles, and a frame holding one is held by it; out-of-
 //! scope units likewise.
 //!
-//! The TypeScript is the byte-identical oracle (`tests/tidy_oracle.rs`), so every
+//! The TypeScript's recorded answers are the byte-identical oracle
+//! (`tests/tidy_oracle.rs`), so every
 //! comparison keeps `===`'s reading of a NaN, `Math.round`, `Math.min` and
 //! `Math.max`, and every sort is stable over a total order.
 
@@ -65,7 +66,7 @@ pub struct TidyNode {
 }
 
 /// What a caller sets.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct TidyOptions {
     /// Unit roots outside this set stay put (`None` = the whole canvas).
     pub scope: Option<BTreeSet<String>>,
@@ -105,10 +106,10 @@ pub fn tidy_nodes(nodes: &[TidyNode], options: &TidyOptions) -> Vec<TidyMove> {
         ns.iter().flat_map(|n| [n.rect.x, n.rect.y, n.rect.w, n.rect.h].map(bits)).collect()
     };
     let mut current = board.clone();
-    let mut seen: BTreeSet<Vec<u64>> = BTreeSet::new();
+    let mut seen: Vec<Vec<u64>> = Vec::new();
     let mut budget = Budget::new();
     for _ in 0..TIDY_MAX_SETTLE_PASSES {
-        seen.insert(positions(&current));
+        seen.push(positions(&current));
         current = settle_once(&current, &ctx, &mut budget);
         if seen.contains(&positions(&current)) {
             break;
@@ -149,13 +150,16 @@ fn board_of(clean: &[&TidyNode], options: &TidyOptions) -> (Ctx, Vec<Node>) {
 /// Each node whose settled box differs from the one it was given. The settled
 /// box of an id repeated on the board is the last one's.
 fn moves_between(clean: &[&TidyNode], board: &[Node], settled: &[Node]) -> Vec<TidyMove> {
-    let mut last: BTreeMap<usize, Rect> = BTreeMap::new();
+    let mut last: Vec<Option<Rect>> =
+        vec![None; settled.iter().map(|n| n.key.saturating_add(1)).max().unwrap_or(0)];
     for node in settled {
-        last.insert(node.key, node.rect);
+        if let Some(slot) = last.get_mut(node.key) {
+            *slot = Some(node.rect);
+        }
     }
     let mut moves = Vec::new();
     for (given, node) in clean.iter().zip(board) {
-        let Some(rect) = last.get(&node.key) else { continue };
+        let Some(rect) = last.get(node.key).copied().flatten() else { continue };
         let (x, y) =
             (whiteboard_det::math::js_round(rect.x), whiteboard_det::math::js_round(rect.y));
         let (w, h) =

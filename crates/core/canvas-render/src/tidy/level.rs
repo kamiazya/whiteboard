@@ -217,15 +217,17 @@ fn run_passes_to_fixpoint(level: &mut LevelWalk, p: &Pass<'_>) {
     let LevelInput { origin, floor, .. } = &level.input;
     let (origin, floor) = (*origin, *floor);
     let units = &mut level.units;
-    let mut seen: BTreeSet<Vec<u64>> = BTreeSet::from([signature(units)]);
+    let mut seen: Vec<Vec<u64>> = vec![signature(units)];
     for _ in 0..TIDY_MAX_ITERATIONS {
         align_bands(units, Axis::X, origin.x, floor.map(|f| f.x));
         align_bands(units, Axis::Y, origin.y, floor.map(|f| f.y));
         order_rows_by_edges(units, p.nodes, p.ctx);
         resolve_overlaps(units, origin, floor);
-        if !seen.insert(signature(units)) {
+        let now = signature(units);
+        if seen.contains(&now) {
             break;
         }
+        seen.push(now);
     }
 }
 

@@ -48,6 +48,7 @@ pub mod measure;
 pub mod measure_memo;
 pub mod node_box;
 pub mod node_outline;
+mod order;
 pub mod proposals;
 pub mod references;
 pub mod scale_scene;

@@ -458,13 +458,11 @@ const ALWAYS_ON_TOTAL_BUDGET = 21
 // importing it would close a cycle. A file list would go stale; the rule
 // that decides where the next overlay goes does not.
 //
-// 142 -> 143 (the tidy decomposition): `tidy.ts` gave up `tidy-axis.ts` and
-// `tidy-bands.ts`, and what a session here has to be told is again the
-// DIRECTION rather than the file list — an axis is a THING, four passes read
-// it, so it is its own module and not filed beside the band pass it was
-// introduced for. The measurements that justified the split are in the PR;
-// what stays is the rule, plus which instrument re-reads it
-// (`tidy-quality.test.ts`, whose columns are pinned exactly).
+// 142 -> 143 (the tidy decomposition): what a session here has to be told is
+// the DIRECTION rather than the file list — an axis is a THING, four passes
+// read it, so it is its own module and not filed beside the band pass it was
+// introduced for (those passes are the core's now; `tidy-quality.test.ts` pins
+// the columns exactly).
 //
 // 143 -> 144 (node composition leaves `spatial-canvas.ts`): the file sat 38
 // characters under the boundary, so ANY accurate update crossed it. What a
@@ -488,7 +486,10 @@ const ALWAYS_ON_TOTAL_BUDGET = 21
 // 106 -> 96: the decisions whose TypeScript went with the layout (the embed
 // contract, the builder, the reference seam, line breaking, the cut) are a
 // line each here, their text moved to the decisions page (ADR-0054 S18j).
-const CANVAS_RENDER_BUDGET = 96
+//
+// 96 -> 95: tidy's passes moved to the core (ADR-0054 A4b); the decomposition
+// paragraphs for the three TypeScript modules that held them went.
+const CANVAS_RENDER_BUDGET = 95
 
 // The rule that loads for every edit under `tools/arch-lint/**` — 119-odd test
 // files, so every session that adds a guard reads it, and it grows in exactly

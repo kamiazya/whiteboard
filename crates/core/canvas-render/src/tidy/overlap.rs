@@ -9,6 +9,7 @@ use super::axis::{AXES, Axis, on_some_anchor, round_to_grid};
 use super::units::{
     Point, TIDY_BAND_PX, TIDY_GRID_PX, TIDY_MARGIN_PX, Unit, js_eq, overlaps_with_margin,
 };
+use crate::order::sorted_by;
 
 /// How deep `unit` and `hit` overlap along `ax`: 0 or less when they miss.
 fn penetration(ax: Axis, unit: &Rect, hit: &Rect) -> f64 {
@@ -33,8 +34,7 @@ fn hop_clear(unit: &mut Unit, ax: Axis, forward: bool, occupied: &[Rect], from: 
         let steps = (v - from) / TIDY_GRID_PX;
         from + if forward { steps.ceil() } else { steps.floor() } * TIDY_GRID_PX
     };
-    let mut in_hop_order = occupied.to_vec();
-    in_hop_order.sort_by(|a, b| {
+    let in_hop_order = sorted_by(occupied.to_vec(), |a, b| {
         if forward {
             compare_numbers(ax.near(a), ax.near(b))
         } else {

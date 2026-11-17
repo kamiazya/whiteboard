@@ -16,6 +16,8 @@ use whiteboard_det::math::{js_max, js_min};
 use whiteboard_edge_routing::edge_rules::fully_contains;
 use whiteboard_edge_routing::geometry::Rect;
 
+use crate::order::sorted_by;
+
 pub(super) const TIDY_BAND_PX: f64 = 24.0;
 pub(super) const TIDY_GRID_PX: f64 = 8.0;
 pub(super) const TIDY_MARGIN_PX: f64 = 32.0;
@@ -247,13 +249,12 @@ pub(super) fn build_units(
         mark(&mut claimed, node.key);
         push_unit(i, vec![i], node.rect);
     }
-    order_by_root(&mut units, level, nodes, ctx.in_scope.len());
-    units
+    order_by_root(units, level, nodes, ctx.in_scope.len())
 }
 
 /// Units participate in document order of their root: group roots were emitted
 /// before later singletons. An id repeated on the level takes its last place.
-fn order_by_root(units: &mut [Unit], level: &[usize], nodes: &[Node], keys: usize) {
+fn order_by_root(units: Vec<Unit>, level: &[usize], nodes: &[Node], keys: usize) -> Vec<Unit> {
     let mut place = vec![0_usize; keys];
     for (at, &i) in level.iter().enumerate() {
         if let Some(slot) = nodes.get(i).and_then(|n| place.get_mut(n.key)) {
@@ -261,7 +262,7 @@ fn order_by_root(units: &mut [Unit], level: &[usize], nodes: &[Node], keys: usiz
         }
     }
     let of = |u: &Unit| nodes.get(u.root).and_then(|n| place.get(n.key)).copied().unwrap_or(0);
-    units.sort_by_key(of);
+    sorted_by(units, |a, b| of(a).cmp(&of(b)))
 }
 
 /// What one call may spend on the parts of the frame walk whose cost grows

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import type { MutableRefObject } from 'react'
 import { announceOnCanvas } from '../../../lib/canvas-announcer.js'
+import { requireLayoutCore } from '../../../lib/spatial/require-layout-core.js'
 import type { ContextMenuItem } from '../../ui/ContextMenu.js'
 import { alignableBoxesOf, alignBoxes, distributeBoxes } from '../align.js'
 import { tidyMessage } from '../canvas-announcement-text.js'
@@ -104,6 +105,7 @@ function tidyVerb(input: ArrangeBandsInput): ContextMenuItem {
     onSelect: () => {
       const { nodes, edges } = canvasRef.current
       const moves = tidyNodes(tidyBoxes(nodes), {
+        core: requireLayoutCore(),
         scope: new Set([node.id, ...extraIds]),
         locked: isLocked,
         edges,

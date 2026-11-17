@@ -32,7 +32,6 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/scene-diff-quality.rust.test.ts',
     // The package-root modules the layout scoreboards and replays load.
     'packages/canvas-render/src/comment-geometry.ts',
-    'packages/canvas-render/src/containment.ts',
     'packages/canvas-render/src/edge-arrows.ts',
     'packages/canvas-render/src/edge-routing.ts',
     'packages/canvas-render/src/layout-core.ts',
@@ -44,9 +43,6 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/scene-children.ts',
     'packages/canvas-render/src/scene-entry-keys.ts',
     'packages/canvas-render/src/tidy.ts',
-    'packages/canvas-render/src/tidy-axis.ts',
-    'packages/canvas-render/src/tidy-bands.ts',
-    'packages/canvas-render/src/tidy-units.ts',
     // The bundled plugin's manifest, which the Rust crate embeds and loads.
     'packages/plugin-visual/src/visual.manifest.json',
   ],

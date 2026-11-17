@@ -56,6 +56,17 @@ type GeometryQuery =
       readonly obstacles: readonly Box[]
     }
   | { readonly query: 'outline-content-box'; readonly shape?: string; readonly box: Box }
+  | {
+      readonly query: 'tidy'
+      /** Each box of the board: its id, whether it is a frame, and `x, y, w, h`. */
+      readonly nodes: readonly (readonly [string, boolean, number, number, number, number])[]
+      /** The unit roots that may move; absent for the whole board. */
+      readonly scope?: readonly string[]
+      /** The ids that may not move. */
+      readonly locked: readonly string[]
+      /** The canvas's edges by the ids their ends name; absent for none, null for a free end. */
+      readonly edges?: readonly (readonly [string | null, string | null])[]
+    }
 
 export type LayoutQueryRequest = MeasuredQuery | GeometryQuery
 
@@ -65,15 +76,22 @@ type QueryNumbers = number | readonly QueryNumbers[]
 /**
  * The core's answer: an edge layer and what the layout reported beside it;
  * a scene digest, as the JSON text the core wrote, with what the layout reported;
- * the numbers of any other query, each double exactly as the core computed it
+ * a tidy's moves, each as `[id, x, y]` or, for a frame that grew, `[id, x, y,
+ * w, h]`; the numbers of any other query, each double exactly as the core computed it
  * (a non-finite one included); or what it refused, which a query's caller
  * answers as the query says, having no scene to draw a refusal in.
  */
 export type LayoutQueryAnswer =
   | { readonly nodes: readonly SceneNode[]; readonly degradations: readonly LayoutEvent[] }
   | { readonly digest: string; readonly degradations: readonly LayoutEvent[] }
+  | { readonly moves: readonly TidyWireMove[] }
   | { readonly numbers: readonly QueryNumbers[] }
   | { readonly refused: LayoutRefusal }
+
+/** A box a tidy moves: `[id, x, y]`, or `[id, x, y, w, h]` for a frame that grew. */
+type TidyWireMove =
+  | readonly [string, number, number]
+  | readonly [string, number, number, number, number]
 
 const OPERATION = 'layout_query'
 
@@ -118,6 +136,23 @@ const readDigest: Read<LayoutQueryAnswer> = (parsed, errors) => {
     return { digest, degradations: events as LayoutEvent[] }
   }
   throw errors.refused(OPERATION, 'malformed', refusedDetail(parsed))
+}
+
+const readTidy: Read<LayoutQueryAnswer> = (parsed, errors) => {
+  const refused = unanswered(parsed)
+  if (refused !== undefined) return refused
+  const [kind, ...rows] = parsed
+  const moves = rows.map(tidyMoveOf)
+  if (kind === 'ok' && !moves.includes(undefined)) return { moves: moves as TidyWireMove[] }
+  throw errors.refused(OPERATION, 'malformed', refusedDetail(parsed))
+}
+
+function tidyMoveOf(row: unknown): TidyWireMove | undefined {
+  if (!Array.isArray(row) || (row.length !== 3 && row.length !== 5)) return undefined
+  const [id, ...numbers] = row
+  const read = numbers.map(numbersOf)
+  if (typeof id !== 'string' || read.some((n) => typeof n !== 'number')) return undefined
+  return [id, ...read] as unknown as TidyWireMove
 }
 
 const readNumbers: Read<LayoutQueryAnswer> = (parsed, errors) => {
@@ -168,5 +203,6 @@ export function layoutQuery(
     return { refused: { code: 'input-too-large', reason: 'too-large' } }
   }
   const parsed: unknown = JSON.parse(glue.layout_query(text))
-  return readNumbers(Array.isArray(parsed) ? parsed : [], errors)
+  const read = request.query === 'tidy' ? readTidy : readNumbers
+  return read(Array.isArray(parsed) ? parsed : [], errors)
 }

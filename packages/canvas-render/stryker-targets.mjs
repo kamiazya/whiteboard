@@ -32,30 +32,13 @@ export const MUTATED = [
   // How a scene nests, split out so a layout stage below `scene-bounds` reads
   // it too. In the lane because the file it left was.
   'src/scene-children.ts',
-  // The rectangle arithmetic the quality instruments share. In the lane for the
-  // reason `tidy-units.ts` is: leaving it out would shrink what the lane sees
-  // of them while the report kept looking the same.
+  // The rectangle arithmetic the quality instruments share: leaving it out
+  // would shrink what the lane sees of them while the report kept looking the
+  // same.
   'src/quality/rect.ts',
-  'src/tidy.ts',
-  // Split out of `tidy.ts` and covered for that reason: `buildUnits` is
-  // where that file's mutation residue moved once its scoreboard existed,
-  // and `mostlyInside` is what the idempotence fix reads. Leaving it out
-  // would have SHRUNK what the lane sees while the report kept looking the
-  // same, which is the failure this list's pinned counts exist to stop.
-  'src/tidy-units.ts',
-  // Split out of `tidy.ts` with it: the axis vocabulary every pass reads,
-  // and the band pass it was introduced for. Both are in the lane for the
-  // reason `tidy-units.ts` is — this is where the heuristic lives, so this
-  // is where the residue goes. `tidy-axis.ts` earns it twice over: a rule
-  // written asymmetrically on one axis is exactly the defect the vocabulary
-  // exists to make impossible, and the lane is what checks that claim
-  // rather than restating it.
-  'src/tidy-axis.ts',
-  'src/tidy-bands.ts',
-  // Moved out of the TypeScript comment-bubble placement and the TypeScript edge rules (S18h1), both
-  // then in the lane, so leaving them out would have shrunk what it saw.
+  // Moved out of the TypeScript comment-bubble placement (S18h1), then in the
+  // lane, so leaving it out would have shrunk what it saw.
   'src/comment-geometry.ts',
-  'src/containment.ts',
   // The sketch ink decomposition: reach, determinism and translation
   // equivariance are properties over random boxes and seeds, and the
   // silhouette per outline kind is pinned by example.
@@ -113,17 +96,11 @@ export const MINUTES = {
   'src/scene-bounds.ts': 12.3,
   'src/scene-children.ts': 0.8,
   'src/quality/rect.ts': 7.7,
-  'src/tidy.ts': 11.3,
-  'src/tidy-units.ts': 4.2,
-  'src/tidy-axis.ts': 0.5,
-  'src/tidy-bands.ts': 1.5,
-  // ESTIMATED, not yet measured: a handful of mutants each, priced at
-  // `tidy-axis.ts`'s rate.
+  // ESTIMATED, not yet measured: a handful of mutants each.
   'src/comment-geometry.ts': 0.5,
-  'src/containment.ts': 0.5,
   'src/ink/sketch.ts': 4.5,
   // ESTIMATED, not yet measured: about 120 mutants, one 5-test file that
-  // runs in milliseconds, priced at `tidy-bands.ts`'s rate.
+  // runs in milliseconds.
   'src/det-math.ts': 1.5,
 }
 
@@ -205,75 +182,6 @@ export function shardOf(files, spec, minutes = MINUTES) {
  * anyway.
  */
 export const KNOWN_EQUIVALENT = {
-  // `mostlyInside`'s span check: `area` is positive there, so `w * h * 2 >
-  // area` already implies `w * h > 0`, and at `w === 0` the product is 0 and
-  // fails the majority test whichever comparison admitted it. The reasoning
-  // is beside the code; verified by applying the edit and running the file's
-  // property.
-  //
-  // The other three change no output of `buildUnits`, each verified by
-  // applying the edit and running tidy's suites and the drawing, composition
-  // and facet scoreboards, which stay green. `frameNesting` builds an
-  // encloser list for every frame on the board, and a level's frames are the
-  // board's own objects, so its `?? []` fallback is never taken. A missing
-  // `locked` defaults to a function answering `false`; one answering
-  // `undefined` is read through `!` and `.some` alike. And `units.length < 2`
-  // is a shortcut: sorting a level of one unit by document order returns it.
-  'src/tidy-units.ts': {
-    'EqualityOperator: w > 0 -> w >= 0': 1,
-    'ArrayDeclaration: [] -> ["Stryker was here"]': 1,
-    'ArrowFunction: () => false -> () => undefined': 1,
-    'ConditionalExpression: units.length < 2 -> false': 1,
-  },
-  // Guards that change no output of `tidyNodes`. A yield anchor list seeded
-  // with a string (both of `anchorsToYieldTo`'s arrays) is read only by
-  // `onSomeAnchor`, where the string minus a number is NaN and matches
-  // nothing. `at >= target` -> `>` differs only at `at === target`, where the
-  // shift is zero and `shift` returns early. Every `shift`
-  // is gated on `unit.movable`, so an immobile unit's delta is zero and
-  // `applyUnitDeltas` skipping it — or skipping a zero delta — adds nothing.
-  // And the output's finiteness check repeats `settleOnce`'s, which already
-  // falls back to the finite input for any non-finite rounded rect. Each
-  // verified as the `tidy-units.ts` entries above were.
-  //
-  // The rest were each applied by hand against the tests the lane selects
-  // and stayed green, and each is equivalent by construction. Lookups that
-  // cannot miss: every node's rect is in the walk's `settled` map from the
-  // start and every level's nodes are the board's own, so the `frame` /
-  // `rect === undefined` guards (two and three of them) and `settled`'s
-  // `?? []` are never taken; the top level has no floor, so its `outside`
-  // anchors (the object and both arrays) are never read; and `framed` is a
-  // set of node ids, which a string literal never matches. An empty level
-  // (`inner.length === 0`) settles nothing and grows its frame by nothing.
-  // `snapped === at` only spares a zero shift. A missing `otherId` finds no
-  // unit in `byId` anyway, and a unit's member list is never empty, so
-  // `?.` and `.` agree. A `locked` answering `undefined` reads as `false`.
-  // Skipping only immobile zero-delta units in `applyUnitDeltas` applies a
-  // movable unit's zero delta, which adds nothing. And leaving the start
-  // state out of the level loop's `seen` costs at most one pass from a state
-  // that is already a fixpoint. NOT recorded, because some board would tell
-  // them apart: the fixpoint loops' bounds (a board needing more passes than
-  // the cap, or one that cycles),
-  // the signatures' `'|'` separators (two visited states whose coordinates
-  // concatenate alike), and every budget guard, which the cost tests kill
-  // and the lane excludes for run time.
-  'src/tidy.ts': {
-    'ArrayDeclaration: [] -> ["Stryker was here"]': 6,
-    'EqualityOperator: at >= target -> at > target': 1,
-    'ConditionalExpression: !unit.movable || (unit.dx === 0 && unit.dy === 0) -> false': 1,
-    'ConditionalExpression: unit.dx === 0 && unit.dy === 0 -> false': 1,
-    'ConditionalExpression: !isFiniteRect({ x, y, width, height }) -> false': 1,
-    'ConditionalExpression: frame === undefined -> false': 2,
-    'ConditionalExpression: rect === undefined -> false': 3,
-    'ObjectLiteral: { x: [], y: [] } -> {}': 1,
-    'ConditionalExpression: inner.length === 0 -> false': 1,
-    'ConditionalExpression: snapped === at -> false': 1,
-    'ConditionalExpression: otherId === undefined -> false': 1,
-    'OptionalChaining: unit.members[0]?.frame -> unit.members[0].frame': 1,
-    'ArrowFunction: () => false -> () => undefined': 1,
-    'LogicalOperator: !unit.movable || (unit.dx === 0 && unit.dy === 0) -> !unit.movable && unit.dx === 0 && unit.dy === 0': 1,
-    'ArrayDeclaration: [signature()] -> []': 1,
-  },
   // `tags ?? []` only matters when the element carries no `tags` at all, and
   // then the substitute is iterated as a tag: a string with no colon is not
   // a scoped tag, `parseScopedTag` answers `undefined`, and the loop
@@ -342,22 +250,6 @@ export const KNOWN_EQUIVALENT = {
   // 1008-test suite. Two neighbours of these are NOT here and were pinned
   // instead — writing every hoistable name unconditionally erases a container's
   // own attribute, and the every-child comparison throws on an attr-less child.
-  // Skipping a zero delta guards an addition of zero. Two entries for the
-  // frame floor's `<` used to sit here, on the reasoning that `<=` admits
-  // exactly the coordinate the shift lands on and costs one no-op iteration:
-  // they are gone because the floor is gone — the margin is an ANCHOR now,
-  // and its comparison is a band, whose boundary a test pins. The margin's
-  // own `<=` left for a like reason earlier, when a centre or far-edge snap
-  // started reading the margin to decide whether it may move: a pair exactly
-  // the margin apart then answers differently, and the grouped tidy
-  // scoreboard kills it. Each hand-verified; the reasoning is
-  // `package-canvas-render.md`.
-  // The zero-delta entry moved here with `shift` when the axis vocabulary
-  // came out of `tidy.ts`, and became TWO: `shift` is written once per axis
-  // rather than once with a branch, which is the whole point of it.
-  'src/tidy-axis.ts': {
-    'ConditionalExpression: delta === 0 -> false': 2,
-  },
   'src/svg/hoist.ts': {
     'ConditionalExpression: !isVNode(child) -> false': 1,
     'ConditionalExpression: attrs === undefined -> false': 1,
