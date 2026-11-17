@@ -37,14 +37,14 @@ import { randomCjk } from './random-cjk.js'
 import { searchableContents } from './search-oracle-contents.js'
 import { segmentRecords } from './search-oracle-segments.js'
 
-export const SEED = 0x5ea4_c4e1
-export const FOLD_CASES = 3500
-export const FIND_CASES = 2500
-export const TOKEN_CASES = 3500
-export const TERMS_CASES = 260
-export const SNIPPET_CASES = 500
-export const EXCERPT_CASES = 300
-export const SEARCH_CASES = 160
+const SEED = 0x5ea4_c4e1
+const FOLD_CASES = 3500
+const FIND_CASES = 2500
+const TOKEN_CASES = 3500
+const TERMS_CASES = 260
+const SNIPPET_CASES = 500
+const EXCERPT_CASES = 300
+const SEARCH_CASES = 160
 
 // A record is plain JSON data; the writer is `JSON.stringify`, so nothing narrower is checked.
 type Json = unknown
@@ -68,7 +68,7 @@ function hexBits(value: number): string {
 const MASK = (1n << 64n) - 1n
 
 /** FNV-1a over the UTF-8 of `text`, as 16 hex digits. */
-export function fnv64(text: string): string {
+function fnv64(text: string): string {
   let h = 0xcbf29ce484222325n
   for (const byte of new TextEncoder().encode(text))
     h = ((h ^ BigInt(byte)) * 0x100000001b3n) & MASK
@@ -573,7 +573,7 @@ function folderRecords(next: () => number): Json[] {
   return out
 }
 
-export function meta(): Json {
+function meta(): Json {
   return {
     kind: 'meta',
     seed: SEED,

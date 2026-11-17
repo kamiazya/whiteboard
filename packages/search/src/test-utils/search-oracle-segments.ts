@@ -9,7 +9,7 @@ import { randomFrom } from '@kamiazya/whiteboard-model/test-utils'
 import { snippetAround } from '../snippet.js'
 
 const SEED = 0x6e11_5e65
-export const GRAPHEME_CASES = 1500
+const GRAPHEME_CASES = 1500
 
 const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' })
 
