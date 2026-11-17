@@ -1,7 +1,8 @@
 //! The content cache across nesting levels: a body that names a canvas is a
 //! cycle on one embed path and drawn on another, and drawing it charges the
-//! render's nested-layout account. A warm cache must change neither — the
-//! scene is the one an uncached render draws.
+//! render's nested-layout account, and so does colouring a fence, from its
+//! tokenizer account. A warm cache must change neither — the scene is the one
+//! an uncached render draws.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -12,12 +13,13 @@ use whiteboard_canvas_render::compose_node::{
     BodySeams, ComposeHost, ContentCache, Degradation, ParseFailed,
 };
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
+use whiteboard_canvas_render::highlight::would_colour;
 use whiteboard_canvas_render::node_box::ResolvedReference;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::typeset::{
-    CanvasSummary, EmbedResolver, Embedded, FittedBlocks, IconRange, ImageRef, InlineSeams,
-    NestedLayoutBudget,
+    CanvasSummary, CodeToken, CodeTokenLines, CodeTokenizer, EmbedResolver, Embedded, FittedBlocks,
+    IconRange, ImageRef, InlineSeams, NestedLayoutBudget, TokenRole,
 };
 use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::mdast::{Flow, Phrasing, Root};
@@ -43,9 +45,15 @@ fn node(id: &str, x: f64, resource: NodeResource) -> SpatialNode {
 /// A text node; every body here reads as `![[X]]`, so every key is the same
 /// unless the level is in it.
 fn body(id: &str, x: f64) -> SpatialNode {
+    text_node(id, x, "X")
+}
+
+/// A text node holding `content`: `X` is the embed, anything else a `js` fence
+/// of that source.
+fn text_node(id: &str, x: f64, content: &str) -> SpatialNode {
     let text = NodeResource {
         mime_type: "text/markdown".to_owned(),
-        content: Some("X".to_owned()),
+        content: Some(content.to_owned()),
         ..NodeResource::default()
     };
     node(id, x, text)
@@ -56,11 +64,17 @@ fn embedded() -> SpatialCanvas {
     SpatialCanvas { nodes: vec![body("inner", 0.0)], ..SpatialCanvas::default() }
 }
 
-/// A host for which every body is `![[X]]` and every reference is canvas `X`.
+/// A host for which the body `X` is `![[X]]`, any other a `js` fence of its
+/// text, and every reference is canvas `X`.
 struct Naming;
 
 impl ComposeHost for Naming {
-    fn parse_body(&self, _: &str) -> Result<Root, ParseFailed> {
+    fn parse_body(&self, text: &str) -> Result<Root, ParseFailed> {
+        if text != "X" {
+            let lang = Some("js".to_owned());
+            let fence = Flow::Code { value: text.to_owned(), lang, meta: None };
+            return Ok(Root { children: vec![fence] });
+        }
         let embed = Phrasing::Embed { document_id: "X".to_owned(), fragment: None };
         Ok(Root { children: vec![Flow::Paragraph { children: vec![embed] }] })
     }
@@ -81,6 +95,20 @@ impl ComposeHost for Naming {
 
     fn parse_markdown(&self, _: &str) -> Result<Root, ParseFailed> {
         Err(ParseFailed)
+    }
+}
+
+/// Colours every fence the default highlighter's gate passes, as one keyword.
+impl CodeTokenizer for Naming {
+    fn tokenize(
+        &self,
+        lang: &str,
+        value: &str,
+        budget: Option<&NestedLayoutBudget>,
+    ) -> Option<CodeTokenLines> {
+        would_colour(lang, value, budget).then(|| {
+            vec![vec![CodeToken { text: value.to_owned(), role: Some(TokenRole::Keyword) }]]
+        })
     }
 }
 
@@ -134,9 +162,19 @@ impl ContentCache for Keeping {
 /// `canvas`'s scene, over a fresh `cache` when asked, with `layouts` nested
 /// layouts left in the account, under the bundled plugin's `registry`.
 fn scene_of(canvas: &SpatialCanvas, cached: bool, layouts: usize, registry: &Registry) -> String {
-    let appearance = create_spatial_theme(SpatialThemeMode::Light, None);
     let cache = Keeping::default();
     let budget = NestedLayoutBudget::with_remaining(layouts, NestedLayoutBudget::ELEMENTS);
+    scene_over(canvas, cached.then_some(&cache), &budget, registry)
+}
+
+/// `canvas`'s scene over `cache`, spending from `budget`.
+fn scene_over(
+    canvas: &SpatialCanvas,
+    cache: Option<&Keeping>,
+    budget: &NestedLayoutBudget,
+    registry: &Registry,
+) -> String {
+    let appearance = create_spatial_theme(SpatialThemeMode::Light, None);
     let options = LayoutOptions {
         measure: &FakeMeasure::default(),
         appearance: &appearance,
@@ -151,18 +189,18 @@ fn scene_of(canvas: &SpatialCanvas, cached: bool, layouts: usize, registry: &Reg
         locked: &[],
         side_overrides: None,
         host: &Naming,
-        content_cache: cached.then_some(&cache as &dyn ContentCache),
+        content_cache: cache.map(|cache| cache as &dyn ContentCache),
         fragment_table_reads: None,
         comments: CommentOptions::default(),
         proposals: &[],
         body: BodySeams {
             inline: &Naming,
-            highlight: None,
+            highlight: Some(&Naming),
             math: None,
             diagram: None,
             embeds: Some(&Naming),
         },
-        budget: Some(&budget),
+        budget: Some(budget),
         embed_path: &[],
     };
     format!("{:?}", layout_spatial_canvas(canvas, &options).scene)
@@ -196,4 +234,22 @@ fn a_body_served_from_the_cache_still_leaves_its_embed_charged_to_the_render() {
     let cached = scene_of(&canvas, true, 1, &registry);
     assert_eq!(cached.matches("Budget").count(), 1, "{cached}");
     assert_eq!(cached, scene_of(&canvas, false, 1, &registry));
+}
+
+#[test]
+fn a_body_whose_fence_spent_the_tokenizer_account_is_not_served_warm() {
+    // The account covers one fence: `let` (9) is coloured and `var` refused, so
+    // drawn plain. A warm render must not take `let` from the cache unspent and
+    // so colour `var` too.
+    let canvas = SpatialCanvas {
+        nodes: vec![text_node("a", 0.0, "let"), text_node("b", 400.0, "var")],
+        ..SpatialCanvas::default()
+    };
+    let registry = visual_registry().expect("the bundled plugin loads");
+    let account = || NestedLayoutBudget::new().with_tokenizer(9, NestedLayoutBudget::LINE_RUNS, 0);
+    let cache = Keeping::default();
+    let cold = scene_over(&canvas, Some(&cache), &account(), &registry);
+    assert_eq!(cold, scene_over(&canvas, None, &account(), &registry));
+    let warm = scene_over(&canvas, Some(&cache), &account(), &registry);
+    assert_eq!(warm, cold);
 }
