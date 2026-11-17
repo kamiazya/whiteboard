@@ -289,6 +289,17 @@ fn the_digest_of_a_canvas_is_read_where_it_is_laid_out() {
 }
 
 #[test]
+fn a_digest_box_with_a_non_finite_coordinate_is_refused_not_written_as_null() {
+    let one = |y: f64| SpatialCanvas {
+        nodes: vec![whiteboard_model::spatial::SpatialNode { y, ..text_node("a", "a") }],
+        ..SpatialCanvas::default()
+    };
+    // The control: the same single box, finite, is answered.
+    assert_eq!(digest_of(canvas_json(&one(0.0)))[0], json!("ok"));
+    assert_eq!(digest_of(canvas_json(&one(f64::NAN))), refused("malformed", "non-finite"));
+}
+
+#[test]
 fn label_obstacles_past_their_caps_are_refused() {
     let run = s(vec![json!("node"), json!("F"), numbers(&[0.0; 4])]);
     let at = |runs: usize, nodes: usize| {

@@ -165,6 +165,10 @@ fn digest(request: &Request, host: Option<&dyn Host>) -> String {
         with_options(request, measure, None, plugin, &mut |options, wire, _| {
             let laid = layout_spatial_canvas(&request.canvas, options);
             settled(wire, || match scene_digest(&laid.scene) {
+                // A box the grid never sized (one non-finite coordinate on a
+                // single row) would be written as `null`, which the reader's
+                // schema refuses as a crash rather than a refusal.
+                Ok(digest) if !finite_boxes(&digest) => refused("malformed", "non-finite"),
                 Ok(digest) => ok(vec![Tree::Text(digest.to_json()), events(&wire.degradations())]),
                 // The grid a non-finite coordinate cannot size: the same
                 // layout the scene's own answer refuses as non-finite.
@@ -172,6 +176,14 @@ fn digest(request: &Request, host: Option<&dyn Host>) -> String {
             })
         })
     })
+}
+
+/// Every box the digest names is finite.
+fn finite_boxes(digest: &whiteboard_canvas_render::scene_digest::SceneDigest) -> bool {
+    let finite = |b: &whiteboard_scene::BoundingBox| {
+        b.x.is_finite() && b.y.is_finite() && b.w.is_finite() && b.h.is_finite()
+    };
+    digest.nodes.iter().all(|node| finite(&node.bbox)) && digest.free_regions.iter().all(finite)
 }
 
 fn edge_layer(

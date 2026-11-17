@@ -85,15 +85,15 @@ export function edgesThroughCore(
   return [...nodes]
 }
 
-/** What a digest says when nothing could be derived. */
-const EMPTY_DIGEST: SceneDigest = {
+/** What a digest says when nothing could be derived: a fresh one each time, so a caller's edit never reaches the next refusal. */
+const emptyDigest = (): SceneDigest => ({
   nodes: [],
   overlaps: [],
   containment: [],
   clusters: [],
   freeRegions: [],
   partial: true,
-}
+})
 
 /**
  * The spatial digest of the scene `stored` lays out, through `options.core`'s
@@ -111,7 +111,7 @@ export function layoutSceneDigest(
     request: () => ({ ...canvasLayoutRequest(stored, options), query: 'scene-digest' }),
     unanswered: (refused) => {
       options.onRefused?.(refused)
-      return EMPTY_DIGEST
+      return emptyDigest()
     },
     read: (answer) => {
       if (!('digest' in answer)) return undefined

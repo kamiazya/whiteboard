@@ -47,5 +47,16 @@ describe('the spatial digest through the Rust core', () => {
       partial: true,
     })
     expect(refusals).toEqual([{ code: 'input-too-large', reason: 'too-many-elements' }])
+
+    // Each refusal is its own answer: a caller's edit to one never reaches the next.
+    digest.partial = false
+    digest.nodes.push({
+      id: 'x',
+      bbox: { x: 0, y: 0, w: 1, h: 1 },
+      z: 0,
+    })
+    const again = layoutSceneDigest(many, options())
+    expect(again.partial).toBe(true)
+    expect(again.nodes).toEqual([])
   })
 })
