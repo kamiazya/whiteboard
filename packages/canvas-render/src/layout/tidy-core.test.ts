@@ -1,5 +1,6 @@
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
+import { fakeLayoutCore } from '../test-utils/index.js'
 import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { type TidyNode, tidyBoxes, tidyNodes } from '../tidy.js'
 
@@ -56,9 +57,35 @@ describe('tidy through the Rust core', () => {
     expect(tidyNodes(board, { core })).toEqual([{ id: 'b', x: 200, y: 0 }])
   })
 
-  it('answers a board past the core cap as one that moves nothing', () => {
+  it('answers a board past the core cap as one that moves nothing, and says it refused', () => {
     const many = Array.from({ length: 4200 }, (_, i) => box(`n${i}`, 0, 0))
-    expect(tidyNodes(many, { core })).toEqual([])
+    const refusals: unknown[] = []
+    expect(tidyNodes(many, { core, onRefused: (r) => refusals.push(r) })).toEqual([])
+    expect(refusals).toHaveLength(1)
+  })
+
+  it('does not say it refused a board the core answered with no moves', () => {
+    const refusals: unknown[] = []
+    const board = [box('a', 0, 0), box('b', 200, 0)]
+    expect(tidyNodes(board, { core, onRefused: (r) => refusals.push(r) })).toEqual([])
+    expect(refusals).toEqual([])
+  })
+
+  it('drops a move the core answers for a locked box', () => {
+    const stub = fakeLayoutCore({
+      query: {
+        layoutQuery: () => ({
+          moves: [
+            ['a', 1, 1],
+            ['b', 2, 2],
+          ],
+        }),
+      },
+    })
+    const board = [box('a', 0, 0), box('b', 200, 3)]
+    expect(tidyNodes(board, { core: stub, locked: (id) => id === 'b' })).toEqual([
+      { id: 'a', x: 1, y: 1 },
+    ])
   })
 
   it('reads a stored node as a frame by its kind', () => {

@@ -223,6 +223,17 @@ describe('nodeMenuItems', () => {
     })
   })
 
+  it('Tidy says it could not tidy a board the core refuses, not that it was already tidy', () => {
+    const nodes = Array.from({ length: 4200 }, (_, i) =>
+      buildTextNode({ id: `n${i}`, x: 0, y: 0, width: 10, height: 10, text: 'N' }),
+    )
+    const crowded: SpatialCanvas = { nodes, edges: [] }
+    const items = nodeMenuItems(baseInput(textNode, crowded, { extraIds: new Set(['n1']) }))
+    const row = items.find((item) => labelOf(item) === 'Tidy') as { onSelect: () => void }
+    row.onSelect()
+    expect(canvasAnnouncement().trim()).toMatch(/^Could not tidy\. /)
+  })
+
   it('hides Open canvas for a missing file ref, and offers it for a live one', () => {
     const canvas: SpatialCanvas = { nodes: [fileNode], edges: [] }
     const onOpenDocument = vi.fn()

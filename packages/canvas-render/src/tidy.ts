@@ -9,8 +9,8 @@
  * to hold its members carries its new size). Locked nodes never move and stand
  * as fixed obstacles, and a frame holding one is held by it; out-of-scope
  * units likewise. A board the core refuses (past its element cap) is answered
- * as one that moves nothing, which is what a tap on a board too big to arrange
- * can honestly do.
+ * as one that moves nothing, beside the refusal `onRefused` hears, so a caller
+ * can say it could not tidy rather than that nothing needed tidying.
  */
 import {
   type CanvasEdge,
@@ -21,6 +21,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { queried } from './layout/query-switch.js'
 import type { LayoutCore } from './layout-core.js'
+import type { LayoutRefusal } from './refusal.js'
 
 export interface TidyNode {
   readonly id: string
@@ -52,6 +53,8 @@ interface TidyOptions {
    * boxes it fans out to. Without them rows keep the order they were drawn.
    */
   readonly edges?: readonly Pick<CanvasEdge, 'from' | 'to'>[]
+  /** Hears the core's refusal of the board, which is answered as no moves. */
+  readonly onRefused?: (refusal: LayoutRefusal) => void
 }
 
 interface TidyMove {
@@ -100,14 +103,21 @@ export function tidyNodes(nodes: readonly TidyNode[], options: TidyOptions): rea
         ? {}
         : { edges: edges.map((e) => [endNode(e.from) ?? null, endNode(e.to) ?? null] as const) }),
     }),
-    unanswered: () => [],
+    unanswered: (refusal) => {
+      options.onRefused?.(refusal)
+      return []
+    },
+    // The core answers no move for a locked id; one that came back anyway is
+    // dropped here, so no caller applies a move to a node that may not move.
     read: (answer) =>
       'moves' in answer
-        ? answer.moves.map((move) =>
-            move.length === 3
-              ? { id: move[0], x: move[1], y: move[2] }
-              : { id: move[0], x: move[1], y: move[2], width: move[3], height: move[4] },
-          )
+        ? answer.moves
+            .filter((move) => locked?.(move[0]) !== true)
+            .map((move) =>
+              move.length === 3
+                ? { id: move[0], x: move[1], y: move[2] }
+                : { id: move[0], x: move[1], y: move[2], width: move[3], height: move[4] },
+            )
         : undefined,
   })
 }

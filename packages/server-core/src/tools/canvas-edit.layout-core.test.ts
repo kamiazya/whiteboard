@@ -161,4 +161,21 @@ describe('wb_canvas_edit tidy through the layout core', () => {
     expect(direct).toEqual([{ id: 'b', x: 200, y: 0 }])
     expect(canvas.nodes.find((n) => n.id === 'b')?.y).toBe(0)
   })
+
+  it('never moves a locked node, whatever the core answers for it', async () => {
+    const core = fakeLayoutCore({
+      query: { layoutQuery: () => ({ moves: [['b', 201, 1]] }) },
+    })
+    const store = new FakeDocumentStore()
+    const deps = { ...makeDeps(store), layoutCore: async () => core }
+    await seedCanvas(store, board)
+    await createCanvasEditTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'node.lock', id: 'b', locked: true }, ...tidyOp],
+    })
+    const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes.find((n) => n.id === 'b')).toMatchObject({ x: 200, y: 3 })
+  })
 })

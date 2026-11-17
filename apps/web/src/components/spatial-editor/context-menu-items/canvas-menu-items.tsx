@@ -2,7 +2,7 @@
  * The empty-canvas branch: paste-with-fragment, creation entries, the
  * conditional document/image entries, and Tidy at >=2 nodes.
  */
-import { tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
+import { type LayoutRefusal, tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   ClipboardPaste,
@@ -20,7 +20,7 @@ import type { FileRefOption } from '../../../lib/link-entries.js'
 import { requireLayoutCore } from '../../../lib/spatial/require-layout-core.js'
 import type { Point } from '../../../lib/spatial/viewport.js'
 import type { ContextMenuItem } from '../../ui/ContextMenu.js'
-import { tidyMessage } from '../canvas-announcement-text.js'
+import { tidyMessage, tidyRefusedMessage } from '../canvas-announcement-text.js'
 import type { CanvasCommands } from '../canvas-commands.js'
 import { CREATION_LABELS } from '../creation-labels.js'
 import { type ImagePicker, openImagePicker } from '../ImageIntake.js'
@@ -118,13 +118,18 @@ export function canvasMenuItems({
       icon: <Sparkles />,
       onSelect: () => {
         const { nodes, edges } = canvasRef.current
+        const refusals: LayoutRefusal[] = []
         const moves = tidyNodes(tidyBoxes(nodes), {
           core: requireLayoutCore(),
           locked: isLocked,
           edges,
+          onRefused: (refusal) => refusals.push(refusal),
         })
         applyBoxMoves(moves)
-        announceOnCanvas(tidyMessage(nodes, moves))
+        const [refusal] = refusals
+        announceOnCanvas(
+          refusal === undefined ? tidyMessage(nodes, moves) : tidyRefusedMessage(refusal),
+        )
       },
     })
   }

@@ -1,3 +1,4 @@
+import { type LayoutRefusal, refusalCopy } from '@kamiazya/whiteboard-canvas-render'
 import {
   frameHolds,
   frameLabel,
@@ -220,6 +221,11 @@ interface BoxMoveLike {
   readonly y: number
   readonly width?: number
   readonly height?: number
+}
+
+/** What a tidy the core refused says: that it did not run, and what the reader can do. */
+export function tidyRefusedMessage(refusal: LayoutRefusal): string {
+  return `Could not tidy. ${refusalCopy(refusal).detail}`
 }
 
 /**

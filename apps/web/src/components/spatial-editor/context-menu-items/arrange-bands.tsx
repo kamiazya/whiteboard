@@ -1,4 +1,4 @@
-import { tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
+import { type LayoutRefusal, tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import {
   AlignCenterHorizontal,
@@ -16,7 +16,7 @@ import { announceOnCanvas } from '../../../lib/canvas-announcer.js'
 import { requireLayoutCore } from '../../../lib/spatial/require-layout-core.js'
 import type { ContextMenuItem } from '../../ui/ContextMenu.js'
 import { alignableBoxesOf, alignBoxes, distributeBoxes } from '../align.js'
-import { tidyMessage } from '../canvas-announcement-text.js'
+import { tidyMessage, tidyRefusedMessage } from '../canvas-announcement-text.js'
 import type { CanvasCommands } from '../canvas-commands.js'
 
 const ALIGN_PHRASE = {
@@ -104,14 +104,19 @@ function tidyVerb(input: ArrangeBandsInput): ContextMenuItem {
     icon: <Sparkles />,
     onSelect: () => {
       const { nodes, edges } = canvasRef.current
+      const refusals: LayoutRefusal[] = []
       const moves = tidyNodes(tidyBoxes(nodes), {
         core: requireLayoutCore(),
         scope: new Set([node.id, ...extraIds]),
         locked: isLocked,
         edges,
+        onRefused: (refusal) => refusals.push(refusal),
       })
       applyBoxMoves(moves)
-      announceOnCanvas(tidyMessage(nodes, moves))
+      const [refusal] = refusals
+      announceOnCanvas(
+        refusal === undefined ? tidyMessage(nodes, moves) : tidyRefusedMessage(refusal),
+      )
     },
   }
 }
