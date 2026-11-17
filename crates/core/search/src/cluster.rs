@@ -158,3 +158,6 @@ pub fn grapheme_cuts(text: &str) -> Vec<usize> {
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests;

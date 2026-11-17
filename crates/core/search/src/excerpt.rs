@@ -81,3 +81,29 @@ impl Excerpter<'_> {
             .collect()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    fn excerpts(query: &str, text: &str) -> Vec<String> {
+        excerpter_for(query, None).excerpts(&[text.to_owned()])
+    }
+
+    #[test]
+    fn a_query_matching_token_wise_centres_on_the_earliest_matching_token() {
+        // "alpha" is the query's first token and sits late; "beta" is earlier in the text.
+        let text = format!("beta {} alpha", "x".repeat(200));
+        let shown = excerpts("alpha beta", &text);
+        assert_eq!(shown, vec![format!("{}…", &text[..64])]);
+    }
+
+    #[test]
+    fn tokens_matching_at_one_index_keep_the_first_of_them() {
+        let text = format!("abcdefghij{}", "k".repeat(100));
+        let shown = excerpts("ab abc", &text);
+        assert_eq!(shown, vec![format!("{}…", &text[..62])]);
+    }
+}

@@ -180,3 +180,38 @@ pub fn snippet_around(
     let after = if end < units.len() { "…" } else { "" };
     format!("{before}{text}{after}")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    const NEEDLE: &str = "needle";
+
+    #[test]
+    fn a_window_edge_at_the_start_of_a_link_keeps_the_whole_link() {
+        // The left edge, 60 units before the match, is the link's first unit.
+        let text =
+            format!("{}[[a/b]]{}{NEEDLE}{}", "x".repeat(10), "z".repeat(53), "w".repeat(100));
+        let shown = snippet_around(&text, 70, NEEDLE.len(), None);
+        assert_eq!(shown, format!("…b{}{NEEDLE}{}…", "z".repeat(53), "w".repeat(60)));
+    }
+
+    #[test]
+    fn a_link_ending_where_the_match_starts_is_dropped_when_the_edge_falls_inside_it() {
+        // The link is 70 units, so the left edge lands 10 units into it.
+        let link = format!("[[{}]]", "k".repeat(66));
+        let text = format!("ppppp{link}{NEEDLE}{}", "w".repeat(100));
+        let shown = snippet_around(&text, 75, NEEDLE.len(), None);
+        assert_eq!(shown, format!("…{NEEDLE}{}…", "w".repeat(60)));
+    }
+
+    #[test]
+    fn a_link_starting_where_the_match_ends_is_dropped_when_the_edge_falls_inside_it() {
+        let link = format!("[[{}]]", "k".repeat(66));
+        let text = format!("{}{NEEDLE}{link}ppppp", "w".repeat(100));
+        let shown = snippet_around(&text, 100, NEEDLE.len(), None);
+        assert_eq!(shown, format!("…{}{NEEDLE}…", "w".repeat(60)));
+    }
+}

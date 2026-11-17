@@ -196,3 +196,66 @@ pub fn full_text_search(
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    fn doc(id: &str, texts: &[&str], folders: &[&str]) -> SearchableDocument {
+        SearchableDocument {
+            document_id: id.to_owned(),
+            texts: texts.iter().map(|t| (*t).to_owned()).collect(),
+            folders: (!folders.is_empty())
+                .then(|| folders.iter().map(|f| (*f).to_owned()).collect()),
+            ..SearchableDocument::default()
+        }
+    }
+
+    fn ranked(documents: &[SearchableDocument]) -> Vec<String> {
+        let options = SearchOptions { excerpts: Some(false), ..SearchOptions::default() };
+        full_text_search(documents, "alpha", &options).into_iter().map(|h| h.document_id).collect()
+    }
+
+    #[test]
+    fn a_higher_score_ranks_first_whatever_order_the_documents_arrive_in() {
+        let short = doc("short", &["alpha"], &[]);
+        let long = doc("long", &["alpha x y z"], &[]);
+        assert_eq!(ranked(&[short.clone(), long.clone()]), ["short", "long"]);
+        assert_eq!(ranked(&[long, short]), ["short", "long"]);
+    }
+
+    #[test]
+    fn equal_scores_rank_by_document_id() {
+        let same = |id: &str| doc(id, &["alpha"], &[]);
+        assert_eq!(ranked(&[same("c"), same("a"), same("b")]), ["a", "b", "c"]);
+        assert_eq!(ranked(&[same("b"), same("c"), same("a")]), ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn equal_own_scores_rank_by_folder_score_before_document_id() {
+        let plain = doc("a", &["alpha"], &[]);
+        let foldered = doc("b", &["alpha"], &["alpha"]);
+        assert_eq!(ranked(&[plain.clone(), foldered.clone()]), ["b", "a"]);
+        assert_eq!(ranked(&[foldered, plain]), ["b", "a"]);
+    }
+
+    #[test]
+    fn documents_only_a_folder_name_matched_rank_by_folder_score_then_document_id() {
+        let folder_only = |id: &str, folders: &[&str]| doc(id, &["unrelated"], folders);
+        let strong = folder_only("z", &["alpha"]);
+        let weak = folder_only("y", &["alpha x y z"]);
+        assert_eq!(ranked(&[weak.clone(), strong.clone()]), ["z", "y"]);
+        assert_eq!(ranked(&[strong, weak]), ["z", "y"]);
+        let tied = |id: &str| folder_only(id, &["alpha"]);
+        assert_eq!(ranked(&[tied("c"), tied("a"), tied("b")]), ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn a_folder_only_hit_ranks_below_every_document_whose_own_text_matched() {
+        let own = doc("own", &["alpha x y z"], &[]);
+        let folder = doc("folder", &["unrelated"], &["alpha"]);
+        assert_eq!(ranked(&[folder, own]), ["own", "folder"]);
+    }
+}

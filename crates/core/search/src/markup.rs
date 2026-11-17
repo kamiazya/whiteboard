@@ -133,11 +133,7 @@ fn skip_blanks(line: &[u16], from: usize) -> usize {
 }
 
 fn run_of(line: &[u16], from: usize, unit: u16) -> usize {
-    let mut at = from;
-    while line.get(at) == Some(&unit) {
-        at = at.saturating_add(1);
-    }
-    at.saturating_sub(from)
+    line.get(from..).unwrap_or_default().iter().take_while(|u| **u == unit).count()
 }
 
 /// A fence line (three or more backticks or tildes after blanks), dropped whole.
@@ -175,7 +171,7 @@ fn delimiter_row_len(line: &[u16]) -> usize {
     while line.get(after) == Some(&0x7c) {
         let past_pipe = skip_blanks(line, after.saturating_add(1));
         if let Some(next) = delimiter_cell(line, past_pipe) {
-            after = next;
+            after = next.max(past_pipe);
         } else {
             after = past_pipe;
             break;
@@ -272,7 +268,7 @@ fn unwrap_link_syntax(units: &[u16]) -> Vec<u16> {
     while let Some(unit) = units.get(at) {
         if let Some((from, to, end)) = link_syntax_at(units, at) {
             out.extend_from_slice(slice(units, from, to));
-            at = end;
+            at = end.max(at.saturating_add(1));
         } else {
             out.push(*unit);
             at = at.saturating_add(1);
@@ -308,7 +304,7 @@ fn pipes_to_spaces(units: &[u16]) -> Vec<u16> {
         let past_blanks = skip_blanks(units, at);
         if units.get(past_blanks) == Some(&0x7c) {
             out.push(0x20);
-            at = skip_blanks(units, past_blanks.saturating_add(1));
+            at = skip_blanks(units, past_blanks.saturating_add(1)).max(at.saturating_add(1));
         } else {
             out.push(*unit);
             at = at.saturating_add(1);
@@ -436,5 +432,25 @@ mod tests {
         assert_eq!(leaf_of_path("a/b/c"), "c");
         assert_eq!(leaf_of_path("c"), "c");
         assert_eq!(leaf_of_path("a/"), "");
+    }
+
+    #[test]
+    fn a_link_needs_both_opening_brackets() {
+        assert_eq!(link_at(&encode("[x]]"), 0), None);
+        assert_eq!(link_at(&encode("x[]]"), 0), None);
+    }
+
+    #[test]
+    fn a_task_box_needs_a_blank_before_it_and_the_whole_box() {
+        assert_eq!(strip("-[x] done"), "-[x] done");
+        assert_eq!(strip("- ax] t"), "ax] t");
+        assert_eq!(strip("- [y] t"), "[y] t");
+        assert_eq!(strip("- [x  t"), "[x  t");
+    }
+
+    #[test]
+    fn a_stand_in_without_its_number_or_its_close_is_ordinary_text() {
+        assert_eq!(strip("a\u{e001}\u{e002}b"), "a\u{e001}\u{e002}b");
+        assert_eq!(strip("a\u{e001}12x"), "a\u{e001}12x");
     }
 }

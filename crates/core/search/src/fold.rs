@@ -151,4 +151,13 @@ mod tests {
         assert_eq!(fold_for_search("\u{301}x"), "\u{301}x");
         assert_eq!(fold_for_search("е\u{308}"), "е\u{308}");
     }
+
+    #[test]
+    fn the_scripts_that_skip_the_table_fold_to_themselves_all_the_same() {
+        for range in [0x3040..=0x30ff_u32, 0x3400..=0x9fff, 0xac00..=0xd7af, 0xf900..=0xfaff] {
+            for c in range.filter_map(char::from_u32) {
+                assert_eq!(fold_code_point(c), (c.to_string(), false), "U+{:04X}", u32::from(c));
+            }
+        }
+    }
 }
