@@ -67,7 +67,7 @@ catalog:
   "@vitest/coverage-v8": "^5.0.0"
   # the html reporter and `vitest --ui`; the only surfaces that persist a
   # browser traceView replay (measured: the flag alone writes nothing).
-  "@vitest/ui": "^5.0.0"
+  "@vitest/ui": "^5.0.5"
   # mcp-server's first InversifyJS composition root (DI wiring only, no
   # decorators/reflect-metadata) — pinned old enough to clear minimumReleaseAge.
   inversify: "^8.2.3"
