@@ -138,11 +138,25 @@ pub(super) fn snap_stale_anchors(units: &mut [Unit], origin: Point) {
             if js_eq(snapped, here) || anchored(units, at, ax) {
                 continue;
             }
+            // The snap runs after the last separation, so it may not undo it:
+            // rounding can close a margin the overlap pass left exactly open.
+            if closes_a_margin(units, at, &ax.moved(&unit.bbox, snapped - here)) {
+                continue;
+            }
             if let Some(unit) = units.get_mut(at) {
                 ax.shift(unit, snapped - here);
             }
         }
     }
+}
+
+/// Whether `moved`, the box of unit `at` after a shift, is within the margin of
+/// a neighbour it was clear of before.
+fn closes_a_margin(units: &[Unit], at: usize, moved: &Rect) -> bool {
+    let Some(unit) = units.get(at) else { return false };
+    units.iter().enumerate().filter(|(i, _)| *i != at).any(|(_, o)| {
+        overlaps_with_margin(*moved, o.bbox) && !overlaps_with_margin(unit.bbox, o.bbox)
+    })
 }
 
 /// The anchors a frame's level holds that the margin rule cannot move.
@@ -175,5 +189,52 @@ pub(super) fn apply_floor(units: &mut [Unit], floor: Point, outside: &Outside) {
             }
             ax.shift(unit, target - at);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    fn unit(x: f64, y: f64) -> Unit {
+        Unit {
+            root: 0,
+            members: vec![0],
+            bbox: Rect { x, y, w: 10.0, h: 10.0 },
+            movable: true,
+            dx: 0.0,
+            dy: 0.0,
+        }
+    }
+
+    const ORIGIN: Point = Point { x: 0.0, y: 0.0 };
+
+    #[test]
+    fn a_snap_that_would_close_the_margin_to_a_neighbour_is_not_made() {
+        // Lined up with nothing, 5 and 47 both round onto the grid, to 8 and 48:
+        // a gap of 30 where 32 was left.
+        let mut units = vec![unit(5.0, 0.0), unit(47.0, 0.0)];
+        snap_stale_anchors(&mut units, ORIGIN);
+        let gap = units[1].bbox.x - (units[0].bbox.x + units[0].bbox.w);
+        assert!(gap >= TIDY_MARGIN_PX, "gap {gap}");
+        // The one that can snap clear still does.
+        assert!(js_eq(units[1].bbox.x, 48.0));
+    }
+
+    #[test]
+    fn a_snap_clear_of_every_neighbour_is_made() {
+        let mut units = vec![unit(5.0, 0.0), unit(200.0, 0.0)];
+        snap_stale_anchors(&mut units, ORIGIN);
+        assert!(js_eq(units[0].bbox.x, 8.0));
+    }
+
+    #[test]
+    fn a_unit_already_inside_the_margin_of_a_neighbour_still_snaps() {
+        // Nothing the snap does closes a margin that was never open.
+        let mut units = vec![unit(5.0, 0.0), unit(20.0, 0.0)];
+        snap_stale_anchors(&mut units, ORIGIN);
+        assert!(js_eq(units[0].bbox.x, 8.0));
     }
 }
