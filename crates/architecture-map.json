@@ -120,11 +120,16 @@
     "whiteboard-search": {
       "path": "crates/core/search",
       "layer": "core",
-      "status": "planned",
+      "status": "present",
       "description": "tokenizer, BM25 ranking, snippets, searchable text",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det", "whiteboard-model"],
-      "allowedThirdParty": {},
+      "allowedThirdParty": {
+        "unicode-case-mapping": "the lowercase mapping String#toLowerCase applies to a code point, special casing included (U+0130); Unicode 16.0; checked before adopting: pure tables, no I/O and no `std` dependence of their own (unicode-normalization needs only `tinyvec`), so they build unchanged on wasm32 and native; pinned exactly so the Unicode release is a determinism input (QR-20b), which each reports and a test asserts",
+        "unicode-normalization": "NFKD, the decomposition that folds a compatibility form to its Latin or ASCII base; Unicode 18.0; checked before adopting: pure tables, no I/O and no `std` dependence of their own (unicode-normalization needs only `tinyvec`), so they build unchanged on wasm32 and native; pinned exactly so the Unicode release is a determinism input (QR-20b), which each reports and a test asserts",
+        "unicode-properties": "the general category behind the letter, number and mark classes; Unicode 18.0; checked before adopting: pure tables, no I/O and no `std` dependence of their own (unicode-normalization needs only `tinyvec`), so they build unchanged on wasm32 and native; pinned exactly so the Unicode release is a determinism input (QR-20b), which each reports and a test asserts",
+        "unicode-script": "the Script property behind the Latin test; Unicode 18.0; checked before adopting: pure tables, no I/O and no `std` dependence of their own (unicode-normalization needs only `tinyvec`), so they build unchanged on wasm32 and native; pinned exactly so the Unicode release is a determinism input (QR-20b), which each reports and a test asserts"
+      },
       "absorbs": ["packages/search"]
     },
     "whiteboard-plugin-visual": {

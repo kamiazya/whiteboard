@@ -31,7 +31,7 @@ import {
   tokenize,
   tokenizeForIndex,
 } from '../full-text.js'
-import { type SearchableContent, searchableTexts } from '../searchable-texts.js'
+import { searchableTexts } from '../searchable-texts.js'
 import { linkLabelsFrom, snippetAround } from '../snippet.js'
 import { randomCjk } from './random-cjk.js'
 import { searchableContents } from './search-oracle-contents.js'
@@ -544,7 +544,7 @@ function searchRecords(next: () => number): Json[] {
 }
 
 function contentRecords(): Json[] {
-  return searchableContents().map((content: SearchableContent) => ({
+  return searchableContents().map((content: ReturnType<typeof searchableContents>[number]) => ({
     kind: 'searchable-texts',
     content: content as unknown as Json,
     out: searchableTexts(content),

@@ -62,6 +62,11 @@
       "regions": 96,
       "reason": "first measured 2026-11-11 at 100.00% lines and 96.15% regions: the scene vocabulary is types, so what runs is the oracle-feature readers (tests/oracle_read.rs, and canvas-render's replay of the recordings), and the regions left are the derive's own error arms"
     },
+    "core/search": {
+      "lines": 98,
+      "regions": 97,
+      "reason": "first measured 2026-11-17 at 98.43% lines and 97.85% regions over the folding and tokenizing, with the recorded search.jsonl replayed natively (tests/search_oracle.rs: every fold, find and tokenization, and the three Unicode tables over every code point) beside the examples; what is left is the arms a well-formed text never reaches (a span lookup past the folded text, a slice off a char boundary)"
+    },
     "testing/proptest": {
       "lines": 98,
       "regions": 97,

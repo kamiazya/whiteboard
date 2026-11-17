@@ -1,6 +1,8 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import type { SearchableContent } from '../searchable-texts.js'
+import type { searchableTexts } from '../searchable-texts.js'
+
+type SearchableContent = Parameters<typeof searchableTexts>[0]
 
 const box = { x: 0, y: 0, width: 100, height: 40 }
 
@@ -14,12 +16,21 @@ const canvas = (
 
 /** The contents `searchableTexts` is recorded over: every node kind, label and description shape. */
 export function searchableContents(): SearchableContent[] {
+  return [...markdownContents(), ...spatialContents()]
+}
+
+function markdownContents(): SearchableContent[] {
   return [
     { kind: 'markdown', body: '# Roadmap\n\nShip search.' },
     { kind: 'markdown', body: '# Roadmap', description: 'Quarterly summary' },
     { kind: 'markdown', body: '# Roadmap', description: '' },
     { kind: 'markdown', body: '', description: '検索' },
     { kind: 'markdown', body: '' },
+  ]
+}
+
+function spatialContents(): SearchableContent[] {
+  return [
     {
       kind: 'spatial',
       canvas: canvas(
