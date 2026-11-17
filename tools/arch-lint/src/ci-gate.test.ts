@@ -34,6 +34,7 @@ const {
   stillSettling,
   readSettledJobs,
   readScopePlan,
+  readMutantsPlan,
   NOT_AFFECTED_STEP,
   SCOPE_JOB,
 } = (await import(pathToFileURL(join(ROOT, 'tools/checks/src/ci-gate.mjs')).href)) as {
@@ -42,8 +43,10 @@ const {
     needed: string[]
     gateJobName: string
     plan?: ScopePlan
+    mutantsLegs?: string | null
   }) => string[]
   readScopePlan: (needs: unknown) => ScopePlan
+  readMutantsPlan: (needs: unknown) => string | null
   NOT_AFFECTED_STEP: string
   SCOPE_JOB: string
   SKIPPABLE_JOBS: Record<string, string>
@@ -132,6 +135,31 @@ describe('the extension smokes run beside verify, not inside it', () => {
     expect(gate?.needs).toContain('extension-smokes')
     const waiting = jobs.filter((job) => job.needs.includes('extension-smokes'))
     expect(waiting.map((job) => job.id)).toEqual(['ci-gate'])
+  })
+})
+
+describe('the gate accepts a skipped rust-mutants only when the plan job planned no leg', () => {
+  const needed = () => gate?.needs ?? []
+  const skipped = fixture('green').map((job) =>
+    baseJobName(job.name) === 'rust-mutants' ? { ...job, conclusion: 'skipped' } : job,
+  )
+  const run = (mutantsLegs: string | null) =>
+    gateFailures({ jobs: skipped, needed: needed(), gateJobName: 'ci-gate', mutantsLegs })
+
+  it('passes when zero legs were planned', () => {
+    expect(run('0')).toEqual([])
+  })
+
+  it.each(['3', '8', '', null])('fails when the plan said %j', (legs) => {
+    expect(run(legs).length).toBeGreaterThan(0)
+    expect(run(legs)[0]).toMatch(
+      /^rust-mutants \(\d\): skipped, but the `rust-mutants-plan` job planned/,
+    )
+  })
+
+  it('reads the plan job total out of needs', () => {
+    expect(readMutantsPlan({ 'rust-mutants-plan': { outputs: { total: '0' } } })).toBe('0')
+    expect(readMutantsPlan({})).toBeNull()
   })
 })
 

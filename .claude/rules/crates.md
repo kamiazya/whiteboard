@@ -136,8 +136,9 @@ steps and cache paths to the scripts.
   run, counted per crate; under a floor fails, and so does a floor more than
   `headroomPoints` below the measurement (`--update` only raises).
 - **Mutation gate** (QR-17): CI's `rust-mutants` job runs `pnpm
-  rust:mutants:pr` — `cargo mutants --in-diff` against the PR base, eight
-  shards, after a separate green `cargo test --workspace` — and a missed or
+  rust:mutants:pr` — `cargo mutants --in-diff` against the PR base, in
+  as many shards as the diff lists mutants for (`rust-mutants-plan`: none to
+  eight on a pull request, always eight elsewhere), after a separate green `cargo test --workspace` — and a missed or
   timed-out mutant, or a failed baseline, fails it
   (`tools/checks/src/rust-mutants.mjs` reads the exit codes). A mutant no
   test can observe is ledgered in `.cargo/mutants.toml` with its reason above
@@ -233,8 +234,11 @@ steps and cache paths to the scripts.
   crates carry unsafe or f32 and `ttf-parser` is unmaintained). It reads fonts users install, so it
   is an `input-caps.json` entry (`sfnt_parse`, seeds in `crates/fuzz/seeds/sfnt_parse`) and
   refuses a cmap whose segments or groups are not sorted and disjoint.
-- **The spatial digest is held to a recording and written by hand**:
-  `packages/canvas-render/src/oracle/scene-digest.jsonl` holds `sceneDigest`'s
+- **The spatial digest is held to a recording and written by hand**, and the
+  TypeScript it was recorded from is deleted (ADR-0054 phase A1): the core
+  answers it through `layout_query`'s `scene-digest` query, so the scene is
+  never sent back, and the recording is frozen.
+  `packages/canvas-render/src/oracle/scene-digest.jsonl` holds the deleted `sceneDigest`'s
   `JSON.stringify` text for the scenes of `svg.jsonl` (by id), for scenes written
   as specs, and for seeded boards regenerated from its `meta` record (one FNV digest
   per chunk); a digest past 3,000 characters is held as its length and FNV digest.

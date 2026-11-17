@@ -4,6 +4,7 @@
 use whiteboard_det::math::{compare_numbers, js_max, js_min};
 use whiteboard_scene::BoundingBox;
 
+use super::order::sorted_by;
 use super::{DigestError, Entry};
 
 /// Grid granularity, in px.
@@ -200,12 +201,13 @@ pub(super) fn free_regions(entries: &[Entry]) -> Result<(Vec<BoundingBox>, bool)
         Plan::NoRows => return Ok((Vec::new(), false)),
         Plan::Scan(grid) => grid,
     };
-    let mut regions = free_runs(&occupancy(entries, &grid), &grid);
+    let regions = free_runs(&occupancy(entries, &grid), &grid);
     if regions.len() <= MAX_REGIONS {
         return Ok((regions, false));
     }
-    regions.sort_by(|a, b| compare_numbers(b.w * b.h, a.w * a.h).then_with(|| by_position(a, b)));
+    let mut regions = sorted_by(regions, |a, b| {
+        compare_numbers(b.w * b.h, a.w * a.h).then_with(|| by_position(a, b))
+    });
     regions.truncate(MAX_REGIONS);
-    regions.sort_by(by_position);
-    Ok((regions, true))
+    Ok((sorted_by(regions, by_position), true))
 }

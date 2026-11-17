@@ -125,7 +125,8 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   'scene-entry-keys.ts': 'leaf',
   'xml-escape.ts': 'leaf',
   'scene-bounds.ts': 'scene-bounds',
-  'scene-digest.ts': 'surface',
+  // The digest's schema, which a query's answer names and a root's tool output spreads.
+  'scene-digest-schema.ts': 'leaf',
   'scoring.ts': 'surface',
   'tidy.ts': 'surface',
   'tidy-axis.ts': 'surface',

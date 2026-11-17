@@ -1,7 +1,6 @@
 import type { BoundingBox, Scene, SceneNode } from '@kamiazya/whiteboard-scene'
-import { describe, expect, it } from 'vitest'
+import { describe, expect } from 'vitest'
 import { sceneBounds } from './scene-bounds.js'
-import { sceneDigest } from './scene-digest.js'
 import type { SvgDocumentOptions } from './svg/backend.js'
 import { renderSceneToSvg } from './svg/backend.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
@@ -12,42 +11,6 @@ const bboxArb = fc.record({
   y: fc.integer({ min: 0, max: 300 }),
   w: fc.integer({ min: 0, max: 100 }),
   h: fc.integer({ min: 0, max: 100 }),
-})
-
-/**
- * A scene mixing ADDRESSABLE chrome (a `shape` carrying a document id) with
- * anonymous nodes. The id is what the digest is for — it reports one entry
- * per addressable node so a reader can act on what it sees — and a scene of
- * bare `thematicBreak`s carries none, so every entry fell through to the
- * `n${index}` fallback: measured 0 of 200 runs reached an addressable entry,
- * which is the path the digest actually ships.
- */
-const digestSceneArb: fc.Arbitrary<Scene> = fc
-  .array(fc.record({ bbox: bboxArb, addressable: fc.boolean() }), { maxLength: 8 })
-  .map((entries) => ({
-    nodes: entries.map(
-      ({ bbox, addressable }, index): SceneNode =>
-        addressable
-          ? { kind: 'shape' as const, id: `doc-${index}`, bbox }
-          : { kind: 'thematicBreak' as const, bbox },
-    ),
-  }))
-
-describe('sceneDigest determinism (PBT)', () => {
-  fcTest.prop([digestSceneArb], withDefaults())(
-    'is pure: repeated calls on the same scene yield the same digest',
-    (scene) => {
-      expect(sceneDigest(scene)).toEqual(sceneDigest(scene))
-    },
-  )
-
-  it('the domain reaches addressable entries, not only the anonymous fallback', () => {
-    const addressable = fc
-      .sample(digestSceneArb, 200)
-      .filter((scene) => sceneDigest(scene).nodes.some((node) => node.id.startsWith('doc-')))
-    // A floor, well under what the generator measures.
-    expect(addressable.length).toBeGreaterThanOrEqual(120)
-  })
 })
 
 /**

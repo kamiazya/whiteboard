@@ -73,6 +73,19 @@ describe('a query over the artifact', () => {
     )
   })
 
+  it('reads a scene digest as the text the core wrote, and refuses another shape', () => {
+    const digest = JSON.stringify({ nodes: [], overlaps: [] })
+    const request = { query: 'scene-digest', measure: { kind: 'ratio' } } as const
+    const events = [{ kind: 'font-missing', family: 'Yomogi' }]
+    expect(ask(glueOf(JSON.stringify(['ok', digest, events])).glue, request)).toEqual({
+      digest,
+      degradations: events,
+    })
+    expect(() => ask(glueOf(JSON.stringify(['ok', digest])).glue, request)).toThrow(
+      'layout_query malformed answer',
+    )
+  })
+
   it('sends the fences a measured query asks for, tokenised, on a second call', () => {
     const needs = JSON.stringify(['needs', { code: [['ts', 'x']] }])
     const { glue, sent } = glueOf(needs, JSON.stringify(['ok', [hex(42)]]))

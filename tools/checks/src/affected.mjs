@@ -234,6 +234,8 @@ export const UNSCOPED_JOBS = {
   zizmor: 'audits the workflow files, which are CI itself',
   'dependency-review':
     'reads the dependency-graph diff GitHub computes between base and head, not a workspace path',
+  'rust-mutants-plan':
+    'sizes rust-mutants from the diff itself (rust-mutants.mjs plan), and runs the scope step to do it',
   'ci-gate': 'the aggregate check',
 }
 

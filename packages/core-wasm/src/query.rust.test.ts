@@ -46,6 +46,21 @@ describe('the queries through the shim over the built artifact', () => {
     expect(asked).toContain('flows')
   })
 
+  it('digests the scene a canvas lays out without sending the scene back', async () => {
+    const core = await loadCore(bytes())
+    const request = {
+      query: 'scene-digest',
+      canvas,
+      mode: 'light',
+      expand: false,
+      measure: { kind: 'fake', factor: 0.6 },
+    } as const
+    const answered = core.layoutQuery(request)
+    expect('digest' in answered, JSON.stringify(answered)).toBe(true)
+    const digest = JSON.parse((answered as { digest: string }).digest)
+    expect(digest.nodes.map((n: { id: string }) => n.id)).toEqual(['a', 'b'])
+  })
+
   it('sizes a node, asking for its fence tokens on a second call', async () => {
     const core = await loadCore(bytes())
     const node = {
