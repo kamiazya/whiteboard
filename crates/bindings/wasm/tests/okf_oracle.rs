@@ -9,6 +9,7 @@
 //! `packages/codec`'s wasm differential holds that.
 
 use serde_json::{Value as Json, json};
+use whiteboard_codec::frontmatter::{self, Value};
 use whiteboard_wasm::okf::{okf_parse, okf_serialize};
 
 fn recording() -> Vec<Json> {
@@ -106,10 +107,46 @@ fn every_recorded_text_is_read_as_the_typescript_read_it() {
     assert!(read > 250 && refused > 700, "{read} read, {refused} refused");
 }
 
+/// Every string a recorded value holds as a leaf (a map's values, not its keys).
+fn recorded_strings(recorded: &Json) -> Vec<String> {
+    match recorded {
+        Json::String(text) => vec![text.clone()],
+        Json::Array(items) => items.iter().flat_map(recorded_strings).collect(),
+        Json::Object(object) => {
+            object.get("m").and_then(Json::as_array).map_or_else(Vec::new, |pairs| {
+                pairs.iter().flat_map(|pair| recorded_strings(&pair[1])).collect()
+            })
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// Every string a read value holds as a leaf.
+fn read_strings(value: &Value) -> Vec<String> {
+    match value {
+        Value::String(text) => vec![text.clone()],
+        Value::Seq(items) => items.iter().flat_map(read_strings).collect(),
+        Value::Map(entries) => entries.iter().flat_map(|(_, item)| read_strings(item)).collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Whether a written text's frontmatter reads back holding every string the
+/// recorded frontmatter holds, as `crates/core/codec/tests/okf_oracle.rs` asks.
+fn reads_back_holding(recorded: &Json, text: &str) -> bool {
+    let held = recorded_strings(recorded);
+    let yaml = text.strip_prefix("---\n").and_then(|rest| rest.split_once("\n---\n"));
+    yaml.and_then(|(yaml, _)| frontmatter::parse(yaml).ok()).is_some_and(|read| {
+        let read = read_strings(&read);
+        held.iter().filter(|s| !s.is_empty()).all(|s| read.contains(s))
+    })
+}
+
 #[test]
 fn every_recorded_document_is_written_as_the_typescript_wrote_it() {
     let (mut written, mut unwritable, mut declined, mut problems) =
         (0usize, 0usize, 0usize, Vec::new());
+    let mut corrected = 0usize;
     for case in recording().iter().filter(|c| c["k"] == "w") {
         let Some(frontmatter) = wire(field(&case["d"], "frontmatter")) else { continue };
         let answer: Json =
@@ -124,7 +161,17 @@ fn every_recorded_document_is_written_as_the_typescript_wrote_it() {
         if let Some(y) = case.get("y").and_then(Json::as_str) {
             let body = field(&case["d"], "body").as_str().unwrap_or_default();
             let text = format!("{}{body}", answer[1].as_str().unwrap_or_default());
-            if answer[0] != "ok" || text != y {
+            let recorded = field(&case["d"], "frontmatter");
+            if answer[0] == "ok"
+                && text != y
+                && !reads_back_holding(recorded, y)
+                && reads_back_holding(recorded, &text)
+            {
+                // A first line that starts with a space, folded by the
+                // TypeScript where a reader keeps the break: see the codec's
+                // `recorded_oracle.rs`.
+                corrected += 1;
+            } else if answer[0] != "ok" || text != y {
                 problems.push(format!("wrote {answer}, expected {y:?}"));
             }
             written += 1;
@@ -142,5 +189,6 @@ fn every_recorded_document_is_written_as_the_typescript_wrote_it() {
         &problems[..problems.len().min(5)]
     );
     assert!(written > 420 && unwritable > 25, "{written} written, {unwritable} refused");
+    assert_eq!(corrected, 1, "recorded writes that did not read back, written so they do");
     assert!((1..30).contains(&declined), "{declined} documents declined");
 }

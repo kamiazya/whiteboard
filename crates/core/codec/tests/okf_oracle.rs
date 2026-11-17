@@ -19,7 +19,7 @@ mod common;
 
 use common::{decode, encode};
 use serde_json::{Value as Json, json};
-use whiteboard_codec::frontmatter::{Refusal, Unwritable, Value};
+use whiteboard_codec::frontmatter::{self, Refusal, Unwritable, Value};
 use whiteboard_codec::okf::{
     Code, Document, Failure, Issue, OkfMarkdownFrontmatter, OkfTrustEvent, Step, parse, serialize,
 };
@@ -272,20 +272,51 @@ fn document_of(case: &Json) -> Result<Option<Document>, String> {
     Ok(Some(Document { frontmatter, body: text_field(&whole, "body").ok_or("no body")? }))
 }
 
+/// Whether a written text's frontmatter reads back holding every string the
+/// recorded frontmatter holds. The document itself may be one the schema
+/// refuses, so the frontmatter is read alone.
+fn reads_back_holding(case: &Json, text: &str) -> bool {
+    let held = map_of(&decode(&case["d"]).unwrap_or(Value::Null))
+        .ok()
+        .and_then(|whole| field(&whole, "frontmatter").map(strings_of_value))
+        .unwrap_or_default();
+    let yaml = text.strip_prefix("---\n").and_then(|rest| rest.split_once("\n---\n"));
+    yaml.and_then(|(yaml, _)| frontmatter::parse(yaml).ok()).is_some_and(|read| {
+        let read = strings_of_value(&read);
+        held.iter().filter(|s| !s.is_empty()).all(|s| read.contains(s))
+    })
+}
+
+/// Every string a value holds as a leaf.
+fn strings_of_value(value: &Value) -> Vec<String> {
+    match value {
+        Value::String(text) => vec![text.clone()],
+        Value::Seq(items) => items.iter().flat_map(strings_of_value).collect(),
+        Value::Map(entries) => {
+            entries.iter().flat_map(|(_, item)| strings_of_value(item)).collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
 #[test]
 fn every_recorded_document_is_written_as_the_typescript_wrote_it() {
     let recording = recording();
     let cases: Vec<&Json> = recording.iter().filter(|c| c["k"] == "w").collect();
     let mut problems: Vec<String> = Vec::new();
-    let (mut written, mut unwritable, mut unrepresentable) = (0usize, 0usize, 0usize);
+    let (mut written, mut unwritable, mut unrepresentable, mut corrected) = (0, 0, 0, 0usize);
     for case in &cases {
         let Some(doc) = document_of(case).expect("a recorded document") else {
             unrepresentable += 1;
             assert!(case.get("err").is_some(), "a lone surrogate was written: {case}");
             continue;
         };
+        let reads_back = |text: &str| reads_back_holding(case, text);
         match (serialize(&doc), case.get("y").and_then(Json::as_str), case.get("err")) {
             (Ok(text), Some(y), _) if text == y => written += 1,
+            // A first line that starts with a space, folded by the TypeScript
+            // where a reader keeps the break: see `recorded_oracle.rs`.
+            (Ok(text), Some(y), _) if !reads_back(y) && reads_back(&text) => corrected += 1,
             (Err(faults), ..) if faults.iter().any(|f| f.why == Unwritable::TooDeep) => {
                 problems.push(format!("too deep: {case}"));
             }
@@ -303,6 +334,7 @@ fn every_recorded_document_is_written_as_the_typescript_wrote_it() {
         &problems[..problems.len().min(5)]
     );
     assert!(written > 350, "{written} documents written");
+    assert_eq!(corrected, 1, "recorded writes that did not read back, written so they do");
     assert!(unwritable > 20, "{unwritable} documents refused");
     assert!(unrepresentable > 3, "{unrepresentable} documents held a lone surrogate");
 }
