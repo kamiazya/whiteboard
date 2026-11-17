@@ -433,10 +433,10 @@ describe('the mutation lane covers what it says it covers', () => {
     // codegen` emits from contracts/geometry. Outside the lane: it is
     // generated, so an edit to it fails `codegen --check` before any test,
     // and its refusals are pinned by `geometry-contract.test.ts`.
-    // 127 with the TypeScript routing seam (ADR-0054): the
-    // core when a root hands one, else the TypeScript routing. Outside the
-    // lane: it was a two-way dispatch, both branches driven by its own test,
-    // and it went with the TypeScript routing (S18h3b).
+    // 127 with the routing seam (ADR-0054), then a two-way dispatch: the
+    // core when a root handed one, else the TypeScript routing. Outside the
+    // lane: both branches were driven by its own test. The TypeScript branch
+    // went with the TypeScript routing (S18h3b); the seam is `layout-core.ts`.
     // 128 with the phrase-pair rule: the join of a BudouX phrase that ends
     // inside a surrogate pair, outside the lane because it was one loop whose
     // every branch its surrogate-pair test drove. Both went with the
@@ -492,9 +492,9 @@ describe('the mutation lane covers what it says it covers', () => {
     // 88 and 16 since the TypeScript edge routing was deleted (S18h3b): the
     // twenty-one modules and the bench under `layout/edges/` went, and three
     // root modules took what outlives them — `edge-routing.ts` (the sides,
-    // anchors and budget a caller hands the core), the TypeScript routing seam (the core
+    // anchors and budget a caller hands the core), `layout-core.ts` (the core
     // as a root hands it, and `routeLayout`, one call into it) and
-    // the TypeScript stroke-weight table, moved as it stood. None of the three joins the lane:
+    // `stroke-weight.ts`, the stroke-weight table, moved as it stood. None of the three joins the lane:
     // types, a constant table and a one-line forward, with nothing a mutant
     // could change that a test could see. The seven mutated routing modules
     // (the cost model, the ink terms, the diagonal clip, the crossing sweep,

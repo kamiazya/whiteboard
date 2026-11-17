@@ -24,6 +24,54 @@ function sharedCorners(a: readonly Point[], b: readonly Point[]): number {
   ).size
 }
 
+// The scoreboard below asserts a sum of zero, which a helper that never counts
+// would also give. These pin that the helper does count a kiss, and only one.
+const kissing = [
+  [
+    { x: 0, y: 50 },
+    { x: 50, y: 50 },
+    { x: 50, y: 0 },
+  ],
+  [
+    { x: 100, y: 50 },
+    { x: 50, y: 50 },
+    { x: 50, y: 100 },
+  ],
+] as const
+
+describe('the shared-corner count the scoreboard is judged by', () => {
+  it('counts two corners on one point once for the pair', () => {
+    expect(sharedCorners(kissing[0], kissing[1])).toBe(1)
+  })
+
+  it('finds none where two paths merely end on one anchor', () => {
+    const converging = [
+      [
+        { x: 0, y: 50 },
+        { x: 50, y: 50 },
+      ],
+      [
+        { x: 50, y: 0 },
+        { x: 50, y: 50 },
+      ],
+    ] as const
+    expect(sharedCorners(converging[0], converging[1])).toBe(0)
+  })
+
+  it('counts a corner once however often one path revisits it', () => {
+    const revisiting = [
+      { x: 0, y: 50 },
+      { x: 50, y: 50 },
+      { x: 50, y: 90 },
+      { x: 20, y: 90 },
+      { x: 20, y: 50 },
+      { x: 50, y: 50 },
+      { x: 50, y: 0 },
+    ]
+    expect(sharedCorners(revisiting, kissing[1])).toBe(1)
+  })
+})
+
 describe('the optimizer leaves a corner kiss when it can', () => {
   it('draws the service board without two detours bending at one point', () => {
     const board = designerBoard()
