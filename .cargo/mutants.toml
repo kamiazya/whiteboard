@@ -344,4 +344,8 @@ exclude_re = [
   # padding): `dx` then only moves a node by `x + -0`, and the placement adds
   # `bounds.x + pad_x`, never `-0`, after it, so the zero's sign never survives.
   'node_box\.rs:\d+:\d+: replace < with <= in place_in_node$',
+  # canvas-render scene_digest positions: `width < len` made `<=` adds one pass at
+  # `width == len`, where the slice is a single run and the merge copies it
+  # unchanged, so the order it answers is the same.
+  'order\.rs:\d+:\d+: replace < with <= in positions$',
 ]

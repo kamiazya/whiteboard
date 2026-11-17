@@ -11,13 +11,18 @@ use core::cmp::Ordering;
 /// order (a stable bottom-up merge sort).
 fn positions(len: usize, compare: &dyn Fn(usize, usize) -> Ordering) -> Vec<usize> {
     let mut order: Vec<usize> = (0..len).collect();
-    let mut width = 1;
-    while width < len {
+    // Run widths 1, 2, 4, … while a run is shorter than the slice. An
+    // iterator that ends at overflow rather than a `while` on `width`, so no
+    // edit to the bound can spin forever.
+    let widths = core::iter::successors(Some(1_usize), |w| w.checked_mul(2));
+    for width in widths.take_while(|&width| width < len) {
         let mut merged = Vec::with_capacity(len);
-        let mut start = 0;
-        while start < len {
+        let step = width.saturating_mul(2);
+        // An iterator rather than a `while start < len` cursor: no edit to
+        // the bound can turn the pass into a loop that never ends.
+        for start in (0..len).step_by(step) {
             let mid = start.saturating_add(width).min(len);
-            let end = mid.saturating_add(width).min(len);
+            let end = start.saturating_add(step).min(len);
             let left = order.get(start..mid).unwrap_or_default();
             let right = order.get(mid..end).unwrap_or_default();
             let (mut l, mut r) = (0, 0);
@@ -32,10 +37,8 @@ fn positions(len: usize, compare: &dyn Fn(usize, usize) -> Ordering) -> Vec<usiz
             }
             merged.extend_from_slice(left.get(l..).unwrap_or_default());
             merged.extend_from_slice(right.get(r..).unwrap_or_default());
-            start = end;
         }
         order = merged;
-        width = width.saturating_mul(2);
     }
     order
 }
