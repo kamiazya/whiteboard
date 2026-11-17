@@ -348,13 +348,6 @@ exclude_re = [
   # `width == len`, where the slice is a single run and the merge copies it
   # unchanged, so the order it answers is the same.
   'order\.rs:\d+:\d+: replace < with <= in positions$',
-  # search cluster: `preceded_by_prepend` answering true makes the cheap test
-  # `is_boundary_unit` refuse every unit, which only sends each cut down the
-  # window path. A boundary unit is a cut no cluster straddles and nothing
-  # before it decides what follows, so a window from the nearest one and a
-  # window 64 units back segment from there on alike: the answer is the same
-  # and only the cost differs. Its `false` sibling is judged.
-  'cluster\.rs:\d+:\d+: replace preceded_by_prepend -> bool with true$',
   # search fold: `folds_to_itself` only spares kana, CJK and Hangul a table
   # lookup that answers the same; the test beside fold_code_point checks every
   # code point of those ranges against the table's answer, so answering false

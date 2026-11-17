@@ -113,3 +113,15 @@ fn emoji_that_share_a_flag_leading_surrogate_do_not_push_the_window_to_its_lookb
     // run of them past the lookback must still be found whole by a window.
     check_every_offset(&format!("a{}", "\u{1f300}\u{301}".repeat(500)));
 }
+
+#[test]
+fn a_letter_after_a_flag_run_stops_the_window_before_the_run() {
+    // 600 flags are 1200 units, past the lookback, then 'a' + U+0301 + 'b'. The
+    // 'a' at 1200 is a cut nothing before it decides, so the window starts
+    // there; walked back into the flags it would exhaust the lookback and snap
+    // to code points, cutting between the 'a' and its combining mark.
+    let units: Vec<u16> = format!("{}a\u{301}b", "\u{1f1e6}".repeat(600)).encode_utf16().collect();
+    let between_the_letter_and_its_mark = 1201;
+    assert_eq!(cluster_start_at_or_after(&units, between_the_letter_and_its_mark), 1202);
+    assert_eq!(cluster_end_at_or_before(&units, between_the_letter_and_its_mark), 1200);
+}
