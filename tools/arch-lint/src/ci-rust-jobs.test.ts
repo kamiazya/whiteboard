@@ -30,6 +30,7 @@ interface Step {
   with?: Record<string, unknown>
 }
 interface Job {
+  name?: string
   needs?: string | string[]
   if?: string
   env?: Record<string, unknown>
@@ -163,16 +164,30 @@ describe('the rust-mutants job runs the pinned cargo-mutants after a green basel
     expect(cache?.with?.key).toBe(`cargo-mutants-${MUTANTS_PIN}`)
   })
 
-  it('runs the workspace tests in a step before the mutants, and shards with identical arguments', () => {
-    const test = steps.findIndex((s) => s.run?.trim() === 'cargo test --workspace --locked')
+  it("runs the leg's tests in a step before the mutants, and shards with identical arguments", () => {
+    const test = steps.findIndex(
+      (s) => s.run?.trim() === 'node tools/checks/src/rust-mutants.mjs baseline',
+    )
     const mutants = steps.findIndex((s) => s.run?.includes('pnpm rust:mutants:pr'))
     expect(test).toBeGreaterThan(-1)
     expect(mutants).toBeGreaterThan(test)
     expect(steps[mutants]?.env?.RUST_MUTANTS_BASE).toBe('HEAD^1')
-    expect(steps[mutants]?.env?.RUST_MUTANTS_SHARD).toBe(
-      `\${{ matrix.shard }}/\${{ needs.rust-mutants-plan.outputs.total }}`,
-    )
+    expect(steps[mutants]?.env?.RUST_MUTANTS_SHARD).toBe(`\${{ matrix.shard }}`)
     expect(ci.jobs['rust-mutants']?.strategy?.['fail-fast']).toBe(false)
+  })
+
+  it('hands a leg its packages and tests through env, never into a script body', () => {
+    const job = ci.jobs['rust-mutants'] as Job
+    expect(job.env?.RUST_MUTANTS_PACKAGES).toBe(`\${{ matrix.packages }}`)
+    expect(job.env?.RUST_MUTANTS_TESTS).toBe(`\${{ matrix.tests }}`)
+    for (const script of runs(ci, 'rust-mutants')) expect(script).not.toContain('matrix.')
+  })
+
+  it('names each leg and its report by the plan, so two groups never share an artifact', () => {
+    const job = ci.jobs['rust-mutants'] as Job
+    expect(job.name).toBe(`rust-mutants (\${{ matrix.leg }})`)
+    const upload = steps.find((s) => s.uses?.startsWith('actions/upload-artifact@'))
+    expect(upload?.with?.name).toBe(`rust-mutants-\${{ matrix.key }}`)
   })
 })
 
@@ -184,7 +199,7 @@ describe('the rust-mutants legs are planned from the diff and the plan cannot pl
     const job = ci.jobs['rust-mutants'] as Job
     expect(job.needs).toBe('rust-mutants-plan')
     expect(job.if).toBe("needs.rust-mutants-plan.outputs.total != '0'")
-    expect(job.strategy?.matrix?.shard).toBe(
+    expect(job.strategy?.matrix?.include).toBe(
       `\${{ fromJSON(needs.rust-mutants-plan.outputs.shards) }}`,
     )
     expect(ci.jobs['ci-gate']?.needs).toContain('rust-mutants-plan')

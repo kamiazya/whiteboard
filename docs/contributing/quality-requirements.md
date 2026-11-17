@@ -101,7 +101,7 @@ layer budgets are the `test-layer-selection` skill's.
 
 | QR | Requirement | Guards against | TypeScript today | Rust | Gate · where |
 |---|---|---|---|---|---|
-| **QR-17** | Rust: every mutant in a PR's diff MUST be caught, or ledgered with a reason. A full run on `main` MUST run nightly and be reported. A by-hand mutation check MUST be shown to have changed something. | Tests and properties that assert nothing; a "mutation check" that substituted nothing | Stryker lanes, report-only: `pnpm mutation:render` (`packages/canvas-render/stryker.config.mjs`, `stryker-targets.mjs`) and `pnpm mutation:contracts` (`packages/mcp-server/stryker.config.mjs`); `mutation.yml` (diff-scoped PR comment, weekly full); lane pinned exactly by `mutation-lane-coverage.test.ts` with its `KNOWN_EQUIVALENT` ledger; `.claude/scripts/mutate.mjs` (exits 3 when nothing matched) | cargo-mutants. PR: `cargo mutants --in-diff` against the PR base, after a separate green test step, with `--baseline=skip`, an explicit `--timeout`, `--test-workspace=true`, sharded `--shard k/n` with identical arguments and `fail-fast: false`. Ledger: `#[mutants::skip]` only with a reason on the same item, and `.cargo/mutants.toml` `exclude_re` entries each carrying a reason, with a test that every regex still matches a mutant in `cargo mutants --list` (a stale entry fails) and the count pinned. Nightly: the full workspace run on `main`, survivors filed as whiteboard issues | Rust: G (PR) + S (nightly). TypeScript: R |
+| **QR-17** | Rust: every mutant in a PR's diff MUST be caught, or ledgered with a reason. A full run on `main` MUST run nightly and be reported. A by-hand mutation check MUST be shown to have changed something. | Tests and properties that assert nothing; a "mutation check" that substituted nothing | Stryker lanes, report-only: `pnpm mutation:render` (`packages/canvas-render/stryker.config.mjs`, `stryker-targets.mjs`) and `pnpm mutation:contracts` (`packages/mcp-server/stryker.config.mjs`); `mutation.yml` (diff-scoped PR comment, weekly full); lane pinned exactly by `mutation-lane-coverage.test.ts` with its `KNOWN_EQUIVALENT` ledger; `.claude/scripts/mutate.mjs` (exits 3 when nothing matched) | cargo-mutants. PR: `cargo mutants --in-diff` against the PR base, after a separate green test step, with `--baseline=skip`, an explicit `--timeout`, each mutant judged by every test that can observe it (`--package` the mutated crate, `--test-package` that crate and its transitive workspace reverse dependents, dev-dependencies included; the whole workspace, `--test-workspace=true`, on `main`, a schedule, a merge queue and whenever the plan cannot be read), sharded `--shard k/n` within each crate's group with identical arguments and `fail-fast: false`. Ledger: `#[mutants::skip]` only with a reason on the same item, and `.cargo/mutants.toml` `exclude_re` entries each carrying a reason, with a test that every regex still matches a mutant in `cargo mutants --list` (a stale entry fails) and the count pinned. Nightly: the full workspace run on `main`, survivors filed as whiteboard issues | Rust: G (PR) + S (nightly). TypeScript: R |
 
 **Exit codes are decisions, not noise.** cargo-mutants exits 0 when every
 mutant was caught, 2 when one was missed, 3 when one timed out, 4 when the
@@ -113,8 +113,17 @@ A tests-only diff produces no mutants and passes trivially.
 [testing.md](testing.md#survivor-classification) already uses: real risk (add
 the test that kills it), equivalent (ledger it), intentionally permissive
 (ledger it with the contract it follows). TypeScript's fourth class,
-perTest-escaping, has no Rust counterpart because the gate runs the whole
-workspace's tests per mutant (`--test-workspace=true`).
+perTest-escaping, has no Rust counterpart because the gate runs every test
+that can observe a mutant, not only the mutated crate's: its transitive
+workspace reverse dependents too, since a crate's oracle can live in a crate
+that depends on it (the edge-routing crate is judged by `whiteboard-wasm`'s
+replay of the recorded TypeScript answers). A test in a crate that does not
+depend on the mutated one, directly or through others, cannot call the mutated
+code, so running it judges nothing and only costs time; a pull request plans
+that set per mutated crate (`shardPlan`, from `cargo metadata`). A test that
+observes a crate without depending on it (one that reads its source text, or
+runs a built artifact outside `cargo test`) is outside `cargo mutants` either
+way, and `main`'s run keeps `--test-workspace=true`.
 
 **Why Rust gates and TypeScript does not — the asymmetry is deliberate.** The
 reasons TypeScript mutation is report-only are real, and the Rust gate is
