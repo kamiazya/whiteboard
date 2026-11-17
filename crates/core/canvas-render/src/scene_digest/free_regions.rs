@@ -4,8 +4,8 @@
 use whiteboard_det::math::{compare_numbers, js_max, js_min};
 use whiteboard_scene::BoundingBox;
 
-use super::order::sorted_by;
 use super::{DigestError, Entry};
+use crate::order::sorted_by;
 
 /// Grid granularity, in px.
 const GRID_PX: f64 = 20.0;

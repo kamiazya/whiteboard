@@ -46,6 +46,19 @@ describe('the queries through the shim over the built artifact', () => {
     expect(asked).toContain('flows')
   })
 
+  it('tidies a board and answers only the boxes that move', async () => {
+    const core = await loadCore(bytes())
+    const request = {
+      query: 'tidy',
+      nodes: [
+        ['a', false, 0, 0, 100, 40],
+        ['b', false, 200, 3, 100, 40],
+      ],
+      locked: [],
+    } as const
+    expect(core.layoutQuery(request)).toEqual({ moves: [['b', 200, 0]] })
+  })
+
   it('digests the scene a canvas lays out without sending the scene back', async () => {
     const core = await loadCore(bytes())
     const request = {

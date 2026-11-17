@@ -148,4 +148,37 @@ describe('a query over the artifact', () => {
     })
     expect(sent).toEqual([])
   })
+
+  it('sends a tidy on the value wire and reads its moves, a grown frame carrying its size', () => {
+    const request = {
+      query: 'tidy',
+      nodes: [['a', false, 0, 0, 100, 40]],
+      locked: ['b'],
+      edges: [['a', null]],
+    } as const
+    const answer = JSON.stringify([
+      'ok',
+      ['a', hex(8), hex(-0)],
+      ['f', hex(0), hex(0), hex(144), hex(96)],
+    ])
+    const { glue, sent } = glueOf(answer, JSON.stringify(['ok', ['a', 'nope', hex(1)]]))
+    expect(ask(glue, request)).toEqual({
+      moves: [
+        ['a', 8, -0],
+        ['f', 0, 0, 144, 96],
+      ],
+    })
+    expect(sent[0]).toEqual([
+      'm',
+      'query',
+      'tidy',
+      'nodes',
+      ['s', ['s', 'a', false, 0, 0, 100, 40]],
+      'locked',
+      ['s', 'b'],
+      'edges',
+      ['s', ['s', 'a', null]],
+    ])
+    expect(() => ask(glue, request)).toThrow('layout_query malformed answer')
+  })
 })

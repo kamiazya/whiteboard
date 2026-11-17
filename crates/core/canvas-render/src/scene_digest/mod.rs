@@ -14,7 +14,6 @@
 
 mod free_regions;
 pub(crate) mod json;
-mod order;
 mod pairs;
 
 use whiteboard_scene::{BoundingBox, Scene, SceneNode};

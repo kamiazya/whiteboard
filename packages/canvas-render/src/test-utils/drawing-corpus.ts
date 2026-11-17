@@ -1,6 +1,7 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { tidyBoxes, tidyNodes } from '../tidy.js'
+import { tidyBoxes } from '../tidy.js'
+import { tidyNodes } from './tidy-core.js'
 
 /**
  * Boards for the drawing scoreboard: the two diagrams the tool-surface

@@ -5,8 +5,8 @@ use core::cmp::Ordering;
 use whiteboard_det::math::{compare_numbers, hypot, js_max, js_min};
 use whiteboard_scene::BoundingBox;
 
-use super::order::sorted_by;
 use super::{Entry, PAIRWISE_MAX_ENTRIES};
+use crate::order::sorted_by;
 
 /// Two bboxes join one cluster when their gap is at most this, in px.
 const PROXIMITY_THRESHOLD_PX: f64 = 24.0;

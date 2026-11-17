@@ -220,6 +220,5 @@ export type { SpatialThemeMode, SpatialThemeOptions } from './theme/spatial-them
 export { createSpatialTheme, spatialThemeModeSchema } from './theme/spatial-theme.js'
 export { paletteFromTokens } from './theme/theme-asset.js'
 export { type ThemeFont, themeFontSchema } from './theme/theme-font.js'
-export type { TidyMove, TidyNode, TidyOptions } from './tidy.js'
 export { tidyBoxes, tidyNodes } from './tidy.js'
 export { escapeXmlAttr, escapeXmlText } from './xml-escape.js'

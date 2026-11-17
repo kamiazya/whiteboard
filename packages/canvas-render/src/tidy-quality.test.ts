@@ -16,8 +16,8 @@
 // whoever moved it says why in the diff. This is not a golden to regenerate.
 import { describe, expect, it } from 'vitest'
 import { fc } from './test-utils/fast-check.js'
+import { tidyNodes } from './test-utils/tidy-core.js'
 import type { TidyNode } from './tidy.js'
-import { tidyNodes } from './tidy.js'
 
 const TIDY_MARGIN_PX = 32
 const TIDY_GRID_PX = 8

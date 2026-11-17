@@ -90,7 +90,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/canvas-render/src/quality/polyline-geometry.ts#Point',
   'packages/canvas-render/src/quality/polyline-geometry.ts#Rect',
   'packages/canvas-render/src/quality/polyline-geometry.ts#segmentLength',
-  'packages/canvas-render/src/tidy-units.ts#mostlyInside',
   'packages/canvas-viewer/src/font-embedding.ts#fontBytesToDataUri',
   'packages/canvas-viewer/src/font-embedding.ts#viewerFontDataUri',
   'packages/codec/src/spatial/census.ts#jsonSchemaLeafPaths',
@@ -224,8 +223,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'where a published install carries the wasm; exported so layout-core.test.ts pins the dist/assets/core-wasm segment that copy-core-wasm-into-dist.mjs writes, rather than a second spelling of it',
   'packages/mcp-server/src/server/export/layout-core.ts#artifactDirectory':
     "the choice among the environment's directory, the packaged copy and the checkout's; exported so layout-core.test.ts decides it over temp directories, since the real candidates exist only in a built tree",
-  'packages/mcp-server/src/server/export/layout-core.ts#stagedArtifacts':
-    "where the daemon reads the staged wasm by default; exported so layout-core.test.ts asserts CI staged it at the SAME path, rather than a second spelling of the path that could drift from the loader's",
   'apps/web/src/lib/spatial/layout-core.ts#createLayoutCoreHost':
     "the host a realm installs over the build's artifact (`installLayoutCore`); exported so its load-failure policy is driven with a fake source, which the real artifact cannot be made to fail within one run",
   'packages/canvas-render/src/generated/geometry.zod.ts#pointSchema':
@@ -373,7 +370,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 130
+const DEBT_CEILING = 129
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 9

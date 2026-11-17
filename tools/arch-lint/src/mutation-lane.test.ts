@@ -319,9 +319,8 @@ describe('the canvas-render lane skips the tests that measure cost', () => {
     const files = testFiles(join(RENDER, 'src'))
       .map((file) => relative(RENDER, file).split(sep).join('/'))
       .filter((file) => /(cost|budget)[^/]*\.test\.ts$/.test(file))
-    // Nine since the line jumps' and the label placement's own cost suites went
-    // with their TypeScript (ADR-0054 step 7, S18h3).
-    expect(files.length).toBeGreaterThan(8)
+    // Eight since tidy's cost suite went with its TypeScript (ADR-0054 phase A4b).
+    expect(files.length).toBeGreaterThan(7)
     const exclude = await exclusions()
     expect(files.filter((file) => !exclude.some((glob) => matchesGlob(file, glob)))).toEqual([])
   })

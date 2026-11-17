@@ -2,7 +2,6 @@
  * The empty-canvas branch: paste-with-fragment, creation entries, the
  * conditional document/image entries, and Tidy at >=2 nodes.
  */
-import { tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   ClipboardPaste,
@@ -14,16 +13,15 @@ import {
   StickyNote,
 } from 'lucide-react'
 import type { MutableRefObject } from 'react'
-import { announceOnCanvas } from '../../../lib/canvas-announcer.js'
 import { hasClipboardFragment } from '../../../lib/clipboard-store.js'
 import type { FileRefOption } from '../../../lib/link-entries.js'
 import type { Point } from '../../../lib/spatial/viewport.js'
 import type { ContextMenuItem } from '../../ui/ContextMenu.js'
-import { tidyMessage } from '../canvas-announcement-text.js'
 import type { CanvasCommands } from '../canvas-commands.js'
 import { CREATION_LABELS } from '../creation-labels.js'
 import { type ImagePicker, openImagePicker } from '../ImageIntake.js'
 import { commentHereItem, resolvedCommentsItem } from './annotation-verbs.js'
+import { tidyAndAnnounce } from './arrange-bands.js'
 
 export interface CanvasMenuItemsInput {
   readonly point: Point
@@ -115,12 +113,7 @@ export function canvasMenuItems({
     emptyItems.push({
       label: 'Tidy canvas',
       icon: <Sparkles />,
-      onSelect: () => {
-        const { nodes, edges } = canvasRef.current
-        const moves = tidyNodes(tidyBoxes(nodes), { locked: isLocked, edges })
-        applyBoxMoves(moves)
-        announceOnCanvas(tidyMessage(nodes, moves))
-      },
+      onSelect: () => tidyAndAnnounce({ canvas: canvasRef.current, isLocked, applyBoxMoves }),
     })
   }
   // Its own band: a comment is not content, so it sits apart from the

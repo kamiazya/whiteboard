@@ -1,4 +1,4 @@
-import { tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
+import { type LayoutRefusal, tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import {
   AlignCenterHorizontal,
@@ -13,9 +13,10 @@ import {
 } from 'lucide-react'
 import type { MutableRefObject } from 'react'
 import { announceOnCanvas } from '../../../lib/canvas-announcer.js'
+import { requireLayoutCore } from '../../../lib/spatial/require-layout-core.js'
 import type { ContextMenuItem } from '../../ui/ContextMenu.js'
 import { alignableBoxesOf, alignBoxes, distributeBoxes } from '../align.js'
-import { tidyMessage } from '../canvas-announcement-text.js'
+import { tidyMessage, tidyRefusedMessage } from '../canvas-announcement-text.js'
 import type { CanvasCommands } from '../canvas-commands.js'
 
 const ALIGN_PHRASE = {
@@ -96,21 +97,44 @@ function distributeRow(input: ArrangeBandsInput): ContextMenuItem {
   }
 }
 
+/**
+ * Tidy the canvas (or `scope` within it) through the layout core, apply the
+ * moves, and announce the outcome: a refusal says so rather than reading as
+ * "Already tidy". The canvas menu and the selection menu both run it.
+ */
+export function tidyAndAnnounce(input: {
+  readonly canvas: Pick<SpatialCanvas, 'nodes' | 'edges'>
+  readonly scope?: ReadonlySet<string>
+  readonly isLocked: (nodeId: string) => boolean
+  readonly applyBoxMoves: CanvasCommands['applyBoxMoves']
+}): void {
+  const { nodes, edges } = input.canvas
+  let refusal: LayoutRefusal | undefined
+  const moves = tidyNodes(tidyBoxes(nodes), {
+    core: requireLayoutCore(),
+    ...(input.scope === undefined ? {} : { scope: input.scope }),
+    locked: input.isLocked,
+    edges,
+    onRefused: (r) => {
+      refusal ??= r
+    },
+  })
+  input.applyBoxMoves(moves)
+  announceOnCanvas(refusal === undefined ? tidyMessage(nodes, moves) : tidyRefusedMessage(refusal))
+}
+
 function tidyVerb(input: ArrangeBandsInput): ContextMenuItem {
   const { node, canvasRef, isLocked, extraIds, applyBoxMoves } = input
   return {
     label: 'Tidy',
     icon: <Sparkles />,
-    onSelect: () => {
-      const { nodes, edges } = canvasRef.current
-      const moves = tidyNodes(tidyBoxes(nodes), {
+    onSelect: () =>
+      tidyAndAnnounce({
+        canvas: canvasRef.current,
         scope: new Set([node.id, ...extraIds]),
-        locked: isLocked,
-        edges,
-      })
-      applyBoxMoves(moves)
-      announceOnCanvas(tidyMessage(nodes, moves))
-    },
+        isLocked,
+        applyBoxMoves,
+      }),
   }
 }
 

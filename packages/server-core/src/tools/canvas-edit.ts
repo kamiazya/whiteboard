@@ -408,8 +408,12 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
   const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
   claimSpatialDocument(doc, input.documentId)
   const measure = await resolveMeasurerFor(deps, input.ops)
-  // The core sizes what the measurer would, so it is asked for only then.
-  const core = measure === undefined ? undefined : await deps.layoutCore()
+  // The core sizes what the measurer would and arranges a tidy, so it is asked
+  // for only when a batch needs one of them.
+  const core =
+    measure === undefined && !input.ops.some((op) => op.op === 'tidy')
+      ? undefined
+      : await deps.layoutCore()
 
   // Every op runs against this session; nothing reaches the doc until
   // the last op has applied. That is what makes the batch all-or-nothing
