@@ -134,8 +134,9 @@ fn fit_text_body(
 /// The body laid out and fitted, or its text as one line when it does not
 /// parse. Only a body that left the render's account untouched is cached: one
 /// refused something is degraded only because THIS render ran out, and one that
-/// drew an embed spent from the account, a charge a hit would skip. Nor is one
-/// that asked a renderer beside a fragment table, which its key does not carry.
+/// drew an embed or coloured a fence spent from the account, a charge a hit
+/// would skip. Nor is one that asked a renderer beside a fragment table, which
+/// its key does not carry.
 fn lay_out_body(
     node: &SpatialNode,
     text: &str,
@@ -145,7 +146,11 @@ fn lay_out_body(
 ) -> FittedBlocks {
     let nb = &options.node_box;
     let reads = || options.layout.fragment_table_reads.map(Cell::get);
-    let before = (options.budget.layouts_remaining(), options.budget.refused(), reads());
+    let account = || {
+        let budget = options.budget;
+        (budget.layouts_remaining(), budget.tokenizer_remaining(), budget.refused(), reads())
+    };
+    let before = account();
     let Ok(root) = options.layout.host.parse_body(text) else {
         options.layout.host.degrade(Degradation::BodyParseFailed { node_id: node.id.clone() });
         let line = SceneNode::TextRun(Box::new(label_run(text, nb, max_width)));
@@ -155,7 +160,7 @@ fn lay_out_body(
     let laid = typeset_mdast_blocks(&root, &style.options(max_width, options));
     let body = fit_text_body(&laid.nodes, node, nb);
     if let (Some(cache), Some(key)) = (options.layout.content_cache, key)
-        && (options.budget.layouts_remaining(), options.budget.refused(), reads()) == before
+        && account() == before
     {
         cache.set(key, &body);
     }
