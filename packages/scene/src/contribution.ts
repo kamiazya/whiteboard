@@ -10,7 +10,7 @@
  * reaching for each other.
  */
 import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
-import type { CanvasEdge, CanvasLine, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, CanvasLine, SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 /**
  * What the router and an appearance resolver are handed: an EDGE or a LINE
@@ -23,7 +23,7 @@ import type { CanvasEdge, CanvasLine, SpatialCanvas, SpatialNode } from '@kamiaz
  */
 export type RoutableElement = CanvasEdge | CanvasLine
 
-import type { Appearance, BoundingBox, SceneNode } from './scene-graph.js'
+import type { BoundingBox } from './scene-graph.js'
 
 /**
  * A node's silhouette, as a KIND plus numbers derived from its bbox — never
@@ -56,11 +56,12 @@ export type NodeOutline =
 /**
  * A silhouette a plugin registers, under a NAMESPACED id.
  *
- * `outline` is the whole contract for painting, hit-testing and edge
- * anchoring, because the renderer's containment test switches on the
- * returned VALUE's kind and its entry-point search bisects against that —
- * one implementation serves every shape, and nothing a contributor supplies
- * can make the drawn and the hit geometry disagree.
+ * `outline` is the whole contract for painting a silhouette. Hit-testing and
+ * edge anchoring are the Rust core's, over its port of the same geometry
+ * (held to `node-outline.jsonl`); its containment test switches on the
+ * returned VALUE's kind and its entry-point search bisects against that, so
+ * one implementation serves every shape. A contributed shape the core has no
+ * port of is drawn here and hit-tested as its box.
  *
  * ponytail: a returned polygon must be CONVEX. The renderer answers
  * containment through a convex test and bisects assuming convexity along
@@ -82,34 +83,24 @@ export interface ShapeContribution {
  */
 export type ShapeTable = Readonly<Record<string, ShapeContribution>>
 
-/** What a decoration is told about the node it marks. */
-interface DecorationContext {
-  readonly bounds: BoundingBox
-  readonly label: Appearance
-}
-
-/** A plugin's mark on a node. Returns scene nodes in the shared vocabulary —
- *  the union stays closed, contributions build from it. */
-export type NodeDecoration = (node: SpatialNode, context: DecorationContext) => readonly SceneNode[]
-
 /**
- * Everything one plugin contributes to rendering.
+ * What one plugin registers with the renderer: its silhouettes and its theme
+ * assets, and how it reads the theme a canvas names.
  *
- * `shapes` are keyed by BARE name and `readShape` answers a bare kind: the
- * renderer composes `${namespace}.${kind}` at both ends, so a payload never
- * carries a namespace and a document cannot name another plugin's geometry
- * however it is written.
+ * The layout itself is the Rust core's, which reads a node's shape, text
+ * placement and decorations through the plugin's own Rust twin
+ * (`whiteboard-plugin-visual`). What is left here is what TypeScript still
+ * draws or resolves: the SVG backend paints a silhouette from `shapes`, and
+ * an editor chrome or an export previews the palette `themes` and
+ * `readTheme` resolve to.
  *
- * A reader rather than a facet KEY, because reading a facet is the plugin's
- * job: the bundled one resolves through the engine's compat chain and schema,
- * which a raw `stored.kind` read of a declared key never did.
+ * `shapes` are keyed by BARE name: the renderer composes
+ * `${namespace}.${name}`, so a payload never carries a namespace and a
+ * document cannot name another plugin's geometry however it is written.
  */
 export interface RenderContribution {
   readonly namespace: string
   readonly shapes?: Readonly<Record<string, ShapeContribution>>
-  readonly readShape?: (node: SpatialNode) => string | undefined
-  readonly readTextPlacement?: (node: SpatialNode) => 'start' | 'center' | undefined
-  readonly decorations?: readonly NodeDecoration[]
   /**
    * Theme assets by BARE name, namespaced to `${namespace}.${name}` the way
    * `shapes` are. Unlike a shape, a theme id in a document MAY name another

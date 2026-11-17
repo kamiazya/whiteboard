@@ -139,7 +139,7 @@ and a file row alike, and a second reader is how one surface comes to draw a
 fallback the others do not. The document wrapper takes the
 facets BUCKET rather than a document — this package cannot open stored
 content, and every caller has already parsed the frontmatter it holds.
-| `./render` (`src/render.ts`) | the whole rendering contribution: silhouettes, the readers that select them, text placement | React; anything that cannot run where a document is read |
+| `./render` (`src/render.ts`) | what the TypeScript renderer still reads of this plugin: the silhouettes the SVG backend paints, the theme assets and the canvas-theme reader | React; anything that cannot run where a document is read |
 | `./ui` (`src/ui.tsx`) | the settings declaration and the one hand-written editor | anything the renderer needs |
 
 The default entry is react-free because it runs wherever a document is read —
@@ -161,9 +161,14 @@ facet-engine ← facet-ui ← plugin-visual ← canvas-render
 ```
 
 **There is no edge back into `canvas-render` at all.** `/render` names the
-contract — `RenderContribution`, `ShapeContribution`, the scene-node union a
-decoration returns, the edge-router types — and that contract is
-`@kamiazya/whiteboard-scene`, a package below both this one and the renderer.
+contract — `RenderContribution`, `ShapeContribution`, `BoundingBox` — and that
+contract is `@kamiazya/whiteboard-scene`, a package below both this one and the
+renderer. `/render` is now the silhouettes the SVG backend paints plus the
+theme assets and canvas-theme reader palette resolution asks: the shape and
+text-placement readers and the stencil badge left it with the TypeScript
+layout (ADR-0054 step 7, S18i), and `resolveNodeTextAlign`, which only that
+layout called, lives in `test-utils/facet-read-oracle.ts` as the statement the
+Rust reader is held to.
 
 It used to come from the renderer itself, which made this a package CYCLE
 held open by every import back being type-only: a property no manifest can

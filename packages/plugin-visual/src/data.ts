@@ -20,7 +20,6 @@ import type {
   VisualEdgesFacet,
   VisualShapeFacet,
   VisualSymbolFacet,
-  VisualTextFacet,
 } from './generated/visual.zod.js'
 import {
   visualAxesFacetSchema,
@@ -42,7 +41,7 @@ import manifest from './visual.manifest.json' with { type: 'json' }
 
 // The payloads of the simple facets below are generated from
 // `contracts/facets/visual`; what each one MEANS stays documented here.
-export type { VisualEdgesFacet, VisualShapeFacet, VisualTextFacet }
+export type { VisualEdgesFacet, VisualShapeFacet }
 
 /**
  * `visual.edges/v0` — how this canvas's edges are drawn: the routing and
@@ -137,18 +136,6 @@ export { type VisualSymbolFacet, visualSymbolFacetSchema }
 export const VISUAL_SYMBOL_KEY = 'visual.symbol/v0'
 
 /**
- * Where a node's text sits inside the space it has. Separate from
- * `visual.shape` on purpose: a plain rect may want centred text, and a
- * shaped node may want its text at the top — tying placement to the
- * silhouette would make one choice unreachable from the other.
- *
- * ABSENT means "however this node would place text anyway" (a shaped node
- * centres what fits, a rect starts at the top). The facet overrides that
- * default; it does not restate it, which is why there is no third value.
- */
-export const VISUAL_TEXT_KEY = 'visual.text/v0'
-
-/**
  * `visual.theme/v0` — how this canvas is DRAWN, as the id of a registered
  * theme asset (ADR-0030 decision 2): `visual.sketch`, `visual.neon`, or a
  * theme another plugin registers. The payload never carries raw styles; the
@@ -189,6 +176,9 @@ export const VISUAL_HOST: PluginHost = {
     'facets/visual/visual.schema.json#/$defs/VisualInkFacet': visualInkFacetSchema,
     'facets/visual/visual.schema.json#/$defs/VisualStrokeFacet': visualStrokeFacetSchema,
     'facets/visual/visual.schema.json#/$defs/VisualShapeFacet': visualShapeFacetSchema,
+    // `visual.text/v0`: where a node's text sits. Separate from `visual.shape`
+    // on purpose, so placement is reachable whatever the silhouette; ABSENT is
+    // the placement the node would choose anyway, so there is no third value.
     'facets/visual/visual.schema.json#/$defs/VisualTextFacet': visualTextFacetSchema,
     'facets/visual/visual.schema.json#/$defs/VisualThemeFacet': visualThemeFacetSchema,
     'facets/visual/visual.schema.json#/$defs/VisualSymbolFacet': visualSymbolFacetSchema,
@@ -433,20 +423,4 @@ export function resolveDocumentSymbol(
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualSymbolFacet | undefined {
   return readSymbol(facets, registry)
-}
-
-/**
- * The one read path for "where does this node's text sit": the
- * `visual.text/v0` facet when it resolves, else undefined — which every
- * consumer treats as the placement it would have chosen anyway.
- */
-export function resolveNodeTextAlign(
-  node: SpatialCanvas['nodes'][number],
-  registry: FacetRegistry = bundledFacetRegistry,
-): VisualTextFacet['align'] | undefined {
-  const stored = node.facets?.[VISUAL_TEXT_KEY]
-  if (stored === undefined) return undefined
-  const resolution = registry.resolveFacetPayload(VISUAL_TEXT_KEY, stored)
-  if (resolution.kind !== 'resolved') return undefined
-  return visualTextFacetSchema.parse(resolution.value).align
 }

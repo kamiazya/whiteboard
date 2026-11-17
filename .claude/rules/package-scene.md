@@ -12,9 +12,14 @@ paths:
   `Appearance`, the block nodes a markdown body becomes, `ResolvedEdgeNode`,
   `Scene`). Plain TypeScript types, never Zod: a scene does not cross a
   process boundary, so per zod-schema-discipline it needs no runtime schema.
-- `contribution.ts`: the shape a plugin contributes to drawing — `NodeOutline`,
-  `ShapeContribution`/`ShapeTable`, `DecorationContext`/`NodeDecoration`, and
-  `RenderContribution` itself.
+- `contribution.ts`: what a plugin registers with the TypeScript renderer —
+  `NodeOutline`, `ShapeContribution`/`ShapeTable` (the silhouettes the SVG
+  backend paints), `RoutableElement`, and `RenderContribution` itself, which
+  is now a namespace, those shapes, theme assets and the `readTheme` palette
+  resolution asks. The layout's half of the contract (a node's shape and
+  text-placement readers, and `NodeDecoration`/`DecorationContext`) was
+  deleted with the TypeScript layout (ADR-0054 step 7, S18i): the Rust core
+  reads those through the plugin's own Rust twin.
 
 ## Why the package exists
 
@@ -107,5 +112,8 @@ every `SceneNode` kind, `Appearance`, `SceneInk`, the legend, and `NodeOutline`.
 A type added to `scene-graph.ts` is added there too; the recorded
 `canvas-render` oracles (`render.jsonl`, `svg.jsonl`) fail the Rust replay on a
 field the Rust does not know (its `oracle` feature denies unknown fields). The
-closure-taking half of `contribution.ts` (`ShapeContribution`, `NodeDecoration`,
-`RenderContribution`) has no Rust form yet.
+twins have crossed: the Rust holds the `NodeDecoration` trait, which no longer
+exists in TypeScript, and `contribution.ts`'s remaining closures
+(`ShapeContribution`, `RenderContribution.readTheme`) have no Rust form, the
+core reading silhouettes and themes through the plugin's Rust readers
+instead.

@@ -8,17 +8,40 @@
  * The payloads come from `facet-write.jsonl`, whose draws already reach every
  * stage of a facet's schema, so this recording adds no generator of its own.
  */
+import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { decode, type Encoded, encode } from '@kamiazya/whiteboard-model/test-utils'
 import { resolveNodeStencil } from '../apply-stencil.js'
 import {
+  bundledFacetRegistry,
   resolveCanvasEdgeStyle,
   resolveCanvasTheme,
   resolveEdgeOwnStyle,
   resolveNodeShape,
   resolveNodeSymbol,
-  resolveNodeTextAlign,
   resolveStrokeWidth,
 } from '../data.js'
+import { visualTextFacetSchema } from '../generated/visual.zod.js'
+
+const VISUAL_TEXT_KEY = 'visual.text/v0'
+
+/**
+ * Where a node's text sits: the `visual.text/v0` facet when it resolves, else
+ * undefined, which every reader treats as the placement it would have chosen
+ * anyway. The layout that read it is the Rust core's (`read.rs`), so this is
+ * the TypeScript statement that reader is held to, and lives with the
+ * recording rather than in the plugin's shipped half.
+ */
+export function resolveNodeTextAlign(
+  node: SpatialCanvas['nodes'][number],
+  registry: FacetRegistry = bundledFacetRegistry,
+): 'start' | 'center' | undefined {
+  const stored = node.facets?.[VISUAL_TEXT_KEY]
+  if (stored === undefined) return undefined
+  const resolution = registry.resolveFacetPayload(VISUAL_TEXT_KEY, stored)
+  if (resolution.kind !== 'resolved') return undefined
+  return visualTextFacetSchema.parse(resolution.value).align
+}
 
 type Bucket = Readonly<Record<string, unknown>> | undefined
 

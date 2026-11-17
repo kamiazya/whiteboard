@@ -14,20 +14,19 @@ import {
   resolveInkGroup,
   resolveNodeShape,
   resolveNodeSymbol,
-  resolveNodeTextAlign,
   resolveStrokeWidth,
   VISUAL_AXES_KEY,
   VISUAL_EDGES_KEY,
   VISUAL_INK_KEY,
   VISUAL_SHAPE_KEY,
   VISUAL_SYMBOL_KEY,
-  VISUAL_TEXT_KEY,
   VISUAL_THEME_KEY,
   visualPlugin,
   visualShapeFacetSchema,
   visualSymbolFacetSchema,
 } from './data.js'
 import { VISUAL_STROKE_KEY } from './stroke.js'
+import { resolveNodeTextAlign } from './test-utils/facet-read-oracle.js'
 
 const registry = createFacetRegistry(bundledPlugins)
 
@@ -350,8 +349,7 @@ describe('visual.text/v0', () => {
     }) as SpatialCanvas['nodes'][number]
 
   it('registers node-targeted, under the fixed key, declaring its own band', () => {
-    expect(VISUAL_TEXT_KEY).toBe('visual.text/v0')
-    expect(registry.targetsOf(VISUAL_TEXT_KEY)).toEqual(['node'])
+    expect(registry.targetsOf('visual.text/v0')).toEqual(['node'])
     const definition = registry.plugins
       .flatMap((plugin) => plugin.facets)
       .find((facet) => facet.name === 'text')
@@ -365,16 +363,16 @@ describe('visual.text/v0', () => {
 
   it('resolveNodeTextAlign answers the stored choice, else undefined', () => {
     expect(
-      resolveNodeTextAlign(nodeWith({ [VISUAL_TEXT_KEY]: { align: 'center' } }), registry),
+      resolveNodeTextAlign(nodeWith({ 'visual.text/v0': { align: 'center' } }), registry),
     ).toBe('center')
-    expect(
-      resolveNodeTextAlign(nodeWith({ [VISUAL_TEXT_KEY]: { align: 'start' } }), registry),
-    ).toBe('start')
+    expect(resolveNodeTextAlign(nodeWith({ 'visual.text/v0': { align: 'start' } }), registry)).toBe(
+      'start',
+    )
     // Absent means "however this node would place text anyway" — the facet
     // OVERRIDES a default, it does not restate one.
     expect(resolveNodeTextAlign(nodeWith(undefined), registry)).toBeUndefined()
     expect(
-      resolveNodeTextAlign(nodeWith({ [VISUAL_TEXT_KEY]: { align: 'middle' } }), registry),
+      resolveNodeTextAlign(nodeWith({ 'visual.text/v0': { align: 'middle' } }), registry),
     ).toBeUndefined()
   })
 })

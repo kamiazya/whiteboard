@@ -6,11 +6,13 @@
 //! test can replay the scenes the TypeScript recorded.
 //!
 //! Types, as the package is, and one trait: [`NodeDecoration`], what a
-//! plugin's decoration implements (`contribution.ts`'s `NodeDecoration`), so
-//! the renderer iterates contributions rather than naming a plugin. The rest of
-//! `contribution.ts`'s closure-taking half (`ShapeContribution`,
-//! `RenderContribution`) waits for a second caller; `NodeOutline`, `ScenePoint`
-//! and `DecorationContext` are its data and are here.
+//! plugin's decoration implements, so the renderer iterates contributions
+//! rather than naming a plugin. It has no TypeScript twin any more: the
+//! TypeScript layout that asked one went with ADR-0054 step 7, and with it the
+//! TypeScript decoration contract. What `contribution.ts` keeps (a shape's
+//! outline, a theme table) is what the TypeScript SVG backend and palette
+//! resolution still read, and waits here for a second caller; `NodeOutline`,
+//! `ScenePoint` and `DecorationContext` are data and are here.
 
 // Core is total: an out-of-bounds index or an overflowing integer is a
 // panic, and a panic poisons the wasm instance. A justified exception is an

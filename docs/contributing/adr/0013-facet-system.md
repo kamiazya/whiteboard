@@ -329,6 +329,15 @@ way a plugin marks a node. Keeping the point while removing its only user is
 deliberate — it is the contract between the renderer and every plugin, not a
 convenience for this one.
 
+**2026-11-17 (ADR-0054 step 7, S18i):** the point moved rather than went. The
+layout is the Rust core's, so the decoration contract is `whiteboard-scene`'s
+`NodeDecoration` trait, and the stencil badge (which came back with ADR-0034's
+stencils) implements it in `crates/core/plugin-visual`. The TypeScript
+`RenderContribution.decorations`, with the shape and text-placement readers
+that served the same layout, was deleted with that layout's last caller.
+`RenderContribution` keeps what TypeScript still reads: silhouettes for the
+SVG backend, and theme assets with the canvas-theme reader.
+
 **2026-09-09 (ADR-0030):** decision 8's "theme assets" exist now, as a
 PREFIX of the layer it describes rather than the layer itself: a plugin
 registers `assets.themes` (engine-owned token bundles, never raw style in a
