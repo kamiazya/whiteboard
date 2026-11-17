@@ -110,6 +110,11 @@
     "status": "completed"
   },
   {
+    "name": "rust-mutants-plan",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
     "conclusion": "success",
     "name": "zizmor",
     "status": "completed"

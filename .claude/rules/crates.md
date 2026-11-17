@@ -136,8 +136,9 @@ steps and cache paths to the scripts.
   run, counted per crate; under a floor fails, and so does a floor more than
   `headroomPoints` below the measurement (`--update` only raises).
 - **Mutation gate** (QR-17): CI's `rust-mutants` job runs `pnpm
-  rust:mutants:pr` — `cargo mutants --in-diff` against the PR base, eight
-  shards, after a separate green `cargo test --workspace` — and a missed or
+  rust:mutants:pr` — `cargo mutants --in-diff` against the PR base, in
+  as many shards as the diff lists mutants for (`rust-mutants-plan`: none to
+  eight on a pull request, always eight elsewhere), after a separate green `cargo test --workspace` — and a missed or
   timed-out mutant, or a failed baseline, fails it
   (`tools/checks/src/rust-mutants.mjs` reads the exit codes). A mutant no
   test can observe is ledgered in `.cargo/mutants.toml` with its reason above

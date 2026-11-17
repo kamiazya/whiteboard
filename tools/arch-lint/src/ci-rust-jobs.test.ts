@@ -30,6 +30,8 @@ interface Step {
   with?: Record<string, unknown>
 }
 interface Job {
+  needs?: string | string[]
+  if?: string
   env?: Record<string, unknown>
   steps?: Step[]
   strategy?: { 'fail-fast'?: boolean; matrix?: Record<string, unknown> }
@@ -167,10 +169,51 @@ describe('the rust-mutants job runs the pinned cargo-mutants after a green basel
     expect(test).toBeGreaterThan(-1)
     expect(mutants).toBeGreaterThan(test)
     expect(steps[mutants]?.env?.RUST_MUTANTS_BASE).toBe('HEAD^1')
-    const legs = ci.jobs['rust-mutants']?.strategy?.matrix?.shard as number[] | undefined
-    expect(legs?.length).toBeGreaterThan(1)
-    expect(steps[mutants]?.env?.RUST_MUTANTS_SHARD).toBe(`\${{ matrix.shard }}/${legs?.length}`)
+    expect(steps[mutants]?.env?.RUST_MUTANTS_SHARD).toBe(
+      `\${{ matrix.shard }}/\${{ needs.rust-mutants-plan.outputs.total }}`,
+    )
     expect(ci.jobs['rust-mutants']?.strategy?.['fail-fast']).toBe(false)
+  })
+})
+
+describe('the rust-mutants legs are planned from the diff and the plan cannot plan none by accident', () => {
+  const plan = stepsOf(ci, 'rust-mutants-plan')
+  const planStep = plan.find((s) => s.run?.includes('rust-mutants.mjs plan'))
+
+  it('takes its matrix and its skip from the plan job, which it needs', () => {
+    const job = ci.jobs['rust-mutants'] as Job
+    expect(job.needs).toBe('rust-mutants-plan')
+    expect(job.if).toBe("needs.rust-mutants-plan.outputs.total != '0'")
+    expect(job.strategy?.matrix?.shard).toBe(
+      `\${{ fromJSON(needs.rust-mutants-plan.outputs.shards) }}`,
+    )
+    expect(ci.jobs['ci-gate']?.needs).toContain('rust-mutants-plan')
+  })
+
+  it('sizes a pull request against the merge commit first parent and reads the event', () => {
+    expect(planStep?.env?.RUST_MUTANTS_BASE).toBe('HEAD^1')
+    expect(planStep?.env?.EVENT).toBe(`\${{ github.event_name }}`)
+  })
+
+  it('treats a scope step that said nothing as "runs", never as "skip"', () => {
+    // An empty output is an unreadable scope; only a stated false may plan none.
+    expect(planStep?.env?.SCOPE_RUNS).toBe(`\${{ steps.scope.outputs.run }}`)
+    const script = readFileSync(join(REPO_ROOT, 'tools/checks/src/rust-mutants.mjs'), 'utf8')
+    expect(script).toContain("process.env.SCOPE_RUNS !== 'false'")
+    const scoped = plan.filter((s) => s.if?.includes('steps.scope.outputs.run'))
+    expect(scoped.length).toBeGreaterThan(0)
+    for (const step of scoped) {
+      expect(step.if, step.name).toContain("steps.scope.outputs.run != 'false'")
+    }
+  })
+
+  it('installs cargo-mutants at the pin the job running them does', () => {
+    const installs = [
+      ...runs(ci, 'rust-mutants-plan')
+        .join('\n')
+        .matchAll(/cargo-mutants --version (\S+)/g),
+    ]
+    expect(installs.map((m) => m[1])).toEqual([MUTANTS_PIN])
   })
 })
 

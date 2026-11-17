@@ -18,6 +18,7 @@ const {
   mutantNames,
   prExcludeGlobs,
   prExcludeProblems,
+  shardPlan,
 } = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/rust-mutants-ledger.mjs')).href
 )) as {
@@ -27,7 +28,11 @@ const {
   cargoShard: (leg: string | undefined) => string | undefined | Error
   prExcludeGlobs: (text: string) => string[]
   prExcludeProblems: (globs: string[], exists: (path: string) => boolean) => string[]
+  shardPlan: (input: { event: string; scopeRuns: boolean; mutantCount: number | null }) => number[]
 }
+
+/** Every leg, as push, the schedule and an unreadable count plan. */
+const FULL_SET = 8
 
 // .cargo/mutants.toml is the ledger of mutants the Rust mutation gate does
 // not judge (QR-17). Whether each entry still matches a mutant needs
@@ -77,6 +82,43 @@ describe('the Rust mutants ledger', () => {
     expect(cargoShard(undefined)).toBeUndefined()
     expect(cargoShard('0/4')).toBeInstanceOf(Error)
     expect(cargoShard('5/4')).toBeInstanceOf(Error)
+  })
+})
+
+describe('the shard plan of a pull request', () => {
+  const pr = (mutantCount: number | null, scopeRuns = true) =>
+    shardPlan({ event: 'pull_request', scopeRuns, mutantCount })
+
+  it('gives a change that touches a mutant at least one shard, never none', () => {
+    for (const count of [1, 2, 6, 7, 48, 49, 500]) {
+      expect(pr(count).length, `${count} mutants`).toBeGreaterThanOrEqual(1)
+    }
+  })
+
+  it('numbers the legs from 1 up to the count and never past the cap', () => {
+    expect(pr(1)).toEqual([1])
+    expect(pr(7)).toEqual([1, 2])
+    expect(pr(500)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+  })
+
+  it('runs no shard when the diff holds no mutant or the scope does not reach the job', () => {
+    expect(pr(0)).toEqual([])
+    expect(pr(30, false)).toEqual([])
+  })
+
+  it('fails closed to the full set when the count is unknown', () => {
+    expect(pr(null)).toHaveLength(FULL_SET)
+    expect(pr(Number.NaN)).toHaveLength(FULL_SET)
+    expect(pr(-1)).toHaveLength(FULL_SET)
+  })
+
+  it.each([
+    'push',
+    'schedule',
+    'merge_group',
+    'workflow_dispatch',
+  ])('keeps the full set on %s, whatever the diff holds', (event) => {
+    expect(shardPlan({ event, scopeRuns: false, mutantCount: 0 })).toHaveLength(FULL_SET)
   })
 })
 
