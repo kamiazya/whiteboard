@@ -114,4 +114,18 @@ describe('useNodeInEditor', () => {
     act(() => result.current.close())
     expect(result.current.draftBodies).toEqual([])
   })
+
+  // The loading budget caps what a render READS, not what a link may ask the
+  // page's tables, so a link typed past it still has to reach the preview.
+  it('publishes a draft whose new link is past the loading budget', () => {
+    const links = (n: number) => Array.from({ length: n }, (_, i) => `[[notes/l-${i}]]`).join(' ')
+    const { result } = renderHook(() => useNodeInEditor(canvas, vi.fn(), 'doc-a'))
+    act(() => result.current.open('n1', 'before'))
+    act(() => result.current.draft(links(256)))
+    const published = result.current.draftBodies
+
+    act(() => result.current.draft(links(257)))
+    expect(result.current.draftBodies).not.toBe(published)
+    expect(result.current.draftBodies).toEqual([links(257)])
+  })
 })

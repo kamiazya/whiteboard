@@ -38,6 +38,7 @@ import {
   type ReferenceWire,
   referenceWire,
   walkReferences,
+  writtenTargets,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import { decodeSpatialSnapshot } from '../../lib/decode-spatial-snapshot.js'
@@ -199,9 +200,35 @@ export function createRowReferenceReader(
 
     return {
       wire: referenceWire(graph, { resolveAlias, resolveTitle, extras: images.extras, seeds }),
-      key: await referencesKey([...keyRows(graph, resolve, resolveTitle), ...images.rows]),
+      key: await referencesKey([
+        ...keyRows(graph, resolve, resolveTitle),
+        ...linkRows(writtenTargets({ ...seeds, loaded: graph }), graph, resolve, resolveTitle),
+        ...images.rows,
+      ]),
     }
   }
+}
+
+/**
+ * A row for every target the picture's content WRITES that the walk did not
+ * load: past the loading budget, or below the depth cap. The wire still asks
+ * the tables about it, so its link draws the target's name, and the key has
+ * to change when that name, or what the target resolves to, does.
+ */
+function linkRows(
+  written: readonly string[],
+  graph: ReferenceGraph,
+  resolve: (target: string) => WorkspaceDocumentEntry | undefined,
+  resolveTitle: (documentId: string) => string | undefined,
+): ReferenceKeyRow[] {
+  return written
+    .filter((target) => !graph.has(target))
+    .map((target) => {
+      const entry = resolve(target)
+      if (entry === undefined) return { target }
+      const label = resolveTitle(entry.documentId)
+      return { target, link: entry.documentId, ...(label === undefined ? {} : { label }) }
+    })
 }
 
 function keyRows(
