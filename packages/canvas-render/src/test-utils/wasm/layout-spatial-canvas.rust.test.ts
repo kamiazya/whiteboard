@@ -63,11 +63,14 @@ describe.runIf(built)('the whole layout through the real core', () => {
     })
 
   const cases = layoutCases(8)
-  it('draws every recorded case as the TypeScript drew it', () => {
+  it('draws every case as the TypeScript drew it', () => {
+    // Every case is recorded: one the recording lacks is a case the core is
+    // held to nothing on, so it fails here by name rather than being skipped.
+    const unrecorded = cases.map(({ name }) => name).filter((name) => !recordedAnswers.has(name))
+    expect(unrecorded, 'cases with no recorded answer').toEqual([])
     let replayed = 0
     for (const { name, canvas, options } of cases) {
-      const recorded = recordedAnswers.get(name)
-      if (recorded === undefined) continue
+      const recorded = recordedAnswers.get(name) as string
       const events: unknown[] = []
       let asked: readonly FragmentAsk[] = []
       const tabled = options.fragments !== undefined || options.onFragmentsAsked !== undefined
@@ -84,7 +87,8 @@ describe.runIf(built)('the whole layout through the real core', () => {
       expect(JSON.parse(answer ?? 'null'), name).toEqual(JSON.parse(recorded))
       replayed += 1
     }
-    expect(replayed, 'recorded cases replayed').toBeGreaterThan(cases.length / 2)
+    expect(replayed, 'cases replayed').toBe(cases.length)
+    expect(cases.length, 'the layout cases').toBeGreaterThan(100)
     // Every layout is answered: the core is judged, never refused.
     expect(answered.refused).toEqual([])
   })

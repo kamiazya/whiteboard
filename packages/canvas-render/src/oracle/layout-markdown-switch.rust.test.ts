@@ -29,6 +29,15 @@ import { built, requireWasm, wasmBytes } from '../test-utils/wasm/glue.js'
 const DIR = new URL('./', import.meta.url)
 const SURFACES = ['daemon', 'preview', 'outline', 'thumbnail', 'comment'] as const
 
+/** The digests of the recorded scenes too long to hold whole (`layout-markdown-digests.jsonl`). */
+const digests = new Map(
+  readFileSync(new URL('layout-markdown-digests.jsonl', DIR), 'utf8')
+    .trimEnd()
+    .split('\n')
+    .map((line) => JSON.parse(line) as { id: string; n: number; h: number })
+    .map(({ id, n, h }) => [id, { n, h }] as const),
+)
+
 function surface(name: string): { meta: MarkdownMeta; records: MarkdownRecord[] } {
   const [head = '', ...lines] = readFileSync(new URL(`layout-markdown.${name}.jsonl`, DIR), 'utf8')
     .trimEnd()
@@ -90,20 +99,26 @@ describe.runIf(built)('the recorded notes through the core', () => {
   for (const name of SURFACES) {
     it(`answers every ${name} note as the TypeScript recorded it`, { timeout: 120_000 }, () => {
       const { meta, records } = surface(name)
-      let answered = 0
+      // Every branch asserts: a record that fell through would read as
+      // replayed. A long scene is held by its digest alone.
       for (const record of records) {
         const scene = lay(record, meta)
         if ('refused' in record) {
           expect(scene, record.id).toBeUndefined()
         } else if (PAST_THE_PARSER.has(bodyName(record.id))) {
           expect(scene?.refusal, record.id).toBeUndefined()
-          if ('scene' in record) expect(drawn(scene), record.id).not.toEqual(recorded(record))
+          const held = 'scene' in record ? recorded(record) : digests.get(record.id)
+          expect(held, `${record.id} has a recording`).toBeDefined()
+          expect(drawn(scene), record.id).not.toEqual(held)
         } else if ('scene' in record) {
-          answered += 1
           expect(drawn(scene), record.id).toEqual(recorded(record))
+        } else {
+          const held = digests.get(record.id)
+          expect(held, `${record.id} has a digest`).toBeDefined()
+          expect(drawn(scene), record.id).toEqual(held)
         }
       }
-      expect(answered).toBeGreaterThan(20)
+      expect(records.length).toBeGreaterThan(20)
     })
   }
 })
