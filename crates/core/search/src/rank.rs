@@ -145,13 +145,15 @@ fn rank_with_folders<'a>(
 
 /// The distinct tokens of a query, in query order.
 pub(crate) fn distinct_tokens(query: &str) -> Vec<String> {
-    let mut seen: Vec<String> = Vec::new();
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut distinct = Vec::new();
     for token in tokenize(query) {
         if !seen.contains(&token) {
-            seen.push(token);
+            seen.insert(token.clone());
+            distinct.push(token);
         }
     }
-    seen
+    distinct
 }
 
 /// BM25 over the documents' token bags, name and path included as text. Scores
@@ -202,6 +204,12 @@ mod tests {
     use super::*;
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    #[test]
+    fn a_query_keeps_each_token_once_in_the_order_it_first_appears() {
+        assert_eq!(distinct_tokens("b a b c a"), ["b", "a", "c"]);
+        assert!(distinct_tokens("  ").is_empty());
+    }
 
     fn doc(id: &str, texts: &[&str], folders: &[&str]) -> SearchableDocument {
         SearchableDocument {
