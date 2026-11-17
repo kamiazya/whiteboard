@@ -1,8 +1,9 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { spatialCanvasArbitrary, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene } from '@kamiazya/whiteboard-scene'
+import { layoutSceneDigest } from '../../layout/query-switch.js'
 import { layoutSpatialCanvas } from '../../layout/spatial-canvas.js'
-import { sceneDigest } from '../../scene-digest.js'
+import type { SceneDigest } from '../../scene-digest-schema.js'
 import { renderSceneToSvg, type SvgDocumentOptions } from '../../svg/backend.js'
 import { renderSceneToKeyedSvg } from '../../svg/keyed.js'
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
@@ -62,7 +63,8 @@ export interface RenderRecord {
   readonly scene: string
   readonly svg: string
   readonly keyed: ReturnType<typeof keyedAnswer>
-  readonly digest: ReturnType<typeof sceneDigest>
+  /** The core's digest of the same layout, held to the digest the TypeScript wrote. */
+  readonly digest: SceneDigest
 }
 
 export interface SvgRecord {
@@ -83,13 +85,17 @@ function keyedAnswer(scene: Scene, options?: SvgDocumentOptions) {
   return { rootOpen, rootAttrs, groups }
 }
 
-function layoutRecorded(canvas: SpatialCanvas, options: RenderOptions): Scene {
-  return layoutSpatialCanvas(canvas, {
+function layoutOptionsRecorded(options: RenderOptions) {
+  return {
     core: testLayoutCore(),
     measure: createFakeMeasure(),
     appearance: createSpatialTheme({ mode: options.mode }),
     ...(options.style === undefined ? {} : { style: options.style }),
-  })
+  }
+}
+
+function layoutRecorded(canvas: SpatialCanvas, options: RenderOptions): Scene {
+  return layoutSpatialCanvas(canvas, layoutOptionsRecorded(options))
 }
 
 export function renderAnswer(input: RenderInput): RenderRecord {
@@ -101,7 +107,7 @@ export function renderAnswer(input: RenderInput): RenderRecord {
     scene: dumpScene(scene),
     svg: renderSceneToSvg(scene),
     keyed: keyedAnswer(scene),
-    digest: sceneDigest(scene),
+    digest: layoutSceneDigest(input.canvas, layoutOptionsRecorded(input.options)),
   }
 }
 

@@ -234,8 +234,11 @@ steps and cache paths to the scripts.
   crates carry unsafe or f32 and `ttf-parser` is unmaintained). It reads fonts users install, so it
   is an `input-caps.json` entry (`sfnt_parse`, seeds in `crates/fuzz/seeds/sfnt_parse`) and
   refuses a cmap whose segments or groups are not sorted and disjoint.
-- **The spatial digest is held to a recording and written by hand**:
-  `packages/canvas-render/src/oracle/scene-digest.jsonl` holds `sceneDigest`'s
+- **The spatial digest is held to a recording and written by hand**, and the
+  TypeScript it was recorded from is deleted (ADR-0054 phase A1): the core
+  answers it through `layout_query`'s `scene-digest` query, so the scene is
+  never sent back, and the recording is frozen.
+  `packages/canvas-render/src/oracle/scene-digest.jsonl` holds the deleted `sceneDigest`'s
   `JSON.stringify` text for the scenes of `svg.jsonl` (by id), for scenes written
   as specs, and for seeded boards regenerated from its `meta` record (one FNV digest
   per chunk); a digest past 3,000 characters is held as its length and FNV digest.

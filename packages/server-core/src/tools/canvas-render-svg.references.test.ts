@@ -274,7 +274,7 @@ describe('wb_canvas_snapshot({ layout: true })', () => {
   // stronger than "nobody wired it".
   //
   // What it does guard is that chrome-only contract from the other side: if
-  // `sceneDigest` ever started reporting laid-out content, a canvas's
+  // the digest ever started reporting laid-out content, a canvas's
   // analysis would begin moving whenever a DIFFERENT document was edited,
   // and this goes red at that moment. The opt-in itself is guarded by
   // 'leaves the default render untouched' above, which IS mutation-checked.
@@ -313,8 +313,9 @@ describe('wb_canvas_snapshot({ layout: true })', () => {
       ...makeDeps(store),
       layoutCore: async () =>
         fakeLayoutCore({
-          layout: {
-            layoutSpatialCanvas: () => {
+          // The digest is read where the core lays the canvas out, through its query entry.
+          query: {
+            layoutQuery: () => {
               throw asked
             },
           },

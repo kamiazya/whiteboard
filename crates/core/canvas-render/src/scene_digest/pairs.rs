@@ -5,6 +5,7 @@ use core::cmp::Ordering;
 use whiteboard_det::math::{compare_numbers, hypot, js_max, js_min};
 use whiteboard_scene::BoundingBox;
 
+use super::order::sorted_by;
 use super::{Entry, PAIRWISE_MAX_ENTRIES};
 
 /// Two bboxes join one cluster when their gap is at most this, in px.
@@ -45,10 +46,10 @@ fn gap_between(a: &BoundingBox, b: &BoundingBox) -> f64 {
     hypot(dx, dy)
 }
 
-fn sort_pairs(pairs: &mut [[String; 2]]) {
-    pairs.sort_by(|[a1, b1], [a2, b2]| {
+fn sort_pairs(pairs: Vec<[String; 2]>) -> Vec<[String; 2]> {
+    sorted_by(pairs, |[a1, b1], [a2, b2]| {
         code_unit_order(a1, a2).then_with(|| code_unit_order(b1, b2))
-    });
+    })
 }
 
 /// The first [`OVERLAP_MAX_PAIRS`] overlapping pairs in entry order, each pair
@@ -64,8 +65,7 @@ pub(super) fn overlaps(entries: &[Entry]) -> (Vec<[String; 2]>, bool) {
                 continue;
             }
             if pairs.len() == OVERLAP_MAX_PAIRS {
-                sort_pairs(&mut pairs);
-                return (pairs, true);
+                return (sort_pairs(pairs), true);
             }
             let ordered = if code_unit_order(&a.id, &b.id) == Ordering::Greater {
                 [b.id.clone(), a.id.clone()]
@@ -75,8 +75,7 @@ pub(super) fn overlaps(entries: &[Entry]) -> (Vec<[String; 2]>, bool) {
             pairs.push(ordered);
         }
     }
-    sort_pairs(&mut pairs);
-    (pairs, false)
+    (sort_pairs(pairs), false)
 }
 
 /// Each entry's parent: the smallest box strictly holding it, the smaller id
@@ -86,7 +85,7 @@ pub(super) fn containment(entries: &[Entry]) -> Vec<super::Containment> {
     if entries.len() > PAIRWISE_MAX_ENTRIES {
         return Vec::new();
     }
-    let mut result: Vec<super::Containment> = entries
+    let result: Vec<super::Containment> = entries
         .iter()
         .filter_map(|child| {
             entries
@@ -104,10 +103,9 @@ pub(super) fn containment(entries: &[Entry]) -> Vec<super::Containment> {
                 })
         })
         .collect();
-    result.sort_by(|a, b| {
+    sorted_by(result, |a, b| {
         code_unit_order(&a.child, &b.child).then_with(|| code_unit_order(&a.parent, &b.parent))
-    });
-    result
+    })
 }
 
 /// Every id reachable from entry `seed` by a gap within the threshold, or by
@@ -155,13 +153,11 @@ pub(super) fn clusters(entries: &[Entry]) -> Vec<Vec<String>> {
         if seen.get(seed).copied().unwrap_or(true) {
             continue;
         }
-        let mut ids = component(entries, &mut seen, seed, &mut pops);
-        ids.sort_by(|a, b| code_unit_order(a, b));
-        groups.push(ids);
+        let ids = component(entries, &mut seen, seed, &mut pops);
+        groups.push(sorted_by(ids, |a, b| code_unit_order(a, b)));
     }
-    groups.sort_by(|a, b| match (a.first(), b.first()) {
+    sorted_by(groups, |a, b| match (a.first(), b.first()) {
         (Some(x), Some(y)) => code_unit_order(x, y),
         _ => Ordering::Equal,
-    });
-    groups
+    })
 }

@@ -224,8 +224,12 @@ fn a_host_measured_query_is_measured_by_the_host_or_refused() {
 }
 
 fn edges(canvas: Json, extra: &[(&str, Json)]) -> Json {
+    canvas_query("edges", canvas, extra)
+}
+
+fn canvas_query(query: &str, canvas: Json, extra: &[(&str, Json)]) -> Json {
     let mut fields = vec![
-        ("query", json!("edges")),
+        ("query", json!(query)),
         ("canvas", canvas),
         ("measure", fake()),
         ("mode", json!("light")),
@@ -262,6 +266,37 @@ fn an_edge_layer_past_the_canvas_caps_is_refused() {
         ..SpatialCanvas::default()
     };
     assert_eq!(ask(&edges(canvas_json(&far), &[])), refused("malformed", "non-finite"));
+}
+
+fn digest_of(canvas: Json) -> Json {
+    ask(&canvas_query("scene-digest", canvas, &[]))
+}
+
+#[test]
+fn the_digest_of_a_canvas_is_read_where_it_is_laid_out() {
+    let answered = digest_of(board("one box"));
+    assert_eq!(answered[0], json!("ok"));
+    let text = answered[1].as_str().unwrap_or_default();
+    let digest: Json = serde_json::from_str(text).unwrap_or(Json::Null);
+    assert_eq!(digest["nodes"].as_array().map(Vec::len), Some(1));
+    assert_eq!(digest["nodes"][0]["id"], json!("a"));
+    assert_eq!(digest["partial"], json!(false));
+    let many = SpatialCanvas {
+        nodes: (0..=MAX_ELEMENTS).map(|i| text_node(&format!("n{i}"), "")).collect(),
+        ..SpatialCanvas::default()
+    };
+    assert_eq!(digest_of(canvas_json(&many)), refused("input-too-large", "too-many-elements"));
+}
+
+#[test]
+fn a_digest_box_with_a_non_finite_coordinate_is_refused_not_written_as_null() {
+    let one = |y: f64| SpatialCanvas {
+        nodes: vec![whiteboard_model::spatial::SpatialNode { y, ..text_node("a", "a") }],
+        ..SpatialCanvas::default()
+    };
+    // The control: the same single box, finite, is answered.
+    assert_eq!(digest_of(canvas_json(&one(0.0)))[0], json!("ok"));
+    assert_eq!(digest_of(canvas_json(&one(f64::NAN))), refused("malformed", "non-finite"));
 }
 
 #[test]

@@ -7,7 +7,7 @@
  * per YAGNI + this repo's zod-schema-discipline it needs no runtime schema.
  * The SVG-fragment scene node (the math/diagram seam) is likewise a plain
  * TS variant of this union for the same reason. `sceneDigest`'s output is
- * the only Zod-schematized surface in this package — see `scene-digest.ts`.
+ * the only Zod-schematized surface in this package — see `scene-digest-schema.ts`.
  *
  * Scene nodes retain semantic provenance (heading level, list structure,
  * link targets, wikiLink/embed canvas ids) as first-class fields rather

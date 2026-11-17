@@ -4,6 +4,8 @@ import { highlightCode } from '../highlight/lowlight.js'
 import type { LayoutCore } from '../layout-core.js'
 import { type MeasureText, measureSpecOf } from '../measure.js'
 import type { QueryAnswer, QueryNumbers, QueryRequest } from '../query-core.js'
+import type { LayoutRefusal } from '../refusal.js'
+import { type SceneDigest, sceneDigestSchema } from '../scene-digest-schema.js'
 import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
 import { bundledThemeModeOf } from '../theme/spatial-theme.js'
 import { CoreUnaskable, canvasLayoutRequest, hostEvent, styleOptions } from './canvas-switch.js'
@@ -27,7 +29,7 @@ export interface Querying<T> {
    * caps, a number it cannot spell, a host measurer that did not answer): what
    * the surface asking can show without the core's geometry.
    */
-  readonly unanswered: () => T
+  readonly unanswered: (refused: LayoutRefusal) => T
   /** The core's answer in the query's shape, or undefined when it is not one. */
   readonly read: (answer: Answered) => T | undefined
   /** The host's measurer, for a request naming `{kind: 'host'}`. */
@@ -42,7 +44,7 @@ export interface Querying<T> {
 export function queried<T>(core: LayoutCore, querying: Querying<T>): T {
   const request = querying.request()
   const answer = core.query.layoutQuery(request, highlightCode, querying.measure)
-  if ('refused' in answer) return querying.unanswered()
+  if ('refused' in answer) return querying.unanswered(answer.refused)
   const read = querying.read(answer)
   if (read === undefined) throw new Error(`the core answered ${request.query} in another shape`)
   return read
@@ -81,6 +83,43 @@ export function edgesThroughCore(
     measure: options.measure,
   })
   return [...nodes]
+}
+
+/** What a digest says when nothing could be derived: a fresh one each time, so a caller's edit never reaches the next refusal. */
+const emptyDigest = (): SceneDigest => ({
+  nodes: [],
+  overlaps: [],
+  containment: [],
+  clusters: [],
+  freeRegions: [],
+  partial: true,
+})
+
+/**
+ * The spatial digest of the scene `stored` lays out, through `options.core`'s
+ * query entry: the core digests the scene where it lays it out, so the scene
+ * is never sent back. The text it writes is held to `sceneDigestSchema`. A
+ * layout the core refused has no scene to digest, and is answered as a digest
+ * that says so (`partial`, nothing derived) beside the refusal `onRefused`
+ * hears, which the same request's drawn layout would show.
+ */
+export function layoutSceneDigest(
+  stored: SpatialCanvas,
+  options: SpatialLayoutOptions,
+): SceneDigest {
+  return queried<SceneDigest>(options.core, {
+    request: () => ({ ...canvasLayoutRequest(stored, options), query: 'scene-digest' }),
+    unanswered: (refused) => {
+      options.onRefused?.(refused)
+      return emptyDigest()
+    },
+    read: (answer) => {
+      if (!('digest' in answer)) return undefined
+      for (const event of answer.degradations) options.onDegrade?.(hostEvent(event))
+      return sceneDigestSchema.parse(JSON.parse(answer.digest))
+    },
+    measure: options.measure,
+  })
 }
 
 /** The options a node's natural size reads that the core's query takes as data. */

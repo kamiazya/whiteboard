@@ -3,7 +3,7 @@ paths:
   - "packages/canvas-render/**"
 ---
 
-# canvas-render — the SVG backend, sceneDigest, tidy, and the requests a root asks the layout core
+# canvas-render — the SVG backend, the digest schema, tidy, and the requests a root asks the layout core
 
 The measurements, rejected alternatives and incident histories behind this file's
 rules are in
@@ -59,9 +59,10 @@ D10's decision, and the thin TypeScript a root asks the core through:
   `svg/legend.ts` draws the legend the core lays out. The edge path
   flatteners (`edge-path/`) and `edgeArrowPolygons` are the backend's and the
   hit test's one curve.
-- **`sceneDigest`** (`scene-digest.ts`) and **`sceneBounds`** /
-  `sceneDocumentBounds` (`scene-bounds.ts`). The digest is the AI-facing
-  spatial digest, the one Zod-schematized output of this package. It reports
+- **The scene digest** is the Rust core's (`scene_digest`): `layoutSceneDigest`
+  asks the `scene-digest` query (no scene crosses back) and
+  `sceneDigestSchema` holds the text; a refused layout answers a `partial`
+  digest. **`sceneBounds`** / `sceneDocumentBounds` (`scene-bounds.ts`) stay. The AI-facing digest is the one Zod-schematized output here. It reports
   one entry per ADDRESSABLE node — the chrome shapes carrying a document
   `id` — because the reader's only way to act on what it sees is a tool that
   takes a node id. Content laid out inside a node (its text runs, a facet
@@ -188,7 +189,7 @@ backend's x-transform-boundary convention (decision #5).
 ## Resolved design decisions (do not re-litigate without a new gate)
 
 1. **Scene graph stays plain TS, not Zod.** It never crosses a process
-   boundary — only the SVG string and `sceneDigest` JSON leave this
+   boundary — only the SVG string and the scene digest JSON leave this
    package — so per YAGNI + zod-schema-discipline it needs no runtime
    schema. `sceneDigestSchema` is the sole Zod surface here.
 2. **Canonical SVG serialization** (`svg/format.ts`): fixed per-element
@@ -987,9 +988,8 @@ only producers of an edge's path.
 - Adding a hand-written interface next to `sceneDigestSchema` instead of
   `z.infer` — the exact drift class zod-schema-discipline exists to
   prevent.
-- Reaching for `Set`/`Map` iteration order in `sceneDigest`'s overlap/
-  containment/cluster/free-region derivation instead of the documented
-  explicit sort + tie-breaker — makes the AI-facing JSON non-reproducible.
+- Hash-ordered iteration in the core's digest derivations instead of the
+  documented explicit sort + tie-breaker — makes the AI-facing JSON non-reproducible.
 - Importing MathJax, opentype.js, or any font/DOM API directly instead of
   going through the `measure` seam and the fragment table a root answers.
 - Treating every non-endpoint node as a routing obstacle: a rect that
