@@ -76,6 +76,8 @@ export function planSubtreeMove(rows: readonly PathRow[], from: string, to: stri
       return { ok: false, reason: 'taken', path: move.path }
     }
   }
+  const folderTaken = folderCollision(rows, from, to)
+  if (folderTaken !== undefined) return { ok: false, reason: 'taken', path: folderTaken }
 
   // Shallowest source first, by DEPTH — not by path order. A move up into
   // its own ancestor namespace sends a deeper row onto the path a shallower
@@ -88,4 +90,40 @@ export function planSubtreeMove(rows: readonly PathRow[], from: string, to: stri
   // it is — the row producing a contested path is always deeper than the row
   // vacating it, by exactly the number of segments the move removes.
   return { ok: true, moves: [...moves].sort((left, right) => depth(left.from) - depth(right.from)) }
+}
+
+/** Every proper prefix of `path`: the folders a row implies above itself. */
+function foldersAbove(path: string): string[] {
+  const segments = path.split('/')
+  return segments.slice(1).map((_, i) => segments.slice(0, i + 1).join('/'))
+}
+
+/**
+ * A FOLDER is a path that only prefixes rows. Rows alone never collide with
+ * one, but the tree-backed index holds it as a node and cannot land a second
+ * node on its path, so a move it refuses must be refused here too, or a
+ * double passes over what production refuses. Two shapes: a produced path
+ * meets a folder the move does not empty (a document onto `f`, or folder
+ * `f` merged into folder `g`), and a moving folder lands on a document.
+ * Shallowest first within each kind, so the path named is where the two meet.
+ */
+function folderCollision(rows: readonly PathRow[], from: string, to: string): string | undefined {
+  const documents = new Set(rows.map((row) => row.path))
+  const staying = rows.filter((row) => !isSelfOrDescendant(row.path, from))
+  // A folder survives the move when a row that stays is still below it.
+  const keptFolders = new Set(staying.flatMap((row) => foldersAbove(row.path)))
+  const movingFolders = new Set(
+    rows.flatMap((row) => foldersAbove(row.path)).filter((f) => isSelfOrDescendant(f, from)),
+  )
+  const produced = [
+    ...rows.filter((row) => isSelfOrDescendant(row.path, from)).map((row) => row.path),
+    ...movingFolders,
+  ]
+    .map((path) => rebasePath(path, from, to))
+    .sort((left, right) => depth(left) - depth(right))
+  // A document met is the real conflict and is named first, as the tree names it.
+  return (
+    produced.find((path) => documents.has(path) && !isSelfOrDescendant(path, from)) ??
+    produced.find((path) => keptFolders.has(path))
+  )
 }

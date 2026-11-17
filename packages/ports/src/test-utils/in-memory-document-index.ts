@@ -275,16 +275,15 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
 
   async moveDocument(input: MoveDocumentInput): Promise<void> {
     const { workspaceId, from, to } = moveDocumentInputSchema.parse(input)
-    if (isSelfOrDescendant(to, from)) {
-      throw new DocumentMoveIntoSelfError(from, to)
-    }
     const documents = this.#inWorkspace(workspaceId)
     const rows = [...documents.values()].map((entry) => ({ id: entry.path, path: entry.path }))
     const plan = planSubtreeMove(rows, from, to)
-    if (!plan.ok) {
-      if (plan.reason === 'not-found') throw new DocumentNotFoundError(workspaceId, from)
-      throw new DocumentPathTakenError(workspaceId, plan.path)
+    // Not-found, then into-self, then taken: the tree-backed index's order.
+    if (!plan.ok && plan.reason === 'not-found') throw new DocumentNotFoundError(workspaceId, from)
+    if (isSelfOrDescendant(to, from)) {
+      throw new DocumentMoveIntoSelfError(from, to)
     }
+    if (!plan.ok) throw new DocumentPathTakenError(workspaceId, plan.path)
     const root = documents.get(from)
     if (root !== undefined) {
       const staying = [...documents.values()].filter(
