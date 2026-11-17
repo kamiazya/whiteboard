@@ -5,6 +5,7 @@ import {
   ContentFactsCache,
 } from '@kamiazya/whiteboard-reference-graph'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { searchReady } from './search-core.js'
 import { lazyContentRecord, projectDocumentContent } from './workspace-content.js'
 
 /**
@@ -36,6 +37,8 @@ export function browserBacklinksReader(index: DocumentIndex): (documentId: strin
       projectDocumentContent(await record(), documentId),
   })
   return async (documentId) => {
+    // Extraction and the excerpts are the search core's.
+    await searchReady()
     record = lazyContentRecord()
     const workspaceId = getBrowserWorkspaceId()
     const entries = await index.listDocuments({ workspaceId })

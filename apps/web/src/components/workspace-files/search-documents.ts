@@ -11,11 +11,30 @@
  * here would put that decision in two places.
  */
 
-import { folderNamesOf, foldForSearch } from '@kamiazya/whiteboard-search'
+import { folderNamesOf, foldForSearch, isSearchUnavailable } from '@kamiazya/whiteboard-search'
 import { compareDocumentEntries, type WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { FolderNames } from '../../lib/folder-names.js'
 
 const NO_NAMES: FolderNames = new Map()
+
+/**
+ * `answer`, or `degraded` when search has no core to answer (the wasm did not
+ * load) or declines the input past a cap. This list filters as someone types
+ * and must draw whatever happens, so it falls back to plain text rather than
+ * failing a render.
+ */
+function orDegraded<T>(degraded: T, answer: () => T): T {
+  try {
+    return answer()
+  } catch (err) {
+    if (isSearchUnavailable(err)) return degraded
+    throw err
+  }
+}
+
+/** What a text is compared as: folded by the core, lower-cased without it. */
+const comparable = (text: string): string =>
+  orDegraded(text.toLowerCase(), () => foldForSearch(text))
 
 /**
  * Whether one document answers a query. Lived beside the editor header's
@@ -48,8 +67,8 @@ function documentMatchesSearch(
   }
   // Folded the way the content search folds, so a name answers "cafe" for
   // "Café" here exactly as a body does there.
-  const folded = foldForSearch(q)
-  const has = (text: string) => foldForSearch(text).includes(folded)
+  const folded = comparable(q)
+  const has = (text: string) => comparable(text).includes(folded)
   return (
     has(document.path) ||
     (document.name !== undefined && has(document.name)) ||
@@ -63,9 +82,11 @@ function documentMatchesSearch(
  * Team", whose address still says something else. Not for a `#tag` filter.
  */
 function folderMatchesSearch(query: string, path: string, names: FolderNames): boolean {
-  const q = foldForSearch(query.trim())
+  const q = comparable(query.trim())
   if (q === '' || q.startsWith('#')) return false
-  return folderNamesOf(path, names).some((name) => foldForSearch(name).includes(q))
+  return orDegraded([], () => folderNamesOf(path, names)).some((name) =>
+    comparable(name).includes(q),
+  )
 }
 
 /**

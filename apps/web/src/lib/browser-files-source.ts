@@ -34,8 +34,11 @@ import { rewriteDocumentReferences, splitBearerTags } from '@kamiazya/whiteboard
 import {
   folderNamesOf,
   fullTextSearch,
-  linkLabelsFrom,
+  isSearchRefusal,
+  type LinkLabelSet,
+  linkLabels,
   type SearchableDocument,
+  type SearchHit,
   searchableTexts,
 } from '@kamiazya/whiteboard-search'
 import type { LoroDoc } from 'loro-crdt'
@@ -60,6 +63,7 @@ import {
   type WorkspaceFilesSource,
   WorkspaceMissingError,
 } from './files-source.js'
+import { searchReady } from './search-core.js'
 import {
   type ContentRecord,
   lazyContentRecord,
@@ -196,6 +200,42 @@ async function folderNamesIn(index: DocumentIndex): Promise<ReadonlyMap<string, 
 }
 
 /**
+ * `answer`, or `degraded` when the core declines the input past one of its
+ * caps: a search then finds less rather than failing.
+ */
+function refusedAs<T>(degraded: T, answer: () => T): T {
+  try {
+    return answer()
+  } catch (err) {
+    if (isSearchRefusal(err)) return degraded
+    throw err
+  }
+}
+
+/**
+ * The ranked hits for `query`, its excerpts quoting each `[[link]]` as `entries`
+ * name it. The core holds the link labels until released, and holds a bounded
+ * number of them, so they are released rather than left to collection. A corpus
+ * or query the core declines finds nothing, and a listing it declines labels
+ * nothing.
+ */
+function keywordHits(
+  searchable: readonly SearchableDocument[],
+  entries: readonly WorkspaceDocumentEntry[],
+  query: string,
+  limit: number,
+  alsoIndex: (text: string) => string,
+): SearchHit[] {
+  const labels = refusedAs<LinkLabelSet | undefined>(undefined, () => linkLabels(entries))
+  try {
+    const options = { limit, alsoIndex, ...(labels === undefined ? {} : { linkLabels: labels }) }
+    return refusedAs([], () => fullTextSearch(searchable, query, options))
+  } finally {
+    labels?.release()
+  }
+}
+
+/**
  * The search corpus: each document's placement, the display names of the
  * folders it sits in, and its text — read one document at a time, since
  * reading is what the corpus cache spares.
@@ -207,7 +247,8 @@ async function searchableOf(
 ): Promise<SearchableDocument[]> {
   const searchable: SearchableDocument[] = []
   for (const entry of entries) {
-    const folders = folderNamesOf(entry.path, folderNames)
+    // A path the core declines is searched without its folders' names.
+    const folders = refusedAs([], () => folderNamesOf(entry.path, folderNames))
     searchable.push({
       documentId: entry.documentId,
       path: entry.path,
@@ -497,6 +538,7 @@ export function createBrowserFilesSource(
 
     async searchDocuments(query, limit = 20) {
       if (query.trim() === '') return []
+      await searchReady()
       const entries = await this.listDocuments()
       const record = lazyContentRecord()
       const searchable = await searchableOf(entries, await folderNamesIn(index), (entry) =>
@@ -515,8 +557,8 @@ export function createBrowserFilesSource(
       const { emojiSearchText } = await import(
         '@kamiazya/whiteboard-plugin-visual/emoji/searchable'
       )
-      const options = { limit, alsoIndex: emojiSearchText, linkLabel: linkLabelsFrom(entries) }
-      return fullTextSearch(searchable, query, options).flatMap((hit) => {
+      const hits = keywordHits(searchable, entries, query, limit, emojiSearchText)
+      return hits.flatMap((hit) => {
         const document = byId.get(hit.documentId)
         rank += 1
         return document === undefined
