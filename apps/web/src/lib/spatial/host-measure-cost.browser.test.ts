@@ -40,9 +40,10 @@ import type { WebCore } from './web-core.js'
  * each board laid out again with one node moved, the core handed no content
  * cache against the core handed the caller's (S15n). The fourth splits the
  * largest board's warm drag frame into its phases (S18k): the request's
- * encode, the wasm, the host measurer it calls back and the answer's decode,
- * then the same frames without edge labels and without edges, interleaved, so
- * routing's share is a difference rather than a guess.
+ * encode, the rest of the core call, the host measurer it calls back and the
+ * answer's decode, then the same frames without edge labels and without edges,
+ * interleaved, so what edges cost a frame end to end (routing, labels, their
+ * geometry in the answer and its encode) is a difference rather than a guess.
  *
  * A measurement, not a guard: it asserts only that it measured something,
  * and runs when `VITE_MEASURE_HOST_COST=1` (a timing loop has no place in
@@ -397,7 +398,7 @@ const unlabelled = (board: WebLayoutBoard): WebLayoutBoard => ({
   },
 })
 
-/** `canvas` with no edges: what a frame pays for its routing is the difference. */
+/** `canvas` with no edges: what a frame pays for its edges, end to end, is the difference. */
 const edgeless = (board: WebLayoutBoard): WebLayoutBoard => ({
   ...board,
   canvas: { ...board.canvas, edges: [] },
@@ -494,7 +495,9 @@ function phasesOf(board: WebLayoutBoard, real: WebCore, rounds = 30): Phases {
 /**
  * Medians of `rounds` interleaved warm drag frames of each variant: `board`
  * as it is, without its edge labels, and without its edges. The differences
- * size what labels and routing cost a frame inside the wasm.
+ * size what labels and edges cost a frame end to end: routing, and also the
+ * geometry the answer carries for them and its encode and decode. The samples
+ * are kept in the order they were taken, so a drift across the run shows.
  */
 function timedAblations(board: WebLayoutBoard, real: WebCore, rounds = 21) {
   const { core, tally } = countedCore(real)
@@ -528,11 +531,11 @@ function timedAblations(board: WebLayoutBoard, real: WebCore, rounds = 21) {
     }
   }
   expect(tally.answered - before, board.name).toBe(rounds * lays.length)
-  return Object.fromEntries(lays.map(([name, , times]) => [name, median(times)]))
+  return lays.map(([name, , times]) => ({ name, p50: median(times), samples: times }))
 }
 
 describe.runIf(RUN)('a warm drag frame through the core, split into its phases', () => {
-  it('splits the largest board’s frame into encode, wasm, host measure and decode', {
+  it('splits the largest board’s frame into encode, core call, host measure and decode', {
     timeout: 120_000,
   }, async () => {
     // lazy-import: the module names the artifact, which a person without the Rust toolchain has not built
@@ -543,7 +546,7 @@ describe.runIf(RUN)('a warm drag frame through the core, split into its phases',
       (a, b) => b.canvas.nodes.length - a.canvas.nodes.length,
     )[0] as WebLayoutBoard
     const p = phasesOf(board, real)
-    const wasm = p.coreCall - p.encode - p.decode - p.host
+    const rest = p.coreCall - p.encode - p.decode - p.host
     const pct = (ms: number) => `${((ms / p.frame) * 100).toFixed(1)}%`
     await commands.printReading(
       JSON.stringify({
@@ -551,7 +554,7 @@ describe.runIf(RUN)('a warm drag frame through the core, split into its phases',
         'frame ms': p.frame.toFixed(3),
         'outside the core call ms': (p.frame - p.coreCall).toFixed(3),
         'encode (JSON.stringify) ms': `${p.encode.toFixed(3)} (${pct(p.encode)})`,
-        'wasm, less host measure ms': `${wasm.toFixed(3)} (${pct(wasm)})`,
+        'core call less JSON and host measure ms': `${rest.toFixed(3)} (${pct(rest)})`,
         'host measure ms': `${p.host.toFixed(3)} (${pct(p.host)})`,
         'host calls per frame': p.hostCalls.toFixed(1),
         'decode (JSON.parse) ms': `${p.decode.toFixed(3)} (${pct(p.decode)})`,
@@ -562,7 +565,10 @@ describe.runIf(RUN)('a warm drag frame through the core, split into its phases',
       JSON.stringify({
         board: board.name,
         ...Object.fromEntries(
-          Object.entries(ablated).map(([k, v]) => [`${k} p50 ms`, v.toFixed(2)]),
+          ablated.flatMap(({ name, p50, samples }) => [
+            [`${name} p50 ms`, p50.toFixed(2)],
+            [`${name} samples ms`, samples.map((t) => t.toFixed(2)).join(' ')],
+          ]),
         ),
       }),
     )

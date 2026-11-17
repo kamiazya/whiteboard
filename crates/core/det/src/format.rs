@@ -277,20 +277,21 @@ mod tests {
         // two spellings of that many places can then both read back as.
         let coarse = (1u32 << 8..1 << 18, any::<u32>(), 1usize..5)
             .prop_map(|(hi, lo, places)| wide(hi, lo) / TENTHS[places]);
-        // Decimals either side of 1e-6, where the layout turns to an exponent.
-        let tiny = (1i32..100, 6usize..=8).prop_map(|(n, places)| f64::from(n) / TENTHS[places]);
+        // Decimals either side of 1e-6, where the layout turns to an exponent:
+        // seven places reach 1e-6..1e-5 above it, eight reach under it.
+        let tiny = (1i32..100, 7usize..=8).prop_map(|(n, places)| f64::from(n) / TENTHS[places]);
         // Every power of two, normal or not: a mantissa of no stored bits, and
         // a few of them (2^-25 among them) exactly halfway.
         let powers = (0u64..2047).prop_map(|e| f64::from_bits(e << 52).max(5e-324));
         let negated = |s: f64, negative: bool| if negative { -s } else { s };
         let any_number = prop_oneof![
-            2 => integer,
+            3 => integer,
             2 => decimal,
-            1 => tiny,
+            3 => tiny,
             2 => coarse,
             1 => powers,
             3 => dyadic,
-            2 => halfway,
+            3 => halfway,
             2 => any::<f64>(),
             1 => Just(5e-324),
         ];
