@@ -89,9 +89,10 @@ describe('computeDragPreview — connecting through the core', () => {
     expect(() => preview(throwing(defect))).toThrow(defect)
   })
 
-  it('routes in TypeScript in a realm that holds no core', () => {
+  it('routes through this realm’s own core when it is handed none', () => {
     const drawn = preview(undefined)
     if (drawn?.kind !== 'line') throw new Error('expected a line')
+    expect(drawn.path.length).toBeGreaterThanOrEqual(2)
     expect(drawn.path).not.toEqual(fixedCore().detour)
   })
 })
