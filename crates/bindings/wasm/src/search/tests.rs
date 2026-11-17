@@ -234,7 +234,9 @@ fn an_index_holds_a_bounded_number_of_documents_and_replacing_one_is_always_allo
 #[test]
 fn indexes_and_labels_share_one_byte_budget() {
     let term = "t".repeat(1000);
-    let cost = whiteboard_search::TERM_OVERHEAD + term.len();
+    // One term of 1000 bytes under a one-byte id.
+    let cost =
+        whiteboard_search::TERM_OVERHEAD + term.len() + 1 + whiteboard_search::DOCUMENT_OVERHEAD;
     let mut held = Held::new(cost * 2);
     let handle = handle_of(&ask(&mut held, &json!(["index-new"])));
     let put = |held: &mut Held, id: &str, text: &str| {
@@ -249,6 +251,41 @@ fn indexes_and_labels_share_one_byte_budget() {
     assert_eq!(put(&mut held, "c", &"v".repeat(1000))[0], json!("ok"));
     let labelled = ask(&mut held, &json!(["labels", [["a".repeat(500), "p", null]]]));
     assert_eq!(labelled, refused("input-too-large"));
+}
+
+#[test]
+fn a_replacement_is_judged_by_the_corpus_it_leaves_and_a_refused_one_keeps_the_old() {
+    let term = "t".repeat(1000);
+    let cost =
+        whiteboard_search::TERM_OVERHEAD + term.len() + 1 + whiteboard_search::DOCUMENT_OVERHEAD;
+    let mut held = Held::new(cost * 2);
+    let handle = handle_of(&ask(&mut held, &json!(["index-new"])));
+    let put = |held: &mut Held, id: &str, text: &str| {
+        ask(held, &json!(["index-upsert", handle, id, "", null, [text], null]))
+    };
+    put(&mut held, "a", &term);
+    put(&mut held, "b", &"u".repeat(1000));
+    // Full: the same document again leaves the corpus as it stands.
+    assert_eq!(put(&mut held, "a", &term), json!(["ok", true]));
+    // One byte more than it gives back does not fit, and "a" stays as it was.
+    assert_eq!(put(&mut held, "a", &"t".repeat(1001)), refused("input-too-large"));
+    let hits = ask(&mut held, &json!(["index-query", handle, term, null]));
+    assert_eq!(hits[1].as_array().map(Vec::len), Some(1));
+    assert_eq!(ask(&mut held, &json!(["index-size", handle]))[2], json!(cost * 2));
+}
+
+#[test]
+fn a_document_is_charged_its_id_even_with_no_terms() {
+    let id = "i".repeat(1000);
+    let mut tight = Held::new(1000 + whiteboard_search::DOCUMENT_OVERHEAD - 1);
+    let handle = handle_of(&ask(&mut tight, &json!(["index-new"])));
+    let upsert = json!(["index-upsert", handle, id, "", null, [], null]);
+    assert_eq!(ask(&mut tight, &upsert), refused("input-too-large"));
+    let mut exact = Held::new(1000 + whiteboard_search::DOCUMENT_OVERHEAD);
+    let handle = handle_of(&ask(&mut exact, &json!(["index-new"])));
+    let upsert = json!(["index-upsert", handle, id, "", null, [], null]);
+    assert_eq!(ask(&mut exact, &upsert), json!(["ok", false]));
+    assert_eq!(exact.bytes(), 1000 + whiteboard_search::DOCUMENT_OVERHEAD);
 }
 
 #[test]

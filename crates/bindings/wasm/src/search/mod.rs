@@ -29,9 +29,9 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_model::spatial::{CanvasEdge, NodeResource, SpatialCanvas, SpatialNode};
 use whiteboard_search::{
-    LinkEntry, LinkLabels, SearchIndex, SearchableContent, cost_of, document_terms, excerpter_for,
-    find_folded, fold_for_search, folder_names_of, searchable_texts, snippet_around, tokenize,
-    tokenize_for_index,
+    LinkEntry, LinkLabels, SearchIndex, SearchableContent, document_cost, document_terms,
+    excerpter_for, find_folded, fold_for_search, folder_names_of, searchable_texts, snippet_around,
+    tokenize, tokenize_for_index,
 };
 
 const TOO_LARGE: &str = "input-too-large";
@@ -352,16 +352,20 @@ fn index_upsert(args: &[Json], held: &mut Held) -> Result<Json, Refusal> {
     let named = if folders_wire.is_null() { Vec::new() } else { texts(folders_wire)? };
     let folder_bag = (!named.is_empty()).then(|| document_terms("", None, &named, None));
     let id = text(id)?;
-    let cost = cost_of(&own).saturating_add(folder_bag.as_ref().map_or(0, cost_of));
-    // The replaced document's cost is still in the total: refusing on the sum
-    // is conservative by that much and never lets the corpus grow past the cap.
-    let total = held.bytes().saturating_add(cost);
-    let held_limit = held.limit;
-    let index = held.index_mut(handle_of(handle)?)?;
-    if (!index.contains(id) && index.len() >= MAX_INDEX_DOCUMENTS) || total > held_limit {
+    let handle = handle_of(handle)?;
+    let index = held.index(handle)?;
+    let full = !index.contains(id) && index.len() >= MAX_INDEX_DOCUMENTS;
+    // A replacement gives back what it replaces, so the total it is judged by
+    // is the corpus as it will stand, never the replaced and the new together.
+    let total = held.bytes().saturating_sub(index.cost_held(id)).saturating_add(document_cost(
+        id,
+        &own,
+        folder_bag.as_ref(),
+    ));
+    if full || total > held.limit {
         return Err(TOO_LARGE);
     }
-    Ok(ok(vec![json!(index.upsert(id, own, folder_bag))]))
+    Ok(ok(vec![json!(held.index_mut(handle)?.upsert(id, own, folder_bag))]))
 }
 
 fn index_remove(args: &[Json], held: &mut Held) -> Result<Json, Refusal> {
@@ -425,6 +429,18 @@ fn dispatch(op: &str, args: &[Json], held: &mut Held) -> Result<Json, Refusal> {
 #[must_use]
 pub fn search_op(request: &str) -> String {
     answer(request, &mut held())
+}
+
+/// Answers `requests` in order against holdings of their own, as a fresh
+/// instance would. What the fuzz target drives: one input's indexes and handles
+/// never decide what the next input reaches, and a sequence inside one input
+/// exercises live handles and their release. Not exported to a host.
+#[doc(hidden)]
+pub fn search_ops_in_fresh_instance<'a>(
+    requests: impl IntoIterator<Item = &'a str>,
+) -> Vec<String> {
+    let mut held = Held::new(MAX_HELD_BYTES);
+    requests.into_iter().map(|request| answer(request, &mut held)).collect()
 }
 
 fn answer(request: &str, held: &mut Held) -> String {

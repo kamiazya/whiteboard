@@ -226,6 +226,20 @@ fn the_content_cache_seed_is_a_layout_a_warm_cache_answers_the_same() {
 }
 
 #[test]
+fn the_search_lifecycle_seeds_answer_every_step_in_a_fresh_instance() {
+    // A sequence's later steps name the handle its first step minted; one the
+    // export refused would teach the fuzzer nothing past that refusal.
+    for name in ["index-lifecycle", "labels-lifecycle"] {
+        let input = std::fs::read_to_string(root().join("seeds/search_wasm").join(name)).unwrap();
+        let answers = whiteboard_wasm::search::search_ops_in_fresh_instance(input.split('\n'));
+        assert!(answers.len() >= 3, "{name}: {answers:?}");
+        for answer in &answers {
+            assert!(answer.starts_with("[\"ok\""), "{name}: {answer:.100}");
+        }
+    }
+}
+
+#[test]
 fn the_stateless_search_seeds_are_requests_the_export_answers() {
     // A seed the export refuses teaches the fuzzer nothing past the refusal;
     // the handle ops' seeds need an earlier call's handle and are not here.

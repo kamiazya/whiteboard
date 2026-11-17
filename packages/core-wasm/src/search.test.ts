@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Finalizer } from './font-handles.js'
+import { SEARCH_OP_CAPS } from './generated/input-caps.js'
 import { CoreInputRefused } from './index.js'
 import { type SearchGlue, searchOver } from './search.js'
 
@@ -80,6 +81,64 @@ describe('the search shim over a fake glue', () => {
       expect.objectContaining({ code: 'input-too-large' }),
     )
     expect(sent).toEqual([])
+  })
+
+  it('refuses by the UTF-8 bytes a request is sent as, not its UTF-16 length', () => {
+    // '["fold",""]' is 11 bytes, and each 界 three.
+    const fits = Math.floor((SEARCH_OP_CAPS.maxBytes - 11) / 3)
+    const { glue, sent } = fake(['["ok","x"]'])
+    const search = searchOver(glue, errors)
+    expect(() => search.foldForSearch('界'.repeat(fits + 1))).toThrowError(
+      expect.objectContaining({ code: 'input-too-large' }),
+    )
+    expect(sent).toEqual([])
+    expect(search.foldForSearch('界'.repeat(fits))).toBe('x')
+    expect(sent).toHaveLength(1)
+  })
+
+  it('counts a surrogate pair as four bytes and a lone surrogate as the three of U+FFFD', () => {
+    const pairs = Math.floor((SEARCH_OP_CAPS.maxBytes - 11) / 4)
+    const { glue, sent } = fake(['["ok","x"]', '["ok","x"]'])
+    const search = searchOver(glue, errors)
+    expect(search.foldForSearch('😀'.repeat(pairs))).toBe('x')
+    expect(() => search.foldForSearch('😀'.repeat(pairs + 1))).toThrowError(
+      expect.objectContaining({ code: 'input-too-large' }),
+    )
+    const lone = Math.floor((SEARCH_OP_CAPS.maxBytes - 11) / 3)
+    expect(search.foldForSearch('\uD800'.repeat(lone))).toBe('x')
+    expect(sent).toHaveLength(2)
+  })
+
+  it('refuses an answer that is not JSON as malformed', () => {
+    const { glue } = fake(['not json'])
+    expect(() => searchOver(glue, errors).foldForSearch('a')).toThrowError(
+      expect.objectContaining({ operation: 'search_op', code: 'malformed', detail: 'fold' }),
+    )
+  })
+
+  it('refuses a document id that is not well-formed instead of keying it as another', () => {
+    const { glue, sent } = fake(['["ok",0]'])
+    const index = searchOver(glue, errors).createIndex()
+    const ill = { documentId: 'a\uD800', path: 'p', texts: [] }
+    expect(() => index.upsert(ill)).toThrowError(expect.objectContaining({ code: 'malformed' }))
+    expect(() => index.remove('a\uD801')).toThrowError(
+      expect.objectContaining({ code: 'malformed' }),
+    )
+    expect(sent).toEqual([['index-new']])
+  })
+
+  it('refuses a label set another instance minted, and shares one between facades of one', () => {
+    const one = fake(['["ok",0]', '["ok","seen"]'])
+    const other = fake([])
+    const labels = searchOver(one.glue, errors).linkLabels([{ documentId: 'd', path: 'p' }])
+    expect(() => searchOver(other.glue, errors).snippetAround('t', 0, 1, labels)).toThrowError(
+      expect.objectContaining({ code: 'malformed', detail: 'snippet' }),
+    )
+    expect(() => searchOver(other.glue, errors).excerpts('q', [['t']], labels)).toThrowError(
+      expect.objectContaining({ code: 'malformed', detail: 'excerpts' }),
+    )
+    expect(other.sent).toEqual([])
+    expect(searchOver(one.glue, errors).snippetAround('t', 0, 1, labels)).toBe('seen')
   })
 
   it('sends a lone surrogate as the replacement character', () => {

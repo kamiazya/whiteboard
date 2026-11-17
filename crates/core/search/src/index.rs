@@ -18,10 +18,15 @@ pub const DEFAULT_LIMIT: usize = 10;
 /// by, not a measurement of the allocator.
 pub const TERM_OVERHEAD: usize = 64;
 
+/// What a held document is charged beyond its bags: the id's map node and its
+/// string's header, rounded up. Its id's bytes are charged on top, since an
+/// empty bag under a long id holds the id all the same.
+pub const DOCUMENT_OVERHEAD: usize = 64;
+
 struct Held {
     own: DocumentTerms,
     folders: Option<DocumentTerms>,
-    /// [`cost_of`] both bags, computed once so a corpus's total is a running sum.
+    /// [`document_cost`], computed once so a corpus's total is a running sum.
     cost: usize,
 }
 
@@ -32,6 +37,16 @@ pub fn cost_of(terms: &DocumentTerms) -> usize {
         .counts
         .keys()
         .fold(0_usize, |sum, term| sum.saturating_add(term.len()).saturating_add(TERM_OVERHEAD))
+}
+
+/// What holding `id` with these bags costs a corpus: both bags, the id's
+/// bytes and [`DOCUMENT_OVERHEAD`], so a caller can refuse before holding it.
+#[must_use]
+pub fn document_cost(id: &str, own: &DocumentTerms, folders: Option<&DocumentTerms>) -> usize {
+    cost_of(own)
+        .saturating_add(folders.map_or(0, cost_of))
+        .saturating_add(id.len())
+        .saturating_add(DOCUMENT_OVERHEAD)
 }
 
 /// The documents of one corpus, by id, as the two token bags each is scored by.
@@ -50,7 +65,7 @@ impl SearchIndex {
     /// Holds `id` as `own` and, when it sits in a named folder, `folders`;
     /// replaces what it held. Answers whether it held the id before.
     pub fn upsert(&mut self, id: &str, own: DocumentTerms, folders: Option<DocumentTerms>) -> bool {
-        let cost = cost_of(&own).saturating_add(folders.as_ref().map_or(0, cost_of));
+        let cost = document_cost(id, &own, folders.as_ref());
         let before = self.held.insert(id.to_owned(), Held { own, folders, cost });
         self.bytes = self.bytes.saturating_sub(before.as_ref().map_or(0, |held| held.cost));
         self.bytes = self.bytes.saturating_add(cost);
@@ -61,6 +76,13 @@ impl SearchIndex {
     #[must_use]
     pub fn contains(&self, id: &str) -> bool {
         self.held.contains_key(id)
+    }
+
+    /// What `id` costs as held now; 0 when it holds none. An upsert's caller
+    /// judges a replacement by the total less this.
+    #[must_use]
+    pub fn cost_held(&self, id: &str) -> usize {
+        self.held.get(id).map_or(0, |held| held.cost)
     }
 
     /// Forgets `id`; `false` when it held none.
@@ -227,8 +249,10 @@ mod tests {
         let folders = document_terms("", None, &["gamma".to_owned()], None);
         index.upsert("a", own, Some(folders));
         assert!(!index.is_empty());
-        assert_eq!(index.bytes_held(), (5 + 4 + 5) + 3 * TERM_OVERHEAD);
+        assert_eq!(index.bytes_held(), (5 + 4 + 5) + 3 * TERM_OVERHEAD + 1 + DOCUMENT_OVERHEAD);
+        assert_eq!(index.cost_held("a"), index.bytes_held());
         index.upsert("a", document_terms("", None, &["x".to_owned()], None), None);
-        assert_eq!(index.bytes_held(), 1 + TERM_OVERHEAD);
+        assert_eq!(index.bytes_held(), 1 + TERM_OVERHEAD + 1 + DOCUMENT_OVERHEAD);
+        assert_eq!(index.cost_held("absent"), 0);
     }
 }
