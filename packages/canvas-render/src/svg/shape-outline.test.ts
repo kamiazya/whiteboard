@@ -1,6 +1,6 @@
 import type { Scene } from '@kamiazya/whiteboard-scene'
-import { describe, expect, it } from 'vitest'
-import { renderSceneToSvg } from './backend.js'
+import { describe, expect, expectTypeOf, it } from 'vitest'
+import { renderSceneToSvg, type SvgDocumentOptions } from './backend.js'
 
 const scene = (
   shape?:
@@ -21,6 +21,13 @@ const scene = (
 })
 
 describe('shape outlines in the SVG backend', () => {
+  it('draws only the bundled silhouettes: a caller hands no shape table of its own', () => {
+    // The layout that read a caller's table is the Rust core's now, and its
+    // silhouettes are the bundled plugin's, so a second table here could only
+    // draw an outline the core never anchored or contained against.
+    expectTypeOf<SvgDocumentOptions>().not.toHaveProperty('shapes')
+  })
+
   it('an absent shape field renders the historic rect byte-for-byte', () => {
     expect(renderSceneToSvg(scene())).toBe(
       '<svg xmlns="http://www.w3.org/2000/svg"><rect x="10" y="20" width="100" height="60" fill="#fff" stroke="#333"/></svg>',

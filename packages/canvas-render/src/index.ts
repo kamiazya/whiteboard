@@ -123,12 +123,7 @@ export {
   isFullWidthCodePoint,
   measureSpecOf,
 } from './measure.js'
-export type { ShapeContribution, ShapeTable } from './outline/node-outline.js'
-export {
-  type NodeOutline,
-  nodeOutline,
-  resolveShapeTable,
-} from './outline/node-outline.js'
+export { type NodeOutline, nodeOutline } from './outline/node-outline.js'
 export { paintOrderOf } from './paint-order.js'
 export {
   CANVAS_VIEW_PICTURE_META_KEY,
