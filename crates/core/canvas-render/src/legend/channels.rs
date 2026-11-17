@@ -63,8 +63,9 @@ fn partition<C: PartialEq>(name: &str, classes: impl IntoIterator<Item = C>) -> 
     Partition { name: name.to_owned(), classes: seen.into_iter().map(|(_, m)| m).collect() }
 }
 
-/// Keys the boxes already partition by under their own name.
-const BUILT_IN: [&str; 3] = ["frame", "kind", "stencil"];
+/// Keys the boxes already partition by under their own name. A scoped tag
+/// under one of them is not that partition, so it partitions nothing.
+pub const BUILT_IN: [&str; 3] = ["frame", "kind", "stencil"];
 
 /// One partition per scoped-tag key, in key order: an element carrying none is
 /// in the unlisted `""` class, and a key some element carries twice (even one

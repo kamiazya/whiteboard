@@ -44,6 +44,43 @@ fn reading_of(usage: &ChannelUse) -> (String, Vec<String>) {
     }
 }
 
+/// The recordings that list a scoped tag written under a built-in
+/// partition's name (`frame:west`) as the key carrying the colour, when what
+/// carried it was the partition itself. The TypeScript did, and the recording
+/// is frozen; the legend lists only scoped-tag keys, so the replay expects
+/// these with that key dropped.
+const CORRECTED: [&str; 2] = ["frame-carried", "sweep-99"];
+
+/// The partitions the boxes hold under their own name, spelled here rather
+/// than read from the code the replay judges.
+const BUILT_IN: [&str; 3] = ["frame", "kind", "stencil"];
+
+fn lists_a_built_in(legend: Option<&SceneLegend>) -> bool {
+    legend.is_some_and(|l| l.keys.iter().any(|k| BUILT_IN.contains(&k.key.as_str())))
+}
+
+/// `recorded` less any key named after a built-in partition, and no legend
+/// when that leaves nothing to say.
+fn corrected(recorded: Option<&SceneLegend>) -> Option<SceneLegend> {
+    let mut legend = recorded?.clone();
+    legend.keys.retain(|k| !BUILT_IN.contains(&k.key.as_str()));
+    let says = !legend.keys.is_empty() || legend.uncarried.boxes || legend.uncarried.edges;
+    says.then_some(legend)
+}
+
+/// What the replay expects of one theme's legend: the recording, or for a
+/// [`CORRECTED`] record, the recording corrected, which must differ from it
+/// so the list cannot outlive what it corrects.
+fn expected(record: &LegendRecord, recorded: Option<&SceneLegend>) -> Res<Option<SceneLegend>> {
+    let listed = CORRECTED.contains(&record.name.as_str());
+    if listed != lists_a_built_in(recorded) {
+        let state =
+            if listed { "corrected, lists no built-in" } else { "lists a built-in, uncorrected" };
+        return Err(state.to_owned());
+    }
+    Ok(if listed { corrected(recorded) } else { recorded.cloned() })
+}
+
 fn replay_legend(record: &LegendRecord) -> Res<()> {
     let registry = visual_registry().map_err(|e| format!("{e:?}"))?;
     let canvas = canvas_of(&record.canvas)?;
@@ -52,9 +89,11 @@ fn replay_legend(record: &LegendRecord) -> Res<()> {
     differ("boxes", &reading_of(&channels.boxes), &want(&record.boxes))?;
     differ("edges", &reading_of(&channels.edges), &want(&record.edges))?;
     let light = create_spatial_theme(SpatialThemeMode::Light, None);
-    differ("light", &canvas_legend(&canvas, &light, &registry), &record.light)?;
+    let want_light = expected(record, record.light.as_ref())?;
+    differ("light", &canvas_legend(&canvas, &light, &registry), &want_light)?;
     let dark = create_spatial_theme(SpatialThemeMode::Dark, None);
-    differ("dark", &canvas_legend(&canvas, &dark, &registry), &record.dark)
+    let want_dark = expected(record, record.dark.as_ref())?;
+    differ("dark", &canvas_legend(&canvas, &dark, &registry), &want_dark)
 }
 
 #[test]
