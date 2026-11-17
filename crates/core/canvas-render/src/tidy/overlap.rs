@@ -224,6 +224,16 @@ mod tests {
     }
 
     #[test]
+    fn a_snap_toward_a_neighbour_is_judged_by_the_distance_it_really_moves() {
+        // The left one snaps to -32 (away from its neighbour); the right one
+        // would snap to 8, 3px toward the box on its left, and closes the margin.
+        let mut units = vec![unit(-31.0, 0.0), unit(11.0, 0.0)];
+        snap_stale_anchors(&mut units, ORIGIN);
+        assert!(js_eq(units[0].bbox.x, -32.0));
+        assert!(js_eq(units[1].bbox.x, 11.0));
+    }
+
+    #[test]
     fn a_snap_clear_of_every_neighbour_is_made() {
         let mut units = vec![unit(5.0, 0.0), unit(200.0, 0.0)];
         snap_stale_anchors(&mut units, ORIGIN);
