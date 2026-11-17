@@ -16,6 +16,7 @@ pub mod fold;
 mod markup;
 pub mod rank;
 pub mod snippet;
+mod tables;
 pub mod terms;
 pub mod texts;
 pub mod tokenize;

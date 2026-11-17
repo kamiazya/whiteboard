@@ -699,6 +699,7 @@ dependencies = [
  "wasm-bindgen-test",
  "whiteboard-det",
  "whiteboard-model",
+ "whiteboard-proptest",
 ]
 
 [[package]]

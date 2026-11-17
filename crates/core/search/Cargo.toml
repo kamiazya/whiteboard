@@ -9,16 +9,19 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-unicode-case-mapping.workspace = true
-unicode-normalization.workspace = true
-unicode-properties.workspace = true
-unicode-script.workspace = true
 unicode-segmentation.workspace = true
 whiteboard-det = { path = "../det" }
 whiteboard-model = { path = "../model" }
 
 [dev-dependencies]
 serde_json.workspace = true
+# The generator and the oracle of `src/tables.rs` (tests/unicode_tables.rs);
+# none is linked into a shipped artifact.
+unicode-case-mapping.workspace = true
+unicode-normalization.workspace = true
+unicode-properties.workspace = true
+unicode-script.workspace = true
+whiteboard-proptest = { path = "../../testing/proptest" }
 
 # QR-21 layer 3: the same tests run natively and on wasm32 under Node.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

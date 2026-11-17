@@ -7,7 +7,7 @@
 //! it would make が and か one character. A compatibility form whose
 //! decomposition is Latin or ASCII folds to that decomposition.
 
-use crate::unicode::{is_latin, is_mark, lowercase, nfkd, push_lowercase};
+use crate::unicode::{self, is_mark};
 
 /// A folded text with where each of its code points came from, in UTF-16 code
 /// units of the original.
@@ -43,17 +43,7 @@ pub fn fold_code_point(c: char) -> (String, bool) {
     if folds_to_itself(u32::from(c)) {
         return (c.to_string(), false);
     }
-    let mut lower = String::new();
-    push_lowercase(c, &mut lower);
-    let decomposed = lowercase(&nfkd(&lower));
-    let first_is_latin = decomposed.chars().next().is_some_and(is_latin);
-    let ascii = !decomposed.is_empty() && decomposed.chars().all(|d| matches!(d, ' '..='~'));
-    if first_is_latin || ascii {
-        let out: String = decomposed.chars().filter(|d| !is_mark(*d)).collect();
-        let latin = out.chars().next_back().is_some_and(is_latin);
-        return (out, latin);
-    }
-    (lower, false)
+    unicode::fold_of(c).unwrap_or_else(|| (c.to_string(), false))
 }
 
 /// The folded text, with where each of its code points came from.
