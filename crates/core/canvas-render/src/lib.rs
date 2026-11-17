@@ -61,6 +61,7 @@ pub mod seed;
 pub mod sfnt;
 pub mod svg;
 pub mod theme;
+pub mod tidy;
 pub mod translate_scene;
 pub mod truncate;
 pub mod typeset;

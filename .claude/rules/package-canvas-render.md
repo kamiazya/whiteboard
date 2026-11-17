@@ -72,7 +72,8 @@ D10's decision, and the thin TypeScript a root asks the core through:
   of taking every bbox-carrying node named by position — there is nothing
   better to name them by, and the alternative is answering with nothing.
 - **Tidy** (`tidy.ts`, `tidy-units.ts`, `tidy-bands.ts`, `tidy-axis.ts`):
-  no Rust port, and the sections below are its rules.
+  every caller still runs this TypeScript; the core's `tidy` is its port, held
+  to `oracle/tidy.jsonl`. The sections below are its rules.
 - **Hit testing and paint order** (`hit-boxes.ts`, `hit-test.ts`,
   `paint-order.ts`, `containment.ts`), over the scene the core answers.
 - **The theme layer** (`theme/`, `layout/canvas-theme.ts`): the palettes,
