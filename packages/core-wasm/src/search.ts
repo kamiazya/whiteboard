@@ -97,12 +97,43 @@ const DEFAULT_LIMIT = 10
 const toWellFormed = (s: string): string =>
   (s as string & { toWellFormed(): string }).toWellFormed()
 
+/**
+ * A document id as the index keys it. One that is not well-formed is refused
+ * rather than rewritten: U+FFFD in place of a lone surrogate would key two
+ * distinct ids alike and answer a hit under an id its caller never named.
+ */
+function idOf(channel: Channel, op: string, id: string): string {
+  if (!(id as string & { isWellFormed(): boolean }).isWellFormed()) {
+    throw channel.errors.refused('search_op', 'malformed', op)
+  }
+  return id
+}
+
 const bits = new DataView(new ArrayBuffer(8))
 
 function scoreOf(hex: unknown): number | undefined {
   if (typeof hex !== 'string' || !/^[0-9a-f]{16}$/.test(hex)) return undefined
   bits.setBigUint64(0, BigInt(`0x${hex}`))
   return bits.getFloat64(0)
+}
+
+/**
+ * The UTF-8 bytes a request is sent as: the cap is on those, and a string of
+ * characters past U+007F holds up to three per UTF-16 unit. A lone surrogate
+ * crosses as U+FFFD, three bytes, as the encoder writes it.
+ */
+function utf8Length(text: string): number {
+  let bytes = 0
+  for (let at = 0; at < text.length; at++) {
+    const unit = text.charCodeAt(at)
+    if (unit < 0x80) bytes += 1
+    else if (unit < 0x800) bytes += 2
+    else if (unit >= 0xd800 && unit <= 0xdbff && (text.charCodeAt(at + 1) & 0xfc00) === 0xdc00) {
+      bytes += 4
+      at++
+    } else bytes += 3
+  }
+  return bytes
 }
 
 const isText = (x: unknown): x is string => typeof x === 'string'
@@ -118,12 +149,19 @@ class Channel {
   /** The artifact's answer after `ok`, or a thrown `CoreInputRefused`. */
   call(op: string, ...args: unknown[]): unknown[] {
     const request = JSON.stringify([op, ...args])
-    // A UTF-16 length is never over its UTF-8 one, so this refuses nothing the
-    // artifact would take; the artifact refuses on the bytes.
-    if (request.length > SEARCH_OP_CAPS.maxBytes) {
+    // Refused before the artifact is called, on the bytes it would read. A
+    // UTF-16 length is never over its UTF-8 one, and never under a third of it,
+    // so the count runs only where the length alone cannot decide.
+    const max = SEARCH_OP_CAPS.maxBytes
+    if (request.length > max || (request.length * 3 > max && utf8Length(request) > max)) {
       throw this.errors.refused('search_op', 'input-too-large', op)
     }
-    const answer: unknown = JSON.parse(this.glue.search_op(request))
+    let answer: unknown
+    try {
+      answer = JSON.parse(this.glue.search_op(request))
+    } catch {
+      throw this.errors.refused('search_op', 'malformed', op)
+    }
     if (Array.isArray(answer) && answer[0] === 'ok') return answer.slice(1) as unknown[]
     const code = Array.isArray(answer) && answer[0] === 'refused' ? answer[1] : undefined
     throw this.errors.refused('search_op', code === 'input-too-large' ? code : 'malformed', op)
@@ -150,13 +188,21 @@ function unitOf(channel: Channel, op: string, n: number): number {
 class LinkLabelSet {
   /** @internal */
   readonly handle: number
+  /** @internal The instance that minted it: a handle means nothing in another. */
+  readonly glue: SearchGlue
   readonly #release: () => void
   readonly #collected: Finalizer
   #released = false
 
   /** @internal */
-  constructor(handle: number, release: (handle: number) => void, collected: Finalizer) {
+  constructor(
+    handle: number,
+    glue: SearchGlue,
+    release: (handle: number) => void,
+    collected: Finalizer,
+  ) {
     this.handle = handle
+    this.glue = glue
     this.#release = () => release(handle)
     this.#collected = collected
     collected.register(this, handle, this)
@@ -203,7 +249,7 @@ class SearchIndex {
     const [replaced] = this.#channel.call(
       'index-upsert',
       this.#handle,
-      toWellFormed(doc.documentId),
+      idOf(this.#channel, 'index-upsert', doc.documentId),
       expand(doc.path),
       expand(doc.name ?? ''),
       doc.texts.map(expand),
@@ -216,7 +262,12 @@ class SearchIndex {
 
   /** Forgets a document; false when the index held none. */
   remove(documentId: string): boolean {
-    return this.#channel.first('index-remove', isBoolean, this.#handle, toWellFormed(documentId))
+    return this.#channel.first(
+      'index-remove',
+      isBoolean,
+      this.#handle,
+      idOf(this.#channel, 'index-remove', documentId),
+    )
   }
 
   /**
@@ -393,6 +444,17 @@ function contentCalls(channel: Channel): ContentCalls {
 
 type ExcerptCalls = Pick<SearchCore, 'linkLabels' | 'snippetAround' | 'excerpts'>
 
+/**
+ * A label set's handle, or null for none. Every instance numbers its sets from
+ * zero, so a set another instance minted would name this one's labels, or
+ * none: it is refused, keyed on the instance so facades over one share sets.
+ */
+function labelsOf(channel: Channel, op: string, labels: LinkLabelSet | undefined): number | null {
+  if (labels === undefined) return null
+  if (labels.glue !== channel.glue) throw channel.errors.refused('search_op', 'malformed', op)
+  return labels.handle
+}
+
 function excerptCalls(channel: Channel, collected: Finalizer): ExcerptCalls {
   const release = (handle: number) => quietly(channel, 'labels-release', handle)
   return {
@@ -402,7 +464,12 @@ function excerptCalls(channel: Channel, collected: Finalizer): ExcerptCalls {
         toWellFormed(path),
         orNull(name),
       ])
-      return new LinkLabelSet(channel.first('labels', isNumber, listed), release, collected)
+      return new LinkLabelSet(
+        channel.first('labels', isNumber, listed),
+        channel.glue,
+        release,
+        collected,
+      )
     },
     snippetAround: (text, index, length, labels) =>
       channel.first(
@@ -411,14 +478,14 @@ function excerptCalls(channel: Channel, collected: Finalizer): ExcerptCalls {
         toWellFormed(text),
         unitOf(channel, 'snippet', index),
         unitOf(channel, 'snippet', length),
-        labels?.handle ?? null,
+        labelsOf(channel, 'snippet', labels),
       ),
     excerpts(query, documents, labels) {
       const answered = channel.first(
         'excerpts',
         (x): x is string[][] => Array.isArray(x) && x.every(isTexts),
         toWellFormed(query),
-        labels?.handle ?? null,
+        labelsOf(channel, 'excerpts', labels),
         documents.map((texts) => texts.map(toWellFormed)),
       )
       if (answered.length !== documents.length) {
