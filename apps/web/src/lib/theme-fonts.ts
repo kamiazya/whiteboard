@@ -16,7 +16,10 @@
  * bundled family until the answer changes, and `themeFontsGeneration` is
  * what tells a scene to lay out again when it does.
  */
-import { SPATIAL_THEME_FONT_STACK } from '@kamiazya/whiteboard-canvas-render'
+import {
+  SPATIAL_THEME_FONT_FAMILY,
+  SPATIAL_THEME_FONT_STACK,
+} from '@kamiazya/whiteboard-canvas-render'
 import { hasLoadedFace, registerFontBytes } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import {
   fontCatalogueEntryByFamily,
@@ -207,7 +210,11 @@ export function editingFontFamilyFor(
   registry: FacetRegistry = bundledFacetRegistry,
 ): string {
   const family = themeFamilyFor(canvas, registry)
-  return family !== undefined && hasLoadedFace(family) ? family : SPATIAL_THEME_FONT_STACK
+  // The bundled family is "loaded" by definition, before its face is, so a
+  // theme naming it gets the stack too, or it types in the page's default.
+  return family !== undefined && family !== SPATIAL_THEME_FONT_FAMILY && hasLoadedFace(family)
+    ? family
+    : SPATIAL_THEME_FONT_STACK
 }
 
 /**

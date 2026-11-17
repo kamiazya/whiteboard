@@ -1,5 +1,5 @@
 import type { FontDescriptor } from '@kamiazya/whiteboard-canvas-render'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, inject, it } from 'vitest'
 import { VIEWER_FONT_FAMILY } from './font.js'
 import { createBrowserMeasureText } from './measure-text.js'
 
@@ -43,6 +43,12 @@ function holdsRoboto(): boolean {
   return false
 }
 
+declare module 'vitest' {
+  export interface ProvidedContext {
+    onCi: boolean
+  }
+}
+
 afterEach(() => {
   document.body.replaceChildren()
 })
@@ -59,6 +65,10 @@ describe('the browser measurer before the vendored face loads', () => {
     probe.font = '16px system-ui, sans-serif'
     const generic = probe.measureText(SAMPLE).width
     if (holdsRoboto() || Math.abs(bare - generic) < 0.5) {
+      // CI's browser has no Roboto, so this premise must hold there: a skip on
+      // CI would leave the assertion unrun while every summary stayed green.
+      if (inject('onCi'))
+        throw new Error('Roboto resolves on CI, so this test would assert nothing')
       return ctx.skip('Roboto resolves here, so there is no fallback to disagree on')
     }
     const measured = createBrowserMeasureText()(SAMPLE, font).advanceWidth

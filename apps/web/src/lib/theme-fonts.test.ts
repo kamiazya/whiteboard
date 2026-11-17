@@ -155,6 +155,33 @@ describe('theme fonts', () => {
     hasLoadedFace.mockReturnValue(false)
   })
 
+  it('types a theme that names the bundled family in the stack the scene draws it in', async () => {
+    // `hasLoadedFace` answers true for the bundled family before its face
+    // loads, so a theme naming it must not short-circuit to the bare name.
+    const mod = await import('./theme-fonts.js')
+    const { bundledFacetRegistry } = await import('@kamiazya/whiteboard-plugin-visual')
+    const themeAsset = (id: string) => {
+      const asset = bundledFacetRegistry.themeAsset(id)
+      return asset === undefined ? undefined : { ...asset, fontFamily: 'Roboto' }
+    }
+    const naming = new Proxy(bundledFacetRegistry, {
+      get: (target, key) => {
+        if (key === 'themeAsset') return themeAsset
+        const value: unknown = Reflect.get(target, key)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+    const sketched = {
+      nodes: [],
+      edges: [],
+      facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
+    }
+    expect(mod.themeFamilyFor(sketched, naming)).toBe('Roboto')
+    hasLoadedFace.mockReturnValue(true)
+    expect(mod.editingFontFamilyFor(sketched, naming)).toBe('Roboto, system-ui, sans-serif')
+    hasLoadedFace.mockReturnValue(false)
+  })
+
   // What a list surface's render key carries, so a picture drawn before a
   // face landed is not the answer to an ask made after it.
   it('reports the held faces as one sorted key, empty until the first lands', async () => {

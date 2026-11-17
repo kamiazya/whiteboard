@@ -7,9 +7,15 @@
  */
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import { cleanup, render, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, inject, it } from 'vitest'
 import { type ReferenceLoader, useReferenceSeams } from '../../hooks/use-reference-seams.js'
 import { PreviewPane } from './PreviewPane.js'
+
+declare module 'vitest' {
+  export interface ProvidedContext {
+    onCi: boolean
+  }
+}
 
 afterEach(cleanup)
 
@@ -54,8 +60,13 @@ function robotoResolves(): boolean {
 
 describe('space-separated wiki links in the preview', () => {
   it('draws a visible gap between each pair before the vendored face loads', async (ctx) => {
-    if (robotoResolves())
+    if (robotoResolves()) {
+      // CI's browser has no Roboto, so this premise must hold there: a skip on
+      // CI would leave the assertion unrun while every summary stayed green.
+      if (inject('onCi'))
+        throw new Error('Roboto resolves on CI, so this test would assert nothing')
       return ctx.skip('Roboto resolves here, so there is no fallback to disagree on')
+    }
     const { container } = render(<Note />)
     await waitFor(() =>
       expect(container.querySelector(`a[href="${idOf(COUNT - 1)}"] text`)).not.toBeNull(),
