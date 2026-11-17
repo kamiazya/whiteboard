@@ -569,6 +569,7 @@ version = "0.0.0"
 dependencies = [
  "libm",
  "wasm-bindgen-test",
+ "whiteboard-proptest",
 ]
 
 [[package]]
