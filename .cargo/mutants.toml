@@ -347,7 +347,7 @@ exclude_re = [
   # canvas-render tidy mostly_inside: `w > 0.0` made `>=` differs only at a zero
   # overlap width, where the product `w * h * 2.0` is zero (or NaN against an
   # infinite `h`) and fails the majority test on the next operand anyway.
-  'tidy/units\.rs:93:7: replace > with >= in mostly_inside$',
+  'tidy/units\.rs:\d+:7: replace > with >= in mostly_inside$',
   # canvas-render scene_digest positions: `width < len` made `<=` adds one pass at
   # `width == len`, where the slice is a single run and the merge copies it
   # unchanged, so the order it answers is the same.
