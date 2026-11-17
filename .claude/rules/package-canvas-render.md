@@ -69,14 +69,18 @@ never knew a shape's name: containment switches on the returned
 core's now. Only the geometry is per-shape — which is the whole of
 `ShapeContribution`.
 
-**Decorations are the second contribution point, and the cheap one.** A
-`NodeDecoration` is handed a node plus its CONTENT box and the resolved label
+**Decorations are the second contribution point, and the Rust core's.** A
+decoration is handed a node plus its CONTENT box and the resolved label
 appearance, and returns scene nodes drawn after the node's own content. They
 COMPOSE — several plugins marking one node is a stack, not a competition — so
 order answers by contribution order and no conflict rule is needed, unlike a
-silhouette. `visual.symbol`'s badge is one of these and now lives in
-`plugin-visual`, taking its size, margin and corner with it; this package no
-longer knows what a badge is.
+silhouette. The contract is the `NodeDecoration` trait in `whiteboard-scene`,
+and `visual`'s stencil badge implements it in `crates/core/plugin-visual`. The
+TypeScript form went with the TypeScript layout that asked it (ADR-0054 step
+7, S18i), as did the shape and text-placement readers `RenderContribution`
+carried for the layout; what is left of `RenderContribution` is what this
+package still reads: `shapes` for the SVG backend and `themes`/`readTheme`
+for palette resolution.
 
 **An icon contribution carries its coordinate space and paint**, not geometry
 alone (`IconContribution`, `svg/backend.ts`). Geometry means nothing without

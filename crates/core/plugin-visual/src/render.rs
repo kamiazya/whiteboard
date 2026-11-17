@@ -207,7 +207,7 @@ const BADGE_INSET_PX: f64 = 6.0;
 /// Below this node height the badge would sit on the label, so it is left off.
 const BADGE_MIN_NODE_HEIGHT_PX: f64 = 48.0;
 
-/// The mark a box wearing a stencil carries (`stencilBadge`), at the top centre,
+/// The mark a box wearing a stencil carries, at the top centre,
 /// where every silhouette here is at its widest and clear: a corner is outside a
 /// diamond, an ellipse and a parallelogram. Only a stencil-wearing box draws it,
 /// since a stencil is a kind, and two kinds that differ only by silhouette are
@@ -240,10 +240,9 @@ fn stencil_badge(
     })
 }
 
-/// The plugin's decoration (`stencilBadge`): the badge over a node, placed by
-/// the node's own box rather than the content bounds it is told, as the
-/// TypeScript places it, from the stencil and symbol the node's facets resolve
-/// to through `registry`.
+/// The plugin's decoration: the badge over a node, placed by the node's own box
+/// rather than the content bounds it is told, from the stencil and symbol the
+/// node's facets resolve to through `registry`.
 pub struct StencilBadge<'a> {
     pub registry: &'a Registry,
 }

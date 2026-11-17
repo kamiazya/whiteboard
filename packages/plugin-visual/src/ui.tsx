@@ -91,9 +91,8 @@ export const visualUi = definePluginUi({
     // schema arms and a field-level control could not express them. The
     // facet-level picker can, so the declaration in `data.ts` is the whole
     // UI now and every vessel draws it the same way. `component` stays a
-    // real point with no bundled user, deliberately, the way
-    // `RenderContribution.decorations` does: it is the contract with every
-    // plugin, not a convenience for this one.
+    // real point with no bundled user, deliberately: it is the contract with
+    // every plugin, not a convenience for this one.
     { title: 'Symbol', facet: 'symbol' },
     { title: 'Text placement', facet: 'text' },
   ],
