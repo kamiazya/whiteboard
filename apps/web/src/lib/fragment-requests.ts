@@ -2,13 +2,13 @@
  * Which math blocks and diagram fences a layout asks for, answered by the
  * layout itself.
  *
- * canvas-render's `renderMath` / `renderDiagram` seams are synchronous and
- * the engines behind them (MathJax, mermaid) are not, so every surface that
- * typesets has to know the sources BEFORE the layout that draws them. The
- * only complete answer is the layout's own: an embedded note, an embedded
- * board's text nodes and a file node's note each ask through the same seams,
- * and a hand walk over one body's tree misses whatever the layout learns to
- * reach next. So every surface records what the seams were asked for, here.
+ * The engines behind math and diagrams (MathJax, mermaid) are asynchronous
+ * and a layout is not, so every surface that typesets has to know the sources
+ * BEFORE the layout that draws them. The only complete answer is the
+ * layout's own: an embedded note, an embedded board's text nodes and a file
+ * node's note each ask through the same fragment table, and a hand walk over
+ * one body's tree misses whatever the layout learns to reach next. So every
+ * surface records what the table was asked for, here.
  *
  * Pure and engine-free: the layout worker imports this, and the engines
  * themselves stay behind `markdown-fragment-renderers.ts`'s dynamic imports.
@@ -25,16 +25,10 @@ import {
 // canvas-render's: the Rust core rebuilds the same keys from a layout
 // request's table, so the key format has one definition.
 
-/** The async engines behind the two seams. */
+/** The async engines behind math blocks and diagram fences. */
 export interface FragmentLoaders {
   readonly math: (value: string) => Promise<RenderedSvgFragment | undefined>
   readonly diagram: (lang: string, value: string) => Promise<RenderedSvgFragment | undefined>
-}
-
-/** The two layout seams, in the shape every layout this app runs accepts. */
-export interface FragmentSeams {
-  readonly renderMath: (value: string) => RenderedSvgFragment | undefined
-  readonly renderDiagram: (lang: string, value: string) => RenderedSvgFragment | undefined
 }
 
 export function loadFragment(
@@ -45,31 +39,9 @@ export function loadFragment(
 }
 
 /**
- * Seams that answer from `lookup` and hand every source they could not
- * answer to `onMiss`. A lookup that answers nothing makes this a pure
- * recording pass.
- */
-export function recordingFragmentSeams(
-  lookup: (key: string) => RenderedSvgFragment | undefined,
-  onMiss: (ask: FragmentAsk, key: string) => void,
-): FragmentSeams {
-  const answer = (ask: FragmentAsk): RenderedSvgFragment | undefined => {
-    const key = fragmentAskKey(ask)
-    const found = lookup(key)
-    if (found === undefined) onMiss(ask, key)
-    return found
-  }
-  return {
-    renderMath: (value) => answer({ kind: 'math', value }),
-    renderDiagram: (lang, value) => answer({ kind: 'diagram', lang, value }),
-  }
-}
-
-/**
  * The two layout options that carry fragments as data: what has rendered,
  * and a listener for the sources it could not answer. This is the shape
- * every spatial layout this app runs takes, because a function seam is one
- * the Rust core cannot be handed (the request gate skips it), and a table is.
+ * every layout this app runs takes: data, which the Rust core can be handed.
  */
 export interface FragmentTable {
   readonly fragments: readonly FragmentEntry[]

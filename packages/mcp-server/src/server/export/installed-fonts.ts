@@ -8,8 +8,11 @@ import { extname, join } from 'node:path'
 // (ADR-0012) writes there; it does not own the directory.
 
 /**
- * `.ttc` is a collection rather than a single face; both resvg's fontdb and
- * opentype.js read one, so it is admitted alongside the single-face formats.
+ * `.ttc` is a collection rather than a single face. resvg's fontdb reads one,
+ * so its glyphs fill in what the drawn family lacks in a raster export, which
+ * is what fixes tofu; that is why it is admitted. opentype.js 2.0.0 does not
+ * (`Unsupported OpenType signature ttcf`), so a collection never becomes a
+ * measured family: a theme naming its family draws in Roboto (`font-missing`).
  *
  * `.woff2` is NOT here. resvg's font database does not decode it, so accepting
  * one would put a file in the directory that silently never renders — worse

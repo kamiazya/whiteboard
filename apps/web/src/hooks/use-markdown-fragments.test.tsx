@@ -1,12 +1,15 @@
 import {
+  type FragmentAsk,
+  fragmentAskKey,
   type ReferenceSeams,
+  type RenderedSvgFragment,
   referenceSeamsFromWire,
   referenceWire,
 } from '@kamiazya/whiteboard-canvas-render'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import type { FragmentLoaders, FragmentSeams } from '../lib/fragment-requests.js'
+import type { FragmentLoaders, FragmentTable } from '../lib/fragment-requests.js'
 import { layoutMarkdownOutline } from '../lib/render-preview.js'
 import { fakeMeasure } from '../test-utils/fake-measure.js'
 import { useMarkdownFragments } from './use-markdown-fragments.js'
@@ -17,10 +20,25 @@ const wired = (...args: Parameters<typeof referenceWire>) =>
 
 const LAYOUT = { measure: fakeMeasure, maxWidth: 480 }
 
+/** What a layout would be answered for one source, read off the table without asking. */
+interface FragmentProbe {
+  readonly renderMath: (value: string) => RenderedSvgFragment | undefined
+  readonly renderDiagram: (lang: string, value: string) => RenderedSvgFragment | undefined
+}
+
+function probe(table: FragmentTable): FragmentProbe {
+  const answer = (ask: FragmentAsk) =>
+    table.fragments.find(([key]) => key === fragmentAskKey(ask))?.[1]
+  return {
+    renderMath: (value) => answer({ kind: 'math', value }),
+    renderDiagram: (lang, value) => answer({ kind: 'diagram', lang, value }),
+  }
+}
+
 /**
  * The hook as the preview uses it: the table is handed to a layout of
  * `body` on every render, and that layout is what asks for the sources. The
- * seams it returns read the same cache, so a test can probe one source.
+ * probe reads the same table and asks for nothing, so only the layout asks.
  */
 function useLaidOutFragments({
   body,
@@ -30,14 +48,14 @@ function useLaidOutFragments({
   body: string
   loaders: FragmentLoaders
   references?: ReferenceSeams
-}): FragmentSeams {
-  const { seams, table } = useMarkdownFragments(loaders)
+}): FragmentProbe {
+  const { table } = useMarkdownFragments(loaders)
   layoutMarkdownOutline(body, {
     ...LAYOUT,
     ...(references ? { references } : {}),
     fragments: table,
   })
-  return seams
+  return probe(table)
 }
 const TARGET_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
@@ -58,7 +76,7 @@ describe('useMarkdownFragments', () => {
   it('resolves a math block through the async loader and serves it synchronously', async () => {
     const l = loaders()
     const { result } = renderHook(() => useLaidOutFragments({ body: MATH_BODY, loaders: l }))
-    // Before the first render lands, the sync seam misses (layout keeps its
+    // Before the first render lands, the table misses (layout keeps its
     // placeholder fallback).
     expect(result.current.renderMath('x^2')).toBeUndefined()
     await waitFor(() =>
