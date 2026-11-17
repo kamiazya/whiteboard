@@ -59,7 +59,10 @@ describe('the browser measurer before the vendored face loads', () => {
     // A machine with Roboto installed measures and draws the same face either
     // way, and this test would assert nothing there.
     const probe = document.createElement('canvas').getContext('2d')
-    if (probe === null) return ctx.skip('no 2D context to measure in')
+    if (probe === null) {
+      if (inject('onCi')) throw new Error('no 2D context on CI, so this test would assert nothing')
+      return ctx.skip('no 2D context to measure in')
+    }
     probe.font = '16px Roboto'
     const bare = probe.measureText(SAMPLE).width
     probe.font = '16px system-ui, sans-serif'
