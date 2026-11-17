@@ -140,6 +140,30 @@ it('orders a row by its edges: a hub at the end swaps with the nearest box it fa
   expect(byId(latest.canvas, 'near').x).toBe(40)
 })
 
+it('a second edge joining the hub and its nearest box does not swap the hub back', () => {
+  // Two edges to one box are one partner: counted per edge, `near` passed the
+  // two-partner test as a hub too and traded straight back with `hub`.
+  const hubEdge = (id: string, to: string) => ({ id, from: { node: 'hub' }, to: { node: to } })
+  const board: SpatialCanvas = {
+    nodes: [
+      textNode({ id: 'hub', x: 40, y: 40, width: 160, height: 60, text: 'Hub' }),
+      textNode({ id: 'near', x: 264, y: 40, width: 160, height: 60, text: 'Near' }),
+      textNode({ id: 'far', x: 488, y: 40, width: 160, height: 60, text: 'Far' }),
+    ],
+    edges: [hubEdge('e1', 'near'), hubEdge('e2', 'near'), hubEdge('e3', 'far')],
+  }
+  const { Host, latest } = makeEditorHost({ initial: board, size: SIZE, lockedNodes: [] })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  openMenuOn(root, 700, 500)
+  clickItem(container, 'Tidy canvas')
+
+  expect(byId(latest.canvas, 'hub').x).toBe(264)
+  expect(byId(latest.canvas, 'near').x).toBe(40)
+  expect(byId(latest.canvas, 'far').x).toBe(488)
+})
+
 it('tidies the whole canvas from the empty-space menu', () => {
   const { Host, latest } = makeEditorHost({ initial: initial, size: SIZE, lockedNodes: [] })
   const { container } = render(<Host />)

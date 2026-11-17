@@ -34,11 +34,6 @@ const LEDGER: Readonly<Record<string, { readonly chains: number; readonly reason
     reason:
       'the quality metrics are independent of the layout code they judge, so they do not call into the model',
   },
-  'packages/canvas-render/src/containment.ts': {
-    chains: 1,
-    reason:
-      "the edge router's and tidy's own `{x, y, w, h}` Rect; `frameHolds` takes `{width, height}` and every call here would need an adapter",
-  },
 }
 
 const CONTAINMENT = `a.x >= b.x && a.y >= b.y && a.x + a.width <= b.x + b.width && a.y + a.height <= b.y + b.height`

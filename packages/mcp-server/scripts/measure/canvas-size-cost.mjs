@@ -22,13 +22,16 @@
  * box. Each row is one call, CPU milliseconds, after one warm-up call on a
  * small canvas so module load and font tables are not in the first row.
  */
+import { readFileSync } from 'node:fs'
 import {
   createSpatialTheme,
   layoutSpatialCanvas,
   tidyBoxes,
   tidyNodes,
 } from '@kamiazya/whiteboard-canvas-render'
+import { loadCore } from '@kamiazya/whiteboard-core-wasm/load'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { stagedArtifacts } from '../../src/server/export/layout-core.ts'
 import { createExportTextMeasurer } from '../../src/server/export/measure-text.ts'
 
 const counts = process.argv.slice(2).map(Number)
@@ -37,6 +40,8 @@ const edgesPerCluster = Number(process.env.EDGES_PER_CLUSTER ?? 12)
 const linesPerCluster = Number(process.env.LINES_PER_CLUSTER ?? 0)
 const only = process.env.ONLY
 const appearance = createSpatialTheme({ mode: 'light' })
+const wasm = await loadCore(readFileSync(`${stagedArtifacts()}/whiteboard_wasm_bg.wasm`))
+const core = { routing: wasm, layout: wasm, markdown: wasm, query: wasm }
 const { measure } = await createExportTextMeasurer({ fontsDir: '/nonexistent-fonts-dir' })
 
 /** A deterministic generator, so two runs lay out the same canvas. */
@@ -122,8 +127,9 @@ function cpuMs(run) {
   return (spent.user + spent.system) / 1000
 }
 
-const layOut = (canvas) => cpuMs(() => layoutSpatialCanvas(canvas, { measure, appearance }))
-const tidy = (canvas) => cpuMs(() => tidyNodes(tidyBoxes(canvas.nodes), { edges: canvas.edges }))
+const layOut = (canvas) => cpuMs(() => layoutSpatialCanvas(canvas, { measure, appearance, core }))
+const tidy = (canvas) =>
+  cpuMs(() => tidyNodes(tidyBoxes(canvas.nodes), { core, edges: canvas.edges }))
 
 const warm = clusteredCanvas(24)
 layOut(warm)

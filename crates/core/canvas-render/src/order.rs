@@ -1,15 +1,15 @@
-//! A stable sort the digest's five orderings share.
+//! A stable sort the scene digest's and tidy's orderings share.
 //!
 //! `slice::sort_by` is instantiated once per element type and comparator, and
-//! the digest sorts five different rows: in the wasm artifact that was about
-//! 25 KB of code for what is one algorithm. The merge below is written once,
+//! these sort a dozen different rows: in the wasm artifact that was tens of KB
+//! of code for what is one algorithm. The merge below is written once,
 //! over positions, and each caller only reorders its rows by the answer.
 
 use core::cmp::Ordering;
 
 /// The positions `0..len` in the order `compare` puts them, ties in position
 /// order (a stable bottom-up merge sort).
-fn positions(len: usize, compare: &dyn Fn(usize, usize) -> Ordering) -> Vec<usize> {
+pub(crate) fn positions(len: usize, compare: &dyn Fn(usize, usize) -> Ordering) -> Vec<usize> {
     let mut order: Vec<usize> = (0..len).collect();
     // Run widths 1, 2, 4, … while a run is shorter than the slice. An
     // iterator that ends at overflow rather than a `while` on `width`, so no
@@ -44,7 +44,7 @@ fn positions(len: usize, compare: &dyn Fn(usize, usize) -> Ordering) -> Vec<usiz
 }
 
 /// `items` stably sorted by `compare`.
-pub(super) fn sorted_by<T>(items: Vec<T>, compare: impl Fn(&T, &T) -> Ordering) -> Vec<T> {
+pub(crate) fn sorted_by<T>(items: Vec<T>, compare: impl Fn(&T, &T) -> Ordering) -> Vec<T> {
     let order = positions(items.len(), &|a, b| match (items.get(a), items.get(b)) {
         (Some(x), Some(y)) => compare(x, y),
         _ => Ordering::Equal,

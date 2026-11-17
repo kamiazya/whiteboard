@@ -7,7 +7,8 @@
 // tidy belongs to it, and must be wholly inside it after.
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
-import { type TidyNode, tidyNodes } from './tidy.js'
+import { tidyNodes } from './test-utils/tidy-core.js'
+import type { TidyNode } from './tidy.js'
 
 const frame = (id: string, x: number, y: number, width: number, height: number): TidyNode => ({
   id,

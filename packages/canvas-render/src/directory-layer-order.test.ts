@@ -103,7 +103,6 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   'canvas-fragment.ts': 'leaf',
   // What a comment points at and the bubble constants the editor shares.
   'comment-geometry.ts': 'leaf',
-  'containment.ts': 'leaf',
   // A rendered math block or diagram as data, which the core's requests carry.
   'fragment-ask.ts': 'leaf',
   'paint-order.ts': 'leaf',
@@ -129,9 +128,6 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   'scene-digest-schema.ts': 'leaf',
   'scoring.ts': 'surface',
   'tidy.ts': 'surface',
-  'tidy-axis.ts': 'surface',
-  'tidy-bands.ts': 'surface',
-  'tidy-units.ts': 'surface',
   'index.ts': 'surface',
 }
 

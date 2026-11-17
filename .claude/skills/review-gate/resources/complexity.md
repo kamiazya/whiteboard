@@ -55,7 +55,7 @@ threshold, against these shapes — each has a precedent here:
 |---|---|---|
 | a branch per KIND of a closed union | a `satisfies Record<Kind, Handler>` table — the union growing becomes a type error | the per-kind compose table, the TypeScript node composer |
 | a chain of "try this, else that" early returns | a list in rank order; the first that answers wins | the file-representation table, same file |
-| the same logic written twice for two symmetric cases (x/y, from/to, before/after) | one operation over an abstraction of the case | `tidy-axis.ts` |
+| the same logic written twice for two symmetric cases (x/y, from/to, before/after) | one operation over an abstraction of the case | the Rust tidy's `axis.rs` |
 | boolean flags that combine into states | a discriminated union of the states | — |
 | one function doing two jobs (resolve then apply, decide then perform) | a boundary between them, often a module | `layout/layout-options.ts` beside the composer |
 

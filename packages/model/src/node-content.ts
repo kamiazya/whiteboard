@@ -11,7 +11,7 @@
  * `isFrame` is on the OTHER axis and is here to keep it distinguishable: a
  * group's dissolution (OCIF spells it `parent` plus `@ocif/group`) turns
  * membership from geometric into declared, which is a change to BEHAVIOUR
- * rather than to shape — `tidy-units.ts` says plainly that membership is
+ * rather than to shape — the Rust tidy's `units.rs` says plainly that membership is
  * containment — so it is a separate decision from this one and wants its own
  * single reader when it is taken.
  */

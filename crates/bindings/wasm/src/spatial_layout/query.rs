@@ -17,7 +17,11 @@
 //!   `node-size` `[h]`, `node-content` `[w, h]`, `label-placement` `[x, y]`
 //!   or `[]` for a path that draws no line, `label-obstacles` the frame
 //!   titles then every obstacle as `[x, y, w, h]` rows, `comment-bubble` and
-//!   `outline-content-box` `[x, y, w, h]`.
+//!   `outline-content-box` `[x, y, w, h]`;
+//! - `tidy`: `["ok", move...]`, each box that moves as `[id, x, y]`, or
+//!   `[id, x, y, w, h]` for a frame that grew, the numbers as bits.
+
+use std::collections::BTreeSet;
 
 use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_canvas_render::comments::placement::place_comment_bubble;
@@ -31,6 +35,7 @@ use whiteboard_canvas_render::node_outline::outline_content_box;
 use whiteboard_canvas_render::scene_digest::{DigestError, scene_digest};
 use whiteboard_canvas_render::scene_wire::{Tree, nodes_tree};
 use whiteboard_canvas_render::theme::geometry::SPATIAL_THEME_GEOMETRY;
+use whiteboard_canvas_render::tidy::{TidyMove, TidyNode, TidyOptions, tidy_nodes};
 use whiteboard_det::math::js_max;
 use whiteboard_model::node_content::is_frame;
 use whiteboard_model::spatial::SpatialNode;
@@ -92,8 +97,32 @@ pub fn query_with_host(request: &str, host: Option<&dyn Host>) -> String {
         Some(Query::OutlineContentBox { shape, bbox }) => {
             ok(vec![box_tree(&outline_content_box(shape.as_deref(), &bbox))])
         }
+        Some(Query::Tidy { nodes, options }) => tidy(&nodes, &options),
         None => refused("malformed", "request"),
     }
+}
+
+/// The boxes a tidy moves, or why it is not answered: refused past the
+/// element cap on the board, its edges or the ids it names, and for a box
+/// whose coordinate no move can be written from.
+fn tidy(nodes: &[TidyNode], options: &TidyOptions) -> String {
+    let named = options.scope.as_ref().map_or(0, BTreeSet::len).max(options.locked.len());
+    let edges = options.edges.as_ref().map_or(0, Vec::len);
+    if nodes.len().max(edges).max(named) > MAX_ELEMENTS {
+        return refused("input-too-large", "too-many-elements");
+    }
+    if nodes.iter().any(|n| ![n.x, n.y, n.width, n.height].iter().all(|v| v.is_finite())) {
+        return refused("malformed", "non-finite");
+    }
+    ok(tidy_nodes(nodes, options).iter().map(move_tree).collect())
+}
+
+fn move_tree(moved: &TidyMove) -> Tree {
+    let mut row = vec![Tree::Text(moved.id.clone()), hex(moved.x), hex(moved.y)];
+    if let Some((w, h)) = moved.size {
+        row.extend([hex(w), hex(h)]);
+    }
+    Tree::List(row)
 }
 
 fn hex(n: f64) -> Tree {

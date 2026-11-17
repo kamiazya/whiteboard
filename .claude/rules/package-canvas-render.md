@@ -72,10 +72,14 @@ D10's decision, and the thin TypeScript a root asks the core through:
   identified shape at all (hand-built, a fragment) keeps the older behaviour
   of taking every bbox-carrying node named by position — there is nothing
   better to name them by, and the alternative is answering with nothing.
-- **Tidy** (`tidy.ts`, `tidy-units.ts`, `tidy-bands.ts`, `tidy-axis.ts`):
-  no Rust port, and the sections below are its rules.
+- **Tidy** (`tidy.ts`): the boxes a canvas gives tidy, the options a caller
+  sets and `tidyNodes(nodes, { core, ... })`, one `tidy` query on the core's
+  `layout_query`; the TypeScript passes are deleted (ADR-0054 phase A4b) and
+  `oracle/tidy.jsonl` is frozen, replayed natively. A board past the core's
+  element cap, or a box with a non-finite coordinate left out of it, moves
+  nothing / is ignored. The sections below are its rules.
 - **Hit testing and paint order** (`hit-boxes.ts`, `hit-test.ts`,
-  `paint-order.ts`, `containment.ts`), over the scene the core answers.
+  `paint-order.ts`), over the scene the core answers.
 - **The theme layer** (`theme/`, `layout/canvas-theme.ts`): the palettes,
   `createSpatialTheme`, `resolveCanvasPalette`,
   `resolveCanvasThemeFontFamily` and `resolveThemeTable` — what a chrome
@@ -408,7 +412,7 @@ backend's x-transform-boundary convention (decision #5).
       incumbent-wins-ties predicate `optimize_side_choices` consults. `u-hook-span-exposed-first` demotes a
       same-side U-hook candidate whose DEPARTURE side border runs through
       the target's strict interior (group frames excluded via
-      `fullyContains`) behind one that does not — this is what makes the
+      `fully_contains`) behind one that does not — this is what makes the
       optimizer's ALREADY-CORRECT scoring of a clean same-side route
       reachable in one improving hop instead of several: the defect was in
       candidate ORDER, not the search budget, so `CROSSING_OPT_MAX_PASSES`
@@ -998,7 +1002,7 @@ only producers of an edge's path.
   it — so it must be excluded from the obstacle set, or the router falls
   back to a garbage shortest-detour around the whole frame. This applies
   to the COST MODEL as much as to the router: `optimize_side_choices`'s foreign-body
-  list used to omit the `fullyContains` filter `route_edge`
+  list used to omit the `fully_contains` filter `route_edge`
   applies, so the search priced ink through a group frame the router had
   correctly ignored, and could be talked into a dogleg to "save" ink no
   route could avoid. A cost model that disagrees with the router about
@@ -1192,31 +1196,10 @@ only on some seeds — an earlier fix in this same investigation survived five
 fresh property runs and then failed the example the property had itself
 produced.
 
-`tidy.ts` passed the 800-line budget in this change and gave up `tidy-units.ts`
-— the units half: what a box, a caller's options and a UNIT are, and
-`buildUnits`, which decides who belongs to whom. It is in the mutation lane
-because that is where `tidy.ts`'s own survivors had migrated once its
-scoreboard existed, so leaving it out would have shrunk the lane's reach while
-the report read the same.
-
-**An AXIS is a thing here** (`tidy-axis.ts`). Every rule in `tidy.ts` is
-stated once and run twice, and each one used to carry `axis === 'x' ? … : …`
-at every read of a position, every write of one, and every pick of an origin
-or a floor — 18 of them, each a branch a reader resolves before seeing what
-the rule says, and each the one place a rule can be written asymmetrically by
-accident. `Axis` is `near` / `size` / `at(fraction)` / `of(pair)` / `moved` /
-`shift`, plus `bandFractions` — the anchors a drawer sets on that axis, the
-far edge only on x. Its own module rather than filed beside the band pass it
-was introduced for, because four passes read it. `tidy-bands.ts` took that
-pass and `SnapGuard`, the two things a snap may not buy alignment with.
-
-Both are in the mutation lane for the reason `tidy-units.ts` is, and
-`tidy-axis.ts` twice over: a rule written asymmetrically on one axis is the
-defect the vocabulary exists to make impossible, and the lane is what checks
-that claim rather than restating it. Nothing about tidy's OUTPUT moved when
-this was done, and `tidy-quality.test.ts` is why that is checkable rather
-than asserted — its debt AND price columns are pinned exactly, so it is the
-instrument to re-run first when touching any of these three files.
+Its passes (units, bands, row order, overlap, the settle loop) are the core's
+(`crates/core/canvas-render/src/tidy`), split by what they decide: who belongs
+to whom, the axis vocabulary every rule is stated once over, and the band pass.
+`tidy-quality.test.ts` pins the debt AND price columns exactly, over the core.
 
 **Board-wide GUIDE LINES in tidy were implemented, measured and REJECTED
 — by the composition score, on its first use as a decision instrument.**

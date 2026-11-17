@@ -15,11 +15,18 @@
 //! - `comment-bubble`: an anchor, a bubble's size and the obstacles
 //!   (`placeCommentBubble`);
 //! - `outline-content-box`: a silhouette id, absent for none, and a box
-//!   (`outlineContentBox`).
+//!   (`outlineContentBox`);
+//! - `tidy`: the board's boxes as `[id, frame, x, y, w, h]` rows, the ids that
+//!   may not move (`locked`), the unit roots that may (`scope`, absent for the
+//!   whole board) and the edges as `[from, to]` rows, each end an id or null
+//!   (`tidyNodes`).
 //!
 //! A point is `[x, y]`, a size `[w, h]` and a box `[x, y, w, h]`.
 
+use std::collections::BTreeSet;
+
 use whiteboard_canvas_render::references::{Expansion, ReferenceWire};
+use whiteboard_canvas_render::tidy::{TidyNode, TidyOptions};
 use whiteboard_model::Value;
 use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 use whiteboard_scene::{BoundingBox, ScenePoint};
@@ -76,6 +83,10 @@ pub(crate) enum Query {
         shape: Option<String>,
         bbox: BoundingBox,
     },
+    Tidy {
+        nodes: Vec<TidyNode>,
+        options: TidyOptions,
+    },
 }
 
 fn numbers<const N: usize>(value: &Value) -> Option<[f64; N]> {
@@ -99,6 +110,38 @@ fn run_of(value: &Value) -> Option<Run> {
         _ => return None,
     };
     Some(Run { node, id: string_of(id)?, bbox: box_of(bbox)? })
+}
+
+fn tidy_node_of(value: &Value) -> Option<TidyNode> {
+    let Value::Seq(items) = value else { return None };
+    let [id, frame, x, y, w, h] = items.as_slice() else { return None };
+    Some(TidyNode {
+        id: string_of(id)?,
+        frame: flag_of(frame)?,
+        x: number_of(x)?,
+        y: number_of(y)?,
+        width: number_of(w)?,
+        height: number_of(h)?,
+    })
+}
+
+/// An edge as `[from, to]`, each end a node id or null for one that names none.
+fn tidy_edge_of(value: &Value) -> Option<(Option<String>, Option<String>)> {
+    let Value::Seq(items) = value else { return None };
+    let [from, to] = items.as_slice() else { return None };
+    let end = |end: &Value| match end {
+        Value::Null => Some(None),
+        other => string_of(other).map(Some),
+    };
+    Some((end(from)?, end(to)?))
+}
+
+fn tidy_of(f: &mut Fields<'_>) -> Option<Query> {
+    let nodes = f.field("nodes", |v| items_of(v, tidy_node_of))??;
+    let scope = f.field("scope", strings_of)?.map(|ids| ids.into_iter().collect::<BTreeSet<_>>());
+    let locked = f.field("locked", strings_of)?.unwrap_or_default().into_iter().collect();
+    let edges = f.field("edges", |v| items_of(v, tidy_edge_of))?;
+    Some(Query::Tidy { nodes, options: TidyOptions { scope, locked, edges } })
 }
 
 fn floor_of(value: &Value) -> Option<bool> {
@@ -175,6 +218,7 @@ fn query_from(f: &mut Fields<'_>, query: &str) -> Option<Query> {
             shape: f.field("shape", string_of)?,
             bbox: f.field("box", box_of)??,
         },
+        "tidy" => tidy_of(f)?,
         _ => return None,
     })
 }

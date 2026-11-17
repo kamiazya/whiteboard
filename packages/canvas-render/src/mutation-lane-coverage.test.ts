@@ -127,11 +127,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // the built-in, which its own test pinned by name. A
     // survivor there would say a fallback is unobserved, and the fallbacks
     // are the whole module.
-    // 68 and 13 since `tidy-units.ts`, split out of `tidy.ts` when that file
-    // passed the 800-line budget and covered for the same reason `tidy.ts`
-    // is: the split moved `buildUnits` — where `tidy.ts`'s own survivors had
-    // migrated — so leaving it out would have quietly reduced the lane's
-    // reach while the report read the same.
+    // 68 and 13 with the tidy's units half in the lane (since gone, below).
     // 70 after two files arrived from opposite directions, both OUTSIDE the
     // lane and each for its own reason.
     //
@@ -214,12 +210,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // by hand at the three cases that moved — flattening preserveAspectRatio,
     // dropping the glyph baseline offset, and dropping the fragment's
     // presentation role each move the dump.
-    // 85 and 18 since `tidy-axis.ts` and `tidy-bands.ts` came out of
-    // `tidy.ts` — the axis vocabulary and the band pass, split off when
-    // decomposing that file for cognitive complexity carried it past the
-    // 800-line budget. Both are IN the lane, for the reason `tidy-units.ts`
-    // is: leaving a piece of the heuristic out would shrink what the lane
-    // sees while the report kept looking the same.
+    // 85 and 18 with the tidy's axis and band modules in the lane (since gone, below).
     //
     // 86 and 19 since the TypeScript ink terms came out of the TypeScript edge rules the same way
     // — the ink TERMS — and is in the lane for the same reason.
@@ -227,8 +218,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // 87 and 19 since the node composer came out of `spatial-canvas.ts`
     // — how one node's box is drawn and filled, 47% of that file. OUTSIDE the
     // lane, because the file it left was: splitting it changes nothing the
-    // lane saw, which is the opposite case from the TypeScript ink terms and
-    // `tidy-units.ts`. What pins it is the scene and SVG suites, which are
+    // lane saw, which is the opposite case from the TypeScript ink terms. What pins it is the scene and SVG suites, which are
     // examples, so a mutation report over it would be survivors nobody can
     // act on — the reasoning `svg/paint.ts` left under.
     //
@@ -470,7 +460,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // every branch driven by `refusal.test.ts` and the switches' tests, and
     // mutation-checked by hand.
     // 143 with three modules moved out of `layout/` ahead of its deletion
-    // (S18h1): `containment.ts` (`fullyContains`, out of the TypeScript edge rules) and
+    // (S18h1): the TypeScript edge rules' containment predicate and
     // `comment-geometry.ts` (`nearestPointOnPolyline` out of
     // the comment-bubble placement, with `commentAnchor` and the bubble constants)
     // join the lane, since both files they left were in it and leaving them
@@ -503,9 +493,14 @@ describe('the mutation lane covers what it says it covers', () => {
     // their mutation residue are the Rust port's to hold, by cargo-mutants over
     // the frozen recording. `scene-digest-schema.ts` took its Zod contract and
     // stays outside the lane: a schema has no heuristic for a mutant to weaken.
+    // 85 and 11 since tidy moved (84 and 10 with its last helper, the containment predicate, gone with it) to the core: the passes and their mutation
+    // residue are the Rust port's to hold, by cargo-mutants over the frozen
+    // recording, and `tidy.ts` kept the boxes a canvas gives it and the one
+    // adapter call, which leaves nothing for a mutant to weaken that a test
+    // could not see.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 15,
-      production: 88,
+      mutated: 10,
+      production: 84,
     })
   })
 

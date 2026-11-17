@@ -16,6 +16,11 @@ describe('quality rect arithmetic', () => {
     expect(overlapArea(box(0, 0, 10, 10), box(5, 6, 10, 10))).toBe(20)
   })
 
+  it('shares none when the boxes cross on one axis and miss on the other', () => {
+    expect(overlapArea(box(0, 0, 10, 10), box(5, 20, 10, 5))).toBe(0)
+    expect(overlapArea(box(0, 0, 10, 10), box(20, 5, 5, 10))).toBe(0)
+  })
+
   it('contains an identical rectangle and one sharing a border, but not one poking out', () => {
     expect(contains(box(0, 0, 10, 10), box(0, 0, 10, 10))).toBe(true)
     expect(contains(box(0, 0, 10, 10), box(0, 0, 4, 10))).toBe(true)

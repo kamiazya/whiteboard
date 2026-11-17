@@ -5,8 +5,8 @@
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
+import { tidyNodes } from './test-utils/tidy-core.js'
 import type { TidyNode } from './tidy.js'
-import { tidyNodes } from './tidy.js'
 
 const box = (
   id: string,
