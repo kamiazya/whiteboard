@@ -15,6 +15,20 @@ use whiteboard_canvas_render::tidy::{TidyMove, TidyNode, TidyOptions, tidy_nodes
 
 const RECORDING: &str = include_str!("../../../../packages/canvas-render/src/oracle/tidy.jsonl");
 
+/// The recorded boards whose answer this core DELIBERATELY changes, pinned by
+/// count and by id so neither a new difference nor a stale entry passes.
+///
+/// The TypeScript charged the tidy budget for the frame walk's pairs and levels
+/// but not for a unit's scoop, which asks a node about every frame it holds so
+/// far: 1100 frames each strictly inside the last cost about 220 million
+/// comparisons across the walk, past what the budget meant to allow, and the
+/// same walk over 2000 frames ran for minutes. The core charges those
+/// comparisons to the `nesting` account, so this board degrades earlier than
+/// the recording (a scoop it cannot afford stops short and the frames it did not
+/// reach stand as units of their own). Every other recorded board spends
+/// within the account and answers as recorded.
+const CORRECTED_SCOOP_BUDGET: [&str; 1] = ["extra/past-level-budget"];
+
 /// A number JSON cannot hold is written by name.
 #[derive(Deserialize)]
 #[serde(untagged)]
@@ -128,10 +142,13 @@ fn every_recorded_board_is_tidied_to_the_recorded_moves() {
     let (cases, boards) = cases().expect("the recording is read");
     assert!(cases.len() > 2200, "the recording holds {} cases", cases.len());
     assert_eq!(cases.iter().filter(|c| c.id.starts_with("seeded/")).count(), boards);
-    // The first board that differs ends the run: a defect that loops would
-    // otherwise spend its whole budget on every board after it.
+    let mut differing: Vec<&str> = Vec::new();
     for case in &cases {
         let got = answered(&tidy_nodes(&case.nodes(), &case.options()));
-        assert_eq!(got, case.recorded(), "board {}", case.id);
+        if got != case.recorded() {
+            differing.push(&case.id);
+        }
     }
+    assert_eq!(differing, CORRECTED_SCOOP_BUDGET, "boards answering other than recorded");
+    assert_eq!(differing.len(), 1);
 }

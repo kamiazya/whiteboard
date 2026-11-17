@@ -152,19 +152,34 @@ pub(super) fn frame_nesting(nodes: &[Node]) -> Vec<Vec<usize>> {
 /// What `root` claims: every yet-unclaimed node more than half inside it and,
 /// since a frame it claims brings what IT holds, more than half inside any
 /// frame claimed so far. Marks each claimed; answers them in board order.
-fn scoop(root: usize, level: &[usize], nodes: &[Node], claimed: &mut [bool]) -> Vec<usize> {
+///
+/// Each node still asked about costs one comparison per frame held so far, taken
+/// from the `nesting` account: a chain of frames each more than half inside the
+/// next claims one frame per pass, which is cubic in the frames. A scoop the
+/// account cannot cover stops with what it has claimed; the rest of the level
+/// stand as units of their own.
+fn scoop(
+    root: usize,
+    level: &[usize],
+    nodes: &[Node],
+    claimed: &mut [bool],
+    budget: &mut Budget,
+) -> Vec<usize> {
     let Some(root_node) = nodes.get(root) else { return Vec::new() };
     let mut holders = vec![root_node.rect];
     let mut mine = vec![false; claimed.len()];
     mark(&mut mine, root_node.key);
     mark(claimed, root_node.key);
     // Each pass that goes on claimed a node, so a level's length bounds them.
-    for _ in 0..=level.len() {
+    'passes: for _ in 0..=level.len() {
         let mut grew = false;
         for &m in level {
             let Some(node) = nodes.get(m) else { continue };
             if is_marked(claimed, node.key) {
                 continue;
+            }
+            if !budget.spend(Account::Nesting, holders.len()) {
+                break 'passes;
             }
             if !holders.iter().any(|h| mostly_inside(*h, node.rect)) {
                 continue;
@@ -208,6 +223,7 @@ pub(super) fn build_units(
     nodes: &[Node],
     ctx: &Ctx,
     enclosers: &[Vec<usize>],
+    budget: &mut Budget,
 ) -> Vec<Unit> {
     let mut at_level = vec![false; nodes.len()];
     for &i in level {
@@ -238,7 +254,7 @@ pub(super) fn build_units(
             continue;
         }
         if node.frame && is_root(i) {
-            push_unit(i, scoop(i, level, nodes, &mut claimed), node.rect);
+            push_unit(i, scoop(i, level, nodes, &mut claimed, budget), node.rect);
         }
     }
     for &i in level {
@@ -267,7 +283,8 @@ fn order_by_root(units: Vec<Unit>, level: &[usize], nodes: &[Node], keys: usize)
 
 /// What one call may spend on the parts of the frame walk whose cost grows
 /// faster than the board: asking every frame whether it stands over every other
-/// (`nesting`, once per settling pass), and opening a level per frame, each
+/// (`nesting`, once per settling pass, and again for every frame a unit's scoop
+/// asks a node about), and opening a level per frame, each
 /// doing work in proportion to the nodes it holds (`levels`).
 ///
 /// Neither is bounded by the node cap alone: 2000 frames each strictly inside
@@ -311,9 +328,10 @@ impl Budget {
 
 #[cfg(test)]
 mod tests {
-    use super::{Account, Budget};
+    use super::{Account, Budget, Ctx, Node, build_units, frame_nesting};
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
+    use whiteboard_edge_routing::geometry::Rect;
 
     #[test]
     fn an_account_refuses_work_it_cannot_cover_whole_and_keeps_what_it_had() {
@@ -332,5 +350,51 @@ mod tests {
         let mut budget = Budget::new();
         assert!(budget.spend(Account::Nesting, 16_000_000));
         assert!(budget.spend(Account::Levels, 500_000));
+    }
+
+    /// Frames each more than half inside the next and only the next, so a scoop
+    /// from the last one claims a single frame per pass.
+    fn frame_chain(n: usize) -> (Vec<Node>, Ctx) {
+        let nodes: Vec<Node> = (0..n)
+            .map(|key| {
+                let i = f64::from(u32::try_from(key).unwrap_or(0));
+                let rect = Rect { x: i * 400.0, y: 0.0, w: 1000.0 + i, h: 1000.0 + i };
+                Node { key, frame: true, rect }
+            })
+            .collect();
+        let ctx = Ctx { in_scope: vec![true; n], locked: vec![false; n], edges: None };
+        (nodes, ctx)
+    }
+
+    #[test]
+    fn a_scoop_holds_the_whole_chain_while_the_nesting_account_covers_it() {
+        let (nodes, ctx) = frame_chain(40);
+        let level: Vec<usize> = (0..40).collect();
+        let mut budget = Budget::new();
+        let units = build_units(&level, &nodes, &ctx, &frame_nesting(&nodes), &mut budget);
+        assert_eq!(units.len(), 1);
+        assert_eq!(units.first().map(|u| u.members.len()), Some(40));
+    }
+
+    #[test]
+    fn the_deepest_chain_the_canvas_holds_exhausts_the_account_rather_than_running_past_it() {
+        let (nodes, ctx) = frame_chain(2000);
+        let level: Vec<usize> = (0..2000).collect();
+        let mut budget = Budget::new();
+        let _ = build_units(&level, &nodes, &ctx, &frame_nesting(&nodes), &mut budget);
+        assert!(budget.nesting < 1_000_000, "{} left of the account", budget.nesting);
+    }
+
+    #[test]
+    fn a_scoop_the_nesting_account_cannot_cover_stops_with_what_it_claimed() {
+        let (nodes, ctx) = frame_chain(40);
+        let level: Vec<usize> = (0..40).collect();
+        let mut budget = Budget { nesting: 100, levels: 0 };
+        let units = build_units(&level, &nodes, &ctx, &frame_nesting(&nodes), &mut budget);
+        let held = units.iter().map(|u| u.members.len()).max().unwrap_or(0);
+        assert!(held > 1 && held < 40, "the root's unit holds {held}");
+        // Every node is still in exactly one unit.
+        assert_eq!(units.iter().map(|u| u.members.len()).sum::<usize>(), 40);
+        assert!(budget.nesting < 100);
     }
 }

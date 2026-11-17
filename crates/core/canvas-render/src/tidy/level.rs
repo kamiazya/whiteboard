@@ -60,8 +60,8 @@ pub(super) struct Pass<'a> {
     pub budget: &'a mut Budget,
 }
 
-fn open_level(input: LevelInput, p: &Pass<'_>, enclosers: &[Vec<usize>]) -> LevelWalk {
-    let units = build_units(&input.nodes, p.nodes, p.ctx, enclosers);
+fn open_level(input: LevelInput, p: &mut Pass<'_>, enclosers: &[Vec<usize>]) -> LevelWalk {
+    let units = build_units(&input.nodes, p.nodes, p.ctx, enclosers, p.budget);
     let mut framed = vec![false; p.ctx.in_scope.len()];
     for unit in units.iter().filter(|u| u.members.len() > 1) {
         for &m in &unit.members {
