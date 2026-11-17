@@ -80,12 +80,11 @@ async function indexTables(
 ): Promise<Pick<ReferenceWireOptions, 'resolveAlias' | 'resolveTitle'>> {
   try {
     const entries = await deps.documentIndex.listDocuments({ workspaceId })
-    const titles = new Map(entries.map((entry) => [entry.documentId, entry.name ?? entry.path]))
     return {
       resolveAlias: createUniqueNameResolver(
         entries.map((entry) => ({ id: entry.documentId, name: entry.path })),
       ),
-      resolveTitle: (documentId) => titles.get(documentId),
+      resolveTitle: titleTable(entries),
     }
   } catch (err) {
     log.warning('workspace listing failed; links past the loaded ones render unresolved', {
@@ -94,4 +93,12 @@ async function indexTables(
     })
     return {}
   }
+}
+
+/** A listing's titles as a table input to the wire, `name ?? path` by id. */
+function titleTable(
+  entries: readonly { documentId: string; path: string; name?: string | undefined }[],
+): (documentId: string) => string | undefined {
+  const titles = new Map(entries.map((entry) => [entry.documentId, entry.name ?? entry.path]))
+  return (documentId) => titles.get(documentId)
 }

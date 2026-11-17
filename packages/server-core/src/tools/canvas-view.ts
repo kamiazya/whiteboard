@@ -104,13 +104,15 @@ function referenceWireEntry(
   return [[target, loadedReferenceToWire(loaded)]]
 }
 
+type NamedOnly = (target: string) => LoadedReference | null | undefined
+
 /**
  * What a target the walk never loaded — past its budget — is known as
  * anyway: the id and name the workspace index answered for it, which is a
  * record with no content, as the loader answers past its content account. So
  * a link the canvas writes keeps its target and title however many it writes.
  */
-function namedOnly(wire: ReferenceWire): (target: string) => LoadedReference | null | undefined {
+function namedOnly(wire: ReferenceWire): NamedOnly {
   const aliases = new Map(wire.aliases)
   const titles = new Map(wire.titles)
   return (target) => {
@@ -131,12 +133,13 @@ async function colouredDrawing(
   deps: ServerDeps,
   workspaceId: string,
   canvas: SpatialCanvas,
-): Promise<{ canvas: SpatialCanvas; graph: ReferenceGraph; wire: ReferenceWire }> {
+): Promise<{ canvas: SpatialCanvas; graph: ReferenceGraph; named: NamedOnly }> {
   const { graph, wire } = await loadReferenceGraph(deps, workspaceId, { canvases: [canvas] })
+  const named = namedOnly(wire)
   const library = await taggedDrawingLibrary(deps, workspaceId, [canvas], graph)
-  if (library === undefined) return { canvas, graph, wire }
+  if (library === undefined) return { canvas, graph, named }
   return {
-    wire,
+    named,
     canvas: withDeclaredColours(canvas, library),
     graph: new Map(
       [...graph].map(([target, ref]) => [
@@ -176,7 +179,6 @@ export function createCanvasViewTool(deps: ServerDeps) {
       const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
       await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'canvas_view')
       const drawn = await colouredDrawing(deps, input.workspaceId, canvas)
-      const named = namedOnly(drawn.wire)
       // Resolved from the style the CALLER asked for, not from the document's
       // facet alone: a canvas naming a theme drawn under the bundled look
       // has nothing to fetch, and a `style` naming a theme the document does
@@ -208,7 +210,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
         // still answers the index's id and name.
         references: Object.fromEntries(
           writtenTargets({ canvases: [canvas] }).flatMap((target) =>
-            referenceWireEntry(target, drawn.graph.get(target) ?? named(target)),
+            referenceWireEntry(target, drawn.graph.get(target) ?? drawn.named(target)),
           ),
         ),
       }
