@@ -82,12 +82,19 @@ fn every_recorded_value_is_written_as_the_typescript_wrote_it() {
     let recording = recording();
     let cases: Vec<&Json> = recording.iter().filter(|c| c["k"] == "w").collect();
     let mut problems: Vec<String> = Vec::new();
-    let (mut written, mut unwritable) = (0usize, 0usize);
+    let (mut written, mut unwritable, mut corrected) = (0usize, 0usize, 0usize);
     for case in &cases {
-        let answer =
-            stringify(&decode(&case["v"]).expect("a recorded writer value is representable"));
-        match (answer, case.get("y").and_then(Json::as_str), case.get("err")) {
+        let value = decode(&case["v"]).expect("a recorded writer value is representable");
+        let reads_as_value = |text: &str| parse(text).is_ok_and(|read| encode(&read) == case["v"]);
+        match (stringify(&value), case.get("y").and_then(Json::as_str), case.get("err")) {
             (Ok(text), Some(y), _) if text == y => written += 1,
+            // The TypeScript folded a first line that starts with a space,
+            // which reads back with a line break for the space; the Rust
+            // writes it literal. A recorded text that reads back is never
+            // overruled.
+            (Ok(text), Some(y), _) if !reads_as_value(y) && reads_as_value(&text) => {
+                corrected += 1;
+            }
             (Err(_), None, Some(_)) => unwritable += 1,
             (answer, y, _) => {
                 problems.push(format!("rust {answer:?}, typescript {y:?}, for {}", case["v"]));
@@ -102,5 +109,6 @@ fn every_recorded_value_is_written_as_the_typescript_wrote_it() {
         &problems[..problems.len().min(5)]
     );
     assert!(written > 900, "{written} values written");
+    assert_eq!(corrected, 3, "recorded writes that did not read back, written so they do");
     assert!(unwritable > 5, "{unwritable} values refused");
 }

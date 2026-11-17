@@ -117,7 +117,9 @@ pub(super) fn block_string(value: &[u16], ctx: &mut Ctx) -> Units {
     if trailing > 0 && value.get(body_len.saturating_sub(1)) == Some(&NEWLINE) {
         return quoted(value, ctx);
     }
-    let indent = indent_for(value, ctx, ctx.force_block_indent);
+    // `yaml` writes `|1` for a root scalar that starts with a space, which
+    // reads its content at column one; indented two columns, `|2` reads back.
+    let indent = indent_for(value, ctx, ctx.force_block_indent || leading_blanks(value).1);
     let literal = !line_over_limit(value, indent);
     if value.is_empty() {
         return units(if literal { "|\n" } else { ">\n" });
@@ -139,7 +141,7 @@ pub(super) fn block_string(value: &[u16], ctx: &mut Ctx) -> Units {
     let (leading, text) = text.split_at(cut.min(text.len()));
     let leading =
         if leading.is_empty() { Units::new() } else { after_newline_runs(leading, &[], indent) };
-    let indicator = if starts_with_space { if indent > 0 { "2" } else { "1" } } else { "" };
+    let indicator = if starts_with_space { "2" } else { "" };
     let header = format!("{indicator}{chomp}");
     if !literal {
         let folded = double_newline_runs(text);
@@ -150,12 +152,20 @@ pub(super) fn block_string(value: &[u16], ctx: &mut Ctx) -> Units {
             ctx.force_block_indent = true;
             return block_string(value, ctx);
         }
-        if !body.overflowed {
+        // `yaml` folds a more-indented first line, where a reader keeps the
+        // break it puts there; the literal form holds that line whole.
+        if !body.overflowed && !breaks_leading_line(&joined, &body.text) {
             return folded_block(&header, indent, &body.text);
         }
     }
     let inner = after_newline_runs(text, &[], indent);
     literal_block(&header, indent, &[leading.as_slice(), inner.as_slice(), end.as_slice()].concat())
+}
+
+/// Whether folding broke a first line that starts with a space.
+fn breaks_leading_line(text: &[u16], folded: &[u16]) -> bool {
+    let first_line = |units: &[u16]| units.iter().take_while(|&&u| u != NEWLINE).count();
+    text.first() == Some(&SPACE) && first_line(folded) < first_line(text)
 }
 
 fn framed(marker: char, header: &str, indent: usize, body: &[u16]) -> Units {
