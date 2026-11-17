@@ -97,27 +97,44 @@ function distributeRow(input: ArrangeBandsInput): ContextMenuItem {
   }
 }
 
+/**
+ * Tidy the canvas (or `scope` within it) through the layout core, apply the
+ * moves, and announce the outcome: a refusal says so rather than reading as
+ * "Already tidy". The canvas menu and the selection menu both run it.
+ */
+export function tidyAndAnnounce(input: {
+  readonly canvas: Pick<SpatialCanvas, 'nodes' | 'edges'>
+  readonly scope?: ReadonlySet<string>
+  readonly isLocked: (nodeId: string) => boolean
+  readonly applyBoxMoves: CanvasCommands['applyBoxMoves']
+}): void {
+  const { nodes, edges } = input.canvas
+  let refusal: LayoutRefusal | undefined
+  const moves = tidyNodes(tidyBoxes(nodes), {
+    core: requireLayoutCore(),
+    ...(input.scope === undefined ? {} : { scope: input.scope }),
+    locked: input.isLocked,
+    edges,
+    onRefused: (r) => {
+      refusal ??= r
+    },
+  })
+  input.applyBoxMoves(moves)
+  announceOnCanvas(refusal === undefined ? tidyMessage(nodes, moves) : tidyRefusedMessage(refusal))
+}
+
 function tidyVerb(input: ArrangeBandsInput): ContextMenuItem {
   const { node, canvasRef, isLocked, extraIds, applyBoxMoves } = input
   return {
     label: 'Tidy',
     icon: <Sparkles />,
-    onSelect: () => {
-      const { nodes, edges } = canvasRef.current
-      const refusals: LayoutRefusal[] = []
-      const moves = tidyNodes(tidyBoxes(nodes), {
-        core: requireLayoutCore(),
+    onSelect: () =>
+      tidyAndAnnounce({
+        canvas: canvasRef.current,
         scope: new Set([node.id, ...extraIds]),
-        locked: isLocked,
-        edges,
-        onRefused: (refusal) => refusals.push(refusal),
-      })
-      applyBoxMoves(moves)
-      const [refusal] = refusals
-      announceOnCanvas(
-        refusal === undefined ? tidyMessage(nodes, moves) : tidyRefusedMessage(refusal),
-      )
-    },
+        isLocked,
+        applyBoxMoves,
+      }),
   }
 }
 
