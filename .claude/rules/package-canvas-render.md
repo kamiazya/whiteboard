@@ -848,15 +848,10 @@ only producers of an edge's path.
 - The live-drag parity property (`layoutSpatialEdges` equal to the edge
   suffix of `layoutSpatialCanvas`, over a generator reading the facet
   REGISTRY through `test-utils/facet-arbitraries.ts`) compared two
-  TypeScript entry points and went with them (S18h2). It is back as
-  `layout/live-drag-parity.rust.test.ts` (canvas-render-rust): the same
-  law and generator, now through the core over the real theme, plus the
-  `edgeSideOverrides` the drag layer always passes. The edge layer is the
-  core's query over the whole layout's own request (`edgesThroughCore`
-  builds it with `canvasLayoutRequest`), and the property is what holds
-  that request to the full layout's: dropping its tag library, side
-  overrides, style, canvas/node/edge facets or the answer's jumps each
-  turns it red.
+  TypeScript entry points and went with them (S18h2). It is back, through
+  the core, as `layout/live-drag-parity.rust.test.ts`, holding
+  `edgesThroughCore`'s request to the full layout's: dropping its library,
+  side overrides, style, any facets or the jumps turns it red.
 - `routing/edge-routing-quality.rust.test.ts` is the routing SCOREBOARD, and the
   answer to "did that rule change help overall". It judges the Rust router
   through the oracle core, in `canvas-render-rust`; the TypeScript router it
