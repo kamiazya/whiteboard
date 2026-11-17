@@ -182,6 +182,11 @@ export function shardOf(files, spec, minutes = MINUTES) {
  * anyway.
  */
 export const KNOWN_EQUIVALENT = {
+  // `overlapArea`'s guard on a zero extent: the invariant is beside it.
+  'src/quality/rect.ts': {
+    'EqualityOperator: w > 0 -> w >= 0': 1,
+    'EqualityOperator: h > 0 -> h >= 0': 1,
+  },
   // `tags ?? []` only matters when the element carries no `tags` at all, and
   // then the substitute is iterated as a tag: a string with no colon is not
   // a scoped tag, `parseScopedTag` answers `undefined`, and the loop

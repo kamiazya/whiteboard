@@ -17,7 +17,12 @@ export const rectOf = (n: SpatialNode): Rect => ({ x: n.x, y: n.y, w: n.width, h
 
 export const area = (r: Rect): number => r.w * r.h
 
-/** The shared area of two rectangles; touching edges share none. */
+/**
+ * The shared area of two rectangles; touching edges share none. The guard's
+ * `> 0` could be `>= 0` on either side without changing an answer: the two
+ * differ only when that extent is exactly 0 and the other is positive, where
+ * the product is +0 either way.
+ */
 export const overlapArea = (a: Rect, b: Rect): number => {
   const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
   const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
