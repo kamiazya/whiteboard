@@ -134,8 +134,17 @@ export function prExcludeProblems(globs, exists) {
   return problems
 }
 
-/** The most legs one group of mutants fans out to; what main, a schedule and a merge queue always run in all. */
+/** The legs main, a schedule and a merge queue always run, over the whole workspace. */
 const MAX_SHARDS = 8
+
+/**
+ * The most legs one pull-request group fans out to. Higher than `MAX_SHARDS`
+ * because a group's legs run only that group's tests: a crate most of the
+ * workspace depends on (`whiteboard-det`) is judged by nearly every test, at
+ * about 70-100 s a mutant, so 172 of them over eight legs is ~22 a leg and
+ * runs past the job's 40-minute timeout; sixteen keeps a leg near eleven.
+ */
+const MAX_GROUP_LEGS = 16
 
 /**
  * Mutants one leg is asked to judge before another leg is worth its fixed
@@ -283,7 +292,7 @@ export function shardPlan({ event, scopeRuns, mutants, members }) {
     .flatMap(([name, count]) => {
       const tests = testSetOf(members, name)
       const legs = Math.min(
-        MAX_SHARDS,
+        MAX_GROUP_LEGS,
         Math.ceil(count / mutantsPerLeg(members.length, tests.length)),
       )
       const label = name.replace(/^whiteboard-/, '')

@@ -244,8 +244,8 @@ describe('the legs of a pull request', () => {
 
   it("numbers a package's legs from 1 up to its count and never past the cap", () => {
     const legs = pr(mutantsIn('crates/core/det/src/fdlibm.rs', 500))
-    expect(legs.map((l) => l.shard)).toEqual([1, 2, 3, 4, 5, 6, 7, 8].map((k) => `${k}/8`))
-    expect(new Set(legs.map((l) => l.key)).size).toBe(8)
+    expect(legs.map((l) => l.shard)).toEqual(Array.from({ length: 16 }, (_, i) => `${i + 1}/16`))
+    expect(new Set(legs.map((l) => l.key)).size).toBe(16)
   })
 
   it('runs no leg when the diff holds no mutant or the scope does not reach the job', () => {
