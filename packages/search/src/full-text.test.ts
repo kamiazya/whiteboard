@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fullTextSearch, tokenize } from './full-text.js'
+import { fullTextSearch, tokenize } from './index.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 describe('tokenize', () => {

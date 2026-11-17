@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fullTextSearch } from './full-text.js'
+import { fullTextSearch } from './index.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 const DOC = (documentId: string, texts: string[]) => ({ documentId, path: documentId, texts })

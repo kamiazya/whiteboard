@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findFolded, foldForSearch } from './fold.js'
-import { excerpterFor, fullTextSearch, tokenize, tokenizeForIndex } from './full-text.js'
+import { excerpts, findFolded, foldForSearch, fullTextSearch, tokenize, tokenizeForIndex } from './index.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 const doc = (documentId: string, name: string, texts: string[] = []) => ({
@@ -40,7 +39,7 @@ describe('diacritic-insensitive matching', () => {
   })
 
   it('quotes and locates the ORIGINAL accented text in an excerpt', () => {
-    const excerpt = excerpterFor('cafe')({ texts: ['Order beans from the Café du Monde today'] })
+    const [excerpt] = excerpts('cafe', [['Order beans from the Café du Monde today']])
     expect(excerpt).toEqual(['Order beans from the Café du Monde today'])
     expect(findFolded('Order from the Café du Monde', 'cafe')).toEqual({ index: 15, length: 4 })
     expect(findFolded('café noir', 'café')).toEqual({ index: 0, length: 5 })
