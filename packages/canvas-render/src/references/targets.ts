@@ -19,8 +19,10 @@ const DEPTH_CAP = 3
 
 /**
  * The most targets one render asks for. A document that names more than
- * this is drawn with the rest unresolved rather than turned into that many
- * store reads; 256 is far above any document seen and far below what a
+ * this is drawn with the rest unloaded rather than turned into that many
+ * store reads — their embeds and file nodes draw without content, while a
+ * link still resolves through the caller's table (`writtenTargets`), which
+ * reads no store; 256 is far above any document seen and far below what a
  * link-dense workspace could reach through the walk.
  */
 export const REFERENCE_BUDGET = 256
@@ -37,8 +39,9 @@ const CONTRIBUTION_CAP = REFERENCE_BUDGET
 class Contribution {
   readonly list: string[] = []
   private readonly seen = new Set<string>()
+  constructor(private readonly cap: number = CONTRIBUTION_CAP) {}
   get full(): boolean {
-    return this.list.length >= CONTRIBUTION_CAP
+    return this.list.length >= this.cap
   }
   add(target: string): void {
     // The one image filter, ahead of the cap, so a body or canvas full of
@@ -206,6 +209,63 @@ export function imageTargets(seeds: {
     if (entry !== undefined && entry !== null) addAll(entryImages(entry))
   }
   return [...images]
+}
+
+/**
+ * Every distinct document target the seeds and the records already loaded
+ * WRITE, with no budget: what a link drawn from this content may ask the
+ * alias and title tables, as opposed to what a render may LOAD
+ * (`referenceTargets`). Asking a page's table costs no store read, so a
+ * link the loading budget never reached still resolves and keeps its name;
+ * the list is bounded by the content it is read from.
+ */
+export function writtenTargets(seeds: {
+  readonly bodies?: readonly string[]
+  readonly canvases?: readonly SpatialCanvas[]
+  readonly loaded?: ReferenceGraph
+}): readonly string[] {
+  const out = new Set<string>()
+  const addAll = (list: readonly string[]) => {
+    for (const target of list) out.add(target)
+  }
+  for (const body of seeds.bodies ?? []) addAll(bodyWritten(body))
+  for (const canvas of seeds.canvases ?? []) addAll(canvasWritten(canvas))
+  for (const entry of seeds.loaded?.values() ?? []) {
+    if (entry !== null) addAll(entryWritten(entry))
+  }
+  return [...out]
+}
+
+function bodyWritten(body: string): readonly string[] {
+  const out = new Contribution(Number.POSITIVE_INFINITY)
+  out.addBody(body)
+  return out.list
+}
+
+const canvasWrittenMemo = new WeakMap<SpatialCanvas, readonly string[]>()
+const entryWrittenMemo = new WeakMap<LoadedReference, readonly string[]>()
+
+function canvasWritten(canvas: SpatialCanvas): readonly string[] {
+  return remembered(canvasWrittenMemo, canvas, () => {
+    const out = new Contribution(Number.POSITIVE_INFINITY)
+    for (const node of canvas.nodes) {
+      const file = nodeFile(node)
+      const text = nodeText(node)
+      if (file !== undefined) out.add(file)
+      else if (text !== undefined) out.addBody(text)
+    }
+    return out.list
+  })
+}
+
+// Remembered for the reason `entryTargets` is: a keeper rebuilds its wire on
+// every load that lands, over records it has already read.
+function entryWritten(entry: LoadedReference): readonly string[] {
+  return remembered(entryWrittenMemo, entry, () => {
+    if (entry.body !== undefined) return bodyWritten(entry.body)
+    if (entry.canvas !== undefined) return canvasWritten(entry.canvas)
+    return []
+  })
 }
 
 /** What a render starts from: the document it draws, before anything is loaded. */

@@ -317,6 +317,34 @@ describe('useReferenceSeams', () => {
       expect(result.current.resolveTitle(C)).toBe('Other note')
     })
 
+    it('carries the page table past the loading budget, so every link resolves', async () => {
+      // REFERENCE_BUDGET (256) bounds what is LOADED. Resolving a written
+      // link through the page's table costs no load, so a link the walk
+      // never reached still resolves and keeps its title.
+      const idOf = (i: number) => `01BX5ZZKBKACTAV9WEVG${String(i).padStart(6, '0')}`
+      const body = Array.from({ length: 300 }, (_, i) => `[[note-${i}]]`).join(' ')
+      const load = vi.fn<ReferenceLoader>(async () => undefined)
+      const { result } = renderHook(() =>
+        useReferenceSeams({
+          body,
+          resolveAlias: (alias) =>
+            alias.startsWith('note-') ? idOf(Number(alias.slice(5))) : null,
+          resolveTitle: (id) => `Note ${Number(id.slice(20))}`,
+          load,
+        }),
+      )
+      await waitFor(() => expect(result.current.isLoading).toBeUndefined())
+      expect(load).toHaveBeenCalledTimes(256)
+      const wire = askCore(body, result.current).asked[0]?.references as {
+        aliases: readonly (readonly [string, string])[]
+        titles: readonly (readonly [string, string])[]
+      }
+      expect(wire.aliases).toContainEqual(['note-0', idOf(0)])
+      expect(wire.aliases).toContainEqual(['note-299', idOf(299)])
+      expect(wire.titles).toContainEqual([idOf(299), 'Note 299'])
+      expect(result.current.resolveAlias('note-299')).toBe(idOf(299))
+    })
+
     it('is a wire while a load is in flight, the target still loading marked pending', () => {
       const load = vi.fn<ReferenceLoader>(() => new Promise(() => undefined))
       const { result } = renderHook(() => useReferenceSeams({ body: `![[${B}]]`, load }))

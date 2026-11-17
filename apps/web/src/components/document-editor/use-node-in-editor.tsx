@@ -1,4 +1,4 @@
-import { referenceTargets } from '@kamiazya/whiteboard-canvas-render'
+import { writtenTargets } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useState } from 'react'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
@@ -28,7 +28,7 @@ const NO_DRAFT: { readonly key: string; readonly bodies: readonly string[] } = {
   key: '',
   bodies: [],
 }
-const referenceKey = (text: string) => referenceTargets({ bodies: [text] }).join('\n')
+const referenceKey = (text: string) => writtenTargets({ bodies: [text] }).join('\n')
 
 /**
  * The state and the write behind "open in editor", shared by both pages.

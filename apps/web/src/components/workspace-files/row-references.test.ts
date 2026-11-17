@@ -212,6 +212,41 @@ describe('the key a row is drawn under', () => {
   it('is null when an embedded document has no version to notice a change by', async () => {
     expect(await keyWith([{ ...alpha, contentDigest: undefined }])).toBeNull()
   })
+
+  // A link past the loading budget is never read, but it still draws its
+  // target's name from the table, so the key has to follow that name too.
+  describe('for a link past the loading budget', () => {
+    const LINKS = 300
+    const linked = (i: number, name = `Note ${i}`): WorkspaceDocumentEntry => ({
+      documentId: `l${i}`,
+      path: `notes/l-${i}`,
+      kind: 'markdown',
+      contentDigest: `${i}`.padStart(16, '0'),
+      name,
+    })
+    const body = Array.from({ length: LINKS }, (_, i) => `[[notes/l-${i}]]`).join(' ')
+    const all = (last: WorkspaceDocumentEntry | undefined) => [
+      ...Array.from({ length: LINKS - 1 }, (_, i) => linked(i)),
+      ...(last === undefined ? [] : [last]),
+    ]
+    async function lastLinkKey(last: WorkspaceDocumentEntry | undefined) {
+      const { source, read } = keeper(new Map([['n0', body]]), { current: [note, ...all(last)] })
+      const key = (await read(note)).key
+      return { key, lastRead: readsOf(source, `l${LINKS - 1}`).length }
+    }
+
+    it('changes when that document is renamed', async () => {
+      const before = await lastLinkKey(linked(LINKS - 1))
+      expect(before.lastRead, 'the last link is past the budget, so it is never read').toBe(0)
+      expect((await lastLinkKey(linked(LINKS - 1, 'Renamed'))).key).not.toBe(before.key)
+    })
+
+    it('changes when a dangling one comes to name a document', async () => {
+      expect((await lastLinkKey(linked(LINKS - 1))).key).not.toBe(
+        (await lastLinkKey(undefined)).key,
+      )
+    })
+  })
 })
 
 const ROW_IMAGE_MAX_BYTES = 256 * 1024

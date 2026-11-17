@@ -231,6 +231,12 @@ export interface ReferenceKeyRow {
   readonly version?: string
   readonly label?: string
   readonly image?: string
+  /**
+   * The document a target WRITTEN past the loading budget resolves to: never
+   * loaded, so it has no version, but its link still draws that document's
+   * name and points at it, so a rename or a new document must change the key.
+   */
+  readonly link?: string
 }
 
 /**
@@ -256,6 +262,7 @@ export async function referencesKey(rows: readonly ReferenceKeyRow[]): Promise<s
         row.version ?? null,
         row.label ?? null,
         ...(row.image === undefined ? [] : [row.image]),
+        ...(row.link === undefined ? [] : [{ link: row.link }]),
       ]),
     )
   }

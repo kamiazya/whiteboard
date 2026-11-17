@@ -272,31 +272,79 @@ fn document_of(case: &Json) -> Result<Option<Document>, String> {
     Ok(Some(Document { frontmatter, body: text_field(&whole, "body").ok_or("no body")? }))
 }
 
-/// Whether a written text's frontmatter reads back holding every string the
-/// recorded frontmatter holds. The document itself may be one the schema
-/// refuses, so the frontmatter is read alone.
-fn reads_back_holding(case: &Json, text: &str) -> bool {
-    let held = map_of(&decode(&case["d"]).unwrap_or(Value::Null))
-        .ok()
-        .and_then(|whole| field(&whole, "frontmatter").map(strings_of_value))
-        .unwrap_or_default();
-    let yaml = text.strip_prefix("---\n").and_then(|rest| rest.split_once("\n---\n"));
-    yaml.and_then(|(yaml, _)| frontmatter::parse(yaml).ok()).is_some_and(|read| {
-        let read = strings_of_value(&read);
-        held.iter().filter(|s| !s.is_empty()).all(|s| read.contains(s))
-    })
+/// The root a recorded frontmatter is written as: `facetsRaw`'s entries spread
+/// over the rest, each taking the value of a key it meets, as `serializeOkf`'s
+/// `{...rest, ...facetsRaw, facets}` does. A `facetsRaw` that is no mapping is
+/// left where it is, as the writer leaves it.
+fn as_written(recorded: &Value) -> Value {
+    let Value::Map(entries) = recorded else { return recorded.clone() };
+    let mut root: Vec<(String, Value)> = Vec::new();
+    let mut raw: Vec<(String, Value)> = Vec::new();
+    for (name, item) in entries {
+        match (name.as_str(), item) {
+            ("facetsRaw", Value::Map(record)) => raw.extend(record.iter().cloned()),
+            _ => root.push((name.clone(), item.clone())),
+        }
+    }
+    for (name, item) in raw {
+        match root.iter_mut().find(|(held, _)| *held == name) {
+            Some(slot) => slot.1 = item,
+            None => root.push((name, item)),
+        }
+    }
+    Value::Map(root)
 }
 
-/// Every string a value holds as a leaf.
-fn strings_of_value(value: &Value) -> Vec<String> {
+/// A value with every mapping's keys sorted, so two values compare by what
+/// they hold and not by the order the writer chose for it.
+fn sorted(value: &Value) -> Value {
     match value {
-        Value::String(text) => vec![text.clone()],
-        Value::Seq(items) => items.iter().flat_map(strings_of_value).collect(),
+        Value::Seq(items) => Value::Seq(items.iter().map(sorted).collect()),
         Value::Map(entries) => {
-            entries.iter().flat_map(|(_, item)| strings_of_value(item)).collect()
+            let mut entries: Vec<(String, Value)> =
+                entries.iter().map(|(k, v)| (k.clone(), sorted(v))).collect();
+            entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+            Value::Map(entries)
         }
-        _ => Vec::new(),
+        other => other.clone(),
     }
+}
+
+/// Whether a written text's frontmatter reads back as the recorded one: the
+/// same keys holding the same values of the same types, numbers to the bit.
+/// The document itself may be one the schema refuses, so the frontmatter is
+/// read alone.
+fn reads_back_as(recorded: &Value, text: &str) -> bool {
+    let yaml = text.strip_prefix("---\n").and_then(|rest| rest.split_once("\n---\n"));
+    yaml.and_then(|(yaml, _)| frontmatter::parse(yaml).ok())
+        .is_some_and(|read| encode(&sorted(&read)) == encode(&sorted(&as_written(recorded))))
+}
+
+fn reads_back_holding(case: &Json, text: &str) -> bool {
+    let whole = map_of(&decode(&case["d"]).unwrap_or(Value::Null)).unwrap_or_default();
+    field(&whole, "frontmatter").is_some_and(|recorded| reads_back_as(recorded, text))
+}
+
+#[test]
+fn a_read_back_is_judged_by_every_field_not_by_the_strings_it_holds() {
+    let text = |s: &str| Value::String(s.to_string());
+    let recorded = Value::Map(vec![
+        ("type".to_string(), text("note")),
+        ("title".to_string(), text("same")),
+        ("description".to_string(), text("same")),
+        ("facetsRaw".to_string(), Value::Map(vec![("count".to_string(), Value::Number(2.0))])),
+    ]);
+    let read = |yaml: &str| reads_back_as(&recorded, &format!("---\n{yaml}\n---\n"));
+    assert!(read("type: note\ntitle: same\ndescription: same\ncount: 2"));
+    assert!(read("count: 2\ndescription: same\ntitle: same\ntype: note"), "order is the writer's");
+    // Damage a string-membership check cannot see: a second field holding the
+    // same string, a number, a type, a key moved.
+    assert!(!read("type: note\ntitle: same\ndescription: other\ncount: 2"));
+    assert!(!read("type: note\ntitle: same\ndescription: same\ncount: 3"));
+    assert!(!read("type: note\ntitle: same\ndescription: same\ncount: '2'"));
+    assert!(!read("type: note\ntitle: same\nsummary: same\ncount: 2"));
+    assert!(!read("type: note\ntitle: same\ndescription: same"));
+    assert!(!read("type: note\ntitle: same\ndescription: same\ncount: 2\nextra: 1"));
 }
 
 #[test]

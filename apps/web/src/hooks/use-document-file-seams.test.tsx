@@ -631,6 +631,30 @@ describe('useDocumentFileSeams drafted bodies', () => {
   })
 })
 
+describe('useDocumentFileSeams past the loading budget', () => {
+  it('resolves a text node link the loading budget never reached through the page table', async () => {
+    // REFERENCE_BUDGET (256) bounds what is LOADED; resolving a link through
+    // the page's table costs no load.
+    const idOf = (i: number) => `01BX5ZZKBKACTAV9WEVG${String(i).padStart(6, '0')}`
+    const links = Array.from({ length: 300 }, (_, i) => `[[note-${i}]]`).join(' ')
+    const adapter = makeAdapter({ loadDocument: vi.fn(async () => undefined) })
+    const { result } = renderHook(() =>
+      useDocumentFileSeams({
+        canvas: embedded(links),
+        adapter,
+        stampOf: new Map(),
+        resolveAlias: (alias) => (alias.startsWith('note-') ? idOf(Number(alias.slice(5))) : null),
+        resolveTitle: (id) => `Note ${Number(id.slice(20))}`,
+        bodies: [],
+      }),
+    )
+    await waitFor(() => expect(adapter.loadDocument).toHaveBeenCalledTimes(256))
+    const seams = seamsOf(result)
+    expect(seams.resolveAlias('note-299')).toBe(idOf(299))
+    expect(seams.resolveTitle(idOf(299))).toBe('Note 299')
+  })
+})
+
 describe('useDocumentFileSeams empty documents', () => {
   it('has nothing to embed for a document whose canvas has no nodes', async () => {
     // A markdown document reads back this way; an empty miniature outranks

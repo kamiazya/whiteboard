@@ -107,39 +107,80 @@ fn every_recorded_text_is_read_as_the_typescript_read_it() {
     assert!(read > 250 && refused > 700, "{read} read, {refused} refused");
 }
 
-/// Every string a recorded value holds as a leaf (a map's values, not its keys).
-fn recorded_strings(recorded: &Json) -> Vec<String> {
+/// A recorded value with every mapping's keys sorted, so two values compare by
+/// what they hold and not by the order the writer chose for it.
+fn sorted(recorded: &Json) -> Json {
     match recorded {
-        Json::String(text) => vec![text.clone()],
-        Json::Array(items) => items.iter().flat_map(recorded_strings).collect(),
-        Json::Object(object) => {
-            object.get("m").and_then(Json::as_array).map_or_else(Vec::new, |pairs| {
-                pairs.iter().flat_map(|pair| recorded_strings(&pair[1])).collect()
-            })
+        Json::Array(items) => Json::Array(items.iter().map(sorted).collect()),
+        Json::Object(object) if object.contains_key("m") => {
+            let pairs = object["m"].as_array().map_or(&[][..], Vec::as_slice);
+            let mut pairs: Vec<Json> = pairs.iter().map(|p| json!([p[0], sorted(&p[1])])).collect();
+            pairs.sort_by(|a, b| a[0].as_str().cmp(&b[0].as_str()));
+            json!({ "m": pairs })
         }
-        _ => Vec::new(),
+        scalar => scalar.clone(),
     }
 }
 
-/// Every string a read value holds as a leaf.
-fn read_strings(value: &Value) -> Vec<String> {
+/// The root a recorded frontmatter is written as: `facetsRaw`'s entries spread
+/// over the rest, each taking the value of a key it meets, as `serializeOkf`'s
+/// `{...rest, ...facetsRaw, facets}` does.
+fn as_written(recorded: &Json) -> Json {
+    let pairs = recorded["m"].as_array().map_or(&[][..], Vec::as_slice);
+    let is_raw = |p: &&Json| p[0] == "facetsRaw" && p[1].get("m").is_some();
+    let mut root: Vec<Json> = pairs.iter().filter(|p| !is_raw(p)).cloned().collect();
+    let raw =
+        pairs.iter().filter(is_raw).flat_map(|p| p[1]["m"].as_array().cloned().unwrap_or_default());
+    for pair in raw {
+        match root.iter_mut().find(|held| held[0] == pair[0]) {
+            Some(slot) => *slot = pair,
+            None => root.push(pair),
+        }
+    }
+    json!({ "m": root })
+}
+
+/// A read value in the recording's encoding.
+fn recorded_form(value: &Value) -> Json {
     match value {
-        Value::String(text) => vec![text.clone()],
-        Value::Seq(items) => items.iter().flat_map(read_strings).collect(),
-        Value::Map(entries) => entries.iter().flat_map(|(_, item)| read_strings(item)).collect(),
-        _ => Vec::new(),
+        Value::Null => Json::Null,
+        Value::Bool(b) => json!(b),
+        Value::Number(n) => json!({ "f": format!("{:016x}", n.to_bits()) }),
+        Value::BigInt(digits) => json!({ "big": digits }),
+        Value::String(s) => json!(s),
+        Value::Seq(items) => Json::Array(items.iter().map(recorded_form).collect()),
+        Value::Map(entries) => {
+            json!({ "m": entries.iter().map(|(k, v)| json!([k, recorded_form(v)])).collect::<Vec<_>>() })
+        }
     }
 }
 
-/// Whether a written text's frontmatter reads back holding every string the
-/// recorded frontmatter holds, as `crates/core/codec/tests/okf_oracle.rs` asks.
-fn reads_back_holding(recorded: &Json, text: &str) -> bool {
-    let held = recorded_strings(recorded);
+/// Whether a written text's frontmatter reads back as the recorded one: the
+/// same keys holding the same values of the same types, numbers to the bit, as
+/// `crates/core/codec/tests/okf_oracle.rs` asks.
+fn reads_back_as(recorded: &Json, text: &str) -> bool {
     let yaml = text.strip_prefix("---\n").and_then(|rest| rest.split_once("\n---\n"));
-    yaml.and_then(|(yaml, _)| frontmatter::parse(yaml).ok()).is_some_and(|read| {
-        let read = read_strings(&read);
-        held.iter().filter(|s| !s.is_empty()).all(|s| read.contains(s))
-    })
+    yaml.and_then(|(yaml, _)| frontmatter::parse(yaml).ok())
+        .is_some_and(|read| sorted(&recorded_form(&read)) == sorted(&as_written(recorded)))
+}
+
+#[test]
+fn a_read_back_is_judged_by_every_field_not_by_the_strings_it_holds() {
+    let recorded = json!({ "m": [
+        ["type", "note"], ["title", "same"], ["description", "same"],
+        ["facetsRaw", { "m": [["count", { "f": format!("{:016x}", 2f64.to_bits()) }]] }],
+    ] });
+    let read = |yaml: &str| reads_back_as(&recorded, &format!("---\n{yaml}\n---\n"));
+    assert!(read("type: note\ntitle: same\ndescription: same\ncount: 2"));
+    assert!(read("count: 2\ndescription: same\ntitle: same\ntype: note"), "order is the writer's");
+    // Damage a string-membership check cannot see: a second field holding the
+    // same string, a number, a type, a key moved.
+    assert!(!read("type: note\ntitle: same\ndescription: other\ncount: 2"));
+    assert!(!read("type: note\ntitle: same\ndescription: same\ncount: 3"));
+    assert!(!read("type: note\ntitle: same\ndescription: same\ncount: '2'"));
+    assert!(!read("type: note\ntitle: same\nsummary: same\ncount: 2"));
+    assert!(!read("type: note\ntitle: same\ndescription: same"));
+    assert!(!read("type: note\ntitle: same\ndescription: same\ncount: 2\nextra: 1"));
 }
 
 #[test]
@@ -164,8 +205,8 @@ fn every_recorded_document_is_written_as_the_typescript_wrote_it() {
             let recorded = field(&case["d"], "frontmatter");
             if answer[0] == "ok"
                 && text != y
-                && !reads_back_holding(recorded, y)
-                && reads_back_holding(recorded, &text)
+                && !reads_back_as(recorded, y)
+                && reads_back_as(recorded, &text)
             {
                 // A first line that starts with a space, folded by the
                 // TypeScript where a reader keeps the break: see the codec's
