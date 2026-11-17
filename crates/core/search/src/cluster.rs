@@ -4,7 +4,7 @@
 //! (it cannot join the character before it, bar LF after CR and anything after
 //! a Prepend character), and a cut that must ask asks over a window around it
 //! rather than the whole text. UAX #29's rules are local except regional
-//! indicator pairing, which counts from the start of the run, so a window
+//! indicators, grouped two by two counting from the start of the run, so a window
 //! starts `LOCAL_UNITS` back or at the nearest boundary unit, and only a run
 //! of flags pushes it further, to `LOOKBACK_UNITS`.
 //!
