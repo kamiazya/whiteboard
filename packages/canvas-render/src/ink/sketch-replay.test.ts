@@ -51,6 +51,16 @@ describe('the ink arithmetic, replayed from the seeded stream', () => {
       .map(Number)
   }
 
+  /**
+   * The outline's strokes, one path per pass: every sub-path a pass draws
+   * joins that pass's one path, so a replay checks exactly `SKETCH_PASSES`. An
+   * empty list would otherwise pass every loop over it.
+   */
+  function passesOf(ink: { readonly strokes: readonly string[] }): readonly string[] {
+    expect(ink.strokes).toHaveLength(SKETCH_PASSES)
+    return ink.strokes
+  }
+
   /** Two-decimal rounding is the only slack: every other difference is a different draw or sum. */
   function expectNumbers(actual: number[], expected: number[]): void {
     expect(actual).toHaveLength(expected.length)
@@ -144,7 +154,8 @@ describe('the ink arithmetic, replayed from the seeded stream', () => {
       ]
       const rng = styleRandomFromSeed(s)
       const ink = sketchShape(null, { x: 0, y: 0, w, h }, s)
-      for (const d of ink.strokes) expectNumbers(numbersOf(d), polylineNumbers(rng, corners, true))
+      for (const d of passesOf(ink))
+        expectNumbers(numbersOf(d), polylineNumbers(rng, corners, true))
     },
   )
 
@@ -162,7 +173,7 @@ describe('the ink arithmetic, replayed from the seeded stream', () => {
       const outline = nodeOutline(id, b)
       if (outline?.kind !== 'polygon') throw new Error(`${id} is not a polygon`)
       const rng = styleRandomFromSeed(s)
-      for (const d of sketchShape(outline, b, s).strokes) {
+      for (const d of passesOf(sketchShape(outline, b, s))) {
         expectNumbers(numbersOf(d), polylineNumbers(rng, outline.points, true))
       }
     },
@@ -192,7 +203,7 @@ describe('the ink arithmetic, replayed from the seeded stream', () => {
   ])('a polygon of %s is inked without a non-finite number', (_label, points) => {
     const b = { x: 0, y: 0, w: 60, h: 50 }
     const rng = styleRandomFromSeed(11)
-    for (const d of sketchShape({ kind: 'polygon', points }, b, 11).strokes) {
+    for (const d of passesOf(sketchShape({ kind: 'polygon', points }, b, 11))) {
       const numbers = numbersOf(d)
       expect(numbers.every(Number.isFinite)).toBe(true)
       expectNumbers(numbers, polylineNumbers(rng, points, true))
@@ -233,7 +244,7 @@ describe('the ink arithmetic, replayed from the seeded stream', () => {
         { x, y: top },
       ]
       const rng = styleRandomFromSeed(s)
-      for (const d of sketchShape(outline, b, s).strokes) {
+      for (const d of passesOf(sketchShape(outline, b, s))) {
         expectNumbers(numbersOf(d), [
           ...curveNumbers(rng, over.pts, over.mids, false),
           ...polylineNumbers(rng, right, false),
@@ -258,7 +269,7 @@ describe('the ink arithmetic, replayed from the seeded stream', () => {
 
   it('a cylinder is five sub-paths per pass, its two straight sides left open', () => {
     const b = { x: 0, y: 0, w: 100, h: 80 }
-    for (const d of sketchShape(nodeOutline('visual.cylinder', b), b, 5).strokes) {
+    for (const d of passesOf(sketchShape(nodeOutline('visual.cylinder', b), b, 5))) {
       // Over the top cap, right side, under the bottom cap, left side, lid:
       // each starts at its own move and is separated from the last by a space.
       expect(d.match(/(?:^| )M /g)).toHaveLength(5)
@@ -281,7 +292,7 @@ describe('the ink arithmetic, replayed from the seeded stream', () => {
       const pts = Array.from({ length: 24 }, (_, i) => at(i * step))
       const mids = Array.from({ length: 24 }, (_, i) => at((i + 0.5) * step))
       const rng = styleRandomFromSeed(s)
-      for (const d of sketchShape(outline, b, s).strokes) {
+      for (const d of passesOf(sketchShape(outline, b, s))) {
         expectNumbers(numbersOf(d), curveNumbers(rng, pts, mids, true))
       }
     },
@@ -306,7 +317,7 @@ describe('the ink arithmetic, replayed from the seeded stream', () => {
         { x: x + dx, y: y + dy },
       ]
       const rng = styleRandomFromSeed(s)
-      for (const d of sketchEdge(pts, s, { arrows: [] }).strokes) {
+      for (const d of passesOf(sketchEdge(pts, s, { arrows: [] }))) {
         expectNumbers(numbersOf(d), polylineNumbers(rng, pts, false))
       }
     },
@@ -396,7 +407,7 @@ describe('the ink arithmetic, replayed from the seeded stream', () => {
       }))
       const rng = styleRandomFromSeed(s)
       const ends = [anchors[0]!, anchors[pieces]!]
-      for (const d of sketchEdge(ends, s, { arrows: [] }).strokes) {
+      for (const d of passesOf(sketchEdge(ends, s, { arrows: [] }))) {
         expectNumbers(numbersOf(d), polylineNumbers(rng, anchors, false))
       }
     },
