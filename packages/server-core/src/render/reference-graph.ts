@@ -38,8 +38,9 @@ export interface LoadedReferenceGraph {
  * decides on its own what a reference is or draws as.
  *
  * Total: a target that fails to load is logged and recorded as nothing
- * there, so the reader keeps the literal text the author wrote and the
- * render never fails for a reference.
+ * there, and the render never fails for a reference. The index's tables
+ * still answer for it, as for a target past the budget: a link keeps its
+ * target and title, while an embed has no content to draw.
  */
 export async function loadReferenceGraph(
   deps: ServerDeps,
