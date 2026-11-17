@@ -235,7 +235,7 @@ fn an_index_holds_a_bounded_number_of_documents_and_replacing_one_is_always_allo
 fn indexes_and_labels_share_one_byte_budget() {
     let term = "t".repeat(1000);
     let cost = whiteboard_search::TERM_OVERHEAD + term.len();
-    let mut held = Held::new(cost * 2 + 300);
+    let mut held = Held::new(cost * 2);
     let handle = handle_of(&ask(&mut held, &json!(["index-new"])));
     let put = |held: &mut Held, id: &str, text: &str| {
         ask(held, &json!(["index-upsert", handle, id, "", null, [text], null]))
@@ -256,4 +256,39 @@ fn the_exported_op_answers_through_the_instance_it_holds() {
     let answered: Json =
         serde_json::from_str(&search_op("[\"fold\",\"ÀB\"]")).unwrap_or(Json::Null);
     assert_eq!(answered, json!(["ok", "ab"]));
+}
+
+#[test]
+fn a_handle_names_its_own_index_and_a_snippet_reads_its_offsets() {
+    let mut held = fresh();
+    let first = handle_of(&ask(&mut held, &json!(["index-new"])));
+    let second = handle_of(&ask(&mut held, &json!(["index-new"])));
+    assert_ne!(first, second);
+    ask(&mut held, &json!(["index-upsert", second, "only", "", null, ["alpha"], null]));
+    let hits = |held: &mut Held, handle: &Json| {
+        ask(held, &json!(["index-query", handle, "alpha", null]))[1].as_array().map(Vec::len)
+    };
+    assert_eq!(hits(&mut held, &first), Some(0));
+    assert_eq!(hits(&mut held, &second), Some(1));
+    assert_eq!(ask(&mut held, &json!(["index-size", first]))[1], json!(0));
+    assert_eq!(ask(&mut held, &json!(["index-size", second]))[1], json!(1));
+    assert_eq!(ask(&mut held, &json!(["index-remove", first, "only"])), json!(["ok", false]));
+    assert_eq!(ask(&mut held, &json!(["index-remove", second, "only"])), json!(["ok", true]));
+
+    let long = format!("{}needle{}", "a".repeat(200), "b".repeat(200));
+    let shown = ask(&mut held, &json!(["snippet", long, 200, 6, null]));
+    assert_eq!(shown[1].as_str().map(|text| text.contains("needle")), Some(true));
+    let elsewhere = ask(&mut held, &json!(["snippet", long, 0, 0, null]));
+    assert_ne!(shown, elsewhere);
+}
+
+#[test]
+fn a_label_set_is_charged_twice_the_bytes_of_its_entries_and_a_fixed_overhead() {
+    let entry = json!(["labels", [["abc", "de", "f"]]]);
+    // 6 bytes of text, doubled, and 128 of overhead.
+    let mut tight = Held::new(139);
+    assert_eq!(ask(&mut tight, &entry), refused("input-too-large"));
+    let mut exact = Held::new(140);
+    assert_eq!(ask(&mut exact, &entry)[0], json!("ok"));
+    assert_eq!(exact.bytes(), 140);
 }

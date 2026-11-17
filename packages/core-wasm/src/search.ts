@@ -44,7 +44,7 @@ interface SearchableDocument {
 }
 
 /** A document a link can name, by path or by id. */
-export interface LinkEntry {
+interface LinkEntry {
   readonly documentId: string
   readonly path: string
   readonly name?: string
@@ -57,23 +57,23 @@ export interface LinkEntry {
 type AlsoIndex = (text: string) => string
 
 /** What one document contributes to an index. */
-export interface DocumentTerms {
+interface DocumentTerms {
   readonly counts: ReadonlyMap<string, number>
   readonly length: number
 }
 
 /** A document's content, as much of it as search needs to see. */
-export type SearchableContent =
+type SearchableContent =
   | { readonly kind: 'markdown'; readonly body: string; readonly description?: string }
   | { readonly kind: 'spatial'; readonly canvas: SpatialCanvas }
 
 /** Where a match sits in the ORIGINAL text, in UTF-16 units. */
-export interface FoundSpan {
+interface FoundSpan {
   readonly index: number
   readonly length: number
 }
 
-export interface SearchHit {
+interface SearchHit {
   readonly documentId: string
   /** BM25, relative to the corpus it was asked of: never compare across calls. */
   readonly score: number
@@ -81,7 +81,7 @@ export interface SearchHit {
   readonly contexts: readonly string[]
 }
 
-export interface SearchOptions {
+interface SearchOptions {
   /** Ten when absent. */
   readonly limit?: number
   /** False answers every hit with no contexts. True when absent. */
@@ -90,9 +90,6 @@ export interface SearchOptions {
   /** What a `[[link]]` in an excerpt shows. */
   readonly linkLabels?: LinkLabelSet
 }
-
-/** The most distinct query tokens an excerpt looks for. */
-export const EXCERPT_TOKENS_MAX = 64
 
 /** The default number of hits. */
 const DEFAULT_LIMIT = 10
@@ -150,7 +147,7 @@ function unitOf(channel: Channel, op: string, n: number): number {
 }
 
 /** A listing's link labels, held in the instance and named by handle. */
-export class LinkLabelSet {
+class LinkLabelSet {
   /** @internal */
   readonly handle: number
   readonly #release: () => void
@@ -175,7 +172,7 @@ export class LinkLabelSet {
 }
 
 /** A corpus's token bags, held in the instance and named by handle. */
-export class SearchIndex {
+class SearchIndex {
   readonly #channel: Channel
   readonly #handle: number
   readonly #collected: Finalizer
