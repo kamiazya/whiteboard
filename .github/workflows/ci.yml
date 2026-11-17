@@ -1158,6 +1158,14 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm rust:build:wasm
 
+      # The artifact just built, staged into core-wasm before anything loads
+      # it: canvas-render-rust reaches the SHIPPED core through
+      # test-utils/node-core (the staged file) beside the oracle, and the
+      # core-wasm steps below read it too.
+      - name: Stage the wasm artifact into core-wasm
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm
+
       # QR-21 layer 2: TypeScript against the oracle wasm (the shipped build
       # plus the `oracle-surface` test exports), exact equality.
       - name: Oracle wasm build (cargo xtask dist wasm --oracle)
@@ -1168,13 +1176,9 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm exec vitest run --project=canvas-render-rust
 
-      # The core-wasm shim over the artifact just built: staged into the
-      # package, its hand-written glue declaration held to the generated one,
-      # and its own tests run against the real instance.
-      - name: Stage the wasm artifact into core-wasm
-        if: steps.scope.outputs.run == 'true'
-        run: pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm
-
+      # The core-wasm shim over the staged artifact: its hand-written glue
+      # declaration held to the generated one, and its own tests run against
+      # the real instance.
       - name: core-wasm glue declaration against the generated one
         if: steps.scope.outputs.run == 'true'
         run: pnpm --filter @kamiazya/whiteboard-core-wasm typecheck:abi

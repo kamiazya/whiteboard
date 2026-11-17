@@ -90,6 +90,20 @@ describe('the rust job runs every Rust gate', () => {
     expect(step?.if).toBe("steps.scope.outputs.run == 'true'")
   })
 
+  it('stages the shipped wasm before any vitest project that loads it', () => {
+    // canvas-render-rust reaches the SHIPPED core through
+    // `test-utils/node-core`, which reads the staged artifact, as well as the
+    // oracle; staged after it, nine of its files failed on CI with the
+    // artifact missing while a machine holding both passed.
+    const commands = stepsOf(ci, 'rust').map((s) => s.run?.trim())
+    const at = (command: string) => commands.indexOf(command)
+    const stage = at('pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm')
+    expect(stage).toBeGreaterThan(at('pnpm rust:build:wasm'))
+    for (const project of ['canvas-render-rust', 'core-wasm-rust']) {
+      expect(stage, project).toBeLessThan(at(`pnpm exec vitest run --project=${project}`))
+    }
+  })
+
   it('runs the PR fuzz script on a pull request and every target on any other event', () => {
     const script = runs(ci, 'rust-fuzz-pr').join('\n')
     expect(script).toMatch(/^\s*pnpm rust:fuzz:pr\s*$/m)
