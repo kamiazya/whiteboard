@@ -115,7 +115,7 @@ pub fn tidy_nodes(nodes: &[TidyNode], options: &TidyOptions) -> Vec<TidyMove> {
             break;
         }
     }
-    moves_between(&clean, &board, &current)
+    moves_between(&clean, &board, &current, &ctx)
 }
 
 /// The board as keys and rects, and what the options say of each key.
@@ -147,9 +147,14 @@ fn board_of(clean: &[&TidyNode], options: &TidyOptions) -> (Ctx, Vec<Node>) {
     (ctx, board)
 }
 
-/// Each node whose settled box differs from the one it was given. The settled
+/// Each unlocked node whose settled box differs from the one it was given. The settled
 /// box of an id repeated on the board is the last one's.
-fn moves_between(clean: &[&TidyNode], board: &[Node], settled: &[Node]) -> Vec<TidyMove> {
+fn moves_between(
+    clean: &[&TidyNode],
+    board: &[Node],
+    settled: &[Node],
+    ctx: &Ctx,
+) -> Vec<TidyMove> {
     let mut last: Vec<Option<Rect>> =
         vec![None; settled.iter().map(|n| n.key.saturating_add(1)).max().unwrap_or(0)];
     for node in settled {
@@ -159,6 +164,11 @@ fn moves_between(clean: &[&TidyNode], board: &[Node], settled: &[Node]) -> Vec<T
     }
     let mut moves = Vec::new();
     for (given, node) in clean.iter().zip(board) {
+        // A locked box is applied nowhere: rounding its off-pixel box would
+        // answer a move for something that may not move.
+        if ctx.is_locked(node.key) {
+            continue;
+        }
         let Some(rect) = last.get(node.key).copied().flatten() else { continue };
         let (x, y) =
             (whiteboard_det::math::js_round(rect.x), whiteboard_det::math::js_round(rect.y));

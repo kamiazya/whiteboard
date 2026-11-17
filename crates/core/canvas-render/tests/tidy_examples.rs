@@ -69,3 +69,14 @@ fn the_deepest_chain_of_frames_the_canvas_holds_still_tidies() {
     let moves = tidy_nodes(&nodes, &TidyOptions::default());
     assert!(!moves.is_empty());
 }
+
+#[test]
+fn a_locked_box_off_the_whole_pixel_is_never_answered_as_moved() {
+    let nodes = [node("locked", 3.4, 5.5, 100.2, 60.0), node("free", 400.0, 0.0, 100.0, 60.0)];
+    let options = TidyOptions {
+        locked: ["locked".to_string()].into_iter().collect(),
+        ..TidyOptions::default()
+    };
+    let moves = tidy_nodes(&nodes, &options);
+    assert!(moves.iter().all(|m| m.id != "locked"), "{moves:?}");
+}

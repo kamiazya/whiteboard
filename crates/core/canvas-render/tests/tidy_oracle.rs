@@ -29,6 +29,13 @@ const RECORDING: &str = include_str!("../../../../packages/canvas-render/src/ora
 /// within the account and answers as recorded.
 const CORRECTED_SCOOP_BUDGET: [&str; 1] = ["extra/past-level-budget"];
 
+/// Recorded boards where the TypeScript answered a move for a LOCKED box: its
+/// off-pixel box rounded onto the whole pixel, which a caller then applied to
+/// something that may not move. The core answers no move for a locked box; the
+/// allowance is the boards whose answer is the recording minus exactly those
+/// moves, pinned by count.
+const CORRECTED_LOCKED_BOARDS: usize = 65;
+
 /// Boards the row-order pass answers differently, by count: those that join one
 /// pair of boxes by more than one edge, and differ. The TypeScript counted a
 /// hub's partners per EDGE, so a box whose one distinct partner was the hub,
@@ -118,6 +125,15 @@ impl Case {
             .any(|pair| !seen.insert(pair))
     }
 
+    /// Whether the recording moved a LOCKED box and `got` is exactly the
+    /// recording without those moves: nothing else about the answer differs.
+    fn recorded_a_locked_box_moved(&self, got: &[Move]) -> bool {
+        let locked = |id: &str| self.locked.iter().flatten().any(|l| l == id);
+        let recorded = self.recorded();
+        let kept: Vec<Move> = recorded.iter().filter(|(id, _)| !locked(id)).cloned().collect();
+        kept.len() < recorded.len() && kept == got
+    }
+
     /// The recorded moves.
     fn recorded(&self) -> Vec<Move> {
         self.m
@@ -164,17 +180,21 @@ fn every_recorded_board_is_tidied_to_the_recorded_moves() {
     assert_eq!(cases.iter().filter(|c| c.id.starts_with("seeded/")).count(), boards);
     let mut differing: Vec<&str> = Vec::new();
     let mut doubled: Vec<&str> = Vec::new();
+    let mut locked_moved: Vec<&str> = Vec::new();
     for case in &cases {
         let got = answered(&tidy_nodes(&case.nodes(), &case.options()));
         if got == case.recorded() {
             continue;
         }
-        if case.joins_a_pair_twice() {
+        if case.recorded_a_locked_box_moved(&got) {
+            locked_moved.push(&case.id);
+        } else if case.joins_a_pair_twice() {
             doubled.push(&case.id);
         } else {
             differing.push(&case.id);
         }
     }
     assert_eq!(differing, CORRECTED_SCOOP_BUDGET, "boards answering other than recorded");
+    assert_eq!(locked_moved.len(), CORRECTED_LOCKED_BOARDS, "{locked_moved:?}");
     assert_eq!(doubled.len(), CORRECTED_DOUBLED_EDGE_BOARDS, "{doubled:?}");
 }
