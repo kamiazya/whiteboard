@@ -1,5 +1,5 @@
 //! What an excerpt shows of markdown: the words typeset, without the
-//! typesetting. Each step is one of `snippet.ts`'s regular expressions
+//! typesetting. Each step is one of the regular expressions of the TypeScript snippet this replaced
 //! written out over UTF-16 units, in the same order, because a later step
 //! reads what an earlier one left.
 
@@ -206,7 +206,7 @@ fn task_marker_len(line: &[u16], at: usize) -> Option<usize> {
 }
 
 /// The leading marker of a line (heading, quote, task, bullet, ordered item)
-/// as `snippet.ts`'s alternation reads it, in its order.
+/// as that snippet's alternation read it, in its order.
 fn marker_len(line: &[u16]) -> usize {
     let at = skip_blanks(line, 0);
     let hashes = run_of(line, at, 0x23);

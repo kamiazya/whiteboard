@@ -101,7 +101,6 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: Wh
   },
   'packages/mcp-server/src/server/store/version-store.ts': { count: 1, why: 'ordinary English' },
   'packages/ports/src/document-store.ts': { count: 1, why: 'ordinary English' },
-  'packages/search/src/snippet.ts': { count: 1, why: 'ordinary English' },
   'packages/server-core/src/search/eval.test.ts': { count: 1, why: 'ordinary English' },
   'packages/server-core/src/search/eval.ts': { count: 3, why: 'ordinary English' },
   'packages/server-core/src/tools/body-edit.ts': { count: 1, why: 'ordinary English' },

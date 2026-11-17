@@ -73,9 +73,8 @@ describe('PORTED_FUNCTIONS against the tree', () => {
       'folderNamesOf',
       'searchableTexts',
       'snippetAround',
-      'linkLabelsFrom',
-      'documentTerms',
-      'excerpterFor',
+      'linkLabels',
+      'excerpts',
       'fullTextSearch',
     ])
     expect(checkPortedFunctions(PORTED_FUNCTIONS, readReal)).toEqual([])
@@ -99,6 +98,14 @@ describe('the realm-dispatched functions at stage 4', () => {
       ['parseSpatial', 4, 'installSpatialCore'],
       ['serializeSpatial', 4, 'installSpatialCore'],
       ['partitionFacetWrites', 4, 'installFacetWriteCore'],
+      ['foldForSearch', 4, 'installSearchCore'],
+      ['findFolded', 4, 'installSearchCore'],
+      ['folderNamesOf', 4, 'installSearchCore'],
+      ['searchableTexts', 4, 'installSearchCore'],
+      ['snippetAround', 4, 'installSearchCore'],
+      ['linkLabels', 4, 'installSearchCore'],
+      ['excerpts', 4, 'installSearchCore'],
+      ['fullTextSearch', 4, 'installSearchCore'],
     ])
     for (const f of codecs) {
       // The real files the entry says are gone are gone, so an empty `deleted` list cannot pass.

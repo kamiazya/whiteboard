@@ -2,7 +2,7 @@
  * The registry is what keeps the exhaustiveness the node-kind union had.
  *
  * ADR-0038 decision 3 dissolves that union, and with it the `switch` guard
- * `searchable-texts.ts` names outright. The stored shape stays OCIF-faithful
+ * the search core's `texts.rs` names outright. The stored shape stays OCIF-faithful
  * — a mimeType, inline content or a location, no discriminant we invented —
  * and the closed set lives in `RESOURCE_KINDS` instead, so `ResourceKind` is
  * still a closed union and a `switch` over it still narrows to `never`.

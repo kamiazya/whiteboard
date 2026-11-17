@@ -7,15 +7,15 @@ import {
   fullTextSearch,
   installSearchCore,
   isSearchRefusal,
+  isSearchUnavailable,
   linkLabels,
   type SearchCore,
   type SearchHit,
   searchableTexts,
   searchCoreInstalled,
   snippetAround,
-  tokenize,
-  tokenizeForIndex,
 } from './index.js'
+import { tokenize, tokenizeForIndex } from './tokens.js'
 
 // Every function answers through the core a realm installs and through nothing
 // else, so the way a realm that forgot to install one fails is the contract.
@@ -117,6 +117,26 @@ describe('a realm that installed a core', () => {
     expect(installSearchCore(other)).toBe(stub)
     expect(foldForSearch('a')).toBe('other')
     expect(installSearchCore(stub)).toBe(other)
+  })
+})
+
+describe('isSearchUnavailable', () => {
+  it('names a refusal and a missing core, and nothing else', () => {
+    const refusal = new Error('too large')
+    refusal.name = 'CoreInputRefused'
+    const before = installSearchCore(undefined)
+    const missing = (() => {
+      try {
+        foldForSearch('a')
+      } catch (err) {
+        return err
+      }
+    })()
+    installSearchCore(before)
+    expect(isSearchUnavailable(refusal)).toBe(true)
+    expect(isSearchUnavailable(missing)).toBe(true)
+    expect(isSearchUnavailable(new Error('boom'))).toBe(false)
+    expect(isSearchRefusal(missing)).toBe(false)
   })
 })
 

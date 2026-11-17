@@ -7,7 +7,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
  * a second place that decides it. A snippet quotes what the document says, so
  * derived text never reaches an excerpt.
  */
-export type AlsoIndex = (text: string) => string
+type AlsoIndex = (text: string) => string
 
 /** A document a corpus holds, as a root names it. */
 export interface SearchableDocument {
@@ -146,3 +146,65 @@ export function searchCore(fn: string): SearchCore {
 /** Whether `err` is the core declining an input past a cap. */
 export const isSearchRefusal = (err: unknown): boolean =>
   err instanceof Error && err.name === 'CoreInputRefused'
+
+/**
+ * Whether `err` is search having no core to answer: none was installed, which
+ * is a realm whose wasm did not load. A surface that must still draw (a list
+ * filtering as someone types) degrades on this as on a refusal; everything
+ * that can wait for the load awaits it instead.
+ */
+export const isSearchUnavailable = (err: unknown): boolean =>
+  isSearchRefusal(err) || (err instanceof Error && err.name === 'SearchCoreNotInstalled')
+
+// Every function below answers through the core a realm installed
+// (`installSearchCore`): lexical search has no TypeScript implementation, so
+// the daemon and the browser rank one corpus the same way because one program
+// ranks it.
+
+/** What a text is compared as: case folded and Latin accents removed. */
+export const foldForSearch = (text: string): string =>
+  searchCore('foldForSearch').foldForSearch(text)
+
+/** Where `needle` occurs in `text` once both are folded, as a span of the ORIGINAL text. */
+export const findFolded = (text: string, needle: string): FoundSpan | undefined =>
+  searchCore('findFolded').findFolded(text, needle)
+
+/** The display names of the named folders a document at `path` sits in, top down. */
+export const folderNamesOf = (path: string, names: ReadonlyMap<string, string>): string[] =>
+  searchCore('folderNamesOf').folderNamesOf(path, names)
+
+/** The one definition of what text a document contributes to search. */
+export const searchableTexts = (content: SearchableContent): string[] =>
+  searchCore('searchableTexts').searchableTexts(content)
+
+/** A listing's link labels. The caller releases them when the listing goes. */
+export const linkLabels = (entries: Iterable<LinkEntry>): LinkLabelSet =>
+  searchCore('linkLabels').linkLabels(entries)
+
+/** A short plain-text excerpt around `[index, index + length)` of `text`. */
+export const snippetAround = (
+  text: string,
+  index: number,
+  length: number,
+  labels?: LinkLabelSet,
+): string => searchCore('snippetAround').snippetAround(text, index, length, labels)
+
+/**
+ * The excerpts `query` finds in each document's texts, one list per entry of
+ * `documents`: the three texts that match best, quoted.
+ */
+export const excerpts = (
+  query: string,
+  documents: readonly (readonly string[])[],
+  labels?: LinkLabelSet,
+): string[][] => searchCore('excerpts').excerpts(query, documents, labels)
+
+/**
+ * BM25 over the documents' token bags, name and path included as text. Scores
+ * are relative to THIS corpus: never compare across calls.
+ */
+export const fullTextSearch = (
+  documents: readonly SearchableDocument[],
+  query: string,
+  options?: SearchOptions,
+): SearchHit[] => searchCore('fullTextSearch').fullTextSearch(documents, query, options)

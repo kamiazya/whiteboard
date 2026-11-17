@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { fullTextSearch, tokenize } from './index.js'
+import { fullTextSearch } from './index.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
+import { tokenize } from './tokens.js'
 
 describe('tokenize', () => {
   it('turns Japanese runs into adjacent character bigrams', () => {

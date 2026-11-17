@@ -141,6 +141,9 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // either half is a second set of answers.
   // It takes content already read (a body, or a canvas), so it needs
   // neither the CRDT nor the bridge — model's types are the whole surface.
+  // The ranking itself is the Rust core's, which a realm installs
+  // (`installSearchCore`): the core is declared structurally here, so this
+  // package never imports core-wasm, as codec's never does.
   // The Rust core's wasm artifact behind a thin shim (ADR-0054): init from
   // bytes or a compiled module a composition root hands it, an ABI check, one
   // typed call per user operation. Below canvas-render's consumers but never
@@ -153,12 +156,6 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   '@kamiazya/whiteboard-search': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: [],
-    exemptBoundaryFiles: {
-      'snippet.bench.ts': {
-        kinds: ['test-framework-import'],
-        reason: 'a vitest bench: it runs under `vitest bench` and never ships in the package',
-      },
-    },
   },
   // What the documents of a workspace point at, as a graph: the facts one
   // document contributes, the aggregate that answers backlinks and unlinked

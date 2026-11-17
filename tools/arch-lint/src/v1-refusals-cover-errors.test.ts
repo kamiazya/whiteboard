@@ -173,6 +173,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'a wiring defect of the realm, never an input: the daemon installs the Rust core at boot and refuses to start without it, so no /api/v1 operation can reach a parseOkf or serializeOkf with no core',
   SpatialCoreNotInstalled:
     'a wiring defect of the realm, never an input: the daemon installs the Rust core at boot and refuses to start without it, so no /api/v1 operation can reach a parseSpatial or serializeSpatial with no core',
+  SearchCoreNotInstalled:
+    'a wiring defect of the realm, never an input: the daemon installs the Rust core at boot and refuses to start without it, so no /api/v1 operation can reach a search function with no core',
   OkfNotYamlSafeError:
     'serializeOkf throws it; the OKF projection wraps it as DocumentSerializeError (which has an arm) and wb_document_set re-raises it as OkfParseError, so it never reaches a handler bare',
 }

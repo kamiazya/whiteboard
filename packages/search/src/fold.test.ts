@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { excerpts, findFolded, foldForSearch, fullTextSearch, tokenize, tokenizeForIndex } from './index.js'
+import { excerpts, findFolded, foldForSearch, fullTextSearch } from './index.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
+import { tokenize, tokenizeForIndex } from './tokens.js'
 
 const doc = (documentId: string, name: string, texts: string[] = []) => ({
   documentId,

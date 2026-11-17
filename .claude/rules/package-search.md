@@ -3,9 +3,23 @@ paths:
   - "packages/search/**"
 ---
 
-# search — lexical search over documents
+# search — lexical search over documents, answered by the Rust core
 
-## What belongs here
+The algorithms live in `crates/core/search` and reach a root through
+`core-wasm`'s `core.search` (ADR-0054 step 8, B3). This package is what callers
+import and holds none of them: every function dispatches to the one
+`SearchCore` a realm installs with `installSearchCore`, declared structurally
+here so the package never imports `core-wasm` (codec's OKF and JSON Canvas
+cores are the precedent). With none installed a call throws
+`SearchCoreNotInstalled` — there is no second implementation to answer with —
+so every realm that searches installs one BEFORE its first call: the daemon at
+boot (`installRustCoresAtBoot`), apps/web through `startLayoutCore` and
+`searchReady()` (`apps/web/src/lib/search-core.ts`), a Node test realm through
+`src/test-utils/core-setup/node.setup.ts`. The core refuses an input past its
+caps as `CoreInputRefused` (`isSearchRefusal`); each caller answers that with
+the degraded form it already had, never a crash.
+
+## What the core answers (kept here because the rationale is not in the Rust)
 
 - The tokenizer: latin runs lowercased as words, CJK runs as adjacent
   character bigrams (`tokenize`). Dictionary-free by design — Japanese,
@@ -23,23 +37,26 @@ paths:
   recall were unchanged by it — take that measurement again before
   touching either side.
 - BM25 ranking over a caller-supplied corpus (`fullTextSearch`), plus the
-  match excerpts a result row shows (`snippetAround`).
+  match excerpts a result row shows (`excerpts`, `snippetAround`). A link's
+  display name in an excerpt comes from a `LinkLabelSet` the core holds until
+  it is `release()`d: a core holds a bounded number of them, so release it
+  when the listing goes rather than leaving it to collection.
 - **The one definition of what text a document contributes**
   (`searchableTexts`): a markdown description (leading, so a body that
   overflows the embedder window still leaves the summary inside it) and body,
   or a canvas's node texts, link urls, group labels and edge labels. A `file` node contributes NOTHING, and that
   is a decision rather than a gap — its readable label is the RESOLVED
-  reference's, which needs a lookup this package deliberately does not take,
-  and the raw `node.file` is an opaque id. The per-kind readers are a
-  `SEARCHABLE` table held to `satisfies Record<NodeKind, …>`, so a fifth
-  `SpatialNode` kind fails the build rather than being silently dropped from
-  search.
+  reference's, which needs a lookup the core deliberately does not take,
+  and the raw `node.file` is an opaque id.
 
 ## What does NOT belong here
 
 - Reading a document. This package takes content ALREADY read — a body, or
   a `SpatialCanvas` — which is why it needs neither `loro-crdt` nor the
   bridge, and why it runs unchanged in a worker.
+- An algorithm. A change to how text is folded, cut into tokens, ranked or
+  quoted is a change to `crates/core/search`, held to the frozen recording
+  (`src/oracle/search.jsonl`) and to `server-core`'s scoreboard.
 - Persistence, indexes, caches. The daemon serves its corpus from
   `ContentFactsCache`; the browser builds one from IndexedDB. Where the
   corpus comes from is the caller's business.
@@ -49,7 +66,8 @@ paths:
 ## Dependency rules
 
 Runtime dependencies: `@kamiazya/whiteboard-model` (types only). Forbidden:
-`node:*`, DOM globals, `inversify`, `loro-crdt`, `zod`. Enforced by
+`node:*`, DOM globals, `inversify`, `loro-crdt`, `zod`, and the shim itself:
+`core-wasm` is a devDependency of the test installer alone. Enforced by
 `tools/arch-lint` (`arch-lint-node`).
 
 ## Why it is its own package
@@ -57,7 +75,8 @@ Runtime dependencies: `@kamiazya/whiteboard-model` (types only). Forbidden:
 The daemon and the browser must answer a query the same way. A second copy
 of the ranking — or of the corpus definition — is a second set of answers,
 and the difference shows up as one mode finding a document the other
-cannot. `server-core` cannot be that home: it carries hono and the whole
+cannot. One program ranks both now; this package is the seam callers reach it
+through. `server-core` cannot be that home: it carries hono and the whole
 `/api/v1` surface, and the browser has no business importing a package
 whose ROLE is the server.
 
@@ -92,7 +111,14 @@ measurement before and after any change to this function.
 
 ## Tests
 
-- Vitest project: `search-node`.
+- Vitest project: `search-node`, which installs the core from the staged
+  artifact (`pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm`); a
+  missing artifact fails the project by name. The behaviour tests below run
+  through it, so they are the TypeScript-side proof that the dispatch answers
+  what the core does; the core's own are `crates/core/search`'s and
+  `core-wasm`'s `search.rust.test.ts`.
+- `core.test.ts` pins the dispatch itself: a realm with no core throws
+  `SearchCoreNotInstalled` from every function.
 - The tf-monotonicity property (more occurrences never lower a score) and
   query normalisation (a repeated or space-padded query answers as the bare
   one, `full-text.property.test.ts`) are the algebraic invariants; the rest
@@ -123,7 +149,7 @@ Two properties of the seam, each load-bearing:
 - **It answers TEXT, not tokens.** How 「ロケット」 is cut into bigrams is
   this package's scheme to own, and a caller returning tokens would be a
   second place that decides it.
-- **Indexing only, never the snippet.** `contextsFor` quotes what the
+- **Indexing only, never the snippet.** `excerpts` quotes what the
   document actually says. A hit on a word the reader cannot find in their own
   note is confusing enough without the excerpt inventing it.
 
