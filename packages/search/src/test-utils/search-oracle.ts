@@ -35,6 +35,7 @@ import { searchableTexts } from '../searchable-texts.js'
 import { linkLabelsFrom, snippetAround } from '../snippet.js'
 import { randomCjk } from './random-cjk.js'
 import { searchableContents } from './search-oracle-contents.js'
+import { segmentRecords } from './search-oracle-segments.js'
 
 export const SEED = 0x5ea4_c4e1
 export const FOLD_CASES = 3500
@@ -604,6 +605,7 @@ export function recordedLines(): string[] {
     ...searchRecords(next),
     ...contentRecords(),
     ...folderRecords(next),
+    ...segmentRecords(),
   ]
   return records.map((record) => JSON.stringify(record))
 }
