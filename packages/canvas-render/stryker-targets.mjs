@@ -32,11 +32,9 @@ export const MUTATED = [
   // How a scene nests, split out so a layout stage below `scene-bounds` reads
   // it too. In the lane because the file it left was.
   'src/scene-children.ts',
-  'src/scene-digest.ts',
-  // The rectangle arithmetic `scene-digest.ts`'s overlap and containment moved
-  // into when the quality instruments stopped redeclaring it. In the lane for
-  // the reason `tidy-units.ts` is: leaving it out would shrink what the lane
-  // sees of the digest while the report kept looking the same.
+  // The rectangle arithmetic the quality instruments share. In the lane for the
+  // reason `tidy-units.ts` is: leaving it out would shrink what the lane sees
+  // of them while the report kept looking the same.
   'src/quality/rect.ts',
   'src/tidy.ts',
   // Split out of `tidy.ts` and covered for that reason: `buildUnits` is
@@ -114,7 +112,6 @@ export const MINUTES = {
   'src/svg/hoist.ts': 2,
   'src/scene-bounds.ts': 12.3,
   'src/scene-children.ts': 0.8,
-  'src/scene-digest.ts': 6.8,
   'src/quality/rect.ts': 7.7,
   'src/tidy.ts': 11.3,
   'src/tidy-units.ts': 4.2,
@@ -208,44 +205,6 @@ export function shardOf(files, spec, minutes = MINUTES) {
  * anyway.
  */
 export const KNOWN_EQUIVALENT = {
-  // `scene-digest.ts`: five families, each verified by applying the edit and
-  // running the file's test files, which stay green, and each with its
-  // invariant beside the code. (1) Union-find bookkeeping — which id becomes
-  // a root, path compression, union by rank — changes no cluster, since the
-  // clusters are sorted before they reach the digest. (2) A pair loop's
-  // outer bound one past the end runs the inner loop zero times. (3) An
-  // occupancy row or cell past `rows` x `cols` is never read, and an empty
-  // span's four difference marks cancel (a size is never negative). (4) Past
-  // the entry cap no overlap scan runs, so its `capped` flag is unobservable
-  // beside `partial` — the one `false -> true` below is that early return's.
-  // (5) The occupancy clamps never bind: the grid is sized from the same
-  // union the boxes are read against.
-  'src/scene-digest.ts': {
-    'ArithmeticOperator: cols - 1 -> cols + 1': 1,
-    'ArithmeticOperator: rows - 1 -> rows + 1': 1,
-    'BooleanLiteral: false -> true': 1,
-    'EqualityOperator: i < entries.length -> i <= entries.length': 2,
-    'ArrayDeclaration: [id, 0] -> []': 1,
-    'ConditionalExpression: current !== root -> false': 1,
-    'ConditionalExpression: rootA === rootB -> false': 1,
-    'ConditionalExpression: rankA < rankB -> false': 1,
-    'ConditionalExpression: rankA < rankB -> true': 1,
-    'EqualityOperator: rankA < rankB -> rankA <= rankB': 1,
-    'EqualityOperator: rankA < rankB -> rankA >= rankB': 1,
-    'ConditionalExpression: rankA > rankB -> false': 1,
-    'ConditionalExpression: rankA > rankB -> true': 1,
-    'EqualityOperator: rankA > rankB -> rankA <= rankB': 1,
-    'EqualityOperator: rankA > rankB -> rankA >= rankB': 1,
-    'ArithmeticOperator: rankA + 1 -> rankA - 1': 1,
-    'ConditionalExpression: !(c0 <= c1 && r0 <= r1) -> false': 1,
-    'ConditionalExpression: c0 <= c1 && r0 <= r1 -> true': 1,
-    'ConditionalExpression: c0 <= c1 -> true': 1,
-    'ConditionalExpression: r0 <= r1 -> true': 1,
-    'LogicalOperator: c0 <= c1 && r0 <= r1 -> c0 <= c1 || r0 <= r1': 1,
-    'EqualityOperator: r < rows -> r <= rows': 1,
-    'ArrayDeclaration: Array<boolean>(cols) -> Array()': 1,
-    'EqualityOperator: c < cols -> c <= cols': 1,
-  },
   // `mostlyInside`'s span check: `area` is positive there, so `w * h * 2 >
   // area` already implies `w * h > 0`, and at `w === 0` the product is 0 and
   // fails the majority test whichever comparison admitted it. The reasoning

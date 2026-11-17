@@ -5,7 +5,7 @@
 // checks the file's shape on every change.
 
 /** How many `exclude_re` entries .cargo/mutants.toml holds: a change is a decision made in the diff. */
-const EXCLUSIONS = 88
+const EXCLUSIONS = 89
 
 /**
  * The ledger's entries, each with the comment lines directly above it. A
@@ -132,4 +132,35 @@ export function prExcludeProblems(globs, exists) {
     seen.add(g)
   }
   return problems
+}
+
+/** The most legs the job fans out to; what main, a schedule and a merge queue always run. */
+const MAX_SHARDS = 8
+
+/**
+ * Mutants one leg is asked to judge before another leg is worth its fixed
+ * cost: every leg repeats the whole workspace's baseline test run, so a leg
+ * for one or two mutants spends more on the baseline than on judging.
+ * Past MAX_SHARDS legs the ratio only grows, as it did with a fixed eight.
+ */
+const MUTANTS_PER_SHARD = 6
+
+/**
+ * The legs of the mutants job: `[1..n]`, or `[]` when no leg is owed.
+ *
+ * Only a pull request is narrowed. Every other event runs the full set, so
+ * what main judges never depends on a count. On a pull request the count
+ * decides, and it fails closed: a count that could not be read is the full
+ * set, not zero. Zero legs is reserved for the two answers that say nothing
+ * can be judged: the scope does not reach the job, or the diff lists no mutant.
+ * @param {{ event: string, scopeRuns: boolean, mutantCount: number | null }} input
+ * @returns {number[]}
+ */
+export function shardPlan({ event, scopeRuns, mutantCount }) {
+  const legs = (n) => Array.from({ length: n }, (_, i) => i + 1)
+  if (event !== 'pull_request') return legs(MAX_SHARDS)
+  if (!scopeRuns) return []
+  if (!Number.isInteger(mutantCount) || mutantCount < 0) return legs(MAX_SHARDS)
+  if (mutantCount === 0) return []
+  return legs(Math.min(MAX_SHARDS, Math.ceil(mutantCount / MUTANTS_PER_SHARD)))
 }

@@ -1280,6 +1280,55 @@ jobs:
             crates/fuzz/regressions
           retention-days: 14
 
+  # How many legs rust-mutants fans out to. A pull request is sized by the
+  # mutants its diff lists (cargo-mutants parses, it builds nothing): none, or
+  # a scope that does not reach the job, runs no leg; any other event runs all
+  # eight. A count that cannot be read plans all eight. The decision is
+  # `shardPlan` in tools/checks/src/rust-mutants-ledger.mjs.
+  rust-mutants-plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      shards: ${{ steps.plan.outputs.shards }}
+      total: ${{ steps.plan.outputs.total }}
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Read whether the scope reaches the mutants job
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node tools/checks/src/affected-cli.mjs job rust-mutants --event "$EVENT"
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        if: github.event_name == 'pull_request' && steps.scope.outputs.run != 'false'
+        run: rustup toolchain install
+
+      - name: Restore cargo-mutants
+        if: github.event_name == 'pull_request' && steps.scope.outputs.run != 'false'
+        id: mutants-bin
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin/cargo-mutants
+          key: cargo-mutants-27.1.0
+
+      - name: cargo-mutants
+        if: github.event_name == 'pull_request' && steps.scope.outputs.run != 'false' && steps.mutants-bin.outputs.cache-hit != 'true'
+        run: cargo install --locked cargo-mutants --version 27.1.0
+
+      - name: Plan the legs
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          SCOPE_RUNS: ${{ steps.scope.outputs.run }}
+          RUST_MUTANTS_BASE: HEAD^1
+        run: node tools/checks/src/rust-mutants.mjs plan
+
   # QR-17: every mutant in this change's Rust lines must be caught by the
   # workspace's tests, or ledgered in .cargo/mutants.toml with its reason.
   # `cargo mutants --in-diff` against the merge commit's first parent, after a
@@ -1290,6 +1339,11 @@ jobs:
   # oracle in native form. tools/checks/src/rust-mutants.mjs reads the exit
   # codes as QR-17 does: missed, timed out and a failed baseline all fail.
   rust-mutants:
+    needs: rust-mutants-plan
+    # No leg is owed when the diff lists no mutant, and a matrix with no
+    # values is an error, so the job is skipped instead; ci-gate accepts that
+    # skip only when the plan says zero legs.
+    if: needs.rust-mutants-plan.outputs.total != '0'
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
@@ -1297,7 +1351,7 @@ jobs:
       # a failed one, so "Re-run failed jobs" never revives it.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        shard: ${{ fromJSON(needs.rust-mutants-plan.outputs.shards) }}
     env:
       CARGO_TERM_COLOR: always
       CARGO_INCREMENTAL: '0'
@@ -1357,11 +1411,11 @@ jobs:
       # A push to main judges the merged change the same way, against HEAD^1:
       # the whole workspace still holds survivors nobody has classified, so a
       # full run here would fail every merge on mutants it did not add.
-      - name: Mutants in this change (shard ${{ matrix.shard }}/8)
+      - name: Mutants in this change (shard ${{ matrix.shard }}/${{ needs.rust-mutants-plan.outputs.total }})
         if: steps.scope.outputs.run == 'true'
         env:
           RUST_MUTANTS_BASE: HEAD^1
-          RUST_MUTANTS_SHARD: ${{ matrix.shard }}/8
+          RUST_MUTANTS_SHARD: ${{ matrix.shard }}/${{ needs.rust-mutants-plan.outputs.total }}
         run: pnpm rust:mutants:pr
 
       - name: Upload the mutants report
@@ -1502,6 +1556,7 @@ jobs:
       - dry-run-docker
       - rust
       - rust-fuzz-pr
+      - rust-mutants-plan
       - rust-mutants
       - zizmor
       - dependency-review

@@ -267,9 +267,8 @@ describe('the mutation lane covers what it says it covers', () => {
     // a mutant to change.
     //
     // 97 and 20 with `quality/rect.ts`: the overlap and containment
-    // arithmetic `scene-digest.ts` (in the lane) shares with the quality
-    // instruments, so it is in the lane too — taking it out would have shrunk
-    // what the lane sees of the digest.
+    // arithmetic the digest (then in the lane) shared with the quality
+    // instruments, so it is in the lane too.
     //
     // 98 with `scoring.ts`, the `/scoring` subpath: re-exports of the three
     // quality instruments, outside the lane for the reason they are.
@@ -500,8 +499,12 @@ describe('the mutation lane covers what it says it covers', () => {
     // (the cost model, the ink terms, the diagonal clip, the crossing sweep,
     // the grid router, its heap and the corner search) are the Rust ports' to
     // hold now, by cargo-mutants over the frozen recording.
+    // 88 and 15 since the digest moved to the core: the derivations and
+    // their mutation residue are the Rust port's to hold, by cargo-mutants over
+    // the frozen recording. `scene-digest-schema.ts` took its Zod contract and
+    // stays outside the lane: a schema has no heuristic for a mutant to weaken.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 16,
+      mutated: 15,
       production: 88,
     })
   })

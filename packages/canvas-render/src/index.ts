@@ -90,6 +90,7 @@ export {
   queryLabelObstacles,
   queryOutlineContentBox,
 } from './layout/queries.js'
+export { layoutSceneDigest } from './layout/query-switch.js'
 export type {
   SpatialContentCache,
   SpatialLayoutDegradation,
@@ -180,8 +181,8 @@ export { type LayoutRefusal, refusalCopy, refusalScene } from './refusal.js'
 export { MIN_SCENE_EXTENT_PX, sceneBounds, sceneDocumentBounds } from './scene-bounds.js'
 export type { SceneWalkNode } from './scene-children.js'
 export { sceneChildrenOf } from './scene-children.js'
-export type { SceneDigest } from './scene-digest.js'
-export { sceneDigest, sceneDigestSchema } from './scene-digest.js'
+export type { SceneDigest } from './scene-digest-schema.js'
+export { sceneDigestSchema } from './scene-digest-schema.js'
 export { STROKE_WEIGHT_FACTOR } from './stroke-weight.js'
 export type { SvgDocumentOptions } from './svg/backend.js'
 export { renderSceneToSvg } from './svg/backend.js'

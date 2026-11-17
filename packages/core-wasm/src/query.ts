@@ -26,11 +26,12 @@ type Pair = readonly [number, number]
 
 /**
  * A query the core measures: the edge layer of a canvas request (`edges`,
- * every field a canvas request carries), a node's fitted height
- * (`node-size`) or its content's natural size (`node-content`).
+ * every field a canvas request carries), the spatial digest of the scene it
+ * lays out (`scene-digest`), a node's fitted height (`node-size`) or its
+ * content's natural size (`node-content`).
  */
 type MeasuredQuery = LayoutRequest & {
-  readonly query: 'edges' | 'node-size' | 'node-content'
+  readonly query: 'edges' | 'scene-digest' | 'node-size' | 'node-content'
 }
 
 /** A query that measures nothing: placement geometry over boxes and points. */
@@ -63,12 +64,14 @@ type QueryNumbers = number | readonly QueryNumbers[]
 
 /**
  * The core's answer: an edge layer and what the layout reported beside it;
+ * a scene digest, as the JSON text the core wrote, with what the layout reported;
  * the numbers of any other query, each double exactly as the core computed it
  * (a non-finite one included); or what it refused, which a query's caller
  * answers as the query says, having no scene to draw a refusal in.
  */
 export type LayoutQueryAnswer =
   | { readonly nodes: readonly SceneNode[]; readonly degradations: readonly LayoutEvent[] }
+  | { readonly digest: string; readonly degradations: readonly LayoutEvent[] }
   | { readonly numbers: readonly QueryNumbers[] }
   | { readonly refused: LayoutRefusal }
 
@@ -107,6 +110,16 @@ const readEdges: Read<LayoutQueryAnswer> = (parsed, errors) => {
   throw errors.refused(OPERATION, 'malformed', refusedDetail(parsed))
 }
 
+const readDigest: Read<LayoutQueryAnswer> = (parsed, errors) => {
+  const refused = unanswered(parsed)
+  if (refused !== undefined) return refused
+  const [kind, digest, events] = parsed
+  if (kind === 'ok' && typeof digest === 'string' && Array.isArray(events) && parsed.length === 3) {
+    return { digest, degradations: events as LayoutEvent[] }
+  }
+  throw errors.refused(OPERATION, 'malformed', refusedDetail(parsed))
+}
+
 const readNumbers: Read<LayoutQueryAnswer> = (parsed, errors) => {
   const refused = unanswered(parsed)
   if (refused !== undefined) return refused
@@ -140,7 +153,12 @@ export function layoutQuery(
 ): LayoutQueryAnswer {
   const { glue, errors } = calls
   if ('measure' in request) {
-    const read = request.query === 'edges' ? readEdges : readNumbers
+    const read =
+      request.query === 'edges'
+        ? readEdges
+        : request.query === 'scene-digest'
+          ? readDigest
+          : readNumbers
     return layoutWith({ ...calls, entry: OPERATION }, request, read, hostMeasure, undefined)
   }
   const wire = wireOf(request, 0, true)
