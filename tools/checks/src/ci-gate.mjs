@@ -47,6 +47,41 @@ export const SKIPPABLE_JOBS = {
     "job-level `if: github.event_name == 'pull_request'`, so it does not run on push or merge_group",
   'dependency-review':
     "job-level `if: github.event_name == 'pull_request'`: the action diffs the dependency graph between base and head, so it has no meaning on push to main or merge_group and skips there",
+  'rust-mutants':
+    "job-level `if: needs.rust-mutants-plan.outputs.total != '0'`: a pull request whose diff lists no mutant is planned zero legs, and a matrix with no values is an error. The skip counts only when the plan job says zero (mutantsSkipProblems)",
+}
+
+/** The job whose `total` output says how many legs `rust-mutants` was planned. */
+export const MUTANTS_PLAN_JOB = 'rust-mutants-plan'
+
+/**
+ * A skipped `rust-mutants` is a pass only when the plan job planned zero
+ * legs. Every job's `skipped` is also what a job that failed to start
+ * reports, and for this one a plan of three legs that never ran would
+ * otherwise read as "nothing was owed".
+ *
+ * @param {{name: string, conclusion: string | null}[]} jobs
+ * @param {string | null} plannedLegs the plan job's `total` output, null when unreadable
+ * @returns {string[]}
+ */
+export function mutantsSkipProblems(jobs, plannedLegs) {
+  if (plannedLegs === '0') return []
+  return jobs
+    .filter((job) => baseJobName(job.name) === 'rust-mutants' && job.conclusion === 'skipped')
+    .map(
+      (job) =>
+        `${job.name}: skipped, but the \`${MUTANTS_PLAN_JOB}\` job planned ` +
+        `${plannedLegs === null ? 'an unreadable number of' : plannedLegs} legs, not zero`,
+    )
+}
+
+/**
+ * @param {Record<string, { outputs?: Record<string, string> }>} needs
+ * @returns {string | null}
+ */
+export function readMutantsPlan(needs) {
+  const total = needs?.[MUTANTS_PLAN_JOB]?.outputs?.total
+  return typeof total === 'string' ? total : null
 }
 
 /** `test-jsdom (1)` is a leg of the job `test-jsdom`. */
@@ -169,10 +204,11 @@ export function readScopePlan(needs) {
  *   needed: string[],
  *   gateJobName: string,
  *   plan?: { jobs?: Record<string, { run?: unknown }> } | null,
+ *   mutantsLegs?: string | null,
  * }} input
  * @returns {string[]} one line per problem; empty means the gate passes
  */
-export function gateFailures({ jobs, needed, gateJobName, plan = null }) {
+export function gateFailures({ jobs, needed, gateJobName, plan = null, mutantsLegs = null }) {
   if (!Array.isArray(jobs)) {
     // Not "no problems": an unreadable list means the gate checked nothing.
     return ['the run job list was not an array, so no job was checked']
@@ -198,6 +234,7 @@ export function gateFailures({ jobs, needed, gateJobName, plan = null }) {
     if (problem !== undefined) problems.push(problem)
   }
   problems.push(...scopeProblems(others, plan))
+  problems.push(...mutantsSkipProblems(others, mutantsLegs))
   return problems
 }
 
@@ -271,6 +308,7 @@ export function stillSettling({ jobs, needed, gateJobName }) {
  *   needed: string[],
  *   gateJobName: string,
  *   plan?: { jobs?: Record<string, { run?: unknown }> } | null,
+ *   mutantsLegs?: string | null,
  *   attempts?: number,
  * }} input
  */
@@ -280,16 +318,17 @@ export async function readSettledJobs({
   needed,
   gateJobName,
   plan = null,
+  mutantsLegs = null,
   attempts = SETTLE_ATTEMPTS,
 }) {
   let jobs = await fetchJobs()
-  let problems = gateFailures({ jobs, needed, gateJobName, plan })
+  let problems = gateFailures({ jobs, needed, gateJobName, plan, mutantsLegs })
   for (let attempt = 1; attempt < attempts; attempt++) {
     if (problems.length === 0) break
     if (!stillSettling({ jobs, needed, gateJobName })) break
     await sleep(SETTLE_DELAY_MS)
     jobs = await fetchJobs()
-    problems = gateFailures({ jobs, needed, gateJobName, plan })
+    problems = gateFailures({ jobs, needed, gateJobName, plan, mutantsLegs })
   }
   return { jobs, problems }
 }
@@ -350,6 +389,7 @@ async function main() {
       needed: Object.keys(needed),
       gateJobName,
       plan: readScopePlan(needed),
+      mutantsLegs: readMutantsPlan(needed),
     }))
   } catch (err) {
     // A gate that cannot see the run must block, never wave the merge through.

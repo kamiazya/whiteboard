@@ -11,7 +11,13 @@
 //         CI judges a push to main in-diff too, until the workspace's
 //         survivors are classified.
 //
-// Both judge each mutant by the whole workspace's tests
+//   plan  the legs the CI job fans out to (ci.yml's `rust-mutants-plan`): the
+//         mutants `pr` would judge are LISTED, not run, and counted. Reads
+//         EVENT and SCOPE_RUNS, writes `shards` (a JSON array of leg numbers,
+//         empty when none is owed) and `total` to $GITHUB_OUTPUT. See
+//         shardPlan for what is narrowed and what fails closed.
+//
+// `pr` and `full` judge each mutant by the whole workspace's tests
 // (`--test-workspace=true`), so the edge crate is judged by the wasm crate's
 // replay of the TypeScript's recorded answers as well as its own tests. The
 // baseline is skipped because the job runs `cargo test --workspace` green in
@@ -34,7 +40,7 @@
 // would judge a diff by a list nobody reviewed.
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -44,6 +50,7 @@ import {
   mutantNames,
   prExcludeGlobs,
   prExcludeProblems,
+  shardPlan,
 } from './rust-mutants-ledger.mjs'
 
 const VERSION = '27.1.0'
@@ -62,7 +69,65 @@ function fail(message) {
 }
 
 const mode = process.argv[2]
-if (mode !== 'pr' && mode !== 'full') fail('usage: rust-mutants.mjs pr|full')
+if (mode !== 'pr' && mode !== 'full' && mode !== 'plan')
+  fail('usage: rust-mutants.mjs pr|full|plan')
+
+/**
+ * How many mutants `pr` would judge, by listing them with the filters `pr`
+ * applies. Nothing is built: cargo-mutants parses the sources. `null` is
+ * "could not tell" and plans the full set.
+ * @returns {number | null}
+ */
+function inDiffMutantCount() {
+  const excluded = prExcludeGlobs(readFileSync('.cargo/mutants-pr-exclude.txt', 'utf8'))
+  const base = process.env.RUST_MUTANTS_BASE ?? 'origin/main'
+  const diff = spawnSync('git', ['diff', '--unified=0', base, '--', ':(glob)crates/**/*.rs'], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+  if (diff.status !== 0) return null
+  if (diff.stdout.trim() === '') return 0
+  const found = spawnSync('cargo', ['mutants', '--version'], { encoding: 'utf8' })
+  if (found.status !== 0 || !(found.stdout ?? '').trim().endsWith(VERSION)) return null
+  const file = join(mkdtempSync(join(tmpdir(), 'rust-mutants-')), 'change.diff')
+  writeFileSync(file, diff.stdout)
+  const listed = spawnSync(
+    'cargo',
+    [
+      'mutants',
+      '--workspace',
+      '--list',
+      '--colors',
+      'never',
+      ...excluded.flatMap((glob) => ['--exclude', glob]),
+      '--in-diff',
+      file,
+    ],
+    { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+  )
+  return listed.status === 0 ? mutantNames(listed.stdout).length : null
+}
+
+if (mode === 'plan') {
+  const event = process.env.EVENT ?? ''
+  // Anything but a stated `false` runs: an unreadable scope must not plan zero legs.
+  const scopeRuns = process.env.SCOPE_RUNS !== 'false'
+  let mutantCount = null
+  if (event === 'pull_request' && scopeRuns) {
+    try {
+      mutantCount = inDiffMutantCount()
+    } catch {
+      mutantCount = null
+    }
+  }
+  const shards = shardPlan({ event, scopeRuns, mutantCount })
+  const lines = [`shards=${JSON.stringify(shards)}`, `total=${shards.length}`]
+  process.stderr.write(
+    `rust:mutants plan: ${mutantCount ?? 'unknown'} mutants -> ${lines.join(' ')}\n`,
+  )
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join('\n')}\n`)
+  process.exit(0)
+}
 
 const version = spawnSync('cargo', ['mutants', '--version'], { encoding: 'utf8' })
 const found = (version.stdout ?? '').trim()
