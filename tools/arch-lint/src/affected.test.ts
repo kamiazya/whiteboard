@@ -522,6 +522,21 @@ describe('every package, project and job is reachable by some rule', () => {
     }
   })
 
+  it.each([
+    'packages/canvas-render/src/layout/canvas-switch.ts',
+    'packages/canvas-render/src/references/wire.ts',
+    'packages/canvas-render/src/theme/spatial-theme.ts',
+    'packages/canvas-render/src/measure.ts',
+  ])('runs the Rust jobs, where the scoreboards run, for request-building %s', (path) => {
+    const result = affected.planScope({
+      changes: [{ path, status: 'M' }],
+      event: 'pull_request',
+      ...real,
+    })
+    expect(result.everything, result.reasons.join('\n')).toBe(false)
+    expect(result.jobs.rust?.run).toBe(true)
+  })
+
   it("still has apps/web's test-file inventory, the reason TEST_INVENTORY_READERS exists", () => {
     const ledger = readFileSync(
       join(REPO_ROOT, 'apps/web/src/test-utils/coverage-ledger.ts'),
