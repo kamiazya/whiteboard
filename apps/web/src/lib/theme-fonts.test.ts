@@ -148,10 +148,10 @@ describe('theme fonts', () => {
       facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
     }
     hasLoadedFace.mockReturnValue(false)
-    expect(mod.editingFontFamilyFor(sketched)).toBe('Roboto')
+    expect(mod.editingFontFamilyFor(sketched)).toBe('Roboto, system-ui, sans-serif')
     hasLoadedFace.mockReturnValue(true)
     expect(mod.editingFontFamilyFor(sketched)).toBe('Yomogi')
-    expect(mod.editingFontFamilyFor({ nodes: [], edges: [] })).toBe('Roboto')
+    expect(mod.editingFontFamilyFor({ nodes: [], edges: [] })).toBe('Roboto, system-ui, sans-serif')
     hasLoadedFace.mockReturnValue(false)
   })
 

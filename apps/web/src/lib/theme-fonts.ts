@@ -16,7 +16,7 @@
  * bundled family until the answer changes, and `themeFontsGeneration` is
  * what tells a scene to lay out again when it does.
  */
-import { SPATIAL_THEME_FONT_FAMILY } from '@kamiazya/whiteboard-canvas-render'
+import { SPATIAL_THEME_FONT_STACK } from '@kamiazya/whiteboard-canvas-render'
 import { hasLoadedFace, registerFontBytes } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import {
   fontCatalogueEntryByFamily,
@@ -198,14 +198,16 @@ export function themeFamilyFor(
  * holds its face — exactly where the layout declares it (`fontAvailable`)
  * — and the bundled family otherwise. Typing in a family the scene does not
  * draw makes the draft move on commit, so the overlay follows the same rule
- * rather than the theme's wish.
+ * rather than the theme's wish. The bundled family is named in the stack the
+ * SVG backend emits for it, so before its face loads the draft falls back to
+ * the face the scene is drawn and measured in, not the page's default.
  */
 export function editingFontFamilyFor(
   canvas: SpatialCanvas,
   registry: FacetRegistry = bundledFacetRegistry,
 ): string {
   const family = themeFamilyFor(canvas, registry)
-  return family !== undefined && hasLoadedFace(family) ? family : SPATIAL_THEME_FONT_FAMILY
+  return family !== undefined && hasLoadedFace(family) ? family : SPATIAL_THEME_FONT_STACK
 }
 
 /**

@@ -60,8 +60,11 @@ function boardNaming(...fileIds: string[]): LoroDoc {
   const doc = new LoroDoc()
   createWorkspaceDocumentAtPath(doc, { path: 'photo', documentId: BOARD, kind: 'spatial' })
   writeSpatialCanvas(documentContainers(doc, BOARD), {
+    // Wide enough for the unavailable label to be drawn whole in the
+    // fallback face: this page never loads the vendored one, and a label
+    // measured in the face it is drawn in is cut where it does not fit.
     nodes: fileIds.map((id, i) =>
-      fileNode({ id: `n-${id}`, file: newImageRef(id), x: i * 220, y: 0, width: 200, height: 200 }),
+      fileNode({ id: `n-${id}`, file: newImageRef(id), x: i * 340, y: 0, width: 320, height: 200 }),
     ),
     edges: [],
   })
