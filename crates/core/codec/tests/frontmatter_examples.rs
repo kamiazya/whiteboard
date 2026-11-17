@@ -710,22 +710,6 @@ fn a_last_value_ending_in_two_newlines_loses_one_as_serialize_okf_does() {
 }
 
 #[test]
-fn a_long_more_indented_line_is_folded_at_a_space_as_serialize_okf_does() {
-    // `yaml` 2.9 writes a long string that starts with a space and ends in a
-    // newline as a folded scalar and folds its first, more-indented line,
-    // where a reader keeps the line break: the space comes back as a
-    // newline. These are the bytes `serializeOkf` writes for this value, and
-    // the loss is shared until both are changed together.
-    let a = "word0 word1 word2 word3 word4 wordkkkkkkkkkkkk+kkkkkken text";
-    let first = format!(" {}+{}4", "k".repeat(11), "k".repeat(51));
-    let second = format!("word3{}8 wor{}d3kk", "k".repeat(25), "k".repeat(15));
-    let value = map(&[("a", s(a)), ("c", s(&format!("{first} {second}\n")))]);
-    let written = write(&value);
-    assert_eq!(written, format!("a: {a}\nc: >2\n  {first}\n  {second}"));
-    assert_eq!(read(&written), map(&[("a", s(a)), ("c", s(&format!("{first}\n{second}\n")))]));
-}
-
-#[test]
 fn a_more_indented_line_holding_a_unicode_line_separator_keeps_one_line_break() {
     // JavaScript's `.` stops at U+2028 and U+2029, so `yaml`'s folded writer
     // took such a line's end for the separator and doubled the line break
@@ -747,10 +731,10 @@ fn a_more_indented_line_holding_a_unicode_line_separator_keeps_one_line_break() 
 }
 
 #[test]
-fn writes_a_block_scalar_at_the_root_as_yaml_does() {
+fn writes_a_block_scalar_at_the_root() {
     for (text, expected) in [
-        (" a\nb", "|1-\n a\nb"),
-        ("\n\n x\ny", "|1-\n\n\n x\ny"),
+        (" a\nb", "|2-\n   a\n  b"),
+        ("\n\n x\ny", "|2-\n  \n\n   x\n  y"),
         ("x\ny", "|-\nx\ny"),
         ("---\nx", "|-\n  ---\n  x"),
         ("a\n---\nb", "|-\n  a\n  ---\n  b"),
@@ -762,7 +746,7 @@ fn writes_a_block_scalar_at_the_root_as_yaml_does() {
         assert_eq!(write(&s(text)), expected, "{text:?}");
     }
     let long = prose();
-    assert_eq!(write(&s(&format!(" {long}\nx"))), format!(">1-\n {long}\nx"));
+    assert_eq!(write(&s(&format!(" {long}\nx"))), format!("|2-\n   {long}\n  x"));
     assert_eq!(write(&Value::Seq(vec![s("x\n---\ny")])), "- |-\n  x\n  ---\n  y");
     assert_eq!(write(&Value::Seq(vec![s("  a\nb")])), "- |2-\n    a\n  b");
 }

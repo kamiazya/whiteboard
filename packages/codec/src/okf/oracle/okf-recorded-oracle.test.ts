@@ -13,7 +13,8 @@ import {
  * core answers through its wasm shim. The recording was taken from the
  * TypeScript envelope before it was deleted and is frozen: it holds the inputs
  * as well as the answers, so this test needs no generator, and a change that
- * moves an answer must say so by editing the recording by hand.
+ * moves an answer must say so by editing the recording by hand, or, for an
+ * answer that recorded a bug, by naming the case in `CORRECTED_WRITES`.
  *
  * Message text is not recorded: the Rust port words its refusals in its own
  * types, so the two agree on the stage, the class and, for a schema refusal,
@@ -22,6 +23,16 @@ import {
 const FILE = new URL('./okf.jsonl', import.meta.url)
 
 type Refusal = Extract<ReaderCase, { err: unknown }>['err']
+
+/**
+ * Writer cases whose recorded text is a `yaml` 2.9 bug the core no longer
+ * reproduces: a first line that starts with a space, folded at a space where
+ * a reader keeps the line break. The core writes it literal instead. The
+ * native replay, `okf_oracle.rs`, admits a moved write only when the recorded
+ * frontmatter does not read back to the document's strings and the new one
+ * does, and pins the count; this pins which case it is.
+ */
+const CORRECTED_WRITES = new Set([1536])
 
 describe('the recorded OKF envelope oracle', () => {
   const recorded = decodeRecording(readFileSync(FILE, 'utf8'))
@@ -67,7 +78,21 @@ describe('the recorded OKF envelope oracle', () => {
   })
 
   it('equals what the core answers through the shim', () => {
-    const parted = recorded.findIndex((c) => JSON.stringify(answerAgain(c)) !== JSON.stringify(c))
-    expect(parted, 'the first recorded case the core no longer answers as recorded').toBe(-1)
+    const parted = recorded
+      .map((c, index) => ({ index, again: answerAgain(c), c }))
+      .filter(({ again, c }) => JSON.stringify(again) !== JSON.stringify(c))
+    const moved = parted.filter(({ index }) => !CORRECTED_WRITES.has(index))
+    expect(
+      moved.map(({ index }) => index),
+      'recorded cases the core no longer answers as recorded',
+    ).toEqual([])
+    // Each corrected write still differs, and only in the text written.
+    expect(parted.map(({ index }) => index)).toEqual([...CORRECTED_WRITES])
+    for (const { again, c } of parted) {
+      expect({ ...again, y: undefined }, 'a corrected write moves only its text').toEqual({
+        ...c,
+        y: undefined,
+      })
+    }
   })
 })

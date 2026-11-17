@@ -304,6 +304,21 @@ function silhouetteOf(outline: NodeOutline | null, box: BoundingBox): Silhouette
  * Clip the infinite line through `origin` along `dir` to a convex polygon
  * (Cyrus-Beck). Outlines are convex by contract (node-outline.ts), so one
  * entry and one exit is all there is. `undefined` when the line misses.
+ *
+ * Either winding clips alike: the signed area picks which way the normals
+ * face. Several checks here are implied by others, and say so rather than
+ * hide it. A convex polygon of zero area is a segment, which no line crosses
+ * for a pixel, so its sign is moot. `inwardSign` is ±1, so multiplying and
+ * dividing by it agree. A zero denominator has already continued before the
+ * entry/exit split. An inverted interval mid-loop is also rejected by the
+ * final length check, so the early return only saves work. A closed
+ * polygon's normals sum to zero, so a line meeting any side not parallel to
+ * it gets an entry AND an exit: the two bounds are infinite together or not
+ * at all. A side parallel to the line with the origin outside it is the one
+ * branch no hatch reaches — the slant is drawn from a continuous range — and
+ * a side of no length (a repeated vertex) has a zero numerator, never a
+ * negative one. Whether a chord of exactly one pixel counts is a boundary
+ * no ruling lands on.
  */
 function clipToConvex(
   origin: Point,
@@ -356,6 +371,9 @@ function hatchLines(rng: Rng, polygon: readonly Point[], box: BoundingBox): stri
   const cy = box.y + box.h / 2
   const reach = hypot(box.w, box.h) / 2
   const lines: string[] = []
+  // A ruling `reach` from the centre touches the circle round the box at
+  // most, and the silhouette lies in the box, so the last one never cuts a
+  // pixel: `<=` and `<` draw the same hatch.
   for (let offset = -reach; offset <= reach; offset += gap) {
     const origin = { x: cx + normal.x * offset, y: cy + normal.y * offset }
     const clipped = clipToConvex(origin, dir, polygon)
@@ -445,12 +463,16 @@ export function sketchEdge(
     return { strokes: [] }
   }
   const rng = styleRandomFromSeed(seed)
+  // No jumps and jumps that name no segment flatten alike: each is matched
+  // to a segment by index before it can bend the line.
   const drawn = anchored(flattenDrawnEdgePath(path, options.jumps ?? [], options.rounded === true))
   const strokes: string[] = []
   for (let pass = 0; pass < SKETCH_PASSES; pass += 1)
     strokes.push(strokePolyline(rng, drawn, false))
   for (const arrow of options.arrows) {
     const [tip, left, right] = arrow.points
+    // Points are a dense list, so a missing tip or left wing means a missing
+    // right one too: the last check alone decides.
     if (tip === undefined || left === undefined || right === undefined) continue
     strokes.push(jittered(rng, tip, left, JITTER_PX, HATCH_BOW_PX))
     strokes.push(jittered(rng, tip, right, JITTER_PX, HATCH_BOW_PX))

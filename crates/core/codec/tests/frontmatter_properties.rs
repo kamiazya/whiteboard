@@ -75,6 +75,9 @@ fn awkward_text() -> impl Strategy<Value = String> {
         6 => prop::collection::vec("[ a-z]{1,10}", 2..5).prop_map(|lines| lines.join("\n")),
         2 => prop::collection::vec("[a-z]{1,12}", 12..24)
             .prop_map(|words| format!("{}\n  {}\n", words.join(" "), words.join(" "))),
+        // A first line that starts with a space and is long enough to fold.
+        2 => (prop::collection::vec("[a-z]{1,12}", 12..24), " {1,2}", "[ a-z]{0,8}")
+            .prop_map(|(words, lead, rest)| format!("{lead}{}\n{rest}", words.join(" "))),
         1 => Just("k".repeat(1025)),
         1 => (1020usize..1030).prop_map(|n| "k".repeat(n)),
     ]
@@ -141,6 +144,7 @@ fn what_the_writer_writes_the_reader_reads_back_as_the_same_value() {
     let explicit = Floor::new("a text with an explicit key");
     let folded = Floor::new("a text with a folded line");
     let nested = Floor::new("a text nested three deep");
+    let led = Floor::new("a block scalar whose first line starts with a space");
     check(value(), None, |v| {
         let text = stringify(&v);
         prop_assert!(text.is_ok(), "{v:?} has no spelling");
@@ -157,6 +161,7 @@ fn what_the_writer_writes_the_reader_reads_back_as_the_same_value() {
                 .any(|l| l.starts_with("  ") && !l.trim_start().starts_with(['-', '?', ':'])),
         );
         nested.draw(text.lines().any(|l| l.starts_with("      ")));
+        led.draw(text.contains("|2") || text.contains(">2"));
         let read = parse(&text).map_err(|why| format!("{text:?} is refused: {why:?}"));
         prop_assert!(read.is_ok(), "{read:?}");
         let read = read.unwrap_or(Value::Null);
@@ -167,6 +172,7 @@ fn what_the_writer_writes_the_reader_reads_back_as_the_same_value() {
     explicit.assert(10);
     folded.assert(20);
     nested.assert(10);
+    led.assert(10);
 }
 
 const DAMAGE: &[&str] = &[

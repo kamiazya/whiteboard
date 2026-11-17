@@ -26,6 +26,12 @@ export const COMMENT_TEXT_MAX_WIDTH_PX = 200
  * edge is pinned: the reader pressed somewhere near the line, and the pin
  * sits ON it, re-projected from the stored point each layout so it rides a
  * reroute. An empty path answers the point itself.
+ *
+ * Two freedoms the answer does not depend on. Walking each segment from its
+ * far end instead finds the same nearest point (to the last bit or so); and
+ * on a tie the first segment's point wins, though any of the tied points is
+ * equally the nearest — a vertex shared by two segments is the same point
+ * from both.
  */
 function nearestPointOnPolyline(point: Point, path: readonly Point[]): Point {
   let best = point
@@ -72,6 +78,9 @@ export function commentAnchor(
   canvas: SpatialCanvas,
   edgePathOf?: EdgePathLookup,
 ): { readonly x: number; readonly y: number } {
+  // Each guard below is also implied by what follows it: no node has an
+  // undefined id, and an empty path answers the stored point anyway. The edge
+  // guard is the one that is not — a lookup is never asked about "no edge".
   if (comment.targetNodeId !== undefined) {
     const target = canvas.nodes.find((node) => node.id === comment.targetNodeId)
     if (target !== undefined) return commentCornerOf(target)

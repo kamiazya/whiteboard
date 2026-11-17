@@ -100,9 +100,9 @@ pub fn frontmatter_parse(data: &[u8]) {
     };
     // `serializeOkf` writes a mapping, so only a mapping is held to read
     // back: a root scalar folded onto a line that starts with `%` is a
-    // directive to the subset, in the TypeScript as here. And two writings
-    // `serializeOkf` gets wrong are copied byte for byte, so those do not
-    // read back as themselves either.
+    // directive to the subset, in the TypeScript as here. And a writing
+    // `serializeOkf` gets wrong is copied byte for byte, so that does not
+    // read back as itself either.
     if !matches!(value, Value::Map(_)) || any_string(&value, serialize_okf_loses) {
         return;
     }
@@ -123,12 +123,9 @@ pub fn frontmatter_parse(data: &[u8]) {
 }
 
 /// What `serializeOkf` cannot write back: a last value ending in two
-/// newlines loses one, and a multi-line string with a line that starts with
-/// a space or tab can be folded at a space on that more-indented line, which
-/// a reader keeps as a line break.
+/// newlines loses one.
 fn serialize_okf_loses(text: &str) -> bool {
     text.ends_with("\n\n")
-        || (text.contains('\n') && text.split('\n').any(|line| line.starts_with([' ', '\t'])))
 }
 
 fn any_string(value: &Value, holds: fn(&str) -> bool) -> bool {
@@ -181,8 +178,8 @@ pub fn okf_parse(data: &[u8]) {
     let Ok(doc) = read else {
         return;
     };
-    // Two writings `serializeOkf` gets wrong are copied byte for byte (see
-    // `serialize_okf_loses`), so a document holding either is not held to it.
+    // A writing `serializeOkf` gets wrong is copied byte for byte (see
+    // `serialize_okf_loses`), so a document holding it is not held to it.
     if okf_strings(&doc).into_iter().any(serialize_okf_loses) {
         return;
     }

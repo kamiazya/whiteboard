@@ -260,7 +260,10 @@ impl SegmentGrid {
         if self.work > MAX_GRID_WORK_PER_SCENE {
             return None;
         }
-        found.sort_by(usize::cmp);
+        // The ascending order any sort gives indices, through the stable sort a
+        // `BTreeSet<usize>` already links, so no second copy is instantiated.
+        #[expect(clippy::stable_sort_primitive, reason = "shares the linked sort over usize")]
+        found.sort();
         found.dedup();
         Some(found)
     }
