@@ -1,21 +1,12 @@
 /**
- * The subtree arithmetic behind moving and deleting a document path.
+ * The subtree arithmetic behind moving a document path, over plain rows.
  *
- * Two stores write the daemon's `documents` table — `document-store.ts` for
- * the HTTP surface and workspace-index's `loro-workspace-document-index.ts`
- * for the MCP one — and they
- * are deliberately kept from importing each other. That is what let them grow
- * two different answers to the same question: the index moved a whole
- * subtree while the HTTP path renamed one row and stranded its children,
- * and the index refused to delete a document with descendants while the
- * HTTP path stranded them again.
- *
- * The rules live here, as pure functions over rows, so every store keeps its
- * own storage and none owns the semantics alone. That is literally every
- * store: the daemon's two and the browser's IndexedDB `DocumentIndex`, which
- * is why this file sits in ports beside `compareDocumentPaths` — a rule each
- * implementation re-derives from prose is a rule they will re-derive
- * differently.
+ * Its one caller is `InMemoryDocumentIndex`, the row-backed double: every
+ * production index is the workspace tree, which answers moves structurally.
+ * What keeps the two answering alike is not this file but
+ * `describeDocumentIndexConformance`, which both run — so a rule here that
+ * drifts from the tree (a folder-only path taken as free, a not-found asked
+ * after into-self) fails that suite rather than a test that used the double.
  */
 
 import { isSelfOrDescendant, rebasePath } from '@kamiazya/whiteboard-model'
