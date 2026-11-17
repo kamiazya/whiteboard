@@ -27,5 +27,6 @@ pub const TARGETS: &[(&str, Target)] = &[
     ("okf_wasm_parse", targets::okf_wasm_parse),
     ("okf_wasm_serialize", targets::okf_wasm_serialize),
     ("register_layout_fonts_wasm", targets::register_layout_fonts_wasm),
+    ("search_wasm", targets::search_wasm),
     ("sfnt_parse", targets::sfnt_parse),
 ];

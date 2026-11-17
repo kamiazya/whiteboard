@@ -22,6 +22,7 @@ function fakeGlue(abi: string, out: number[]) {
     register_layout_fonts: () => '[]',
     release_layout_fonts: () => false,
     release_layout_cache: () => false,
+    search_op: () => '[]',
     layout_query: () => '',
     facet_bucket_check: () => '["declined","malformed","wire"]',
     okf_parse: () => '["refused","malformed"]',

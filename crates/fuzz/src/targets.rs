@@ -734,3 +734,31 @@ pub fn register_layout_fonts_wasm(data: &[u8]) {
     assert!(release_layout_fonts(handle), "{handle} was not held");
     assert_eq!(layout_spatial_canvas(&request, None), lost);
 }
+
+/// `search_op`, the one export a host calls for every search question, on any
+/// UTF-8 text read as its request. It holds an index and label sets between
+/// calls, so a run of inputs drives the handle table too. It must answer one
+/// JSON text, `["ok", ...]` or `["refused", code]` with a code from the
+/// refusal vocabulary, refuse exactly the request past its cap as too large,
+/// and never panic or run past its budget.
+///
+/// # Panics
+///
+/// When the export panics or answers off its shape.
+pub fn search_wasm(data: &[u8]) {
+    use whiteboard_wasm::input_caps::SEARCH_OP;
+    use whiteboard_wasm::search::search_op;
+
+    let Ok(request) = std::str::from_utf8(data) else {
+        return;
+    };
+    let answer = search_op(request);
+    if request.len() > SEARCH_OP.max_bytes {
+        assert_eq!(answer, "[\"refused\",\"input-too-large\"]");
+        return;
+    }
+    let ok = answer.starts_with("[\"ok\"") && answer.ends_with(']');
+    let refused =
+        answer == "[\"refused\",\"malformed\"]" || answer == "[\"refused\",\"input-too-large\"]";
+    assert!(ok || refused, "{answer:.120} is not an answer");
+}

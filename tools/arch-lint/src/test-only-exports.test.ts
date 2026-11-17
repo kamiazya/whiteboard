@@ -364,8 +364,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the render-time view of a comment on the package export-star surface, generated from the contract; spatial.contract.test.ts pins its refusals',
   'packages/model/src/trust.ts#trustTier':
     'the OKF §5.3 tier rule, kept ahead of its first surface; ADR-0039 and package-model.md name it as a model contract its tests spec',
-  'packages/search/src/full-text.ts#tokenizeForIndex':
-    'the index-side tokenizer without DOCUMENT_TERMS_MAX — what full-text.index-size.test.ts measures that ceiling against, and what search-quality.test.ts reads to explain a miss',
   'packages/server-core/src/search/search-corpus.ts#CORPUS_DOCUMENTS':
     'the judged corpus kept beside the search it measures; the ranking tests are its reader',
   'packages/server-core/src/search/search-corpus.ts#JUDGED_QUERIES':

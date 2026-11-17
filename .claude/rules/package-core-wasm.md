@@ -58,6 +58,12 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   (`oracle/facet-write.jsonl`) by `crates/bindings/wasm/tests/facet_write_oracle.rs`,
   the shim over the artifact by `facet-write.rust.test.ts`, and what the daemon's
   writer does with the answer by server-core's `facet-write.dispatch.test.ts`.
+- `core.search` (`search.ts`): lexical search over the one `search_op` export.
+  Text calls are stateless; a `SearchIndex` (a corpus's token bags, upserted per
+  changed document, queried by string) and a set of link labels live in the
+  instance under a handle, released by `release()` or when collected. A lone
+  surrogate is sent as U+FFFD (same unit count, same tokens and offsets). A
+  call past a cap throws `CoreInputRefused`; no TypeScript answers in its place.
 - Refusing, as `CoreInputRefused` with a `code` from the generated
   `RefusalCode` (`src/generated/input-caps.ts`, `cargo xtask codegen` from
   `crates/input-caps.json`, so both languages refuse by one cap, QR-28b):

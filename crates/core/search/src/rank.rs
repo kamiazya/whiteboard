@@ -49,9 +49,14 @@ pub struct SearchOptions<'a> {
     pub link_label: Option<LinkLabel<'a>>,
 }
 
-struct TokenBag<'a> {
-    doc: &'a SearchableDocument,
-    terms: DocumentTerms,
+/// One document as ranking reads it: who it is and the two token bags it is
+/// scored by.
+pub(crate) struct Ranked<'a> {
+    pub(crate) id: &'a str,
+    pub(crate) own: &'a DocumentTerms,
+    /// Present exactly when the document sits in a named folder; the rest hold
+    /// none of its terms, which is what the corpus size says for them.
+    pub(crate) folders: Option<&'a DocumentTerms>,
 }
 
 /// A count as the double JavaScript holds it; a count past `u32` is far beyond
@@ -62,41 +67,45 @@ fn number(count: usize) -> f64 {
 
 /// Each document's BM25 score over `bags`, out of `corpus` documents; zero
 /// ones left out.
-fn bm25(bags: &[TokenBag<'_>], query_tokens: &[String], corpus: usize) -> BTreeMap<String, f64> {
+fn bm25<'a>(
+    bags: &[(&'a str, &DocumentTerms)],
+    query_tokens: &[String],
+    corpus: usize,
+) -> BTreeMap<&'a str, f64> {
     let mut scores = BTreeMap::new();
     if bags.is_empty() {
         return scores;
     }
-    let total: usize = bags.iter().map(|bag| bag.terms.length).sum();
+    let total: usize = bags.iter().map(|(_, terms)| terms.length).sum();
     let avg_length = number(total) / number(bags.len().max(1));
     // Once per query token, not per (document, token) pair.
     let idf: Vec<f64> = query_tokens
         .iter()
         .map(|token| {
             let containing =
-                number(bags.iter().filter(|bag| bag.terms.counts.contains_key(token)).count());
+                number(bags.iter().filter(|(_, terms)| terms.counts.contains_key(token)).count());
             ln(1.0 + (number(corpus) - containing + 0.5) / (containing + 0.5))
         })
         .collect();
-    for bag in bags {
+    for (id, terms) in bags {
         let mut score = 0.0_f64;
         for (token, idf) in query_tokens.iter().zip(&idf) {
-            let tf = number(bag.terms.counts.get(token).copied().unwrap_or(0));
+            let tf = number(terms.counts.get(token).copied().unwrap_or(0));
             if tf == 0.0 {
                 continue;
             }
             score += (idf * tf * (K1 + 1.0))
-                / (tf + K1 * (1.0 - B + (B * number(bag.terms.length)) / avg_length.max(1.0)));
+                / (tf + K1 * (1.0 - B + (B * number(terms.length)) / avg_length.max(1.0)));
         }
         if score > 0.0 {
-            scores.insert(bag.doc.document_id.clone(), score);
+            scores.insert(*id, score);
         }
     }
     scores
 }
 
-fn by_id(a: &SearchableDocument, b: &SearchableDocument) -> f64 {
-    match compare(&a.document_id, &b.document_id) {
+fn by_id(a: &str, b: &str) -> f64 {
+    match compare(a, b) {
         core::cmp::Ordering::Less => -1.0,
         core::cmp::Ordering::Equal => 0.0,
         core::cmp::Ordering::Greater => 1.0,
@@ -111,36 +120,49 @@ fn first_nonzero(first: f64, second: impl FnOnce() -> f64) -> f64 {
 /// Documents whose own text matched, by that score, then those only a folder
 /// name matched. A folder-only hit's score is its folder score scaled under
 /// the lowest own score, so the scores still descend down the answer.
-fn rank_with_folders<'a>(
-    documents: &'a [SearchableDocument],
-    own: &BTreeMap<String, f64>,
-    in_folders: &BTreeMap<String, f64>,
-) -> Vec<(&'a SearchableDocument, f64)> {
-    let mut own_hits: Vec<(&SearchableDocument, f64, f64)> = documents
+fn rank_with_folders(
+    documents: &[Ranked<'_>],
+    own: &BTreeMap<&str, f64>,
+    in_folders: &BTreeMap<&str, f64>,
+) -> Vec<(usize, f64)> {
+    let mut own_hits: Vec<(usize, &str, f64, f64)> = documents
         .iter()
-        .filter_map(|doc| {
-            own.get(&doc.document_id).map(|score| {
-                (doc, *score, in_folders.get(&doc.document_id).copied().unwrap_or(0.0))
-            })
+        .enumerate()
+        .filter_map(|(at, doc)| {
+            own.get(doc.id)
+                .map(|score| (at, doc.id, *score, in_folders.get(doc.id).copied().unwrap_or(0.0)))
         })
         .collect();
     js_sort_by(&mut own_hits, |a, b| {
-        first_nonzero(b.1 - a.1, || first_nonzero(b.2 - a.2, || by_id(a.0, b.0)))
+        first_nonzero(b.2 - a.2, || first_nonzero(b.3 - a.3, || by_id(a.1, b.1)))
     });
-    let mut folder_only: Vec<(&SearchableDocument, f64)> = documents
+    let mut folder_only: Vec<(usize, &str, f64)> = documents
         .iter()
-        .filter(|doc| !own.contains_key(&doc.document_id))
-        .filter_map(|doc| in_folders.get(&doc.document_id).map(|folder| (doc, *folder)))
+        .enumerate()
+        .filter(|(_, doc)| !own.contains_key(doc.id))
+        .filter_map(|(at, doc)| in_folders.get(doc.id).map(|folder| (at, doc.id, *folder)))
         .collect();
-    js_sort_by(&mut folder_only, |a, b| first_nonzero(b.1 - a.1, || by_id(a.0, b.0)));
-    let floor = own_hits.last().map(|hit| hit.1);
-    let top = folder_only.first().map_or(0.0, |hit| hit.1);
-    let mut ranked: Vec<(&SearchableDocument, f64)> =
-        own_hits.iter().map(|(doc, score, _)| (*doc, *score)).collect();
-    ranked.extend(folder_only.iter().map(|(doc, folder)| {
-        (*doc, floor.map_or(*folder, |floor| (floor * folder) / (folder + top)))
+    js_sort_by(&mut folder_only, |a, b| first_nonzero(b.2 - a.2, || by_id(a.1, b.1)));
+    let floor = own_hits.last().map(|hit| hit.2);
+    let top = folder_only.first().map_or(0.0, |hit| hit.2);
+    let mut ranked: Vec<(usize, f64)> =
+        own_hits.iter().map(|(at, _, score, _)| (*at, *score)).collect();
+    ranked.extend(folder_only.iter().map(|(at, _, folder)| {
+        (*at, floor.map_or(*folder, |floor| (floor * folder) / (folder + top)))
     }));
     ranked
+}
+
+/// The documents `query_tokens` find, best first, as positions in `documents`
+/// with their scores. Scores are relative to THIS corpus.
+pub(crate) fn rank(documents: &[Ranked<'_>], query_tokens: &[String]) -> Vec<(usize, f64)> {
+    let own_bags: Vec<(&str, &DocumentTerms)> =
+        documents.iter().map(|doc| (doc.id, doc.own)).collect();
+    let own = bm25(&own_bags, query_tokens, documents.len());
+    let folder_bags: Vec<(&str, &DocumentTerms)> =
+        documents.iter().filter_map(|doc| doc.folders.map(|terms| (doc.id, terms))).collect();
+    let in_folders = bm25(&folder_bags, query_tokens, documents.len());
+    rank_with_folders(documents, &own, &in_folders)
 }
 
 /// The distinct tokens of a query, in query order.
@@ -168,33 +190,44 @@ pub fn full_text_search(
     if query_tokens.is_empty() {
         return Vec::new();
     }
-    let terms_for = |doc: &SearchableDocument| match options.terms_of {
-        Some(of) => of(doc),
-        None => document_terms(&doc.path, doc.name.as_deref(), &doc.texts, options.also_index),
-    };
-    let bags: Vec<TokenBag<'_>> =
-        documents.iter().map(|doc| TokenBag { doc, terms: terms_for(doc) }).collect();
-    let own = bm25(&bags, &query_tokens, documents.len());
-    // Only the documents that sit in a named folder have a folder bag; the rest
-    // hold none of its terms, which is what the corpus size says for them.
-    let folder_bags: Vec<TokenBag<'_>> = documents
+    let own_terms: Vec<DocumentTerms> = documents
         .iter()
-        .filter_map(|doc| {
-            let folders = doc.folders.as_deref().filter(|folders| !folders.is_empty())?;
-            Some(TokenBag { doc, terms: document_terms("", None, folders, None) })
+        .map(|doc| match options.terms_of {
+            Some(of) => of(doc),
+            None => document_terms(&doc.path, doc.name.as_deref(), &doc.texts, options.also_index),
         })
         .collect();
-    let in_folders = bm25(&folder_bags, &query_tokens, documents.len());
-    let ranked = rank_with_folders(documents, &own, &in_folders);
+    let folder_terms: Vec<Option<DocumentTerms>> = documents
+        .iter()
+        .map(|doc| {
+            let folders = doc.folders.as_deref().filter(|folders| !folders.is_empty())?;
+            Some(document_terms("", None, folders, None))
+        })
+        .collect();
+    let entries: Vec<Ranked<'_>> = documents
+        .iter()
+        .zip(own_terms.iter().zip(&folder_terms))
+        .map(|(doc, (own, folders))| Ranked {
+            id: &doc.document_id,
+            own,
+            folders: folders.as_ref(),
+        })
+        .collect();
+    let ranked = rank(&entries, &query_tokens);
     let excerpter =
         options.excerpts.unwrap_or(true).then(|| excerpter_for(query, options.link_label));
     ranked
         .into_iter()
         .take(options.limit.unwrap_or(10))
-        .map(|(doc, score)| SearchHit {
-            document_id: doc.document_id.clone(),
-            score,
-            contexts: excerpter.as_ref().map_or_else(Vec::new, |each| each.excerpts(&doc.texts)),
+        .filter_map(|(at, score)| {
+            let doc = documents.get(at)?;
+            Some(SearchHit {
+                document_id: doc.document_id.clone(),
+                score,
+                contexts: excerpter
+                    .as_ref()
+                    .map_or_else(Vec::new, |each| each.excerpts(&doc.texts)),
+            })
         })
         .collect()
 }

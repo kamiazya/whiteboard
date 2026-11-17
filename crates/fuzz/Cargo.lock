@@ -328,6 +328,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "whiteboard-search"
+version = "0.0.0"
+dependencies = [
+ "unicode-segmentation",
+ "whiteboard-det",
+ "whiteboard-model",
+]
+
+[[package]]
 name = "whiteboard-wasm"
 version = "0.0.0"
 dependencies = [
@@ -341,6 +350,7 @@ dependencies = [
  "whiteboard-model",
  "whiteboard-plugin-visual",
  "whiteboard-scene",
+ "whiteboard-search",
 ]
 
 [[package]]

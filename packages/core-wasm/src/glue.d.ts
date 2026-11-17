@@ -11,6 +11,7 @@ declare module '#glue' {
   export function initSync(init: { module: BufferSource | WebAssembly.Module }): unknown
   export function abi_version(): string
   export function edge_route_layout(input: Float64Array): Float64Array
+  export function search_op(request: string): string
   export function okf_parse(text: string, mark: number): string
   export function okf_serialize(frontmatter: string): string
   export function json_canvas_parse(text: string): string

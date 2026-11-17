@@ -59,6 +59,7 @@ import {
 } from './okf.js'
 import type { UnwritableIssue } from './okf-unsafe.js'
 import { type LayoutQueryAnswer, type LayoutQueryRequest, layoutQuery } from './query.js'
+import { type SearchCore, searchOver } from './search.js'
 import type { AnchorPair, LabelRect, RoutingBudget, SideOverride } from './types.js'
 import { encodeLayout, sideAt } from './wire.js'
 
@@ -66,7 +67,7 @@ import { encodeLayout, sideAt } from './wire.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '38'
+export const EXPECTED_ABI = '39'
 
 /**
  * What the test lanes' oracle build (`oracle-surface`: the shipped build plus
@@ -259,6 +260,13 @@ export interface Core {
     highlight?: FenceHighlighter,
     measure?: HostMeasure,
   ): LayoutQueryAnswer
+
+  /**
+   * Lexical search (ADR-0054 step 8, B3): folding, tokens, excerpts and the
+   * corpus index. Throws `CoreInputRefused` for a call past its caps, which
+   * has no TypeScript to answer in its place.
+   */
+  readonly search: SearchCore
 }
 
 const ends = ['none', 'arrow'] as const
@@ -421,6 +429,7 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
     facetBucketCheck: (target, bucket, library) =>
       facetBucketCheck(facets, errors, target, bucket, library),
     ...layoutCalls(layout, errors),
+    search: searchOver(glue, errors),
     parseOkf: (text) => parseOkf(okf, errors, text),
     serializeOkf: (doc) => serializeOkf(okf, errors, doc),
     routeLayout(nodes, edges, styleOf, overrides, budget, labels) {

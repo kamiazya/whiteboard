@@ -43,6 +43,14 @@ export const OKF_SERIALIZE_CAPS = Object.freeze({
   maxMillis: 3000,
 } as const)
 
+/** The caps of `whiteboard-wasm::search::search_op`. */
+export const SEARCH_OP_CAPS = Object.freeze({
+  maxBytes: 8388608,
+  maxDepth: 4,
+  maxMillis: 20000,
+  maxNodes: 4096,
+} as const)
+
 /** The caps of `whiteboard-wasm::spatial_edges::edge_route_layout`. */
 export const EDGE_ROUTE_LAYOUT_CAPS = Object.freeze({
   maxBytes: 262144,

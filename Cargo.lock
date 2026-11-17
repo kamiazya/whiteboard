@@ -717,6 +717,7 @@ dependencies = [
  "whiteboard-plugin-visual",
  "whiteboard-proptest",
  "whiteboard-scene",
+ "whiteboard-search",
 ]
 
 [[package]]

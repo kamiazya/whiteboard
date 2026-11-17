@@ -224,3 +224,25 @@ fn the_content_cache_seed_is_a_layout_a_warm_cache_answers_the_same() {
     assert_eq!(again, first);
     assert!(whiteboard_wasm::spatial_layout::release_layout_cache(7));
 }
+
+#[test]
+fn the_stateless_search_seeds_are_requests_the_export_answers() {
+    // A seed the export refuses teaches the fuzzer nothing past the refusal;
+    // the handle ops' seeds need an earlier call's handle and are not here.
+    let stateless = [
+        "fold",
+        "find",
+        "tokens",
+        "folders",
+        "texts-markdown",
+        "texts-spatial",
+        "terms",
+        "snippet",
+        "excerpts",
+    ];
+    for name in stateless {
+        let request = std::fs::read_to_string(root().join("seeds/search_wasm").join(name)).unwrap();
+        let answer = whiteboard_wasm::search::search_op(&request);
+        assert!(answer.starts_with("[\"ok\""), "{name}: {answer:.100}");
+    }
+}
