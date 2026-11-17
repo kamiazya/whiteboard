@@ -358,7 +358,7 @@ export const KNOWN_EQUIVALENT = {
     'StringLiteral: \'\' -> "Stryker was here!"': 1,
     // The clip's redundant checks, the hatch's last ruling, the dense arrow
     // list and an unmatched jump — each invariant is beside its code, each
-    // hand-verified green under `ink/sketch.test.ts`, whose hatch replay
+    // hand-verified green under `ink/sketch-replay.test.ts`, whose hatch replay
     // and degenerate-input examples kill the clip's other mutants.
     'EqualityOperator: area >= 0 -> area > 0': 1,
     'ArithmeticOperator: -ey * inwardSign -> -ey / inwardSign': 1,
