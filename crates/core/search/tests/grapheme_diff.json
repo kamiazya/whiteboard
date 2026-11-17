@@ -1,0 +1,5 @@
+{
+  "$comment": "The Intl.Segmenter difference ledger (ADR-0054 step 8, QR-20b): the recorded grapheme cases (by ordinal among the `graphemes` records of search.jsonl) that unicode-segmentation cuts differently from the recording runtime's Intl.Segmenter, held from both sides with the count pinned. Empty: both segment by Unicode 17.0 and agree on every one of the 1,500 seeded cases (flags, ZWJ sequences, Indic conjuncts, Prepend, Hangul jamo, CR LF) and on the 666 excerpts cut inside long runs of one shape. A crate or runtime bump that moves one lists it here.",
+  "count": 0,
+  "cases": []
+}

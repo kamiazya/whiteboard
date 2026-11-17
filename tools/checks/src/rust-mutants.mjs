@@ -12,21 +12,31 @@
 //         survivors are classified.
 //
 //   plan  the legs the CI job fans out to (ci.yml's `rust-mutants-plan`): the
-//         mutants `pr` would judge are LISTED, not run, and counted. Reads
-//         EVENT and SCOPE_RUNS, writes `shards` (a JSON array of leg numbers,
+//         mutants `pr` would judge are LISTED, not run, grouped by the tests
+//         that can observe them, and each group sharded by its own size.
+//         Reads EVENT and SCOPE_RUNS, writes `shards` (a JSON array of legs,
 //         empty when none is owed) and `total` to $GITHUB_OUTPUT. See
 //         shardPlan for what is narrowed and what fails closed.
+//   baseline  `cargo test --locked` over the tests a leg judges by, which CI
+//         runs green before the leg's mutants.
 //
-// `pr` and `full` judge each mutant by the whole workspace's tests
-// (`--test-workspace=true`), so the edge crate is judged by the wasm crate's
-// replay of the TypeScript's recorded answers as well as its own tests. The
-// baseline is skipped because the job runs `cargo test --workspace` green in
-// a step of its own first; a failing baseline would otherwise read as every
-// mutant caught. `--shard k/n` (RUST_MUTANTS_SHARD) splits the list with
-// identical arguments on every leg, dealt round-robin: the list is sorted by
-// file, and a slice puts every mutant of a crate low in the graph (det,
-// plugin-visual, whose mutants rebuild most of the workspace) on one leg,
-// which then outlives the job's timeout while the others finish early.
+// A leg is judged by its tests: RUST_MUTANTS_PACKAGES are the packages whose
+// mutants it runs and RUST_MUTANTS_TESTS the packages whose tests judge them
+// (`--package` / `--test-package`). `plan` sets those for a pull request to a
+// mutated package and its transitive reverse dependents, dev-dependencies
+// included, since a test in any other crate cannot call the mutated code; so
+// the edge crate is still judged by the wasm crate's replay of the TypeScript's
+// recorded answers, and a crate nothing depends on is judged by its own tests
+// alone. Unset, both are the whole workspace (`--workspace`,
+// `--test-workspace=true`), which is what `full`, a push to main, a schedule
+// and a plan that could not be read run. The baseline is skipped because the
+// job runs the same tests green in a step of its own first; a failing baseline
+// would otherwise read as every mutant caught. `--shard k/n`
+// (RUST_MUTANTS_SHARD) splits the list with identical arguments on every leg
+// of a group, dealt round-robin: the list is sorted by file, and a slice puts
+// every mutant of a crate low in the graph (det, plugin-visual, whose mutants
+// rebuild most of the workspace) on one leg, which then outlives the job's
+// timeout while the others finish early.
 //
 // cargo-mutants' exit codes are decisions, not noise (QR-17): 0 every mutant
 // caught (or none in the diff), 2 one missed, 3 one timed out, 4 the baseline
@@ -48,9 +58,11 @@ import {
   ledgerEntries,
   ledgerProblems,
   mutantNames,
+  packageList,
   prExcludeGlobs,
   prExcludeProblems,
   shardPlan,
+  workspaceMembers,
 } from './rust-mutants-ledger.mjs'
 
 const VERSION = '27.1.0'
@@ -69,16 +81,31 @@ function fail(message) {
 }
 
 const mode = process.argv[2]
-if (mode !== 'pr' && mode !== 'full' && mode !== 'plan')
-  fail('usage: rust-mutants.mjs pr|full|plan')
+if (mode !== 'pr' && mode !== 'full' && mode !== 'plan' && mode !== 'baseline')
+  fail('usage: rust-mutants.mjs pr|full|plan|baseline')
+
+// What a CI leg judges and by which tests (shardPlan's `packages` and `tests`);
+// both unset is the whole workspace on both sides.
+const legPackages = packageList(process.env.RUST_MUTANTS_PACKAGES)
+const legTests = packageList(process.env.RUST_MUTANTS_TESTS)
+if (legPackages instanceof Error) fail(`RUST_MUTANTS_PACKAGES: ${legPackages.message}`)
+if (legTests instanceof Error) fail(`RUST_MUTANTS_TESTS: ${legTests.message}`)
+
+if (mode === 'baseline') {
+  // The tests every mutant of this leg is judged by, green before any mutant
+  // is: a red tree would otherwise read as every mutant caught.
+  const testArgs = legTests.length > 0 ? legTests.flatMap((p) => ['-p', p]) : ['--workspace']
+  const baseline = spawnSync('cargo', ['test', '--locked', ...testArgs], { stdio: 'inherit' })
+  process.exit(baseline.status ?? 1)
+}
 
 /**
- * How many mutants `pr` would judge, by listing them with the filters `pr`
+ * The mutants `pr` would judge, by listing them with the filters `pr`
  * applies. Nothing is built: cargo-mutants parses the sources. `null` is
  * "could not tell" and plans the full set.
- * @returns {number | null}
+ * @returns {string[] | null}
  */
-function inDiffMutantCount() {
+function inDiffMutants() {
   const excluded = prExcludeGlobs(readFileSync('.cargo/mutants-pr-exclude.txt', 'utf8'))
   const base = process.env.RUST_MUTANTS_BASE ?? 'origin/main'
   const diff = spawnSync('git', ['diff', '--unified=0', base, '--', ':(glob)crates/**/*.rs'], {
@@ -86,7 +113,7 @@ function inDiffMutantCount() {
     maxBuffer: 64 * 1024 * 1024,
   })
   if (diff.status !== 0) return null
-  if (diff.stdout.trim() === '') return 0
+  if (diff.stdout.trim() === '') return []
   const found = spawnSync('cargo', ['mutants', '--version'], { encoding: 'utf8' })
   if (found.status !== 0 || !(found.stdout ?? '').trim().endsWith(VERSION)) return null
   const file = join(mkdtempSync(join(tmpdir(), 'rust-mutants-')), 'change.diff')
@@ -105,25 +132,40 @@ function inDiffMutantCount() {
     ],
     { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
   )
-  return listed.status === 0 ? mutantNames(listed.stdout).length : null
+  return listed.status === 0 ? mutantNames(listed.stdout) : null
+}
+
+/**
+ * The workspace's members and their dependencies, which decide the tests that
+ * can observe a mutant. `null` is "could not tell" and plans the full set.
+ * @returns {ReturnType<typeof workspaceMembers> | null}
+ */
+function members() {
+  const meta = spawnSync('cargo', ['metadata', '--no-deps', '--format-version', '1', '--locked'], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+  return meta.status === 0 ? workspaceMembers(JSON.parse(meta.stdout)) : null
 }
 
 if (mode === 'plan') {
   const event = process.env.EVENT ?? ''
   // Anything but a stated `false` runs: an unreadable scope must not plan zero legs.
   const scopeRuns = process.env.SCOPE_RUNS !== 'false'
-  let mutantCount = null
+  let mutants = null
+  let graph = null
   if (event === 'pull_request' && scopeRuns) {
     try {
-      mutantCount = inDiffMutantCount()
+      mutants = inDiffMutants()
+      graph = mutants === null || mutants.length === 0 ? null : members()
     } catch {
-      mutantCount = null
+      mutants = null
     }
   }
-  const shards = shardPlan({ event, scopeRuns, mutantCount })
+  const shards = shardPlan({ event, scopeRuns, mutants, members: graph })
   const lines = [`shards=${JSON.stringify(shards)}`, `total=${shards.length}`]
   process.stderr.write(
-    `rust:mutants plan: ${mutantCount ?? 'unknown'} mutants -> ${lines.join(' ')}\n`,
+    `rust:mutants plan: ${mutants?.length ?? 'unknown'} mutants -> ${shards.map((l) => `[${l.leg}: ${l.packages || 'workspace'} / ${l.tests || 'workspace'}]`).join(' ')} (${lines[1]})\n`,
   )
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join('\n')}\n`)
   // A pull request planned no leg still owes the ledger check the legs would
@@ -138,8 +180,10 @@ checkLedger()
 
 const args = [
   'mutants',
-  '--workspace',
-  '--test-workspace=true',
+  ...(legPackages.length > 0 ? legPackages.flatMap((p) => ['--package', p]) : ['--workspace']),
+  ...(legTests.length > 0
+    ? legTests.flatMap((p) => ['--test-package', p])
+    : ['--test-workspace=true']),
   '--baseline=skip',
   '--timeout',
   TIMEOUT_SECONDS,

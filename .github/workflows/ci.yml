@@ -1280,11 +1280,13 @@ jobs:
             crates/fuzz/regressions
           retention-days: 14
 
-  # How many legs rust-mutants fans out to. A pull request is sized by the
-  # mutants its diff lists (cargo-mutants parses, it builds nothing): none, or
-  # a scope that does not reach the job, runs no leg; any other event runs all
-  # eight. A count that cannot be read plans all eight. The decision is
-  # `shardPlan` in tools/checks/src/rust-mutants-ledger.mjs.
+  # The legs rust-mutants fans out to. A pull request is planned from the
+  # mutants its diff lists (cargo-mutants parses, it builds nothing), grouped
+  # by the tests that can observe them (the mutated package and the workspace
+  # members that depend on it) and sharded by group: none, or a scope that does
+  # not reach the job, runs no leg; any other event runs eight over the whole
+  # workspace. A list or workspace graph that cannot be read plans those eight.
+  # The decision is `shardPlan` in tools/checks/src/rust-mutants-ledger.mjs.
   rust-mutants-plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -1329,14 +1331,15 @@ jobs:
           RUST_MUTANTS_BASE: HEAD^1
         run: node tools/checks/src/rust-mutants.mjs plan
 
-  # QR-17: every mutant in this change's Rust lines must be caught by the
-  # workspace's tests, or ledgered in .cargo/mutants.toml with its reason.
-  # `cargo mutants --in-diff` against the merge commit's first parent, after a
-  # separate green test step (the run skips its own baseline), sharded with
-  # identical arguments so one slow shard never hides another's result. The
-  # edge crate is judged by the wasm crate's replay of the TypeScript's
-  # recorded answers (crates/bindings/wasm/tests/recorded_oracle.rs), its
-  # oracle in native form. tools/checks/src/rust-mutants.mjs reads the exit
+  # QR-17: every mutant in this change's Rust lines must be caught by every
+  # test that can observe it, or ledgered in .cargo/mutants.toml with its
+  # reason. `cargo mutants --in-diff` against the merge commit's first parent,
+  # after a separate green test step (the run skips its own baseline), sharded
+  # with identical arguments so one slow shard never hides another's result.
+  # A leg's tests are its mutated packages plus their transitive reverse
+  # dependents, so the edge crate is still judged by the wasm crate's replay of
+  # the TypeScript's recorded answers
+  # (crates/bindings/wasm/tests/recorded_oracle.rs), its oracle in native form. tools/checks/src/rust-mutants.mjs reads the exit
   # codes as QR-17 does: missed, timed out and a failed baseline all fail.
   rust-mutants:
     needs: rust-mutants-plan
@@ -1344,6 +1347,7 @@ jobs:
     # values is an error, so the job is skipped instead; ci-gate accepts that
     # skip only when the plan says zero legs.
     if: needs.rust-mutants-plan.outputs.total != '0'
+    name: rust-mutants (${{ matrix.leg }})
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
@@ -1351,10 +1355,12 @@ jobs:
       # a failed one, so "Re-run failed jobs" never revives it.
       fail-fast: false
       matrix:
-        shard: ${{ fromJSON(needs.rust-mutants-plan.outputs.shards) }}
+        include: ${{ fromJSON(needs.rust-mutants-plan.outputs.shards) }}
     env:
       CARGO_TERM_COLOR: always
       CARGO_INCREMENTAL: '0'
+      RUST_MUTANTS_PACKAGES: ${{ matrix.packages }}
+      RUST_MUTANTS_TESTS: ${{ matrix.tests }}
     steps:
       # Two commits, so the merge commit's first parent is there to diff against.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1403,26 +1409,26 @@ jobs:
         if: steps.scope.outputs.run == 'true'
 
       # The baseline, on its own: a red tree would otherwise read as every
-      # mutant caught.
-      - name: Workspace tests (the baseline)
+      # mutant caught. Only the tests this leg judges by.
+      - name: Tests the mutants are judged by (the baseline)
         if: steps.scope.outputs.run == 'true'
-        run: cargo test --workspace --locked
+        run: node tools/checks/src/rust-mutants.mjs baseline
 
       # A push to main judges the merged change the same way, against HEAD^1:
       # the whole workspace still holds survivors nobody has classified, so a
       # full run here would fail every merge on mutants it did not add.
-      - name: Mutants in this change (shard ${{ matrix.shard }}/${{ needs.rust-mutants-plan.outputs.total }})
+      - name: Mutants in this change (${{ matrix.leg }})
         if: steps.scope.outputs.run == 'true'
         env:
           RUST_MUTANTS_BASE: HEAD^1
-          RUST_MUTANTS_SHARD: ${{ matrix.shard }}/${{ needs.rust-mutants-plan.outputs.total }}
+          RUST_MUTANTS_SHARD: ${{ matrix.shard }}
         run: pnpm rust:mutants:pr
 
       - name: Upload the mutants report
         if: failure() && steps.scope.outputs.run == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: rust-mutants-shard-${{ matrix.shard }}
+          name: rust-mutants-${{ matrix.key }}
           path: mutants.out
           retention-days: 14
 

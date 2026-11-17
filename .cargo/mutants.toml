@@ -348,4 +348,48 @@ exclude_re = [
   # `width == len`, where the slice is a single run and the merge copies it
   # unchanged, so the order it answers is the same.
   'order\.rs:\d+:\d+: replace < with <= in positions$',
+  # search fold: `folds_to_itself` only spares kana, CJK and Hangul a table
+  # lookup that answers the same; the test beside fold_code_point checks every
+  # code point of those ranges against the table's answer, so answering false
+  # changes the cost and nothing else.
+  'fold\.rs:\d+:\d+: replace folds_to_itself -> bool with false$',
+  # search snippet link_around: `at == 0 || at >= len` only spares the scan.
+  # `&&` lets either extreme through, where the closing range test fails the
+  # same way (no link starts before 0 or ends past the text), so None again.
+  # Column-pinned: the range test's own operators are judged.
+  'snippet\.rs:\d+:16: replace \|\| with && in link_around$',
+  # search snippet_around: `start < end` guards an excerpt of no units, and
+  # `<=` lets start == end through, where plain_excerpt slices nothing
+  # either side of the match slot and the text is the empty string it
+  # would have been.
+  'snippet\.rs:\d+:\d+: replace < with <= in snippet_around$',
+  # search snippet link_around: `start < local` made `<=` differs only where the
+  # link starts AT the cut. The link is found by `last_open_at_or_before(near,
+  # local - 1)` (or is the embed `!` at `local - 1`), so its start is at most
+  # `local - 1` and the comparison is always true. Column-pinned: the range
+  # test's other `<` is judged.
+  'snippet\.rs:\d+:12: replace < with <= in link_around$',
+  # det fdlibm: `with_high_word` joins the high word, shifted up 32, to the
+  # low word, which sits in the low 32 bits, so `|` and `^` set the same bits.
+  'fdlibm\.rs:\d+:44: replace \| with \^ in with_high_word$',
+  # det fdlibm ln: a high word of exactly 0x00100000 (2**-1022 up to a
+  # mantissa of 2**-20) read as subnormal is scaled by 2**54 and the exponent
+  # corrected by 54, which is exact, so every later step sees the same exponent
+  # and mantissa. Column-pinned.
+  'fdlibm\.rs:\d+:13: replace < with <= in ln$',
+  # det fdlibm ln: only an infinity or a NaN reaches `scaled + scaled`, and
+  # `x * x` of either is the same infinity or the same NaN.
+  'fdlibm\.rs:\d+:23: replace \+ with \* in ln$',
+  # det fdlibm ln: `high` is masked to 20 bits before it is joined to
+  # `carry ^ 0x3ff0_0000`, whose bits all sit at 20 and above, so `|` and
+  # `^` set the same bits. Column-pinned: the `^` inside is judged.
+  'fdlibm\.rs:\d+:42: replace \| with \^ in ln$',
+  # det fdlibm reduced: `lower | upper` is `high - 0x6147a` or'd with
+  # `0x6b851 - high`; the two are never both negative (0x6147a < 0x6b851) and
+  # never both zero or equal (their sum 0xCCCCB is odd), so `^` and `|` have
+  # one sign.
+  'fdlibm\.rs:\d+:15: replace \| with \^ in reduced$',
+  # det fdlibm reduced: the same `lower | upper` is never zero, so `> 0` and
+  # `>= 0` are one answer.
+  'fdlibm\.rs:\d+:24: replace > with >= in reduced$',
 ]

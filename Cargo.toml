@@ -14,6 +14,7 @@ members = [
   "crates/core/markdown",
   "crates/core/plugin-visual",
   "crates/core/facet-engine",
+  "crates/core/search",
   "crates/bindings/wasm",
   "crates/bindings/native-fixture",
   "crates/xtask",
@@ -73,6 +74,13 @@ libm = "=0.2.11"
 # Pinned exactly: the grapheme tables are a determinism input (QR-20b), and a
 # bump moves which strings are one symbol.
 unicode-segmentation = "=1.13.3"
+# Pinned exactly, each: the tables are determinism inputs (QR-20b). Each crate
+# carries its own Unicode release, so search's differences from the runtime that
+# recorded its oracle are a ledger of code points, never a toolchain accident.
+unicode-case-mapping = "=1.0.0"
+unicode-normalization = { version = "=0.1.26", default-features = false }
+unicode-properties = { version = "=0.1.5", default-features = false, features = ["general-category"] }
+unicode-script = "=0.5.9"
 wasm-bindgen = "=0.2.130"
 # The test harness released with that wasm-bindgen; its runner ships in
 # wasm-bindgen-cli at the same version.
