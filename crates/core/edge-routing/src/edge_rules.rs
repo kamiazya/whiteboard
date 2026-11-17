@@ -399,6 +399,9 @@ pub fn cost_order(a: &Cost, b: &Cost) -> Ordering {
 }
 
 #[cfg(test)]
+mod side_examples;
+
+#[cfg(test)]
 mod tests {
     use super::{
         End, PreferenceContext, Side, bend_count, compose_side_pairs, has_repairable_problem,
