@@ -223,16 +223,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // snapshot still holding the retired comments plane is refused there, next
   // to the corrupt-record refusal it mirrors.
   'apps/web/src/lib/document-sync-session.ts': 1297, // +20: a document a live update made unreadable takes no further write, queued ones included
-  // The markdown typesetter: one block per mdast kind, the inline run walker
-  // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
-  // the fit that decides what is cut when a body does not fit. Each inner step
-  // is a named function carrying its reason, which is where the lines go. The
-  // code block (the TypeScript code-block typesetter), the table (the TypeScript table typesetter) and the
-  // vocabulary they share with the typesetter (the TypeScript typesetter's options) are
-  // sibling modules; the vocabulary went first, so neither imports the
-  // typesetter back. The next shrink is the inline writer out of
-  // `layoutPhrasing`, benched before and after. Raised by 9 for the nested-
-  // layout budget, which has to be spent where an embed is resolved.
   // The side-choice SEARCH: the cost model's application to a whole canvas,
   // the trial machinery of `createConfigScore`, the repair pass and the
   // regions. The side vocabulary (`edge-sides.ts`), the anchor pass
