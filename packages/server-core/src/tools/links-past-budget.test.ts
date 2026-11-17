@@ -23,6 +23,8 @@ const SOURCE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const COUNT = 300
 const idOf = (i: number) => `01BX5ZZKBKACTAV9WEVG${String(i).padStart(6, '0')}`
 const LINKS = Array.from({ length: COUNT }, (_, i) => `[[note-${i}]]`).join(' ')
+/** A document whose PATH has an id's shape, linked after every note: past the budget, by path. */
+const ULID_PATH = '01ARZ3NDEKTSV4RRFFQ69G5FAZ'
 /** How many of LINKS a render loads: the first link past it is never read. */
 const LOADED = referenceTargets({ bodies: [LINKS] }).length
 
@@ -38,6 +40,13 @@ async function workspace(write: (doc: LoroDoc) => void) {
       name: `Note ${i}`,
     })
   }
+  store.documentIndex.seed({
+    workspaceId: WORKSPACE_ID,
+    path: ULID_PATH,
+    documentId: idOf(COUNT),
+    kind: 'markdown',
+    name: 'Shaped Like An Id',
+  })
   await placeUnlessPlaced(store, WORKSPACE_ID, SOURCE_ID)
   await seedDoc(store, SOURCE_ID, write)
   return makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
@@ -83,5 +92,29 @@ describe('links past the reference loading budget', () => {
     })
     const { svg } = await canvasViewPicture(deps, result)
     expectEveryLinkTitled(svg)
+  })
+
+  test('canvas_view resolves an id-shaped PATH past the budget through the index', async () => {
+    const deps = await workspace((doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({
+            id: 't',
+            x: 0,
+            y: 0,
+            width: 4000,
+            height: 4000,
+            text: `${LINKS} [[${ULID_PATH}]]`,
+          }),
+        ],
+        edges: [],
+      })
+    })
+    const result = await createCanvasViewTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: SOURCE_ID,
+    })
+    expect(result.references?.[ULID_PATH]).toMatchObject({ documentId: idOf(COUNT) })
   })
 })

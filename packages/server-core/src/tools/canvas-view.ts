@@ -116,7 +116,12 @@ function namedOnly(wire: ReferenceWire): NamedOnly {
   const aliases = new Map(wire.aliases)
   const titles = new Map(wire.titles)
   return (target) => {
-    const documentId = documentIdSchema.safeParse(target).success ? target : aliases.get(target)
+    // Id first, then path, as the loader reads one: a ULID-shaped PATH names
+    // no id and resolves through the alias table.
+    const documentId =
+      documentIdSchema.safeParse(target).success && titles.has(target)
+        ? target
+        : aliases.get(target)
     const name = documentId === undefined ? undefined : titles.get(documentId)
     return documentId === undefined || name === undefined ? undefined : { documentId, name }
   }
