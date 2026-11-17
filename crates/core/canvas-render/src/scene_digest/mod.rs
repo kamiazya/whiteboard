@@ -1,4 +1,4 @@
-//! `sceneDigest`, ported from `packages/canvas-render/src/scene-digest.ts`: the
+//! `sceneDigest`, ported from the TypeScript digest it replaced (ADR-0054 phase A1): the
 //! AI-facing spatial digest of a laid-out scene. One entry per addressable node,
 //! the pairs that overlap, the strict containments, the proximity clusters and
 //! the free runs of a 20px grid, and whether a guard cut any of them short.

@@ -38,6 +38,7 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/layout-core.ts',
     'packages/canvas-render/src/finite-box.ts',
     'packages/canvas-render/src/measure.ts',
+    'packages/canvas-render/src/scene-digest-schema.ts',
     'packages/canvas-render/src/refusal.ts',
     'packages/canvas-render/src/scene-bounds.ts',
     'packages/canvas-render/src/scene-children.ts',

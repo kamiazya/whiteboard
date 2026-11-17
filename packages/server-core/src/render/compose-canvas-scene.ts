@@ -4,12 +4,14 @@ import type {
   MeasureText,
   ReferenceSeams,
   Scene,
+  SceneDigest,
   SpatialLayoutDegradation,
   SpatialRenderStyle,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   type BoundingBox,
   createSpatialTheme,
+  layoutSceneDigest,
   layoutSpatialCanvas,
   sceneDocumentBounds,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -111,12 +113,30 @@ export function composeCanvasScene(
   measure: MeasureText,
   options: ComposeCanvasSceneOptions,
 ): Scene {
+  return layoutSpatialCanvas(canvas, layoutOptionsOf(measure, options))
+}
+
+/**
+ * The spatial digest of the scene `composeCanvasScene` would compose, read by
+ * the core where it lays the canvas out, so the scene is never built on this
+ * side. The same options, so a digest never describes a different layout than
+ * the picture beside it.
+ */
+export function composeCanvasDigest(
+  canvas: SpatialCanvas,
+  measure: MeasureText,
+  options: ComposeCanvasSceneOptions,
+): SceneDigest {
+  return layoutSceneDigest(canvas, layoutOptionsOf(measure, options))
+}
+
+function layoutOptionsOf(measure: MeasureText, options: ComposeCanvasSceneOptions) {
   const references = options.references
-  return layoutSpatialCanvas(canvas, {
+  return {
     measure,
     appearance: MCP_SCENE_APPEARANCE,
     onDegrade,
-    onRefused: (refusal) => {
+    onRefused: (refusal: LayoutRefusal) => {
       logRefusal(refusal)
       options.onRefused?.(refusal)
     },
@@ -130,7 +150,7 @@ export function composeCanvasScene(
     // resolved canvas reference expands — export's policy, in the editor's
     // words: a node's intrinsic size, not its zoom.
     ...(references === undefined ? {} : { references, expandFileNode: () => true }),
-  })
+  }
 }
 
 /**

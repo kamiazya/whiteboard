@@ -10,6 +10,8 @@
 //!
 //! - `edges`: `["ok", nodes, degradations]`, the edge layer as `scene_wire`
 //!   writes scene nodes, and what the layout reported instead of failing;
+//! - `scene-digest`: `["ok", digest, degradations]`, the digest as the text
+//!   `SceneDigest::to_json` writes and the degradations as `edges` carries them;
 //! - every other query: `["ok", ...]`, each double the sixteen hex digits of
 //!   its bits, so a non-finite answer crosses as exactly as a finite one:
 //!   `node-size` `[h]`, `node-content` `[w, h]`, `label-placement` `[x, y]`
@@ -20,12 +22,13 @@
 use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_canvas_render::comments::placement::place_comment_bubble;
 use whiteboard_canvas_render::compose_canvas::{
-    ContentSize, layout_spatial_edges, natural_node_content_size,
+    ContentSize, layout_spatial_canvas, layout_spatial_edges, natural_node_content_size,
 };
 use whiteboard_canvas_render::compose_edges::{LabelSize, edge_label_placement, label_obstacles};
 use whiteboard_canvas_render::constant_ratio::ConstantRatioMeasure;
 use whiteboard_canvas_render::measure::Measure;
 use whiteboard_canvas_render::node_outline::outline_content_box;
+use whiteboard_canvas_render::scene_digest::{DigestError, scene_digest};
 use whiteboard_canvas_render::scene_wire::{Tree, nodes_tree};
 use whiteboard_canvas_render::theme::geometry::SPATIAL_THEME_GEOMETRY;
 use whiteboard_det::math::js_max;
@@ -66,6 +69,7 @@ pub fn query_with_host(request: &str, host: Option<&dyn Host>) -> String {
     };
     match query_of(&value) {
         Some(Query::Edges(request)) => edges(&request, host),
+        Some(Query::SceneDigest(request)) => digest(&request, host),
         Some(Query::NodeSize(size)) => node_size(&size, host),
         Some(Query::LabelPlacement { path, size: [w, h], obstacles, rounded }) => {
             let placed = edge_label_placement(&path, LabelSize { w, h }, &obstacles, rounded);
@@ -142,6 +146,30 @@ fn edges(request: &Request, host: Option<&dyn Host>) -> String {
         with_options(request, measure, None, plugin, &mut |options, wire, _| {
             let nodes = layout_spatial_edges(&request.canvas, options);
             settled(wire, || edge_layer(&nodes, wire))
+        })
+    })
+}
+
+/// The spatial digest of the scene a canvas request lays out, as the text
+/// `SceneDigest::to_json` writes beside what the layout reported, or why it is not answered. The scene never
+/// crosses the boundary: the digest is read where it is laid out.
+fn digest(request: &Request, host: Option<&dyn Host>) -> String {
+    if let Some(what) = past_canvas_caps(request) {
+        return refused("input-too-large", what);
+    }
+    let plugin = match plugin(&request.font_families) {
+        Ok(plugin) => plugin,
+        Err(refusal) => return refusal,
+    };
+    measured(&request.measure, host, None, |measure, _| {
+        with_options(request, measure, None, plugin, &mut |options, wire, _| {
+            let laid = layout_spatial_canvas(&request.canvas, options);
+            settled(wire, || match scene_digest(&laid.scene) {
+                Ok(digest) => ok(vec![Tree::Text(digest.to_json()), events(&wire.degradations())]),
+                // The grid a non-finite coordinate cannot size: the same
+                // layout the scene's own answer refuses as non-finite.
+                Err(DigestError::InvalidGrid) => refused("malformed", "non-finite"),
+            })
         })
     })
 }

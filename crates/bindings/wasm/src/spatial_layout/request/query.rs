@@ -55,6 +55,7 @@ pub(crate) struct Run {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Query {
     Edges(Box<Request>),
+    SceneDigest(Box<Request>),
     NodeSize(Box<NodeSize>),
     LabelPlacement {
         path: Vec<ScenePoint>,
@@ -152,6 +153,7 @@ fn node_size_of(f: &mut Fields<'_>, fitted: bool) -> Option<NodeSize> {
 fn query_from(f: &mut Fields<'_>, query: &str) -> Option<Query> {
     Some(match query {
         "edges" => Query::Edges(Box::new(request_from(f)?)),
+        "scene-digest" => Query::SceneDigest(Box::new(request_from(f)?)),
         "node-size" => Query::NodeSize(Box::new(node_size_of(f, true)?)),
         "node-content" => Query::NodeSize(Box::new(node_size_of(f, false)?)),
         "label-placement" => Query::LabelPlacement {

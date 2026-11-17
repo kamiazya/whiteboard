@@ -18,6 +18,8 @@ type QueryPair = readonly [number, number]
  *
  * - `edges`: a canvas request whose edge layer alone is laid out
  *   (`layoutSpatialEdges`), built by `canvasLayoutRequest`;
+ * - `scene-digest`: the same request, answered with the spatial digest of the
+ *   scene it lays out, so the scene itself never crosses the boundary;
  * - `node-size`: `fittedTextNodeHeight`; `node-content`: `naturalNodeContentSize`;
  * - `label-placement`: `edgeLabelPlacement`; `label-obstacles`:
  *   `frameTitleObstacles` and then `labelObstacles`, over the scene's runs that
@@ -26,7 +28,7 @@ type QueryPair = readonly [number, number]
  * - `outline-content-box`: `outlineContentBox` over the bundled silhouettes.
  */
 export type QueryRequest =
-  | (CanvasLayoutRequest & { readonly query: 'edges' })
+  | (CanvasLayoutRequest & { readonly query: 'edges' | 'scene-digest' })
   | {
       readonly query: 'node-size'
       readonly node: SpatialNode
@@ -63,17 +65,18 @@ export type QueryRequest =
     }
   | { readonly query: 'outline-content-box'; readonly shape?: string; readonly box: QueryBox }
 
-/** A number, or a list of them, as the core answers a query other than `edges`. */
+/** A number, or a list of them, as the core answers a geometry or sizing query. */
 export type QueryNumbers = number | readonly QueryNumbers[]
 
 /**
  * The core's answer to a query: an edge layer and what the layout reported
- * beside it, the numbers of any other query (each double exactly as computed),
+ * beside it, a scene digest as the JSON text the core wrote, the numbers of any other query (each double exactly as computed),
  * or what it refused, which a caller answers on its own terms (each query says
  * how), having no scene to draw a refusal in.
  */
 export type QueryAnswer =
   | { readonly nodes: readonly SceneNode[]; readonly degradations: readonly CoreDegradation[] }
+  | { readonly digest: string; readonly degradations: readonly CoreDegradation[] }
   | { readonly numbers: readonly QueryNumbers[] }
   | { readonly refused: LayoutRefusal }
 
