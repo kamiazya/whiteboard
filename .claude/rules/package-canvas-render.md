@@ -59,6 +59,11 @@ D10's decision, and the thin TypeScript a root asks the core through:
   `svg/legend.ts` draws the legend the core lays out. The edge path
   flatteners (`edge-path/`) and `edgeArrowPolygons` are the backend's and the
   hit test's one curve.
+  A SERVER picture does not go through it: `layoutSpatialCanvasPicture` and
+  `layoutMarkdownDocumentPicture` (`layout/core-svg.ts`) ask the core for the
+  scene and its SVG in one call, drawn by the Rust port of this backend; only
+  a refusal's scene, which this side builds, is drawn here.
+  `layout/core-svg.rust.test.ts` holds the two byte for byte.
 - **The scene digest** is the Rust core's (`scene_digest`): `layoutSceneDigest`
   asks the `scene-digest` query (no scene crosses back) and
   `sceneDigestSchema` holds the text; a refused layout answers a `partial`

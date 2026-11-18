@@ -1,5 +1,6 @@
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { Scene } from '@kamiazya/whiteboard-scene'
+import type { CoreSvgAsk } from '../canvas-core.js'
 import { COMMENT_TEXT_MAX_WIDTH_PX } from '../comment-geometry.js'
 import type { FragmentAsk, FragmentEntry } from '../fragment-ask.js'
 import { highlightCode } from '../highlight/lowlight.js'
@@ -11,6 +12,7 @@ import { wireOfSeams } from '../references/wire.js'
 import { type LayoutRefusal, refusalScene } from '../refusal.js'
 import type { SpatialThemeMode } from '../theme/spatial-theme.js'
 import { CoreUnaskable, hasData, styleOptions } from './canvas-switch.js'
+import { askedSvg, type PicturedScene, svgOfDrawnHere } from './core-svg.js'
 import type { SpatialRenderStyle } from './layout-options.js'
 
 // A markdown body through the Rust core's markdown entry (ADR-0054 step 7,
@@ -100,8 +102,33 @@ export function layoutMarkdownDocument(
   body: string,
   options: MarkdownDocumentOptions,
 ): Scene | undefined {
+  return noteThroughCore(body, options, undefined)?.scene
+}
+
+/**
+ * `layoutMarkdownDocument`'s scene with its SVG, both from ONE core call: the
+ * core draws the note it laid out in the envelope `svg` names. A refusal's
+ * scene, which this side builds, is drawn here in that envelope.
+ */
+export function layoutMarkdownDocumentPicture(
+  body: string,
+  options: MarkdownDocumentOptions,
+  svg: CoreSvgAsk,
+): PicturedScene | undefined {
+  const laid = noteThroughCore(body, options, svg)
+  if (laid === undefined) return undefined
+  return { scene: laid.scene, svg: laid.svg ?? svgOfDrawnHere(laid.scene, svg) }
+}
+
+/** A note through the core, with the SVG it drew when `svg` asks for one (none for a refusal). */
+function noteThroughCore(
+  body: string,
+  options: MarkdownDocumentOptions,
+  svg: CoreSvgAsk | undefined,
+): { readonly scene: Scene; readonly svg?: string } | undefined {
+  const request = markdownLayoutRequest(body, options)
   const answer = options.core.markdown.layoutMarkdown(
-    markdownLayoutRequest(body, options),
+    svg === undefined ? request : { ...request, svg },
     highlightCode,
     options.measure,
   )
@@ -109,14 +136,15 @@ export function layoutMarkdownDocument(
     const refusal = answer.refused
     options.onRefused?.(refusal)
     const mode = options.mode ?? 'light'
-    return refusalScene(refusal, { measure: options.measure, mode, maxWidth: options.maxWidth })
+    const measure = options.measure
+    return { scene: refusalScene(refusal, { measure, mode, maxWidth: options.maxWidth }) }
   }
   if ('missing' in answer) return undefined
   const { scene, fragmentsAsked } = answer
   if (fragmentsAsked !== undefined && fragmentsAsked.length > 0) {
     options.onFragmentsAsked?.(fragmentsAsked)
   }
-  return scene
+  return svg === undefined ? { scene } : { scene, svg: askedSvg(answer.svg) }
 }
 
 /**

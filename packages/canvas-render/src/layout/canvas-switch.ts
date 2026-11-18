@@ -12,6 +12,7 @@ import type {
   CoreChange,
   CoreDegradation,
   CoreProposal,
+  CoreSvgAsk,
   CoreThread,
 } from '../canvas-core.js'
 import type { EdgeAnchorPair } from '../edge-routing.js'
@@ -22,6 +23,7 @@ import { type LayoutRefusal, refusalScene } from '../refusal.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { bundledThemeModeOf, type SpatialThemeMode } from '../theme/spatial-theme.js'
 import { resolveThemeTable } from './canvas-theme.js'
+import { askedSvg, type PicturedScene, svgOfDrawnHere } from './core-svg.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout-options.js'
 
 // The whole layout through the Rust core (ADR-0054 step 7): the request a
@@ -193,10 +195,34 @@ export function layoutThroughCore(
   stored: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): LaidOutCanvas {
+  const { scene, anchors } = throughCore(stored, options, undefined)
+  return { scene, anchors }
+}
+
+/**
+ * `layoutThroughCore`'s scene with its SVG, drawn by the core in the same call
+ * in the envelope `svg` names; a refusal's scene, which the core does not draw,
+ * is drawn here in the same envelope.
+ */
+export function pictureThroughCore(
+  stored: SpatialCanvas,
+  options: SpatialLayoutOptions,
+  svg: CoreSvgAsk,
+): PicturedScene {
+  const laid = throughCore(stored, options, svg)
+  return { scene: laid.scene, svg: laid.svg ?? svgOfDrawnHere(laid.scene, svg) }
+}
+
+/** A layout through the core, with the SVG it drew when `svg` asks for one (none for a refusal). */
+function throughCore(
+  stored: SpatialCanvas,
+  options: SpatialLayoutOptions,
+  svg: CoreSvgAsk | undefined,
+): LaidOutCanvas & { readonly svg?: string } {
   const core = options.core
   const request = canvasLayoutRequest(stored, options)
   const answer = core.layout.layoutSpatialCanvas(
-    request,
+    svg === undefined ? request : { ...request, svg },
     highlightCode,
     options.measure,
     options.contentCache,
@@ -204,7 +230,8 @@ export function layoutThroughCore(
   if ('refused' in answer) return drawnRefusal(answer.refused, stored, request.mode, options)
   for (const event of answer.degradations) options.onDegrade?.(hostEvent(event))
   if (answer.fragmentsAsked?.length) options.onFragmentsAsked?.(answer.fragmentsAsked)
-  return { scene: answer.scene, anchors: answer.anchors }
+  const laid = { scene: answer.scene, anchors: answer.anchors }
+  return svg === undefined ? laid : { ...laid, svg: askedSvg(answer.svg) }
 }
 
 /** A refusal told to `onRefused`, and drawn where the board's boxes are. */
