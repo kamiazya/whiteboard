@@ -48,6 +48,25 @@ const UNMEASURED_WIDTH_PX = 200
  */
 const BODY_PADDING_PX = 1
 
+/** The body laid out at `width` and drawn by the core as its keyed projection, in one call. */
+function drawBody(body: string, measure: MeasureText, width: number, compact: boolean) {
+  return layoutCommentDocumentKeyedPicture(
+    body,
+    {
+      measure,
+      core: requireLayoutCore(),
+      maxWidth: width - 2 * BODY_PADDING_PX,
+      // What `compact` has always claimed and, until this, did not do: it
+      // set a `text-xs` class the SVG never reads, so a rail whose chrome
+      // runs at 11-12px drew its prose at the bubble's 16px — the largest
+      // text on the surface, and a third bigger than the row summarising
+      // the same sentence above it.
+      density: compact ? 'compact' : 'comfortable',
+    },
+    { padding: BODY_PADDING_PX },
+  ).keyed
+}
+
 export interface CommentBodyProps {
   readonly body: string
   /** The panel's dense typography; the card inherits the bubble's own. */
@@ -76,24 +95,10 @@ export function CommentBody({ body, compact, className, measure }: CommentBodyPr
     return () => observer.disconnect()
   }, [])
 
-  const keyed = useMemo(() => {
-    const { keyed: drawn } = layoutCommentDocumentKeyedPicture(
-      body,
-      {
-        measure: resolvedMeasure,
-        core: requireLayoutCore(),
-        maxWidth: (width ?? UNMEASURED_WIDTH_PX) - 2 * BODY_PADDING_PX,
-        // What `compact` has always claimed and, until this, did not do: it
-        // set a `text-xs` class the SVG never reads, so a rail whose chrome
-        // runs at 11-12px drew its prose at the bubble's 16px — the largest
-        // text on the surface, and a third bigger than the row summarising
-        // the same sentence above it.
-        density: compact === true ? 'compact' : 'comfortable',
-      },
-      { padding: BODY_PADDING_PX },
-    )
-    return drawn
-  }, [body, compact, resolvedMeasure, width])
+  const keyed = useMemo(
+    () => drawBody(body, resolvedMeasure, width ?? UNMEASURED_WIDTH_PX, compact === true),
+    [body, compact, resolvedMeasure, width],
+  )
 
   const mount = useKeyedSvg(keyed)
   // One stable callback: an inline arrow here changes identity every render,

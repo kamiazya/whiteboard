@@ -91,7 +91,6 @@ export {
 export { fittedTextNodeHeight } from './layout/fitted-height.js'
 export {
   type CommentDocumentOptions,
-  layoutCommentDocument,
   layoutMarkdownDocument,
   type MarkdownDocumentOptions,
 } from './layout/markdown-switch.js'

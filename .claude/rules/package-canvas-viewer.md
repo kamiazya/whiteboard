@@ -25,10 +25,13 @@ paths:
   such as jsdom).
 - `font.ts`: `VIEWER_FONT_FAMILY` — the single constant feeding both the
   browser measurer and the widget's build-time font embedding.
-- `CanvasViewer.tsx`: builds a scene via canvas-render's shared
-  `layoutSpatialCanvas` (with the theme's `VIEWER_APPEARANCES` entry; the
-  core parses a body itself) and renders it via canvas-render's
-  `renderSceneToSvg`, injecting the resulting string through `SceneSvg`.
+- `CanvasViewer.tsx`: lays the canvas out and has the host's Rust core draw
+  it in the same call (`layoutSpatialCanvasPicture`, with the theme's
+  `VIEWER_APPEARANCES` entry; the core parses a body itself), injecting the
+  string through `SceneSvg`. A host that names no size gets the picture at
+  the scene's own size with its root `width`/`height` set to `100%`, so CSS
+  fits it to the figure and a resize costs no layout (owner decision q89;
+  `CanvasViewer.browser.test.tsx` holds it).
   It takes its math and diagrams as canvas-render's fragment TABLE
   (`fragments` + `onFragmentsAsked`), never `renderMath`/`renderDiagram`
   functions, which the layout options no longer have, and lays out through
@@ -60,7 +63,7 @@ paths:
 ## What does NOT belong here
 
 - Scene graph types, layout, or the SVG serializer itself — those are
-  `canvas-render`'s job; this package only calls `renderSceneToSvg`.
+  `canvas-render`'s and the core's job; this package only asks for a picture.
 - Reading or writing JSON Canvas or OKF text. Nothing here parses a
   document: `CanvasViewer` takes the model, and the widget takes a picture
   (ADR-0054 S17), so this package has no codec dependency at all.
@@ -129,7 +132,7 @@ paths:
   passing the prop into a resolver nobody reads would fail.
   `canvas-viewer-geometry-conformance.test.ts` is this package's tier-2
   conformance test for the theme-layer slice (package-canvas-render.md
-  decision #8): asserts `CanvasViewer.tsx` calls `layoutSpatialCanvas` with
+  decision #8): asserts `CanvasViewer.tsx` lays out (`layoutSpatialCanvasPicture`) with
   no `geometry` override, so it always resolves to the shared
   `SPATIAL_THEME_GEOMETRY` default.
 - `measure-text.ts` has a jsdom-project fallback-measurer test and a

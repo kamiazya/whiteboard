@@ -203,14 +203,12 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
-  'packages/canvas-render/src/core-picture.ts#layoutMarkdownDocumentKeyedPicture':
-    "the web's picture in one core call (ADR-0054 A3.1), held byte for byte to the caller's TypeScript envelope by core-picture-web.rust.test.ts; the preview pane (`renderMarkdownPreview`) moves to it in A3.2/A3.3, which gives it a use and takes this entry out",
-  'packages/canvas-render/src/core-picture.ts#layoutCommentDocumentKeyedPicture':
-    "the web's picture in one core call (ADR-0054 A3.1), held byte for byte to the caller's TypeScript envelope by core-picture-web.rust.test.ts; a comment's body (`CommentBody`) moves to it in A3.2/A3.3, which gives it a use and takes this entry out",
   'packages/canvas-render/src/layout/spatial-canvas.ts#layoutSpatialCanvasWithAnchors':
     "a canvas's layout with no picture: every web surface now asks the core for its picture in the same call (`layoutSpatialCanvasPicture` / `layoutSpatialCanvasKeyedPicture`, ADR-0054 A3.3), and the web's browser tests read the scene and anchors alone through it — drag-frame-budget's layout-alone rows and the host-measure benches",
   'packages/canvas-render/src/layout/spatial-canvas.ts#layoutSpatialEdges':
     "the drag overlay's edge layer alone, with no picture: the overlay itself draws through `layoutSpatialEdgesPicture` (ADR-0054 A3.2), whose layer core-picture-web.rust.test.ts holds equal to this one, and live-drag-parity.rust.test.ts holds this layer to the committed layout's edges; the reference both judgements are stated against, and drag-frame-budget's layer-alone row",
+  'packages/canvas-render/src/layout/markdown-switch.ts#layoutCommentDocument':
+    "a comment body's layout with no picture: its one surface, `CommentBody`, asks the core for the keyed picture in the same call (`layoutCommentDocumentKeyedPicture`, ADR-0054 A3.4), and the layout alone stays the reference markdown-switch.test.ts, the recorded comment oracle and core-picture-web.rust.test.ts judge the switch and the picture against",
   'packages/canvas-render/src/layout/markdown-switch.ts#markdownLayoutRequest':
     "which options of a markdown note the Rust core can be handed: the note's switch calls it, and markdown-switch.test.ts holds each option a surface varies, and the empty table a listener alone asks for, apart from the whole switch",
   'packages/facet-engine/src/unrecognized-keys.ts#firstUnrecognizedKey':
