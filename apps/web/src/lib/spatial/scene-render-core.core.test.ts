@@ -7,7 +7,12 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { recordingFragmentTable } from '../fragment-requests.js'
 import { currentLayoutCore } from './layout-core.js'
-import { editorLayoutBase, renderCanvasToSvgWith } from './scene-render-core.js'
+import {
+  editorLayoutBase,
+  renderCanvasForExportWith,
+  renderCanvasKeyedWith,
+  renderCanvasToSvgWith,
+} from './scene-render-core.js'
 
 vi.mock('./layout-core.js', () => ({
   currentLayoutCore: vi.fn(),
@@ -23,6 +28,19 @@ const canvas = {
   edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' } }],
 }
 
+/** The picture a fake core answers a request asking one, in the form it asked. */
+function pictureFor(request: CanvasLayoutRequest) {
+  if (request.svg === undefined) return {}
+  // Each envelope answers its own sentinel, so a result taken from another ask reads wrong.
+  const svg =
+    request.svg.viewBox === 'document' || request.svg.viewBox?.of === 'document'
+      ? '<svg>doc</svg>'
+      : '<svg></svg>'
+  return request.svg.form === 'keyed'
+    ? { keyed: { svg, rootOpen: '<svg>', rootAttrs: {}, groups: [] } }
+    : { svg }
+}
+
 /** A core recording the layouts it is asked for, each answered with an empty scene. */
 function recordingCore() {
   const asked: CanvasLayoutRequest[] = []
@@ -30,7 +48,12 @@ function recordingCore() {
     layout: {
       layoutSpatialCanvas: (request) => {
         asked.push(request)
-        return { scene: { nodes: [] }, anchors: new Map(), degradations: [] }
+        return {
+          scene: { nodes: [] },
+          anchors: new Map(),
+          degradations: [],
+          ...pictureFor(request),
+        }
       },
     },
   })
@@ -57,6 +80,20 @@ describe('the editor layout base', () => {
     renderCanvasToSvgWith(canvas, { measure })
     expect(asked.map((request) => request.canvas)).toEqual([canvas])
   })
+
+  it('asks the core for the picture in the same call, in each form and envelope', () => {
+    const { core, asked } = recordingCore()
+    vi.mocked(currentLayoutCore).mockReturnValue(core)
+    const surface = { viewBox: { of: 'scene' }, legend: 'omit' }
+    expect(renderCanvasToSvgWith(canvas, { measure }).svg).toBe('<svg></svg>')
+    expect(renderCanvasKeyedWith(canvas, { measure }).keyed.svg).toBe('<svg></svg>')
+    expect(renderCanvasForExportWith(canvas, { measure }, '#fff').svg).toBe('<svg>doc</svg>')
+    expect(asked.map((request) => request.svg)).toEqual([
+      surface,
+      { ...surface, form: 'keyed' },
+      { viewBox: { of: 'document', margin: 16 }, background: '#fff' },
+    ])
+  })
 })
 
 describe('the whole layout the editor and its worker hand the core', () => {
@@ -74,6 +111,7 @@ describe('the whole layout the editor and its worker hand the core', () => {
               anchors: new Map(),
               degradations: [],
               fragmentsAsked: [{ kind: 'math', value: 'y' }],
+              ...pictureFor(request),
             }
           },
         },

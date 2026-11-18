@@ -4,8 +4,9 @@
  * Split out of scene-render.ts so the layout worker can import this without
  * the editor-side module graph hanging off scene-render.ts. This is NOT a
  * second scene builder: scene-render.ts calls straight through to here, so
- * there is still exactly one composition of `layoutSpatialCanvas` +
- * `sceneBounds` + `renderSceneToSvg`.
+ * there is still exactly one composition of the layout and its picture, both
+ * answered by the Rust core in one call (ADR-0054 A3): the core draws the
+ * scene it laid out, in the envelope this module names.
  *
  * It takes no `parseBody`: canvas-render DEFAULTS to codec's parser, and the
  * worker imports codec directly anyway, so the option would be one more copy
@@ -14,6 +15,7 @@
 
 import type {
   BoundingBox,
+  CoreSvgAsk,
   EdgeAnchorPair,
   KeyedSvgRender,
   MeasureText,
@@ -22,12 +24,10 @@ import type {
   SpatialContentCache,
   SpatialLayoutOptions,
   SpatialThemeMode,
-  SvgDocumentOptions,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
-  layoutSpatialCanvasWithAnchors,
-  renderSceneToKeyedSvg,
-  renderSceneToSvg,
+  layoutSpatialCanvasKeyedPicture,
+  layoutSpatialCanvasPicture,
   sceneBounds,
   sceneDocumentBounds,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -120,8 +120,8 @@ export interface RenderCanvasCoreOptions {
   readonly onFragmentsAsked?: SpatialLayoutOptions['onFragmentsAsked']
 }
 
-export interface RenderedCanvas {
-  readonly svg: string
+/** A laid-out canvas: its scene, the bounds it is drawn over, and its anchors. */
+interface LaidOutCanvas {
   readonly bounds: BoundingBox
   readonly scene: Scene
   /**
@@ -131,6 +131,20 @@ export interface RenderedCanvas {
    * of the layout, and it already ran to produce this scene.
    */
   readonly anchors: ReadonlyMap<string, EdgeAnchorPair>
+}
+
+/** A laid-out canvas with its SVG, as a list row or a drag layer draws it. */
+export interface RenderedCanvas extends LaidOutCanvas {
+  readonly svg: string
+}
+
+/**
+ * A laid-out canvas with its keyed projection, as the editor surface patches
+ * it in (`keyed-svg-patcher.ts`): the same envelope as `RenderedCanvas.svg`,
+ * one group per key.
+ */
+export interface KeyedRenderedCanvas extends LaidOutCanvas {
+  readonly keyed: KeyedSvgRender
 }
 
 /**
@@ -163,11 +177,9 @@ export function editorLayoutBase(options: {
   }
 }
 
-export function renderCanvasToSvgWith(
-  canvas: SpatialCanvas,
-  options: RenderCanvasCoreOptions,
-): RenderedCanvas {
-  const { scene, anchors } = layoutSpatialCanvasWithAnchors(canvas, {
+/** `options` as the layout options every picture of the editor surface is laid out with. */
+function surfaceLayoutOptions(options: RenderCanvasCoreOptions): SpatialLayoutOptions {
+  return {
     ...editorLayoutBase(options),
     references: options.references,
     expandFileNode: options.expandFileNode,
@@ -183,18 +195,40 @@ export function renderCanvasToSvgWith(
     tagLibrary: options.tagLibrary,
     fragments: options.fragments,
     onFragmentsAsked: options.onFragmentsAsked,
-  })
-  const bounds = sceneBounds(scene)
-  const svg = renderSceneToSvg(scene, documentEnvelope(bounds))
-  return { svg, bounds, scene, anchors }
+  }
 }
 
-/** The ONE producer of the editor surface's document-envelope options, so
- * the plain string and the keyed projection below can never disagree. */
-function documentEnvelope(bounds: BoundingBox): SvgDocumentOptions {
-  // No legend in the editor's own document: the keyed projection cannot
-  // carry one, and the editor draws it as an overlay (ADR-0040 decision 6).
-  return { width: bounds.w, height: bounds.h, viewBox: bounds, legend: 'omit' }
+/**
+ * The ONE envelope of the editor surface, so the plain picture and the keyed
+ * projection can never disagree: the scene's own bounds, at their own size.
+ * No legend: the keyed projection cannot carry one, and the editor draws it
+ * as an overlay (ADR-0040 decision 6).
+ */
+const SURFACE_ASK = { viewBox: { of: 'scene' }, legend: 'omit' } as const satisfies CoreSvgAsk
+
+export function renderCanvasToSvgWith(
+  canvas: SpatialCanvas,
+  options: RenderCanvasCoreOptions,
+): RenderedCanvas {
+  const { scene, anchors, svg } = layoutSpatialCanvasPicture(
+    canvas,
+    surfaceLayoutOptions(options),
+    SURFACE_ASK,
+  )
+  return { svg, bounds: sceneBounds(scene), scene, anchors }
+}
+
+/** `renderCanvasToSvgWith` answered as the keyed projection, in the same envelope. */
+export function renderCanvasKeyedWith(
+  canvas: SpatialCanvas,
+  options: RenderCanvasCoreOptions,
+): KeyedRenderedCanvas {
+  const { scene, anchors, keyed } = layoutSpatialCanvasKeyedPicture(
+    canvas,
+    surfaceLayoutOptions(options),
+    SURFACE_ASK,
+  )
+  return { keyed, bounds: sceneBounds(scene), scene, anchors }
 }
 
 /**
@@ -206,32 +240,21 @@ const EXPORT_MARGIN_PX = 16
 /**
  * The document a person SAVES: the same layout as the editor surface, drawn
  * as a whole document with its legend (ADR-0040 decision 6) in the band
- * `sceneDocumentBounds` reserves for it. The editor's own string above is
- * the keyed projection's bytes, which omit the legend because the editor
- * draws it as an overlay — so an export taken from that string would lose
- * what the screen shows.
+ * `sceneDocumentBounds` reserves for it — the editor surface's envelope omits
+ * the legend, because the editor draws it as an overlay, so an export taken
+ * from that picture would lose what the screen shows. `background` absent
+ * leaves the picture transparent.
  */
 export function renderCanvasForExportWith(
   canvas: SpatialCanvas,
   options: RenderCanvasCoreOptions,
   background?: string,
 ): { readonly svg: string; readonly bounds: BoundingBox } {
-  const { scene } = renderCanvasToSvgWith(canvas, options)
-  const bounds = sceneDocumentBounds(scene, EXPORT_MARGIN_PX)
-  return {
-    svg: renderSceneToSvg(scene, exportEnvelope(bounds, background)),
-    bounds,
-  }
-}
-
-/** The saved document's envelope; `background` absent leaves the picture transparent. */
-function exportEnvelope(bounds: BoundingBox, background?: string): SvgDocumentOptions {
-  return {
-    width: bounds.w,
-    height: bounds.h,
-    viewBox: bounds,
+  const { scene, svg } = layoutSpatialCanvasPicture(canvas, surfaceLayoutOptions(options), {
+    viewBox: { of: 'document', margin: EXPORT_MARGIN_PX },
     ...(background === undefined ? {} : { background }),
-  }
+  })
+  return { svg, bounds: sceneDocumentBounds(scene, EXPORT_MARGIN_PX) }
 }
 
 /**
@@ -252,16 +275,4 @@ export function keyedWithoutPrefix(keyed: KeyedSvgRender, keyPrefix: string): Ke
     groups,
     svg: `${keyed.rootOpen}${groups.map((group) => group.svg).join('')}</svg>`,
   }
-}
-
-/**
- * The keyed projection of an already-rendered canvas, derived on the main
- * thread from the scene the worker (or sync path) already delivered —
- * stringification is ~3ms at 40 nodes against a 66-125ms layout, so the
- * worker protocol stays untouched. Same envelope as `RenderedCanvas.svg`.
- */
-export function renderedCanvasKeyed(
-  rendered: Pick<RenderedCanvas, 'scene' | 'bounds'>,
-): KeyedSvgRender {
-  return renderSceneToKeyedSvg(rendered.scene, documentEnvelope(rendered.bounds))
 }

@@ -398,9 +398,14 @@ it('keeps bystander pins frozen when a layout-worker reply lands mid-gesture', a
 
     const lastId = FakeWorker.instances.flatMap((w) => w.requests).at(-1)?.id ?? 1
     FakeWorker.respond({
-      type: 'laid-out',
+      type: 'laid-out-keyed',
       id: lastId,
-      svg: '<svg xmlns="http://www.w3.org/2000/svg"/>',
+      keyed: {
+        svg: '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+        rootOpen: '<svg xmlns="http://www.w3.org/2000/svg">',
+        rootAttrs: { xmlns: 'http://www.w3.org/2000/svg' },
+        groups: [],
+      },
       bounds: { x: 0, y: 0, w: 10, h: 10 },
       scene: { nodes: [] },
       anchors: committedAnchors(big(60)),

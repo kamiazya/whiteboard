@@ -46,11 +46,13 @@ function layout(fragments?: readonly FragmentEntry[]): Promise<LayoutResponse> {
 
 it('reports the math a layout asked for, then draws it once the request carries it', async () => {
   const bare = await layout()
-  if (bare.type !== 'laid-out') throw new Error(`worker failed: ${bare.reason}`)
+  if (bare.type === 'failed') throw new Error(`worker failed: ${bare.reason}`)
+  if (bare.type !== 'laid-out') throw new Error(`answered ${bare.type}, not a plain picture`)
   expect(bare.svg).not.toContain('worker-typeset')
   expect(bare.fragmentsAsked).toEqual([{ kind: 'math', value: 'x^2' }])
   const typeset = await layout([FRAGMENT])
-  if (typeset.type !== 'laid-out') throw new Error(`worker failed: ${typeset.reason}`)
+  if (typeset.type === 'failed') throw new Error(`worker failed: ${typeset.reason}`)
+  if (typeset.type !== 'laid-out') throw new Error(`answered ${typeset.type}, not a plain picture`)
   expect(typeset.svg).toContain('worker-typeset')
   expect(typeset.fragmentsAsked).toBeUndefined()
 }, 20_000)

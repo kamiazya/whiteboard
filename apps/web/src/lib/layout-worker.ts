@@ -63,7 +63,11 @@ import { startLayoutCore } from './page-layout-core.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
 import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
 import { layoutCoreReady } from './spatial/layout-core.js'
-import { renderCanvasToSvgWith } from './spatial/scene-render-core.js'
+import {
+  type RenderCanvasCoreOptions,
+  renderCanvasKeyedWith,
+  renderCanvasToSvgWith,
+} from './spatial/scene-render-core.js'
 
 const measure = createBrowserMeasureText()
 
@@ -305,7 +309,7 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
     // once) or load an engine, and a list surface's thread never decodes the canvas.
     const fontsMissing = new Set<string>()
     const table = recordingFragmentTable(request.fragments)
-    const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(canvas, {
+    const options: RenderCanvasCoreOptions = {
       measure,
       theme: request.theme,
       references,
@@ -327,14 +331,16 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
       onDegrade: (event) => {
         if (event.kind === 'font-missing') fontsMissing.add(event.family)
       },
-    })
+    }
+    // The editor asks for the keyed projection it patches in; a list row, the plain picture.
+    // Both drawn by the core in the layout's own call, so neither thread serializes the scene.
+    const picture =
+      request.form === 'keyed'
+        ? ({ type: 'laid-out-keyed', ...renderCanvasKeyedWith(canvas, options) } as const)
+        : ({ type: 'laid-out', ...renderCanvasToSvgWith(canvas, options) } as const)
     const response: LayoutResponse = {
-      type: 'laid-out',
+      ...picture,
       id: request.id,
-      svg,
-      bounds,
-      scene,
-      anchors,
       ...(fontsMissing.size === 0 ? {} : { fontsMissing: [...fontsMissing] }),
       ...(table.asked.size === 0 ? {} : { fragmentsAsked: [...table.asked.values()] }),
       ...omittedReferences(request, canvas),

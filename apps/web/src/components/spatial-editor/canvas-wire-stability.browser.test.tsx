@@ -17,7 +17,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 
 vi.mock('../../lib/spatial/scene-render.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/spatial/scene-render.js')>()
-  return { ...actual, renderCanvasToSvg: vi.fn(actual.renderCanvasToSvg) }
+  return { ...actual, renderCanvasKeyed: vi.fn(actual.renderCanvasKeyed) }
 })
 
 afterEach(cleanup)
@@ -39,13 +39,16 @@ const svgText = (container: HTMLElement) =>
 
 describe('the wire the canvas lays out against', () => {
   it('does not re-lay out for rows the canvas cannot read, and does for one it can', async () => {
-    const renders = vi.mocked(sceneRender.renderCanvasToSvg)
+    // Only this editor's layouts: the ones of the canvas object this test made.
+    const renders = () =>
+      vi.mocked(sceneRender.renderCanvasKeyed).mock.calls.filter(([laid]) => laid === canvas).length
     const base = wireWith([[NOTE, { body: 'THE NOTE' }]])
     const { container, rerender } = render(
       <SpatialEditor theme="light" canvas={canvas} onChange={() => {}} references={base} />,
     )
     await waitFor(() => expect(svgText(container)).toContain('THE NOTE'))
-    const before = renders.mock.calls.length
+    const before = renders()
+    expect(before).toBeGreaterThan(0)
 
     // A draft beside the canvas named another note and the host loaded it.
     const grown = wireWith([
@@ -53,7 +56,7 @@ describe('the wire the canvas lays out against', () => {
       ['01BX5ZZKBKACTAV9WEVGEMMVRZ', { body: 'DRAFTED BESIDE THE CANVAS' }],
     ])
     rerender(<SpatialEditor theme="light" canvas={canvas} onChange={() => {}} references={grown} />)
-    expect(renders.mock.calls.length).toBe(before)
+    expect(renders()).toBe(before)
 
     // The note the canvas embeds was edited elsewhere: that is a re-layout.
     const edited = wireWith([[NOTE, { body: 'THE NOTE, REVISED' }]])
@@ -61,6 +64,6 @@ describe('the wire the canvas lays out against', () => {
       <SpatialEditor theme="light" canvas={canvas} onChange={() => {}} references={edited} />,
     )
     await waitFor(() => expect(svgText(container)).toContain('THE NOTE, REVISED'))
-    expect(renders.mock.calls.length).toBeGreaterThan(before)
+    expect(renders()).toBeGreaterThan(before)
   })
 })

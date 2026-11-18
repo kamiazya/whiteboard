@@ -1,8 +1,8 @@
 /**
- * `SpatialCanvas` -> `Scene` -> SVG string, via canvas-render's single
- * `layoutSpatialCanvas` builder — this is NOT a fourth scene builder; it is
- * a thin composition of `layoutSpatialCanvas` + `sceneBounds` +
- * `renderSceneToSvg`, exactly as `CanvasViewer` does in canvas-viewer.
+ * `SpatialCanvas` -> `Scene` -> SVG, via canvas-render's single layout
+ * builder — NOT a fourth scene builder: a thin composition over
+ * `scene-render-core.ts`, where the Rust core lays the canvas out and draws
+ * its picture in one call.
  */
 
 import type {
@@ -18,13 +18,15 @@ import { createEditorAppearance } from './editor-appearance.js'
 import { backgroundOf, type PictureExportOptions } from './picture-options.js'
 import { requireLayoutCore } from './require-layout-core.js'
 import {
+  type KeyedRenderedCanvas,
   type RenderCanvasCoreOptions,
   type RenderedCanvas,
   renderCanvasForExportWith,
+  renderCanvasKeyedWith,
   renderCanvasToSvgWith,
 } from './scene-render-core.js'
 
-export type { RenderedCanvas } from './scene-render-core.js'
+export type { KeyedRenderedCanvas, RenderedCanvas } from './scene-render-core.js'
 
 export interface RenderCanvasOptions {
   readonly measure: MeasureText
@@ -70,6 +72,14 @@ export function renderCanvasToSvg(
   options: RenderCanvasOptions,
 ): RenderedCanvas {
   return renderCanvasToSvgWith(canvas, options)
+}
+
+/** `renderCanvasToSvg` answered as the keyed projection the editor surface patches in. */
+export function renderCanvasKeyed(
+  canvas: SpatialCanvas,
+  options: RenderCanvasOptions,
+): KeyedRenderedCanvas {
+  return renderCanvasKeyedWith(canvas, options)
 }
 
 /** What a saved picture of a canvas is drawn with beside the canvas itself. */

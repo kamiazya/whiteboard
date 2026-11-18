@@ -55,13 +55,13 @@ class HoldingWorker {
     if (message.type === 'layout') this.posted.push(message as LayoutRequest)
   }
   terminate() {}
-  /** Answers the request with `id` as laid out, with an svg naming its marker. */
+  /** Answers the request with `id` as laid out, with a keyed picture naming its marker. */
   reply(request: LayoutRequest) {
     const marker = request.canvas?.nodes[0]?.resource?.content ?? ''
     const response = {
-      type: 'laid-out',
+      type: 'laid-out-keyed',
       id: request.id,
-      svg: `<svg>${marker}</svg>`,
+      keyed: { svg: `<svg>${marker}</svg>`, rootOpen: '<svg>', rootAttrs: {}, groups: [] },
       bounds: { x: 0, y: 0, width: 1, height: 1 },
       scene: { nodes: [] },
       anchors: [],
@@ -103,6 +103,6 @@ it('posts at most the newest pending input while a layout is in flight', async (
     worker.reply(last)
   })
   expect(worker.posted.length).toBeLessThanOrEqual(2)
-  expect(result.current.svg).toBe(`<svg>edit-${changes}</svg>`)
+  expect(result.current.keyed.svg).toBe(`<svg>edit-${changes}</svg>`)
   expect(result.current.sceneCurrent).toBe(true)
 })

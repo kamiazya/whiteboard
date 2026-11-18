@@ -1,6 +1,6 @@
 // The post-scene derived memos, extracted from SpatialEditor: everything
 // projected off the COMMITTED scene once useWorkerScene has produced it —
-// the keyed patch surface, edge hit-test paths, comment chrome boxes, the
+// edge hit-test paths, comment chrome boxes, the
 // selection's own boxes, the minimap overview, and the palette the scene was
 // drawn in, which every chrome the editor floats over it is painted from.
 // Called immediately after useWorkerScene, since every input here is that
@@ -14,12 +14,10 @@ import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useMemo } from 'react'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { buildMinimap } from '../../lib/spatial/minimap.js'
-import { renderedCanvasKeyed } from '../../lib/spatial/scene-render-core.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 
 export interface SceneProjectionInputs {
   readonly scene: Scene
-  readonly bounds: BoundingBox
   readonly boxes: readonly NodeBox[]
   readonly canvas: SpatialCanvas
   readonly theme: ResolvedTheme
@@ -63,7 +61,6 @@ function collectProposalChrome(
 
 export function useSceneProjection({
   scene,
-  bounds,
   boxes,
   canvas,
   theme,
@@ -71,12 +68,6 @@ export function useSceneProjection({
   extraIds,
   tagLibrary,
 }: SceneProjectionInputs) {
-  // The committed surface's keyed projection, derived from the scene the
-  // worker (or sync path) delivered — ~3ms of stringify against the
-  // 66-125ms layout, so the worker protocol stays plain-data. The patch
-  // container below consumes it; the plain `svg` string is not
-  // read here.
-  const keyed = useMemo(() => renderedCanvasKeyed({ scene, bounds }), [scene, bounds])
   // Routed edge paths in canvas coordinates, for edge hit-testing and the
   // selection highlight. Edges have no area, so selection is a
   // distance-to-polyline test against a zoom-adjusted tolerance. The
@@ -201,7 +192,6 @@ export function useSceneProjection({
   )
 
   return {
-    keyed,
     palette,
     edgePaths,
     commentChromeBoxes,

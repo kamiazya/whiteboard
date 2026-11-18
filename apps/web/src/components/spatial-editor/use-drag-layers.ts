@@ -29,8 +29,12 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useKeyedSvg } from '../../hooks/use-keyed-svg.js'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
-import { type RenderedCanvas, renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
-import { editorLayoutBase, renderedCanvasKeyed } from '../../lib/spatial/scene-render-core.js'
+import {
+  type RenderedCanvas,
+  renderCanvasKeyed,
+  renderCanvasToSvg,
+} from '../../lib/spatial/scene-render.js'
+import { editorLayoutBase } from '../../lib/spatial/scene-render-core.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { computeDragPreview } from './drag-preview.js'
@@ -288,7 +292,7 @@ export function useDragLayers({
         canvas.nodes.filter((n) => !carried.has(n.id)),
       ),
     }
-    const rendered = renderCanvasToSvg(base, {
+    const rendered = renderCanvasKeyed(base, {
       measure: resolvedMeasure,
       theme,
       ...fileSeamOptions,
@@ -305,7 +309,7 @@ export function useDragLayers({
     // which a fresh pass over a newer canvas is not.
     return {
       carried,
-      keyed: renderedCanvasKeyed(rendered),
+      keyed: rendered.keyed,
       bounds: rendered.bounds,
       measure,
       committedAnchors: gestureCommitted.anchors,
