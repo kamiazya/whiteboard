@@ -193,4 +193,56 @@ describe('wb_document_search when the core is out of budget for another workspac
     expect(out.results).toHaveLength(1)
     expect(state.released).toBe(1)
   })
+
+  it('finishes an index refused partway through, keeping what it already sent', async () => {
+    const first = await workspace()
+    await first.write('a', 'rocket launch window')
+    const second = await workspace()
+    await second.write('b', 'rocket staging area')
+    await second.write('c', 'rocket fuel depot')
+    // Room for two documents across every index, so the second workspace's
+    // second document is refused until the first workspace's index goes.
+    const real = installSearchCore(undefined)
+    if (real === undefined) throw new Error('the test realm installs a search core')
+    realm = real
+    const state = { heldDocs: 0, released: 0, sent: [] as string[] }
+    installSearchCore({
+      ...real,
+      createIndex: () => {
+        const index = real.createIndex()
+        let mine = 0
+        return {
+          ...index,
+          upsert: (doc, alsoIndex) => {
+            if (state.heldDocs >= 2) {
+              const err = new Error('the core holds no more')
+              err.name = 'CoreInputRefused'
+              throw err
+            }
+            state.heldDocs++
+            mine++
+            state.sent.push(doc.documentId)
+            return index.upsert(doc, alsoIndex)
+          },
+          remove: (id) => index.remove(id),
+          search: (query, limit) => index.search(query, limit),
+          release: () => {
+            state.heldDocs -= mine
+            mine = 0
+            state.released++
+            index.release()
+          },
+        }
+      },
+    })
+    const one = createDocumentSearchTool(first.deps, vectorCacheFor(first.deps))
+    const two = createDocumentSearchTool(second.deps, vectorCacheFor(second.deps))
+
+    await one.execute({ workspaceId: WS, query: 'rocket' })
+    const out = await two.execute({ workspaceId: WS, query: 'rocket' })
+    expect(out.results).toHaveLength(2)
+    expect(state.released).toBe(1)
+    // The document sent before the refusal is not sent again.
+    expect(state.sent).toHaveLength(3)
+  })
 })
