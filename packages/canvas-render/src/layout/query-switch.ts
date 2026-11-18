@@ -129,9 +129,10 @@ export interface NoticeOptions {
  * the picture the core drew of it in the envelope and form `svg` names. A
  * measurer that fails does not refuse it (the core draws it by the ratio
  * estimate); what does is words past 64 KiB together (`input-too-large`), a
- * picture past the SVG cap, or a font handle the core does not hold, and each
- * of those throws `CoreInputRefused` here, since a refusal's words are
- * `refusalCopy`'s sentence or two.
+ * picture past the SVG cap, or a font handle the core does not hold. Each of
+ * those throws here, as an `Error` whose message names the refusal's code and
+ * reason: a refusal's words are `refusalCopy`'s sentence or two, so none is
+ * an input this has to answer.
  */
 export function noticeThroughCore(
   core: LayoutCore,

@@ -1,5 +1,5 @@
 import type {
-  CoreSvgAsk,
+  CorePictureAsk,
   LayoutCore,
   LayoutRefusal,
   MeasureText,
@@ -116,7 +116,7 @@ export function composeCanvasPicture(
   canvas: SpatialCanvas,
   measure: MeasureText,
   options: ComposeCanvasSceneOptions,
-  svg: Omit<CoreSvgAsk, 'form'>,
+  svg: CorePictureAsk,
 ): PicturedScene {
   return layoutSpatialCanvasPicture(canvas, layoutOptionsOf(measure, options), svg)
 }

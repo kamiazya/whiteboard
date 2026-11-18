@@ -1,5 +1,5 @@
 import type {
-  CoreSvgAsk,
+  CorePictureAsk,
   LayoutCore,
   LayoutRefusal,
   MeasureText,
@@ -59,7 +59,7 @@ export function composeMarkdownPicture(
   body: string,
   measure: MeasureText,
   options: ComposeMarkdownSceneOptions,
-  svg: Omit<CoreSvgAsk, 'form'>,
+  svg: CorePictureAsk,
 ): PicturedScene | undefined {
   return layoutMarkdownDocumentPicture(body, noteOptionsOf(measure, options), svg)
 }

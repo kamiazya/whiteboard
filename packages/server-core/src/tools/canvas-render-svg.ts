@@ -5,7 +5,7 @@ import type {
   ReferenceGraph,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
-  type CoreSvgAsk,
+  type CorePictureAsk,
   type PicturedScene,
   selectCanvasFragment,
   spatialRenderStyleSchema,
@@ -103,7 +103,7 @@ class FragmentNotFoundError extends Error {
  * The SVG's envelope: the scene's own document bounds (`sceneEnvelope`), so the
  * viewBox starts where the drawing starts and makes room for the legend.
  */
-const SCENE_RENDER_SVG: CoreSvgAsk = { viewBox: 'document' }
+const SCENE_RENDER_SVG: CorePictureAsk = { viewBox: 'document' }
 
 /**
  * The picture a MARKDOWN document renders as, from its body.

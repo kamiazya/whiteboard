@@ -89,6 +89,11 @@ describe('a query over the artifact', () => {
     expect(got).toEqual({ nodes, degradations: [], svg: '<svg xmlns="x"></svg>' })
     const [tag, ...pairs] = sent[0] as [string, ...unknown[]]
     expect(tag).toBe('m')
+    // One whole pair per key: an unpaired or repeated key fails before the
+    // values are read by key.
+    expect(pairs.length % 2).toBe(0)
+    const keys = pairs.filter((_, i) => i % 2 === 0)
+    expect(new Set(keys).size).toBe(keys.length)
     const fields = Object.fromEntries(
       Array.from({ length: pairs.length / 2 }, (_, i) => [pairs[2 * i], pairs[2 * i + 1]]),
     )

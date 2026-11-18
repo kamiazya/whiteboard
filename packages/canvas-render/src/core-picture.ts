@@ -41,7 +41,7 @@ export interface KeyedPicture {
 }
 
 /** The envelope a picture is asked in; its form is the function's to name. */
-type CorePictureAsk = Omit<CoreSvgAsk, 'form'> & { readonly form?: undefined }
+export type CorePictureAsk = Omit<CoreSvgAsk, 'form'> & { readonly form?: undefined }
 
 const EMPTY: BoundingBox = { x: 0, y: 0, w: 0, h: 0 }
 

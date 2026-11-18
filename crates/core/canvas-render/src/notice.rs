@@ -42,10 +42,21 @@ pub struct NoticeOptions {
     pub at: Option<ScenePoint>,
 }
 
-/// `measure`, noting any answer this notice cannot place.
+/// The most text a notice hands its measurer, summed over every call. The
+/// wrap measures each growing prefix of a line, so a measurer whose advances
+/// never fill one (a zero advance) is asked about every prefix of every word:
+/// about a gigabyte for the 64 KiB a notice may hold, which a host keeping a
+/// memo of what it measured would keep. Past this the notice is drawn by the
+/// ratio estimate, as for a measurer that failed; an ordinary notice spends a
+/// few kilobytes.
+const MEASURED_BYTES_BUDGET: usize = 4 * 1024 * 1024;
+
+/// `measure`, noting any answer this notice cannot place, and how much text it
+/// was asked about.
 struct Trusted<'a> {
     inner: &'a dyn Measure,
     doubted: Cell<bool>,
+    spent: Cell<usize>,
 }
 
 impl Measure for Trusted<'_> {
@@ -59,6 +70,13 @@ impl Measure for Trusted<'_> {
     }
 
     fn measure(&self, text: &str, font: &FontDescriptor) -> TextMetrics {
+        let spent = self.spent.get().saturating_add(text.len());
+        self.spent.set(spent);
+        if spent > MEASURED_BYTES_BUDGET {
+            // Nothing more reaches the host: the notice is drawn again by ratio.
+            self.doubted.set(true);
+            return ConstantRatioMeasure.measure(text, font);
+        }
         let metrics = self.inner.measure(text, font);
         if !metrics.advance_width.is_finite() || !metrics.ascent.is_finite() {
             self.doubted.set(true);
@@ -174,7 +192,7 @@ pub fn notice_scene(
     options: &NoticeOptions,
     measure: &dyn Measure,
 ) -> Scene {
-    let trusted = Trusted { inner: measure, doubted: Cell::new(false) };
+    let trusted = Trusted { inner: measure, doubted: Cell::new(false), spent: Cell::new(0) };
     let scene = drawn(title, detail, options, &trusted);
     if trusted.doubted.get() { drawn(title, detail, options, &ConstantRatioMeasure) } else { scene }
 }
@@ -333,17 +351,52 @@ mod tests {
     #[test]
     fn a_width_that_cannot_hold_the_padding_draws_runs_of_no_width() {
         let scene = notice_scene("T", "d", &options(Some(20.0)), &FakeMeasure::default());
-        for node in &scene.nodes {
-            if let SceneNode::TextRun(run) = node {
-                assert_eq!(run.bbox.w.to_bits(), 0.0_f64.to_bits(), "{}", run.text);
-            }
+        let runs: Vec<(&str, u64)> = scene
+            .nodes
+            .iter()
+            .filter_map(|node| match node {
+                SceneNode::TextRun(run) => Some((run.text.as_str(), run.bbox.w.to_bits())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(runs, [("T", 0.0_f64.to_bits()), ("d", 0.0_f64.to_bits())]);
+    }
+
+    /// A measurer whose advances never fill a line, counting what it is asked.
+    struct Weightless(Cell<usize>);
+
+    impl Measure for Weightless {
+        fn advance_width(&self, text: &str, _: &FontDescriptor) -> f64 {
+            self.0.set(self.0.get() + text.len());
+            0.0
         }
+        fn vertical_metrics(&self, font: &FontDescriptor) -> VerticalMetrics {
+            FakeMeasure::default().vertical_metrics(font)
+        }
+    }
+
+    #[test]
+    fn a_measurer_that_never_fills_a_line_is_asked_about_a_bounded_amount_of_text() {
+        let detail = "a ".repeat(32 * 1024);
+        let weightless = Weightless(Cell::new(0));
+        let got = notice_scene("Title", &detail, &options(None), &weightless);
+        assert!(weightless.0.get() <= MEASURED_BYTES_BUDGET, "{}", weightless.0.get());
+        assert_eq!(got, notice_scene("Title", &detail, &options(None), &ConstantRatioMeasure));
+    }
+
+    #[test]
+    fn a_notice_within_the_budget_keeps_the_measurer_it_was_handed() {
+        let weightless = Weightless(Cell::new(0));
+        let got = notice_scene("Title", "a few words", &options(None), &weightless);
+        let ratio = notice_scene("Title", "a few words", &options(None), &ConstantRatioMeasure);
+        assert_ne!(got, ratio);
+        assert!(weightless.0.get() > 0);
     }
 
     #[test]
     fn the_trusted_measurer_answers_what_it_is_handed() {
         let fake = FakeMeasure::default();
-        let trusted = Trusted { inner: &fake, doubted: Cell::new(false) };
+        let trusted = Trusted { inner: &fake, doubted: Cell::new(false), spent: Cell::new(0) };
         let at = font(14.0, 400.0);
         assert_eq!(
             trusted.advance_width("abc", &at).to_bits(),

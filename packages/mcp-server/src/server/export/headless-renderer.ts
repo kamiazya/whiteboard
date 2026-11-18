@@ -23,7 +23,7 @@
 // one gets an exporter of its own.
 
 import type {
-  CoreSvgAsk,
+  CorePictureAsk,
   LayoutCore,
   MeasureText,
   PicturedScene,
@@ -215,7 +215,7 @@ export function buildSpatialPicture(
   canvas: SpatialCanvas,
   core: LayoutCore,
   measure: MeasureText,
-  svg: Omit<CoreSvgAsk, 'form'>,
+  svg: CorePictureAsk,
   mode: ExportThemeMode = 'light',
   style?: SpatialRenderStyle,
   fontAvailable?: (family: string) => boolean,
