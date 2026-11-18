@@ -30,17 +30,17 @@ const LEDGER: Readonly<Record<string, SinkEntry>> = {
   'packages/canvas-viewer/src/SceneSvg.tsx': {
     sinks: { dangerouslySetInnerHTML: 1 },
     reason:
-      'the one component that injects canvas-render serializer output as markup; every React caller of a scene string goes through it',
+      "the one component that injects the core's serializer output as markup; every React caller of a scene string goes through it",
   },
   'apps/web/src/lib/keyed-svg-patcher.ts': {
     sinks: { 'innerHTML =': 2 },
     reason:
-      "mount-once keyed patching writes the keyed projection's own group strings, which are the serializer's bytes; it decides only which groups to replace, so it cannot go through a component",
+      "mount-once keyed patching writes the keyed projection's own group strings, which are the core serializer's bytes; it decides only which groups to replace, so it cannot go through a component",
   },
   'apps/web/src/components/markdown-editor/shortcode-completion.ts': {
     sinks: { 'innerHTML =': 1 },
     reason:
-      "one icon glyph for a CodeMirror completion row, drawn by renderSceneToSvg itself; CodeMirror's DOM is not React, so the component is not available",
+      "one icon glyph for a CodeMirror completion row, drawn by the core's SVG; CodeMirror's DOM is not React, so the component is not available",
   },
 }
 

@@ -95,7 +95,7 @@ export type LayoutAnswer =
 
 /**
  * The SVG a request asks to be answered with beside its scene: the core's
- * backend over the laid-out scene, with `renderSceneToSvg`'s envelope options.
+ * backend over the laid-out scene, with the envelope options the ask names.
  * The view box names no box, since the caller has no scene to measure
  * beforehand: `'document'` is the scene's document bounds (an empty box for a
  * scene with no node, the server's envelope), and `{of, margin?}` is

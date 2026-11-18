@@ -21,7 +21,7 @@ const MIN_PREVIEW_WIDTH_PX = 320
 const QUANTUM_PX = 64
 
 /**
- * `renderSceneToSvg` pads the preview by `PREVIEW_PADDING_PX` on EVERY side,
+ * The core's SVG pads the preview by `PREVIEW_PADDING_PX` on EVERY side,
  * so the element that lands in the pane is `previewWidth + 2 * padding` wide.
  * Budgeting for the layout width alone left the SVG 16px wider than the box
  * it sits in, on every viewport — which is the horizontal scrollbar a phone

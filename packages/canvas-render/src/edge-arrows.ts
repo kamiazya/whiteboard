@@ -32,7 +32,7 @@ function lineWidth(edge: ResolvedEdgeNode): number {
 }
 
 /** How much larger than the fixed head this edge's heads draw: 1 for a light line. */
-export function edgeArrowScale(edge: ResolvedEdgeNode): number {
+function edgeArrowScale(edge: ResolvedEdgeNode): number {
   return Math.max(1, (lineWidth(edge) * HEAD_WIDTHS_PER_LINE_WIDTH) / (ARROW_HALF_WIDTH * 2))
 }
 
@@ -64,71 +64,6 @@ function arrowAt(
       { x: baseX + uy * half, y: baseY - ux * half },
     ],
   }
-}
-
-/**
- * Marker-local arrowhead geometry: the same triangle `arrowAt` places in
- * canvas space, expressed in a marker viewport so the SVG backend can emit
- * ONE `<marker>` definition per (color, size) instead of a polygon per edge
- * end. Derived from the same constants, so the drawn ink is identical — the
- * browser's `orient="auto"` rotation reproduces `arrowAt`'s unit-vector
- * math (both take the direction of the path's terminal segment), which the
- * arrowhead pixel goldens pin. Points are tip first, per the emission-
- * order convention above. `refX`/`refY` place the tip on the path endpoint
- * `inset` units PAST the vertex the marker is attached to — exactly where
- * `arrowAt` puts it, once the backend has pulled the line's end back by
- * `inset` (see `edgeArrowInset`).
- */
-export function arrowMarkerGeometry(direction: 'start' | 'end', scale: number, inset: number) {
-  const length = ARROW_LENGTH * scale
-  const half = ARROW_HALF_WIDTH * scale
-  return direction === 'end'
-    ? {
-        width: length,
-        height: half * 2,
-        refX: length - inset,
-        refY: half,
-        points: [
-          { x: length, y: half },
-          { x: 0, y: 0 },
-          { x: 0, y: half * 2 },
-        ],
-      }
-    : // A start arrow points AGAINST the outgoing segment (its tip sits on the
-      // first vertex), so the start marker's triangle points -x rather than
-      // relying on `orient="auto-start-reverse"`, which resvg support is not
-      // established for.
-      {
-        width: length,
-        height: half * 2,
-        refX: inset,
-        refY: half,
-        points: [
-          { x: 0, y: half },
-          { x: length, y: 0 },
-          { x: length, y: half * 2 },
-        ],
-      }
-}
-
-/**
- * How far the line's own end must stop short of an arrow tip so its butt
- * end hides under the head. The head narrows to nothing at the tip, so a
- * line drawn all the way there shows its corners either side of it — which
- * on a heavy line blunts the tip or swallows the head. A light line keeps
- * its end (0): the overhang is sub-pixel, and its output stays as it was.
- * Also 0 when the terminal run is too short to shorten without losing its
- * direction, which only costs that the line's corners show.
- */
-export function edgeArrowInset(edge: ResolvedEdgeNode, end: 'from' | 'to'): number {
-  if (edgeArrowScale(edge) === 1 || edge.path.length < 2) return 0
-  // Where the head is half a line wide: its half-width grows by
-  // HALF_WIDTH per LENGTH back from the tip.
-  const inset = ((lineWidth(edge) / 2) * ARROW_LENGTH) / ARROW_HALF_WIDTH
-  const tip = end === 'to' ? edge.path[edge.path.length - 1] : edge.path[0]
-  const inward = end === 'to' ? edge.path[edge.path.length - 2] : edge.path[1]
-  const run = hypot(tip.x - inward.x, tip.y - inward.y)
-  return run > inset + MIN_DIRECTION_LENGTH ? inset : 0
 }
 
 /**

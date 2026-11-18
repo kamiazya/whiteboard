@@ -1,15 +1,14 @@
 // A server picture is ONE core call (ADR-0054): `wb_scene_render` and the
-// `canvas_view` picture ask the core for the SVG beside the scene, and the
-// bytes are the ones the TypeScript backend draws of that scene in the
-// envelope each tool always used — `sceneEnvelope`'s view box, and the derived
+// `canvas_view` picture ask the core for the SVG beside the scene, in the
+// envelope each tool wants — `sceneEnvelope`'s view box, and the derived
 // envelope on the palette's paper. Every document is rendered through a core
-// that records what it answered, so the old expression is judged on the very
-// scene the tool drew.
+// that records what it answered, so the envelope is judged on the very scene
+// the tool drew. That the SVG is the core's backend over that scene is held in
+// the core's own tests.
 
 import {
   type CanvasLayoutCore,
   type LayoutCore,
-  renderSceneToSvg,
   resolveCanvasPalette,
   type Scene,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -146,7 +145,7 @@ const MARKS = ['next', 'data-wb-legend', 'remark', 'wb-glow', 'Weekly notes', 'A
 const STYLES = ['clean', 'document', 'visual.sketch', 'visual.neon'] as const
 
 describe('a server picture in one core call', () => {
-  test('wb_scene_render draws what renderSceneToSvg drew in the scene envelope', async () => {
+  test('wb_scene_render draws the scene in its scene envelope', async () => {
     const { core, answered, calls } = recordingCore()
     const tool = createCanvasRenderSvgTool(await depsOver(core))
     let compared = 0
@@ -174,8 +173,12 @@ describe('a server picture in one core call', () => {
               const { scene, svg } = answered.at(-1) as Answered
               expect(result.svg === svg, label).toBe(true)
               const envelope = sceneEnvelope(scene)
-              const old = renderSceneToSvg(scene, { viewBox: envelope })
-              expect(svg === old, label).toBe(true)
+              const viewBox = /^<svg [^>]*?\bviewBox="([^"]*)"/.exec(svg)?.[1]
+              const drawnBox = (viewBox ?? '').split(' ').map(Number)
+              expect(drawnBox, label).toHaveLength(4)
+              for (const [i, v] of [envelope.x, envelope.y, envelope.w, envelope.h].entries()) {
+                expect(drawnBox[i], label).toBeCloseTo(v, 3)
+              }
               expect([result.width, result.height], label).toEqual([envelope.w, envelope.h])
               for (const mark of MARKS) if (svg.includes(mark)) drawn.add(mark)
               compared += 1
@@ -190,7 +193,7 @@ describe('a server picture in one core call', () => {
     expect([...drawn].sort()).toEqual([...MARKS].sort())
   })
 
-  test('the canvas_view picture draws what renderSceneToSvg drew on the palette paper', async () => {
+  test('the canvas_view picture draws on the palette paper', async () => {
     const { core, answered } = recordingCore()
     const deps = await depsOver(core)
     let compared = 0
@@ -203,12 +206,12 @@ describe('a server picture in one core call', () => {
       const before = answered.length
       const picture = await canvasViewPicture(deps, result)
       expect(answered.length - before, String(style)).toBe(1)
-      const { scene, svg } = answered.at(-1) as Answered
+      const { svg } = answered.at(-1) as Answered
       expect(picture.svg === svg, String(style)).toBe(true)
       const canvas = fromJsonCanvas(result.scene)
       const background = resolveCanvasPalette(canvas, 'light', { style: result.style ?? 'clean' })
-      const old = renderSceneToSvg(scene, { padding: 0, background: background.surface })
-      expect(svg === old, String(style)).toBe(true)
+      expect(svg.startsWith('<svg '), String(style)).toBe(true)
+      expect(svg, String(style)).toContain(`fill="${background.surface}"`)
       compared += 1
     }
     expect(compared).toBe(4)

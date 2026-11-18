@@ -6,78 +6,91 @@
 // instead of exporting an unlit line.
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { renderSceneToSvg, type Scene } from '@kamiazya/whiteboard-canvas-render'
 import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Resvg } from '@resvg/resvg-js'
 import { describe, expect, it } from 'vitest'
 import { renderSpatialCanvasToPng, renderSpatialCanvasToSvg } from './headless-renderer.js'
+import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
 
-const BACKGROUND = '#030711'
-
-type SceneEdge = Extract<Scene['nodes'][number], { kind: 'edge' }>
-
-const edge: SceneEdge = {
-  kind: 'edge',
-  id: 'e',
-  path: [
-    { x: 20, y: 60 },
-    { x: 220, y: 60 },
-  ],
-  fromSide: 'right',
-  toSide: 'left',
-  fromEnd: 'none',
-  toEnd: 'none',
-  appearance: { stroke: '#f472b6', strokeWidth: 2, glow: { radiusPx: 6 } },
+// Two boxes apart on one row (or one column) with a straight edge between
+// them: the edge is axis-aligned, so its own bounding box has no area on one
+// axis. Drawn through the core as the export draws it.
+const BOX = { width: 120, height: 60, text: '' } as const
+const across: SpatialCanvas = {
+  nodes: [textNode({ id: 'a', x: 0, y: 0, ...BOX }), textNode({ id: 'b', x: 300, y: 0, ...BOX })],
+  edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' } }],
 }
-const scene: Scene = { nodes: [edge] }
+const down: SpatialCanvas = {
+  nodes: [textNode({ id: 'a', x: 0, y: 0, ...BOX }), textNode({ id: 'b', x: 0, y: 200, ...BOX })],
+  edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' } }],
+}
 
-function pixelAt(pixels: Buffer, width: number, x: number, y: number): [number, number, number] {
+type Axis = 'horizontal' | 'vertical'
+
+interface Raster {
+  readonly width: number
+  readonly pixels: Buffer
+}
+
+const luminance = (r: number, g: number, b: number): number => r + g + b
+
+function pixelAt({ pixels, width }: Raster, x: number, y: number): [number, number, number] {
   const i = (y * width + x) * 4
   return [pixels[i]!, pixels[i + 1]!, pixels[i + 2]!]
 }
 
+/** The export's SVG of `canvas` in `style`, rasterised by resvg at its own size. */
+async function rasterOf(canvas: SpatialCanvas, style: 'document' | 'visual.neon'): Promise<Raster> {
+  const { svg } = await renderSpatialCanvasToSvg(canvas, NO_INSTALLED_FONTS, {
+    core: testLayoutCore(),
+    theme: 'dark',
+    style,
+  })
+  const image = new Resvg(svg, { fitTo: { mode: 'original' } }).render()
+  return { width: image.width, pixels: image.pixels }
+}
+
+/**
+ * Where the edge crosses the raster's middle, and what lies `offset` pixels
+ * beside it: the middle column (or row) is between the two boxes, so the
+ * brightest pixel along it is the line itself. The ground is the corner's.
+ */
+function beside(raster: Raster, axis: Axis, offset: number) {
+  const height = raster.pixels.length / 4 / raster.width
+  const length = axis === 'horizontal' ? height : raster.width
+  const at = (along: number): [number, number, number] =>
+    axis === 'horizontal'
+      ? pixelAt(raster, Math.floor(raster.width / 2), along)
+      : pixelAt(raster, along, Math.floor(height / 2))
+  let line = 0
+  for (let i = 0; i < length; i++) {
+    if (luminance(...at(i)) > luminance(...at(line))) line = i
+  }
+  return {
+    ground: pixelAt(raster, 0, 0),
+    line: at(line),
+    off: at(line - offset),
+  }
+}
+
 describe('glow under resvg', () => {
-  it('paints a halo beside a horizontal edge, several pixels off the line', () => {
-    const svg = renderSceneToSvg(scene, { width: 240, height: 120, background: BACKGROUND })
-    const image = new Resvg(svg, { fitTo: { mode: 'original' } }).render()
-    const [r, g, b] = pixelAt(image.pixels, image.width, 120, 60 - 5)
-    const [bgR, bgG, bgB] = [0x03, 0x07, 0x11]
-    // Pink halo: red channel well above the near-black ground.
-    expect(r - bgR).toBeGreaterThan(20)
-    expect(g).toBeGreaterThanOrEqual(bgG)
-    expect(b).toBeGreaterThanOrEqual(bgB)
+  it('paints a halo beside a horizontal edge, several pixels off the line', async () => {
+    const { ground, line, off } = beside(await rasterOf(across, 'visual.neon'), 'horizontal', 5)
+    expect(luminance(...off) - luminance(...ground)).toBeGreaterThan(20)
     // And the line itself is there, unblurred away.
-    const [lr] = pixelAt(image.pixels, image.width, 120, 60)
-    expect(lr).toBeGreaterThan(200)
+    expect(luminance(...line)).toBeGreaterThan(luminance(...off))
   })
 
-  it('paints a halo beside a vertical edge, whose box has zero width', () => {
-    const vertical: Scene = {
-      nodes: [
-        {
-          ...edge,
-          path: [
-            { x: 120, y: 10 },
-            { x: 120, y: 110 },
-          ],
-        },
-      ],
-    }
-    const svg = renderSceneToSvg(vertical, { width: 240, height: 120, background: BACKGROUND })
-    const image = new Resvg(svg, { fitTo: { mode: 'original' } }).render()
-    const [r] = pixelAt(image.pixels, image.width, 120 - 5, 60)
-    expect(r - 0x03).toBeGreaterThan(20)
+  it('paints a halo beside a vertical edge, whose box has zero width', async () => {
+    const { ground, off } = beside(await rasterOf(down, 'visual.neon'), 'vertical', 5)
+    expect(luminance(...off) - luminance(...ground)).toBeGreaterThan(20)
   })
 
-  it('the same edge without glow leaves the ground untouched five pixels off the line', () => {
-    const { glow: _glow, ...plain } = edge.appearance ?? {}
-    const crisp: Scene = { nodes: [{ ...edge, appearance: plain }] }
-    const svg = renderSceneToSvg(crisp, { width: 240, height: 120, background: BACKGROUND })
-    const image = new Resvg(svg, { fitTo: { mode: 'original' } }).render()
-    const [r] = pixelAt(image.pixels, image.width, 120, 60 - 5)
-    expect(r).toBeLessThan(0x03 + 4)
+  it('the same edge without glow leaves the ground untouched five pixels off the line', async () => {
+    const { ground, off } = beside(await rasterOf(across, 'document'), 'horizontal', 5)
+    expect(luminance(...off) - luminance(...ground)).toBeLessThan(4)
   })
 })
 

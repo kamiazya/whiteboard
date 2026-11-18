@@ -8,8 +8,7 @@ import {
   constantRatioMeasureText,
   createSpatialTheme,
   hitBoxesOf,
-  layoutSpatialCanvas,
-  renderSceneToSvg,
+  layoutSpatialCanvasPicture,
 } from '@kamiazya/whiteboard-canvas-render'
 import { pictureNodeAt } from '@kamiazya/whiteboard-canvas-render/canvas-view-picture'
 import { browserLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/browser-core'
@@ -34,15 +33,16 @@ const canvas = {
 
 /** The picture `canvas_view` hands over, drawn the way the daemon draws it. */
 function daemonPicture(): CanvasViewPicture {
-  const scene = layoutSpatialCanvas(canvas, {
-    core: CORE,
-    measure: constantRatioMeasureText,
-    appearance: createSpatialTheme({ mode: 'light' }),
-  })
-  return {
-    svg: renderSceneToSvg(scene, { padding: 0, background: '#ffffff' }),
-    boxes: hitBoxesOf(canvas.nodes),
-  }
+  const { svg } = layoutSpatialCanvasPicture(
+    canvas,
+    {
+      core: CORE,
+      measure: constantRatioMeasureText,
+      appearance: createSpatialTheme({ mode: 'light' }),
+    },
+    { padding: 0, background: '#ffffff' },
+  )
+  return { svg, boxes: hitBoxesOf(canvas.nodes) }
 }
 
 function frame(): HTMLElement {

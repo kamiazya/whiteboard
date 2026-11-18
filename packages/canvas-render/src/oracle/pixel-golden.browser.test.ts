@@ -7,7 +7,40 @@
 // What it paints is the recorded `pixel-mount/` picture of each golden in
 // svg.jsonl, which the Rust SVG backend is held to byte for byte
 // (`svg_oracle.rs`), so these screenshots judge the core's drawing. The scenes
-// and the regeneration flow are ../test-utils/pixel-golden-scenes.ts.
+// are the frozen `pixel/*` rows of the same file: text-free (a glyph would make
+// a baseline a claim about the machine's fonts) and, for the hand-authored
+// ones, integer-aligned, which `svg-recorded-oracle.test.ts` holds.
+//
+// ## Regenerating a baseline
+//
+// A screenshot diff is a rendering-format change and gets the same review
+// discipline as a byte-level SVG golden: regenerate ONLY as a deliberate,
+// reviewed act, never blindly to make a failing test pass.
+//
+// 1. From `packages/canvas-render`: `pnpm vitest run --project
+//    canvas-render-browser --update` (or `pnpm test:browser --update` from
+//    the repo root).
+// 2. Eyeball every regenerated PNG under `oracle/__screenshots__/` for the
+//    INTENDED geometry (hop bulge on the drawn side, arrowhead orientation,
+//    corner curvature, rect radius), not just "a diff exists". `--update`
+//    photographs a bug as readily as a fix.
+// 3. Commit the PNGs in the same change as whatever justified the diff (a
+//    pinned chromium version bump, a deliberate rendering fix), never
+//    bundled into an unrelated commit.
+//
+// Baseline filenames are platform/browser-suffixed (`-chromium-linux`) by
+// Vitest. CI runs linux chromium, so a baseline regenerated elsewhere is not
+// CI-valid: take CI's. When `test-browser` fails, download the run's
+// `browser-traces-test-browser-<shard>-attempt-<n>` artifact; under
+// `.vitest/attachments/src/oracle/pixel-golden.browser.test.ts/` a missing
+// baseline left `<scene>-reference-chromium-linux.png` and a mismatch left
+// `<scene>-actual-chromium-linux.png`. Eyeball it (step 2), then commit it as
+// `src/oracle/__screenshots__/pixel-golden.browser.test.ts/<scene>-chromium-linux.png`,
+// dropping the `-reference`/`-actual` infix. Only `-chromium-linux` baselines
+// are committed, so the harness skips off linux (saying so) rather than
+// writing one, and `oracle/pixel-golden-baselines.test.ts` fails on a scene
+// without one or on a baseline for any other platform. A missing baseline is
+// CREATED and the test still FAILS, so a forgotten PNG commit is loud.
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { page, server } from 'vitest/browser'
@@ -60,7 +93,7 @@ describe('pixel-level golden regression (real browser)', () => {
     skip(
       server.platform !== BASELINE_PLATFORM,
       `pixel baselines are ${BASELINE_PLATFORM}-only (CI); this browser server runs on ${server.platform}. ` +
-        'Regenerate on linux as test-utils/pixel-golden-scenes.ts describes.',
+        "Regenerate on linux as this file's header describes.",
     )
   })
 

@@ -1,14 +1,13 @@
 // The file export's SVG is ONE core call (ADR-0054): the core answers the
-// SVG beside the scene, and the bytes are the ones the TypeScript backend
-// draws of that scene in the envelope the export always used — its padding,
-// the palette's paper, the dark mode's text fill and the PNG's raster scale.
-// Every render goes through a core that records what it answered, so the old
-// expression is judged on the very scene the export drew.
+// SVG beside the scene, in the envelope the export wants — its padding, the
+// palette's paper, the dark mode's text fill and the PNG's raster scale. Every
+// render goes through a core that records what it answered, so the envelope is
+// judged on the very scene the export drew. That the SVG is the core's backend
+// over that scene is held in the core's own tests.
 
 import {
   type CanvasLayoutCore,
   type LayoutCore,
-  renderSceneToSvg,
   resolveCanvasPalette,
   type Scene,
   type SpatialRenderStyle,
@@ -55,28 +54,30 @@ const LIBRARY: TagLibrary = { h: { values: { ok: { color: '4' } } } }
 
 const DEFAULT_PADDING_PX = 10
 
-/** What the export drew before: the backend over the scene, in the export's envelope. */
-function exportedBefore(
-  scene: Scene,
+/** The root's `name` attribute as a number. */
+const rootNumber = (svg: string, name: string): number =>
+  Number(new RegExp(`^<svg [^>]*?\\b${name}="([^"]*)"`).exec(svg)?.[1])
+
+/** The paper the export draws on, and (dark) the text fill it asks for, are the palette's. */
+function expectPaper(
+  svg: string,
   canvas: SpatialCanvas,
-  options: { theme?: 'light' | 'dark'; style?: SpatialRenderStyle; padding?: number },
-  rasterScale: number,
-): string {
+  options: { theme?: 'light' | 'dark'; style?: SpatialRenderStyle },
+  label: string,
+): void {
   const mode = options.theme === 'dark' ? 'dark' : 'light'
   const palette = resolveCanvasPalette(canvas, mode, { style: options.style ?? 'clean' })
-  return renderSceneToSvg(scene, {
-    padding: options.padding ?? DEFAULT_PADDING_PX,
-    background: palette.surface,
-    rasterScale,
-    ...(mode === 'dark' ? { textFill: palette.labelFill } : {}),
-  })
+  expect(svg.startsWith('<svg '), label).toBe(true)
+  expect(svg, label).toContain(`fill="${palette.surface}"`)
+  if (mode === 'dark' && canvas.nodes.length > 0) expect(svg, label).toContain(palette.labelFill)
 }
 
 describe('the file export in one core call', () => {
-  it('draws the SVG and the PNG source the backend drew of the same scene', async () => {
+  it('draws the SVG and the PNG source from the one scene the core answered', async () => {
     const { core, answered } = recordingCore()
     let compared = 0
     const marks = new Set<string>()
+    const widths = new Map<string, number>()
     for (const canvas of [BOARD, { nodes: [], edges: [] }]) {
       for (const theme of ['light', 'dark'] as const) {
         for (const style of [undefined, 'document', 'visual.sketch', 'visual.neon'] as const) {
@@ -92,22 +93,32 @@ describe('the file export in one core call', () => {
             const svg = await renderSpatialCanvasToSvg(canvas, NO_INSTALLED_FONTS, options)
             const one = answered.at(-1) as Answered
             expect(svg.svg === one.svg, label).toBe(true)
-            expect(one.svg === exportedBefore(one.scene, canvas, options, 1), label).toBe(true)
+            expectPaper(one.svg, canvas, options, label)
+            widths.set(`${label}`, rootNumber(one.svg, 'width'))
             for (const mark of ['calls', 'data-wb-legend', 'wb-glow']) {
               if (one.svg.includes(mark)) marks.add(mark)
             }
             await renderSpatialCanvasToPng(canvas, NO_INSTALLED_FONTS, { ...options, scale: 3 })
             const zoomed = answered.at(-1) as Answered
             expect(zoomed === one, label).toBe(false)
-            expect(zoomed.svg === exportedBefore(zoomed.scene, canvas, options, 3), label).toBe(
-              true,
-            )
+            expectPaper(zoomed.svg, canvas, options, label)
             compared += 2
           }
         }
       }
     }
     expect(compared).toBe(96)
+    // Padding grows the picture by its width on both sides.
+    for (const canvas of ['3', '0']) {
+      for (const theme of ['light', 'dark']) {
+        for (const style of [undefined, 'document', 'visual.sketch', 'visual.neon']) {
+          const at = (padding: number | undefined) =>
+            widths.get(`${canvas} ${theme} ${style} ${padding}`) as number
+          expect(at(24) - at(0), `${canvas} ${theme} ${style}`).toBe(48)
+          expect(at(undefined) - at(0), `${canvas} ${theme} ${style}`).toBe(2 * DEFAULT_PADDING_PX)
+        }
+      }
+    }
     // The board reaches what the export draws: an edge label, a legend and a theme's glow.
     expect([...marks].sort()).toEqual(['calls', 'data-wb-legend', 'wb-glow'])
   })
@@ -126,6 +137,5 @@ describe('the file export in one core call', () => {
     // The glow fits the budget at scale 1 and not at three times it.
     expect(one.svg).toContain('filter=')
     expect(zoomed.svg).not.toContain('filter=')
-    expect(zoomed.svg === exportedBefore(zoomed.scene, big, options, 3)).toBe(true)
   })
 })

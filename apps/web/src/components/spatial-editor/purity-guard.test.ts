@@ -166,7 +166,7 @@ describe('single content path (S10 guardrail)', () => {
       // The committed-scene sink: mount-once innerHTML write of the full
       // keyed document, plus the per-group parse the patcher replaces
       // changed groups through. Every byte both writes carry is
-      // serializer-produced (`renderSceneToKeyedSvg`'s group strings) —
+      // serializer-produced (the core's keyed group strings) —
       // the patcher decides WHICH elements to swap, never how markup is
       // spelled, so the single-producer argument is unchanged.
       ['../../lib/keyed-svg-patcher.ts', 2],

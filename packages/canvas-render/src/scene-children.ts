@@ -45,8 +45,8 @@ export function sceneChildrenOf(node: SceneWalkNode): readonly SceneWalkNode[] |
 }
 
 /**
- * The x-shift a node applies to its own subtree. `renderListItem` and
- * `renderTableCell` are the only renderers that emit a transform, and both
+ * The x-shift a node applies to its own subtree. The list item and the
+ * table cell are the only wrappers the SVG draws with a transform, and both
  * translate by their own `bbox.x` on the x axis only — so their descendants
  * are stored in wrapper-relative coordinates, and every walk that wants where
  * they are DRAWN (`sceneBounds`, the passage highlights) adds this back,

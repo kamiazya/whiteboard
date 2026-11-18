@@ -86,12 +86,12 @@ describe('the mutation lane covers what it says it covers', () => {
     // reach and determinism claims are properties, exactly what a survivor
     // would expose as decorative.
     //
-    // 63 since `svg/paint.ts` and `svg/shapes.ts` left `svg/backend.ts`:
+    // 63 since the SVG backend's paint module and the SVG backend's shapes module left the SVG backend's backend module:
     // the paint helpers and the shape/edge renderers it had grown past its
     // line ceiling with. Not in the lane — their properties are the
     // byte-identical SVG tests, which are examples.
     // 61 since `ink/glow.ts`: one arithmetic line pinned by
-    // `glow.test.ts`'s bounds assertion, which fails on any other reach.
+    // the glow test's bounds assertion, which fails on any other reach.
     //
     // 62 since `scene-graph.ts` LEFT this package for `@kamiazya/whiteboard-
     // scene`. Nothing about the lane changed: the file was types only, so it
@@ -146,12 +146,12 @@ describe('the mutation lane covers what it says it covers', () => {
     // the node where an id was wanted, so every board read as spending
     // nothing, and overload and excess both firing on the same board because
     // they were tested independently.
-    // 71 since `svg/icon.ts`, and OUTSIDE the lane. It is where `backend.ts`
+    // 71 since the SVG backend's icon module, and OUTSIDE the lane. It is where the backend file
     // kept the icon table, its two fallbacks and the one producer of a
     // `<use>` that references an icon, split out when a text run gained the
     // ability to paint one so the `icon` node and that run cannot emit
     // different definitions of the same icon. Nothing moved into it from a
-    // lane module — `backend.ts` was never in the lane — so the reach did
+    // lane module — the backend file was never in the lane — so the reach did
     // not shrink. And it holds no property: every branch is a way of
     // declining (a non-finite box, a name the table lacks, a
     // prototype-inherited name answering a function) with a named example
@@ -173,7 +173,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // reading OFF the facet score — which keys it listed and which swatch
     // each class got — pinned by examples that planted one board each (a carried key, an uncarried
     // colour, a frame that carries and is not listed, an edge key), the
-    // same shape as the instruments it reads. `svg/legend.ts` is document
+    // same shape as the instruments it reads. the SVG backend's legend module is document
     // chrome whose every decision is a coordinate, pinned by the backend's
     // byte-level examples; a survivor there would be a legend two pixels
     // over, which no reader could call a defect.
@@ -199,11 +199,11 @@ describe('the mutation lane covers what it says it covers', () => {
     // the sift, and both were mutation-checked by hand when written —
     // inverting the sift-up comparison fails three cases, re-rooting with
     // the wrong value fails one.
-    // 83 since `svg/render-edge.ts` left `svg/backend.ts` — the edge's path
+    // 83 since the SVG backend's render-edge module left the SVG backend's backend module — the edge's path
     // data, its arrow markers and their assembly, moved when naming the four
     // biggest `renderNode` cases carried that file past the 800-line budget
-    // again. Outside the lane for the same reason `svg/paint.ts` and
-    // `svg/shapes.ts` were when they left the same file: what pins this code
+    // again. Outside the lane for the same reason the SVG backend's paint module and
+    // the SVG backend's shapes module were when they left the same file: what pins this code
     // is the byte-identical SVG tests, which are examples, so a mutation
     // report over it would be survivors nobody can act on. Held instead by a
     // differential over 24 scenes and 14 single-leaf ones, mutation-checked
@@ -220,7 +220,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // lane, because the file it left was: splitting it changes nothing the
     // lane saw, which is the opposite case from the TypeScript ink terms. What pins it is the scene and SVG suites, which are
     // examples, so a mutation report over it would be survivors nobody can
-    // act on — the reasoning `svg/paint.ts` left under.
+    // act on — the reasoning the SVG backend's paint module left under.
     //
     // 88 and 19 since `layout/canvas-theme.ts` came out of it too — which
     // theme a canvas is drawn in — outside the lane for the same reason.
@@ -284,7 +284,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // below `layout/` so the tokeniser does not import a layout module. Types
     // only, nothing to mutate.
     //
-    // 103 and 21 with `xml-escape.ts`, the escaping half of `svg/format.ts`,
+    // 103 and 21 with `xml-escape.ts`, the escaping half of the SVG backend's format module,
     // moved to the package root so `layout/` and `svg/` can both import it.
     // IN the lane, because the file it left was: the move changes nothing the
     // lane saw.
@@ -297,7 +297,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // shared by the editor and the MCP Apps widget. Outside the lane: its own
     // example suite pins each branch and a surviving mutant would show there.
     //
-    // 107 with `svg/document-href.ts`, the one decoder of a scene's document
+    // 107 with the SVG backend's document-href module, the one decoder of a scene's document
     // link beside its encoder, and `theme/spatial-theme-mode.ts`, the mode
     // schema on its own so a type-only reader does not pull the theme layer.
     // Outside the lane: the decoder's table test pins every branch, and the
@@ -332,8 +332,8 @@ describe('the mutation lane covers what it says it covers', () => {
     // the checks that spend it live in the TypeScript grid router and
     // the TypeScript crossing sweep, which are in it.
     //
-    // 113 with `svg/filter-budget.ts`, the summed filter-region bound. Outside
-    // the lane, as the rest of `svg/` is: `filter-region-budget.test.ts`
+    // 113 with the SVG backend's filter-budget module, the summed filter-region bound. Outside
+    // the lane, as the rest of `svg/` is: the filter-region budget test
     // reads the sum off the SVG with its own parser, and its budget, shadow
     // weight, raster scale, clip, largest-first order and definition removal
     // were each mutation-checked by hand against it.
@@ -364,8 +364,8 @@ describe('the mutation lane covers what it says it covers', () => {
     // 117 with `theme/text-halo.ts`, the one constant for a haloed run's
     // pad, read by the painter and by `sceneBounds` so the pill it draws is
     // counted in the viewBox. Outside the lane: a constant with no branch,
-    // pinned by `scene-bounds.test.ts`'s haloed-run case and mutated by hand
-    // to 0 against it.
+    // pinned by `oracle/svg-edge-cases.test.ts`'s haloed-run case (the recorded
+    // pill must sit inside the bounds) and mutated by hand to 0 against it.
     //
     // 118 with the TypeScript contact mark, the contact mark two touching
     // boxes are drawn as instead of a route. Outside the lane: a predicate
@@ -506,9 +506,17 @@ describe('the mutation lane covers what it says it covers', () => {
     // switches' shared helpers left them as leaf modules (`layout/asked-picture.ts`,
     // `layout/core-query.ts`) beside `layout/notice-switch.ts`, each an adapter call whose
     // answer the core's parity tests hold.
+    //
+    // 73 and 8 since the TypeScript SVG backend (`svg/`, sixteen modules) and
+    // the TypeScript refusal drawing were deleted (A3.6): the core draws every
+    // picture, held by the recorded `svg.jsonl`/`svg-edge-cases.jsonl` and the
+    // crate's own tests. Two mutated modules went with it (the SVG backend's format module,
+    // the SVG backend's hoist module), as did their equivalents; the decoder of a scene's
+    // document link (the document-href module) outlives the backend as a root leaf, its table
+    // test pinning every branch, and stays outside the lane.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 10,
-      production: 88,
+      mutated: 8,
+      production: 73,
     })
   })
 

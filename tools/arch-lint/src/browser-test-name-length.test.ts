@@ -33,7 +33,7 @@
 // which is exactly `166 - project name length` (155 for `web-browser`, 145 for
 // the two `canvas-*` projects, 142 for the window-state one). At the time it
 // was widened, `CanvasViewer.browser.test.tsx` carried a 171-character title and
-// `determinism.browser.test.ts` two at 151-152, each over its project's budget
+// a determinism browser test two at 151-152, each over its project's budget
 // while the old guard reported a clean tree.
 //
 // Which project owns a file is READ from the vitest configs through the same

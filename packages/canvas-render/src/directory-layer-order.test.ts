@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
  * imports its own rank or one below it:
  *
  *   theme < highlight < leaf < quality < engines < ink
- *     < scene-bounds < layout < svg < surface
+ *     < scene-bounds < layout < surface
  *
  * `theme/` decides appearance and geometry tokens and reads nothing else;
  * `highlight/` tokenises a code fence; `leaf` is everything that reads no
@@ -17,10 +17,9 @@ import { describe, expect, it } from 'vitest'
  * entry and the `LayoutCore` that names them, root files all, since the
  * routing TypeScript that was `layout/edges/` is deleted; `ink` is `ink/`; `scene-bounds` is the
  * root module that knows how far a drawn node or edge reaches, so it sits
- * above the ink it measures and below the composers and the SVG backend that
- * ask it; `layout` asks the Rust core for the scene (ADR-0054 step 7);
- * `svg` draws it; `surface` is what a
- * consumer calls on a finished scene and nothing in the pipeline reads.
+ * above the ink it measures and below the layout that asks it; `layout` asks
+ * the Rust core for the scene and its picture (ADR-0054 step 7); `surface` is
+ * what a consumer calls on a finished scene and nothing in the pipeline reads.
  *
  * Ranking is by role, not only by directory, because two files sit in a
  * directory whose rank is not theirs: `quality/drawing-score.ts` reads
@@ -52,7 +51,6 @@ const LAYERS = [
   'ink',
   'scene-bounds',
   'layout',
-  'svg',
   'surface',
 ] as const
 type Layer = (typeof LAYERS)[number]
@@ -72,7 +70,6 @@ const DIRECTORY_LAYERS: Readonly<Record<string, Layer>> = {
   outline: 'leaf',
   'edge-path': 'leaf',
   layout: 'layout',
-  svg: 'svg',
   // The MCP Apps widget's picture contract: what a consumer receives once a
   // scene is drawn, read by nothing in the pipeline.
   picture: 'surface',
@@ -112,13 +109,15 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   // A query's request and answer (S18d), which `LayoutCore` names beside both.
   'query-core.ts': 'engines',
   'det-math.ts': 'leaf',
+  // How a drawn scene's document link is read back: the id grammar alone.
+  'document-href.ts': 'leaf',
   'edge-arrows.ts': 'leaf',
   'hit-boxes.ts': 'leaf',
   'hit-test.ts': 'surface',
   'finite-box.ts': 'leaf',
   'measure.ts': 'leaf',
-  // The refusal's words and its scene (S18f): read off the theme's palette, read
-  // by the answers that carry a refusal and by the switches that draw one.
+  // The refusal's words: read by the answers that carry a refusal and by the
+  // switches that draw one.
   'refusal.ts': 'leaf',
   'scene-children.ts': 'leaf',
   'scene-entry-keys.ts': 'leaf',
@@ -127,7 +126,7 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   // The digest's schema, which a query's answer names and a root's tool output spreads.
   'scene-digest-schema.ts': 'leaf',
   // A server picture: the layout's scene and its SVG from one core call, a
-  // refusal's drawn by the backend, so it sits above both.
+  // refusal's notice drawn by the core the same way, so it sits above both.
   'core-picture.ts': 'surface',
   'scoring.ts': 'surface',
   'tidy.ts': 'surface',
@@ -205,7 +204,7 @@ describe('render pipeline layers', () => {
         return to !== undefined && to !== layerOf(path)
       }),
     )
-    expect(crossLayer.length, 'no cross-layer import resolved').toBeGreaterThan(30)
+    expect(crossLayer.length, 'no cross-layer import resolved').toBeGreaterThan(20)
   })
 
   it('names only files and directories that exist', () => {
@@ -237,14 +236,14 @@ describe('render pipeline layers', () => {
     const planted = {
       './theme/a.ts': "import type { X } from '../layout-core.js'",
       './highlight/b.ts': "export type { Y } from '../canvas-core.js'",
-      './ink/c.ts': "export const m = () => import('../svg/format.js')",
+      './ink/c.ts': "export const m = () => import('../layout/format.js')",
       './ink/ok.ts': "import { z } from '../theme/z.js'",
-      './svg/ok.ts': "import { w } from '../layout/w.js'",
+      './picture/ok.ts': "import { w } from '../layout/w.js'",
     }
     expect(backEdges(planted)).toEqual([
       './theme/a.ts (theme) imports ../layout-core.js (engines)',
       './highlight/b.ts (highlight) imports ../canvas-core.js (engines)',
-      './ink/c.ts (ink) imports ../svg/format.js (svg)',
+      './ink/c.ts (ink) imports ../layout/format.js (layout)',
     ])
   })
 
@@ -263,11 +262,11 @@ describe('render pipeline layers', () => {
 
   it('reads double-quoted, side-effect, dynamic and multi-line specifiers', () => {
     const planted = {
-      './theme/q1.ts': 'import { a } from "../svg/format.js"',
-      './theme/q2.ts': 'import "../svg/format.js"',
-      './theme/q3.ts': 'export const m = () => import("../svg/format.js")',
-      './theme/q4.ts': "import {\n  a,\n  b,\n} from '../svg/format.js'",
-      './theme/q5.ts': 'export * from "../svg/format.js"',
+      './theme/q1.ts': 'import { a } from "../layout/format.js"',
+      './theme/q2.ts': 'import "../layout/format.js"',
+      './theme/q3.ts': 'export const m = () => import("../layout/format.js")',
+      './theme/q4.ts': "import {\n  a,\n  b,\n} from '../layout/format.js'",
+      './theme/q5.ts': 'export * from "../layout/format.js"',
     }
     expect(backEdges(planted)).toHaveLength(5)
   })

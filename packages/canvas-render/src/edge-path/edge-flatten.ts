@@ -10,32 +10,10 @@ import type { Point } from '../generated/geometry.zod.js'
 import { flattenRoundedEdgePath, roundedEdgeCorners } from './edge-rounding.js'
 
 /** Radius of the hop arc, in px. Kept below the editor's edge hit tolerance so the decoration never escapes the grabbable band around the raw path. */
-export const EDGE_JUMP_RADIUS_PX = 5
+const EDGE_JUMP_RADIUS_PX = 5
 
 /** Chord count per hop; matches the corner flattening's sub-pixel budget. */
 const HOP_SUBDIVISIONS = 8
-
-/**
- * Where a hop's half-circle meets the base line: entry and exit one jump
- * radius before/after the crossing, along the direction of travel. The
- * ONE producer of hop endpoints — the SVG backend's `A` command and this
- * module's sampling both start and land here.
- */
-export function hopEndpoints(
-  from: Point,
-  to: Point,
-  jump: Point,
-): { readonly entry: Point; readonly exit: Point } | undefined {
-  const len = hypot(to.x - from.x, to.y - from.y)
-  if (len === 0) return undefined
-  const ux = (to.x - from.x) / len
-  const uy = (to.y - from.y) / len
-  const r = EDGE_JUMP_RADIUS_PX
-  return {
-    entry: { x: jump.x - ux * r, y: jump.y - uy * r },
-    exit: { x: jump.x + ux * r, y: jump.y + uy * r },
-  }
-}
 
 /**
  * Sampled half-circle over `jump` on the run `from`->`to`, bulging to the
@@ -78,7 +56,7 @@ function spanPoints(from: Point, to: Point, jumps: readonly Point[]): Point[] {
  * corner. Shared with the SVG backend so "which hops are drawn" has one
  * producer.
  */
-export function jumpsWithinSpan(
+function jumpsWithinSpan(
   jumps: readonly EdgeJumpPoint[],
   segment: number,
   from: Point,

@@ -43,6 +43,8 @@ export type {
   CanvasLayoutRequest,
   CoreDegradation,
   CoreSvgAsk,
+  KeyedSvgGroup,
+  KeyedSvgRender,
 } from './canvas-core.js'
 export { selectCanvasFragment } from './canvas-fragment.js'
 export {
@@ -56,6 +58,7 @@ export {
   layoutSpatialEdgesPicture,
   type PicturedScene,
 } from './core-picture.js'
+export { documentIdOfHref } from './document-href.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
 export { flattenDrawnEdgePath } from './edge-path/edge-flatten.js'
 export { flattenRoundedEdgePath } from './edge-path/edge-rounding.js'
@@ -189,20 +192,13 @@ export {
   loadedReferenceToWire,
   loadedReferenceWireSchema,
 } from './references/wire-schema.js'
-export { type LayoutRefusal, refusalCopy, refusalScene } from './refusal.js'
+export { type LayoutRefusal, refusalCopy } from './refusal.js'
 export { MIN_SCENE_EXTENT_PX, sceneBounds, sceneDocumentBounds } from './scene-bounds.js'
 export type { SceneWalkNode } from './scene-children.js'
 export { sceneChildrenOf } from './scene-children.js'
 export type { SceneDigest } from './scene-digest-schema.js'
 export { sceneDigestSchema } from './scene-digest-schema.js'
 export { STROKE_WEIGHT_FACTOR } from './stroke-weight.js'
-export type { SvgDocumentOptions } from './svg/backend.js'
-export { renderSceneToSvg } from './svg/backend.js'
-export { documentIdOfHref } from './svg/document-href.js'
-export { formatCoord } from './svg/format.js'
-export type { IconTable } from './svg/icon.js'
-export type { KeyedSvgGroup, KeyedSvgRender } from './svg/keyed.js'
-export { renderSceneToKeyedSvg } from './svg/keyed.js'
 /**
  * Exported because a caller that SCORES a canvas must score the one the
  * layout would draw, not the one the store holds: `layoutSpatialCanvas`

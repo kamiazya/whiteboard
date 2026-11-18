@@ -1,48 +1,23 @@
-import {
-  type KeyedSvgRender,
-  renderSceneToKeyedSvg,
-  type Scene,
-  type SceneNode,
-  type SvgDocumentOptions,
-} from '@kamiazya/whiteboard-canvas-render'
+import type { KeyedSvgRender } from '@kamiazya/whiteboard-canvas-render'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check'
+import {
+  type FixtureEntry,
+  type FixtureRoot,
+  keyedFixture,
+} from '../test-utils/keyed-render-fixture'
 import { mountKeyedSvg } from './keyed-svg-patcher'
 
-const shape = (id: string, x: number): SceneNode => ({
-  kind: 'shape',
-  id,
-  bbox: { x, y: 0, w: 100, h: 60 },
-  radius: 4,
-  appearance: { fill: '#fff', stroke: '#333' },
+const shape = (id: string, x: number): FixtureEntry => ({ key: id, x })
+
+const paragraph = (index: number, x: number, text: string, truncated = false): FixtureEntry => ({
+  key: `preamble#${index}`,
+  x,
+  y: 8,
+  text: truncated ? `${text}…` : text,
 })
 
-const paragraph = (x: number, text: string, truncated = false): SceneNode => ({
-  kind: 'paragraph',
-  bbox: { x, y: 8, w: 80, h: 16 },
-  runs: [
-    {
-      kind: 'textRun',
-      bbox: { x, y: 8, w: 40, h: 16 },
-      text,
-      ...(truncated ? { truncated: true as const } : {}),
-    },
-  ],
-})
-
-const edge = (id: string, fromX: number, toX: number): SceneNode => ({
-  kind: 'edge',
-  id,
-  path: [
-    { x: fromX, y: 30 },
-    { x: toX, y: 30 },
-  ],
-  fromSide: 'right',
-  toSide: 'left',
-  fromEnd: 'none',
-  toEnd: 'arrow',
-  appearance: { stroke: '#888' },
-})
+const edge = (id: string, toX: number): FixtureEntry => ({ key: id, x: 100, y: 30, text: `${toX}` })
 
 const rootOf = (container: Element): SVGSVGElement => {
   const root = container.firstElementChild
@@ -63,10 +38,9 @@ function expectConverged(container: Element, next: KeyedSvgRender): void {
 
 describe('mountKeyedSvg', () => {
   it('reuses untouched group elements and replaces only the changed one', () => {
-    const before = renderSceneToKeyedSvg(
-      { nodes: [shape('a', 0), shape('b', 200), edge('e', 100, 200)] },
-      { padding: 4 },
-    )
+    const before = keyedFixture([shape('a', 0), shape('b', 200), edge('e', 200)], {
+      padding: 4,
+    })
     const container = document.createElement('div')
     const patcher = mountKeyedSvg(container, before)
     const root = rootOf(container)
@@ -75,10 +49,7 @@ describe('mountKeyedSvg', () => {
     const keptE = byKey('e')
     const oldB = byKey('b')
 
-    const after = renderSceneToKeyedSvg(
-      { nodes: [shape('a', 0), shape('b', 220), edge('e', 100, 200)] },
-      { padding: 4 },
-    )
+    const after = keyedFixture([shape('a', 0), shape('b', 220), edge('e', 200)], { padding: 4 })
     patcher.update(after)
 
     expect(byKey('a')).toBe(keptA)
@@ -89,13 +60,14 @@ describe('mountKeyedSvg', () => {
 
   it('converges across chrome transitions: background and defs appearing and disappearing', () => {
     const container = document.createElement('div')
-    const first = renderSceneToKeyedSvg({ nodes: [shape('a', 0), paragraph(8, 'plain')] })
+    const first = keyedFixture([shape('a', 0), paragraph(0, 8, 'plain')])
     const patcher = mountKeyedSvg(container, first)
 
-    const withChrome = renderSceneToKeyedSvg(
-      { nodes: [shape('a', 0), paragraph(8, 'cut…', true)] },
-      { padding: 4, background: '#fff' },
-    )
+    const withChrome = keyedFixture([shape('a', 0), paragraph(0, 8, 'cut', true)], {
+      padding: 4,
+      background: '#fff',
+      defs: true,
+    })
     patcher.update(withChrome)
     expectConverged(container, withChrome)
 
@@ -108,19 +80,16 @@ describe('mountKeyedSvg', () => {
     const a = shape('a', 0)
     const b = shape('b', 200)
     const c = shape('c', 400)
-    const patcher = mountKeyedSvg(
-      container,
-      renderSceneToKeyedSvg({ nodes: [a, b] }, { padding: 4 }),
-    )
-    for (const nodes of [[a, b, c], [c, a], [b, c, a], [b]] as const) {
-      const next = renderSceneToKeyedSvg({ nodes: [...nodes] }, { padding: 4 })
+    const patcher = mountKeyedSvg(container, keyedFixture([a, b], { padding: 4 }))
+    for (const entries of [[a, b, c], [c, a], [b, c, a], [b]] as const) {
+      const next = keyedFixture([...entries], { padding: 4 })
       patcher.update(next)
       expectConverged(container, next)
     }
   })
 })
 
-const entryArb: fc.Arbitrary<SceneNode> = fc.oneof(
+const entryArb: fc.Arbitrary<FixtureEntry> = fc.oneof(
   fc
     .record({ id: fc.constantFrom('a', 'b', 'c', 'd'), x: fc.integer({ min: 0, max: 500 }) })
     .map(({ id, x }) => shape(id, x)),
@@ -130,29 +99,39 @@ const entryArb: fc.Arbitrary<SceneNode> = fc.oneof(
       x: fc.integer({ min: 0, max: 300 }),
       truncated: fc.boolean(),
     })
-    .map(({ text, x, truncated }) => paragraph(x, text, truncated)),
+    .map(({ text, x, truncated }) => paragraph(0, x, text, truncated)),
   fc
     .record({ id: fc.constantFrom('e1', 'e2'), toX: fc.integer({ min: 150, max: 400 }) })
-    .map(({ id, toX }) => edge(id, 100, toX)),
+    .map(({ id, toX }) => edge(id, toX)),
 )
 
-const sceneArb: fc.Arbitrary<Scene> = fc
+/** Entries under distinct keys, as a document's are; a paragraph takes its place's `preamble#` key. */
+const entriesArb: fc.Arbitrary<readonly FixtureEntry[]> = fc
   .array(entryArb, { minLength: 0, maxLength: 5 })
-  .map((nodes) => ({ nodes }))
+  .map((entries) => {
+    const seen = new Set<string>()
+    return entries.flatMap((entry, index) => {
+      const key = entry.key.startsWith('preamble#') ? `preamble#${index}` : entry.key
+      if (seen.has(key)) return []
+      seen.add(key)
+      return [{ ...entry, key }]
+    })
+  })
 
-const optionsArb: fc.Arbitrary<SvgDocumentOptions | undefined> = fc.oneof(
-  fc.constant(undefined),
+const rootArb: fc.Arbitrary<FixtureRoot> = fc.oneof(
+  fc.constant({}),
   fc.constant({ padding: 4 }),
   fc.constant({ padding: 4, background: '#fff' }),
+  fc.constant({ padding: 4, background: '#fff', defs: true }),
 )
 
 describe('mountKeyedSvg (PBT)', () => {
   fcTest.prop(
-    [fc.array(fc.tuple(sceneArb, optionsArb), { minLength: 2, maxLength: 5 })],
+    [fc.array(fc.tuple(entriesArb, rootArb), { minLength: 2, maxLength: 5 })],
     withDefaults({ numRuns: 30 }),
   )('any update sequence converges to the fresh mount of the last render', (steps) => {
     const container = document.createElement('div')
-    const renders = steps.map(([scene, options]) => renderSceneToKeyedSvg(scene, options))
+    const renders = steps.map(([entries, root]) => keyedFixture(entries, root))
     const first = renders[0]
     if (first === undefined) return
     const patcher = mountKeyedSvg(container, first)

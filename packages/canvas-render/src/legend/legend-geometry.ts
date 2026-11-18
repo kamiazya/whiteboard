@@ -8,19 +8,17 @@
 import type { SceneLegend } from '@kamiazya/whiteboard-scene'
 
 export const LEGEND_MARGIN_PX = 12
-export const LEGEND_PAD_PX = 8
-export const LEGEND_ROW_PX = 18
-export const LEGEND_FONT_PX = 12
+const LEGEND_PAD_PX = 8
+const LEGEND_ROW_PX = 18
 /** Roboto at 12px averages ~6.2px a glyph; 7 keeps a long value inside the panel. */
 const GLYPH_PX = 7
-export const LEGEND_SWATCH_W = 16
-export const LEGEND_SWATCH_H = 11
-export const LEGEND_GAP_PX = 6
+const LEGEND_SWATCH_W = 16
+const LEGEND_GAP_PX = 6
 
 const UNTAGGED_LABEL = 'untagged'
 export const legendValueLabel = (value: string): string => (value === '' ? UNTAGGED_LABEL : value)
 
-export interface LegendRow {
+interface LegendRow {
   readonly text: string
   readonly muted?: true
   readonly key?: true
@@ -32,7 +30,7 @@ export interface LegendRow {
  * as a defect to a first-time reader (ADR-0040 decision 6, 2026-10-22
  * addendum), so the notes only ever annotate a panel that already has a key.
  */
-export function legendRows(legend: SceneLegend): LegendRow[] {
+function legendRows(legend: SceneLegend): LegendRow[] {
   if (legend.keys.length === 0) return []
   const out: LegendRow[] = []
   for (const key of legend.keys) {

@@ -1,15 +1,15 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { decodeLines, type SvgRecord, svgAnswer } from '../test-utils/render-oracle/oracle.js'
-import { svgEdgeCaseInputs } from '../test-utils/render-oracle/svg-edge-cases.js'
+import { sceneBounds } from '../scene-bounds.js'
+import { decodeLines, type SvgRecord } from '../test-utils/render-oracle/oracle.js'
 
 /**
  * The second recorded oracle of the SVG backend: small scenes aimed at one
  * rule each (an unusable option, a link's address, a degenerate box), which
  * the goldens and laid-out canvases reach only by accident. The Rust backend
  * replays it beside `svg.jsonl` (`tests/svg_edge_cases.rs`) and is held to it
- * byte for byte. It is frozen with `svg.jsonl` (ADR-0054 A3.6): nothing
- * re-records it.
+ * byte for byte. It is frozen with `svg.jsonl` (ADR-0054 A3.6): the case list
+ * that built it went with the TypeScript backend, and nothing re-records it.
  */
 const FILE = new URL('./svg-edge-cases.jsonl', import.meta.url)
 
@@ -53,20 +53,19 @@ describe('the recorded SVG backend edge cases', () => {
     expect(filters('budget/neon-board-1x'), 'a board under the budget keeps all').toBe(25)
   })
 
-  it('records the scenes the case list builds today', () => {
-    const inputs = recorded.map(({ id, scene, options }) => ({ id, scene, options }))
-    expect(inputs).toEqual(svgEdgeCaseInputs())
-  })
-
-  it('equals what the TypeScript answers today', () => {
-    const lines = text.trimEnd().split('\n')
-    const parted = recorded.findIndex(
-      (r, i) =>
-        JSON.stringify(svgAnswer({ id: r.id, scene: r.scene, options: r.options })) !== lines[i],
-    )
-    expect(
-      recorded[parted]?.id,
-      'the first recorded scene the TypeScript no longer draws as recorded',
-    ).toBeUndefined()
+  it('draws a haloed run inside the scene bounds that count its pill', () => {
+    const record = recorded.find((r) => r.id === 'run/halo')
+    const pill =
+      /<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="([\d.]+)" height="([\d.]+)"[^>]*fill="#ffffff"/.exec(
+        record?.svg ?? '',
+      )
+    expect(pill).not.toBeNull()
+    const [x, y, w, h] = (pill ?? []).slice(1).map(Number) as [number, number, number, number]
+    const bounds = sceneBounds(record?.scene ?? { nodes: [] })
+    // The pill sets the left and top edge: the run's own box starts 2px inside it.
+    expect(bounds.x).toBe(x)
+    expect(bounds.y).toBe(y)
+    expect(bounds.x + bounds.w).toBeGreaterThanOrEqual(x + w)
+    expect(bounds.y + bounds.h).toBeGreaterThanOrEqual(y + h)
   })
 })

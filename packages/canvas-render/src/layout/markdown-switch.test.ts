@@ -8,9 +8,9 @@ import type {
 import { constantRatioMeasureText, describeMeasure, measureSpecOf } from '../measure.js'
 import { referenceSeams } from '../references/seams.js'
 import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../references/wire.js'
-import { refusalScene } from '../refusal.js'
 import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { noticeSceneOf } from '../test-utils/notice-scene.js'
 import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { CoreUnaskable } from './canvas-switch.js'
 import {
@@ -113,7 +113,7 @@ describe('a markdown note through the core', () => {
     const heard: unknown[] = []
     const onRefused = (refusal: unknown) => heard.push(refusal)
     const drawn = run(() => ({ refused }), { mode: 'dark', onRefused })
-    expect(drawn.scene).toEqual(refusalScene(refused, { measure, mode: 'dark', maxWidth: 400 }))
+    expect(drawn.scene).toEqual(noticeSceneOf(refused, { measure, mode: 'dark', maxWidth: 400 }))
     expect(heard).toEqual([refused])
   })
 
@@ -200,7 +200,7 @@ describe("a comment's prose through the core", () => {
   it('draws a comment the core refuses as the refusal at its width', () => {
     const refused = { code: 'malformed', reason: 'host-measure' } as const
     const drawn = lay(() => ({ refused }))
-    expect(drawn.scene).toEqual(refusalScene(refused, { measure, mode: 'light', maxWidth: 260 }))
+    expect(drawn.scene).toEqual(noticeSceneOf(refused, { measure, mode: 'light', maxWidth: 260 }))
   })
 
   it('draws a refusal the host measurer caused without asking that measurer again', () => {
@@ -213,7 +213,7 @@ describe("a comment's prose through the core", () => {
     )
     const { core } = coreOf(() => ({ refused }))
     const scene = layoutCommentDocument(prose, { measure: failing, maxWidth: 260, core })
-    const drawn = refusalScene(refused, {
+    const drawn = noticeSceneOf(refused, {
       measure: constantRatioMeasureText,
       mode: 'light',
       maxWidth: 260,

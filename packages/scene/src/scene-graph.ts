@@ -477,7 +477,7 @@ export interface EmbedResolvedNode {
  * (xMidYMid meet), so the bbox is the FRAME, not necessarily the painted
  * extent.
  */
-export interface ImageSceneNode {
+interface ImageSceneNode {
   readonly kind: 'image'
   readonly bbox: BoundingBox
   readonly href: string

@@ -7,7 +7,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import { renderSceneToSvg } from '../svg/backend.js'
+import { layoutSpatialCanvasPicture } from '../core-picture.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
@@ -45,7 +45,11 @@ const edge = (scene: Scene) => scene.nodes.find((n): n is ResolvedEdgeNode => n.
 
 describe('the bundled themes, through the default contributions', () => {
   it('visual.sketch inks every node and edge and routes straight, like the bundled look', () => {
-    const scene = layoutSpatialCanvas(canvasIn('visual.sketch'), options({ style: 'document' }))
+    const { scene, svg } = layoutSpatialCanvasPicture(
+      canvasIn('visual.sketch'),
+      options({ style: 'document' }),
+      {},
+    )
     expect(shape(scene, 'a')?.ink).toMatchObject({ style: 'sketch', fill: 'hatch' })
     expect(shape(scene, 'b')?.ink).toMatchObject({ style: 'sketch' })
     expect(edge(scene)?.ink).toMatchObject({ style: 'sketch' })
@@ -53,16 +57,20 @@ describe('the bundled themes, through the default contributions', () => {
     // edge under the theme follows the same path as under the bundled look.
     const plain = layoutSpatialCanvas(canvasIn(undefined), options())
     expect(edge(scene)?.path).toEqual(edge(plain)?.path)
-    expect(renderSceneToSvg(scene)).toContain('stroke-linecap="round"')
+    expect(svg).toContain('stroke-linecap="round"')
   })
 
   it('visual.neon glows in the dark palette and routes orthogonally', () => {
-    const scene = layoutSpatialCanvas(canvasIn('visual.neon'), options({ style: 'document' }))
+    const { scene, svg } = layoutSpatialCanvasPicture(
+      canvasIn('visual.neon'),
+      options({ style: 'document' }),
+      {},
+    )
     expect(shape(scene, 'a')?.appearance?.glow).toEqual({ radiusPx: 6 })
     expect(shape(scene, 'a')?.appearance?.stroke).toBe('#67e8f9')
     expect(shape(scene, 'a')?.ink).toBeUndefined()
     expect(edge(scene)?.rounded).toBeUndefined()
-    expect(renderSceneToSvg(scene)).toContain('filterUnits="userSpaceOnUse"')
+    expect(svg).toContain('filterUnits="userSpaceOnUse"')
   })
 
   it('the same document under the library default draws the bundled look', () => {

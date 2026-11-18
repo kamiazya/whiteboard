@@ -10,12 +10,9 @@ import {
   type MeasureText,
   measureSpecOf,
   type QueryLayoutCore,
-  renderSceneToKeyedSvg,
-  renderSceneToSvg,
   type SceneNode,
   type SpatialContentCache,
   type SpatialLayoutOptions,
-  sceneBounds,
   type TextMetrics,
 } from '@kamiazya/whiteboard-canvas-render'
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
@@ -56,14 +53,11 @@ import type { WebCore } from './web-core.js'
  * test, and the timed cases skip, saying so (as layout-core.browser.test.ts does).
  *
  * The overlay frame's SPLIT — the edge layer alone, against the layer with its
- * SVG drawn by the core in the same call (what `use-drag-layers.ts` draws),
- * against the layer with the TypeScript backend's SVG — is a measurement, not a guard: it
- * asserts only that it measured something, and runs when
+ * SVG drawn by the core in the same call (what `use-drag-layers.ts` draws) — is a measurement, not a
+ * guard: it asserts only that it measured something, and runs when
  * `VITE_MEASURE_DRAG_SVG=1` (a timing loop has no place in every CI run).
  * The committed layout's split — the layout alone, against the layout with the
- * editor surface's keyed projection drawn by the core in the same call, against
- * the layout with the TypeScript backend's keyed projection (what the main
- * thread derived from a worker's scene until ADR-0054 A3.3) — and what a
+ * editor surface's keyed projection drawn by the core in the same call — and what a
  * `structuredClone` of the keyed answer alone, and of the scene alone, costs
  * in this realm: two fields of a worker's reply, not the whole reply (which
  * also carries bounds and anchors) and not its delivery, run under the same
@@ -217,12 +211,6 @@ function timedOverlay(
 /** The overlay's envelope as the core's ask: the layer's own bounds, at their size. */
 const OVERLAY_ASK = { viewBox: { of: 'scene' } } as const
 
-/** An edge layer drawn by the TypeScript backend in the overlay's envelope: its own bounds. */
-function overlaySvg(nodes: SceneNode[]): string {
-  const bounds = sceneBounds({ nodes })
-  return renderSceneToSvg({ nodes }, { width: bounds.w, height: bounds.h, viewBox: bounds })
-}
-
 /** `board` with its first node moved `dx` to the right: one drag frame. */
 const frameOf = (board: WebLayoutBoard, dx: number) => ({
   ...board.canvas,
@@ -313,17 +301,6 @@ const largest = (): WebLayoutBoard =>
 /** The editor surface's envelope, as the core is asked for it (`scene-render-core.ts`). */
 const EDITOR_ASK = { viewBox: { of: 'scene' }, legend: 'omit' } as const
 
-/** The same envelope as `renderSceneToKeyedSvg`'s options over `scene`. */
-function editorKeyedTs(scene: Parameters<typeof sceneBounds>[0]) {
-  const bounds = sceneBounds(scene)
-  return renderSceneToKeyedSvg(scene, {
-    width: bounds.w,
-    height: bounds.h,
-    viewBox: bounds,
-    legend: 'omit',
-  })
-}
-
 /** The options a committed layout is composed with, over its own content cache. */
 function committedOptions(board: WebLayoutBoard, measure: MeasureText, core: LayoutCore) {
   return {
@@ -397,7 +374,7 @@ describe('a drag frame laid out by the core', () => {
   )
 
   it.runIf(SPLIT && !ABSENT)(
-    'splits the overlay frame into its edge layer and either SVG',
+    'splits the overlay frame into its edge layer and its SVG',
     { timeout: 120_000 },
     async () => {
       if ('failure' in real) return
@@ -418,16 +395,15 @@ describe('a drag frame laid out by the core', () => {
         const mode = cached ? 'cached sides' : 're-siding'
         const frame = overlayInputs(board, browser, cached, core)
         const lay = (at: number) => layoutSpatialEdges(...frame(at))
-        // The two pictures are the same bytes (core-picture-web.rust.test.ts);
-        // asserted once here too, so the rows time the same work.
+        // The picture is asked once before it is timed, so the rows time a
+        // layer that drew one.
         const [canvas, options] = frame(0)
-        expect(layoutSpatialEdgesPicture(canvas, options, OVERLAY_ASK).svg).toBe(
-          overlaySvg(layoutSpatialEdges(canvas, options)),
-        )
+        expect(
+          layoutSpatialEdgesPicture(canvas, options, OVERLAY_ASK).svg.startsWith('<svg '),
+        ).toBe(true)
         const medians = interleavedMedians({
           layer: lay,
           'layer + core svg': (at) => layoutSpatialEdgesPicture(...frame(at), OVERLAY_ASK),
-          'layer + TS svg': (at) => overlaySvg(lay(at)),
         })
         for (const [row, values] of Object.entries(medians)) {
           expect(values).toHaveLength(BATCHES)
@@ -438,14 +414,14 @@ describe('a drag frame laid out by the core', () => {
     },
   )
   it.runIf(SPLIT && !ABSENT)(
-    'splits the committed layout into its layout and either keyed picture',
+    'splits the committed layout into its layout and its keyed picture',
     { timeout: 120_000 },
     async () => {
       if ('failure' in real) return
       await ensureViewerFontLoaded()
       const browser = createBrowserMeasureText()
-      // Every lane laid out by the core: a refused layout is drawn as its
-      // notice in TypeScript, which would time two identical refusals.
+      // Every lane is laid out by the core, so a refused layout would time
+      // two identical refusals; the tally says none was.
       const tally = { answered: 0, keyed: 0 }
       const layout: CanvasLayoutCore = {
         layoutSpatialCanvas(request, highlight, measure, cache) {
@@ -462,28 +438,20 @@ describe('a drag frame laid out by the core', () => {
         tally.keyed = 0
         const plain = committedOptions(board, browser, core)
         const withCore = committedOptions(board, browser, core)
-        const withTs = committedOptions(board, browser, core)
         const at0 = frameOf(board, 0)
-        // The same bytes either way (core-picture-web.rust.test.ts), asserted
-        // once here too so the rows time the same work.
         const scene = layoutSpatialCanvasWithAnchors(at0, plain).scene
         const keyed = layoutSpatialCanvasKeyedPicture(at0, withCore, EDITOR_ASK).keyed
-        expect(keyed.svg).toBe(editorKeyedTs(scene).svg)
+        expect(keyed.svg.startsWith('<svg ')).toBe(true)
         const medians = interleavedMedians({
           layout: (at) => layoutSpatialCanvasWithAnchors(frameOf(board, (at % 40) * 4), plain),
           'layout + core keyed': (at) =>
             layoutSpatialCanvasKeyedPicture(frameOf(board, (at % 40) * 4), withCore, EDITOR_ASK),
-          'layout + TS keyed': (at) =>
-            editorKeyedTs(
-              layoutSpatialCanvasWithAnchors(frameOf(board, (at % 40) * 4), withTs).scene,
-            ),
-          'TS keyed alone': () => editorKeyedTs(scene),
           'local structuredClone of keyed': () => structuredClone(keyed),
           'local structuredClone of scene': () => structuredClone(scene),
         })
-        // Three lanes lay out every frame, plus the two equality layouts above;
-        // the keyed lane and its equality layout answered keyed.
-        expect(tally.answered).toBe(3 * FRAMES_LAID + 2)
+        // Two lanes lay out every frame, plus the two layouts asked above;
+        // the keyed lane and its asking layout answered keyed.
+        expect(tally.answered).toBe(2 * FRAMES_LAID + 2)
         expect(tally.keyed).toBe(FRAMES_LAID + 1)
         reading[`${board.name}: nodes`] = board.canvas.nodes.length
         reading[`${board.name}: keyed chars`] = keyed.svg.length

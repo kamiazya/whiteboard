@@ -49,18 +49,6 @@ const LEDGER: Readonly<Record<string, LedgerEntry>> = {
     uses: 2,
     why: 'facet keys, which the grammar namespaces as namespace.name/vN and so never integer-like, and the channel records, whose keys are fixed words',
   },
-  'packages/canvas-render/src/svg/serialize.ts': {
-    uses: 1,
-    why: 'SVG attribute names, which start with a letter by the XML Name production and so are never integer-like',
-  },
-  'packages/canvas-render/src/svg/hoist.ts': {
-    uses: 2,
-    why: 'SVG attribute names, which start with a letter by the XML Name production and so are never integer-like',
-  },
-  'packages/canvas-render/src/svg/keyed.ts': {
-    uses: 1,
-    why: 'SVG root attribute names, which start with a letter by the XML Name production and so are never integer-like',
-  },
   'packages/canvas-render/src/outline/node-outline.ts': {
     uses: 1,
     why: 'shape names a contribution registers, which the table composes into namespaced ids before anything is ordered by them',
@@ -97,9 +85,9 @@ const used = new Map(
 describe('canvas-render names the key domain of every object-key walk', () => {
   it('scans a tree worth scanning', () => {
     // An empty scan agrees with every rule; the count is what keeps it honest.
-    // 88 production files since the TypeScript edge routing went (ADR-0054
-    // step 7, S18h3b); the floor follows the package, not the other way round.
-    expect(production.length).toBeGreaterThan(80)
+    // 73 production files since the TypeScript SVG backend went (ADR-0054
+    // A3.6); the floor follows the package, not the other way round.
+    expect(production.length).toBeGreaterThan(60)
     expect(used.size).toBeGreaterThan(0)
   })
 

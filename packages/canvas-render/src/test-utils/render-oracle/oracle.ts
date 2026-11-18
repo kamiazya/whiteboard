@@ -1,43 +1,26 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Scene } from '@kamiazya/whiteboard-scene'
+import type { KeyedSvgRender } from '../../canvas-core.js'
 import { layoutSpatialCanvasKeyedPicture, layoutSpatialCanvasPicture } from '../../core-picture.js'
 import { layoutSceneDigest } from '../../layout/query-switch.js'
 import type { SceneDigest } from '../../scene-digest-schema.js'
-import { renderSceneToSvg, type SvgDocumentOptions } from '../../svg/backend.js'
-import { renderSceneToKeyedSvg } from '../../svg/keyed.js'
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { createFakeMeasure } from '../fake-measure.js'
-import {
-  buildDeterminismGoldenScene,
-  buildShapeAppearanceGoldenScene,
-  DETERMINISM_DOCUMENT_OPTIONS,
-} from '../golden-scene.js'
-import {
-  buildArrowheadsScene,
-  buildIconSetScene,
-  buildJumpHopScene,
-  buildNeonLookScene,
-  buildNodeOutlinesScene,
-  buildRoundedCornersScene,
-  buildRoundedRectScene,
-  buildSketchLookScene,
-} from '../pixel-golden-scenes.js'
 import { testLayoutCore } from '../test-layout-core.js'
-import { buildEveryKindScene } from './every-kind-scene.js'
 import { dumpScene } from './scene-dump.js'
 
 /**
  * The recorded answers of the TypeScript renderer, which the Rust slices
- * replay byte for byte (ADR-0054 decision 11): `render.jsonl` for the
- * composer, `svg.jsonl` for the SVG backend alone. The measurer is
+ * replay byte for byte (ADR-0054 decision 11): `render.jsonl` for the layout
+ * and its pictures, `svg.jsonl` for the SVG backend alone. Both are FROZEN: the
+ * TypeScript composer and SVG backend that drew them are deleted, so a
+ * re-recording would be the core judging itself. The measurer is
  * `createFakeMeasure()`, body parsing and highlighting are the package's own
  * defaults, and the appearance is the bundled theme in the recorded mode, so
  * nothing in an answer depends on a host.
  *
- * A record holds its inputs as well as its answers, so re-computing needs no
- * corpus module and no generator: the files can be replayed by a crate that has
- * neither. Both are frozen: the canvases `render.jsonl` lays out and the
- * scenes `svg.jsonl`'s `layout/` records draw are recorded inputs, not rebuilt.
+ * A record holds its inputs as well as its answers, so a crate that has no
+ * corpus module and no generator can replay the files.
  */
 
 interface RenderOptions {
@@ -52,28 +35,25 @@ export interface RenderRecord {
   /** `dumpScene` of the laid-out scene. */
   readonly scene: string
   readonly svg: string
-  readonly keyed: ReturnType<typeof keyedAnswer>
+  readonly keyed: KeyedRecord
   /** The core's digest of the same layout, held to the digest the TypeScript wrote. */
   readonly digest: SceneDigest
 }
 
+/** The keyed projection less its whole-document text, which the record's `svg` already holds. */
+type KeyedRecord = Pick<KeyedSvgRender, 'rootOpen' | 'rootAttrs' | 'groups'>
+
+/** One row of `svg.jsonl` / `svg-edge-cases.jsonl`: a scene, the envelope it was drawn in, and the pictures. */
 export interface SvgRecord {
   readonly id: string
   readonly scene: Scene
-  readonly options: SvgDocumentOptions | null
+  /** The envelope options the SVG backend was given; `null` for none. */
+  readonly options: Readonly<Record<string, unknown>> | null
   readonly svg: string
-  readonly keyed: ReturnType<typeof keyedAnswer>
+  readonly keyed: KeyedRecord
 }
 
 export type RenderInput = Pick<RenderRecord, 'id' | 'canvas' | 'options'>
-export type SvgInput = Pick<SvgRecord, 'id' | 'scene' | 'options'>
-
-const viaJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
-
-function keyedAnswer(scene: Scene, options?: SvgDocumentOptions) {
-  const { rootOpen, rootAttrs, groups } = renderSceneToKeyedSvg(scene, options)
-  return { rootOpen, rootAttrs, groups }
-}
 
 function layoutOptionsRecorded(options: RenderOptions) {
   return {
@@ -105,72 +85,6 @@ export function renderAnswer(input: RenderInput): RenderRecord {
     keyed: { rootOpen, rootAttrs, groups },
     digest: layoutSceneDigest(input.canvas, options),
   }
-}
-
-export function svgAnswer(input: SvgInput): SvgRecord {
-  const options = input.options ?? undefined
-  return {
-    id: input.id,
-    scene: input.scene,
-    options: input.options,
-    svg: renderSceneToSvg(input.scene, options),
-    keyed: keyedAnswer(input.scene, options),
-  }
-}
-
-const SVG_OPTION_CYCLE: readonly (SvgDocumentOptions | null)[] = [
-  null,
-  DETERMINISM_DOCUMENT_OPTIONS,
-  { width: 320, height: 200, textFill: '#222222' },
-  { viewBox: { x: -5, y: -5, w: 400, h: 300 }, legend: 'omit', rasterScale: 2 },
-]
-
-/** The padding the pixel goldens are mounted in. */
-const PIXEL_MOUNT_PADDING_PX = 8
-
-/**
- * The inputs of `svg.jsonl`'s hand-built records: each golden in every
- * envelope of the cycle, and the pixel goldens as the browser mounts them.
- * The recording's `layout/` records are frozen inputs and are not rebuilt.
- */
-export function svgGoldenInputs(): readonly SvgInput[] {
-  const goldens: { id: string; scene: Scene }[] = [
-    { id: 'golden/every-kind', scene: buildEveryKindScene() },
-    { id: 'golden/determinism', scene: buildDeterminismGoldenScene() },
-    { id: 'golden/shape-appearance', scene: buildShapeAppearanceGoldenScene() },
-    { id: 'pixel/jump-hop', scene: buildJumpHopScene() },
-    { id: 'pixel/rounded-corners', scene: buildRoundedCornersScene() },
-    { id: 'pixel/arrowheads', scene: buildArrowheadsScene() },
-    { id: 'pixel/rounded-rect', scene: buildRoundedRectScene() },
-    { id: 'pixel/node-outlines', scene: buildNodeOutlinesScene() },
-    { id: 'pixel/icon-set', scene: buildIconSetScene() },
-    { id: 'pixel/sketch-look', scene: buildSketchLookScene().scene },
-    { id: 'pixel/neon-look', scene: buildNeonLookScene().scene },
-  ]
-  const perGolden = goldens.flatMap((g) =>
-    SVG_OPTION_CYCLE.map((options, i) => ({ ...g, id: `${g.id}#${i}`, options })),
-  )
-  // The pixel goldens as the browser test mounts them, so the picture it
-  // screenshots is a recorded string the core is held to.
-  const sketch = buildSketchLookScene()
-  const neon = buildNeonLookScene()
-  const pixelMounts = [
-    ...goldens.filter((g) => g.id.startsWith('pixel/') && !g.id.endsWith('-look')),
-    { id: 'pixel/sketch-look', scene: sketch.scene, background: sketch.background },
-    { id: 'pixel/neon-look', scene: neon.scene, background: neon.background },
-  ].map((g) => ({
-    id: `pixel-mount/${g.id.slice('pixel/'.length)}`,
-    scene: g.scene,
-    options: {
-      padding: PIXEL_MOUNT_PADDING_PX,
-      background: 'background' in g ? g.background : '#ffffff',
-    },
-  }))
-  return [...perGolden, ...pixelMounts].map(({ id, scene, options }) => ({
-    id,
-    scene: viaJson(scene),
-    options: viaJson(options),
-  }))
 }
 
 export const encodeLines = (records: readonly unknown[]): string =>
