@@ -87,18 +87,40 @@ describe('a query over the artifact', () => {
       svg: { padding: 4 },
     })
     expect(got).toEqual({ nodes, degradations: [], svg: '<svg xmlns="x"></svg>' })
-    expect(sent[0]).toEqual(
-      expect.arrayContaining([
-        'query',
-        'notice',
-        'title',
-        'Too much to draw here',
-        'mode',
-        'dark',
-        'at',
-        ['s', 10, 20],
-      ]),
+    const [tag, ...pairs] = sent[0] as [string, ...unknown[]]
+    expect(tag).toBe('m')
+    const fields = Object.fromEntries(
+      Array.from({ length: pairs.length / 2 }, (_, i) => [pairs[2 * i], pairs[2 * i + 1]]),
     )
+    expect(fields).toEqual({
+      query: 'notice',
+      title: 'Too much to draw here',
+      detail: 'Split it.',
+      mode: 'dark',
+      measure: ['m', 'kind', 'ratio'],
+      maxWidth: 300,
+      at: ['s', 10, 20],
+      svg: ['m', 'padding', 4],
+    })
+  })
+
+  it('sends a notice no fence tokens, whatever sources the memo holds', () => {
+    const nodes = [{ kind: 'shape', bbox: { x: 0, y: 0, w: 480, h: 80 } }]
+    const { glue, sent } = glueOf(JSON.stringify(['ok', nodes, []]))
+    const memo = new FenceTokenMemo()
+    memo.answer([['js', 'x']], () => [[{ text: 'x', role: 'keyword' }]])
+    layoutQuery(
+      { glue, errors, highlight: () => undefined, memo, fonts: new FontHandles(glue, errors) },
+      {
+        query: 'notice',
+        title: 'Example: x',
+        detail: 'x',
+        mode: 'light',
+        measure: { kind: 'ratio' },
+      },
+      undefined,
+    )
+    expect(JSON.stringify(sent[0])).not.toContain('codeTokens')
   })
 
   it('reads the SVG an edges query asked for last, as the document or its keyed projection', () => {

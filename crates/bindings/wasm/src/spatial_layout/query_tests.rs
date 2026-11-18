@@ -523,3 +523,17 @@ fn a_notice_with_more_words_than_the_cap_is_refused() {
         refused("input-too-large", "too-large")
     );
 }
+
+#[test]
+fn a_notice_with_exactly_as_many_words_as_the_cap_is_drawn() {
+    // The title is "Title": five bytes the detail leaves room for.
+    let detail = "x".repeat(MAX_NOTICE_BYTES - "Title".len());
+    let answer = ask(&notice(&ratio(), &[("detail", json!(detail))]));
+    assert_eq!(
+        answer.get(0),
+        Some(&json!("ok")),
+        "{}",
+        answer.get(1).map_or(0, |n| n.to_string().len())
+    );
+    assert_eq!(MAX_NOTICE_BYTES, 65_536);
+}

@@ -35,7 +35,7 @@ const REFUSALS: readonly LayoutRefusal[] = [
   { code: 'malformed', reason: 'no-words-of-its-own' },
 ]
 
-const WIDTHS = [undefined, 480, 300, 120, 40] as const
+const WIDTHS = [undefined, 480, 300, 120, 40, 20] as const
 const POINTS = [undefined, { x: 0, y: 0 }, { x: 37.5, y: -12 }] as const
 const MODES = ['light', 'dark'] as const
 
