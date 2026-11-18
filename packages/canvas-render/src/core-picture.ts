@@ -10,7 +10,13 @@ import {
   type MarkdownDocumentOptions,
   noteThroughCore,
 } from './layout/markdown-switch.js'
-import { edgeLayerThroughCore } from './layout/query-switch.js'
+import {
+  edgeLayerThroughCore,
+  type NoticeOptions,
+  type NoticeWords,
+  noticeThroughCore,
+} from './layout/query-switch.js'
+import type { LayoutCore } from './layout-core.js'
 import { sceneBounds, sceneDocumentBounds } from './scene-bounds.js'
 import { renderSceneToSvg, type SvgDocumentOptions } from './svg/backend.js'
 import { renderSceneToKeyedSvg } from './svg/keyed.js'
@@ -35,7 +41,7 @@ export interface KeyedPicture {
 }
 
 /** The envelope a picture is asked in; its form is the function's to name. */
-type CorePictureAsk = Omit<CoreSvgAsk, 'form'>
+export type CorePictureAsk = Omit<CoreSvgAsk, 'form'> & { readonly form?: undefined }
 
 const EMPTY: BoundingBox = { x: 0, y: 0, w: 0, h: 0 }
 
@@ -182,4 +188,31 @@ export function layoutSpatialEdgesPicture(
   const { nodes, ...picture } = edgeLayerThroughCore(canvas, options, wireAsk(svg))
   const { svg: drawn } = pictured({ scene: { nodes }, ...picture }, svg)
   return { nodes, svg: drawn }
+}
+
+/**
+ * A refusal's notice, words and all, drawn by the core: one box and its text
+ * runs (`refusalScene`'s drawing, which the core repeats), with its SVG, both
+ * from ONE core call. The words stay `refusalCopy`'s, so every surface that
+ * words a refusal says the same thing.
+ */
+export function layoutNoticePicture(
+  core: LayoutCore,
+  words: NoticeWords,
+  options: NoticeOptions,
+  svg: CorePictureAsk,
+): PicturedScene {
+  const { nodes, ...picture } = noticeThroughCore(core, words, options, wireAsk(svg))
+  return pictured({ scene: { nodes }, ...picture }, svg)
+}
+
+/** `layoutNoticePicture` answered as the keyed projection. */
+export function layoutNoticeKeyedPicture(
+  core: LayoutCore,
+  words: NoticeWords,
+  options: NoticeOptions,
+  svg: CorePictureAsk,
+): KeyedPicture {
+  const { nodes, ...picture } = noticeThroughCore(core, words, options, keyedAsk(svg))
+  return keyedPictured({ scene: { nodes }, ...picture }, svg)
 }

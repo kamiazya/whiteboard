@@ -22,7 +22,10 @@
 //!   titles then every obstacle as `[x, y, w, h]` rows, `comment-bubble` and
 //!   `outline-content-box` `[x, y, w, h]`;
 //! - `tidy`: `["ok", move...]`, each box that moves as `[id, x, y]`, or
-//!   `[id, x, y, w, h]` for a frame that grew, the numbers as bits.
+//!   `[id, x, y, w, h]` for a frame that grew, the numbers as bits;
+//! - `notice`: `["ok", nodes, [], svg?]`, as `edges` answers, the notice drawn
+//!   by `whiteboard_canvas_render::notice`; a host measurer that did not
+//!   answer draws it by the ratio estimate rather than refusing it.
 
 use std::collections::BTreeSet;
 
@@ -35,9 +38,11 @@ use whiteboard_canvas_render::compose_edges::{LabelSize, edge_label_placement, l
 use whiteboard_canvas_render::constant_ratio::ConstantRatioMeasure;
 use whiteboard_canvas_render::measure::Measure;
 use whiteboard_canvas_render::node_outline::outline_content_box;
+use whiteboard_canvas_render::notice::{NoticeOptions, notice_scene};
 use whiteboard_canvas_render::scene_digest::{DigestError, scene_digest};
 use whiteboard_canvas_render::scene_wire::{Tree, nodes_tree};
 use whiteboard_canvas_render::theme::geometry::SPATIAL_THEME_GEOMETRY;
+use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::tidy::{TidyMove, TidyNode, TidyOptions, tidy_nodes};
 use whiteboard_det::math::js_max;
 use whiteboard_model::node_content::is_frame;
@@ -46,10 +51,10 @@ use whiteboard_scene::{BoundingBox, Scene, SceneNode};
 
 use super::answer::{events, refused, svg_item};
 use super::host_measure::{Host, HostMeasurer};
-use super::request::{NodeSize, Query, Request, Run, SvgAsk, query_of};
+use super::request::{NodeSize, NoticeAsk, Query, Request, Run, SvgAsk, query_of};
 use super::{
-    MAX_BODY_BYTES, MAX_ELEMENTS, MAX_FRAGMENTS, MAX_SVG_BYTES, measured, past_canvas_caps, plugin,
-    settled, with_options,
+    MAX_BODY_BYTES, MAX_ELEMENTS, MAX_FRAGMENTS, MAX_SVG_BYTES, Unmeasured, measured,
+    past_canvas_caps, plugin, settled, with_measurer, with_options,
 };
 use crate::input_caps::LAYOUT_QUERY;
 use crate::json_canvas_wire::json_value;
@@ -101,8 +106,40 @@ pub fn query_with_host(request: &str, host: Option<&dyn Host>) -> String {
             ok(vec![box_tree(&outline_content_box(shape.as_deref(), &bbox))])
         }
         Some(Query::Tidy { nodes, options }) => tidy(&nodes, &options),
+        Some(Query::Notice(ask)) => notice(&ask, host),
         None => refused("malformed", "request"),
     }
+}
+
+/// The most bytes a notice's words may hold together. Its words are a
+/// sentence or two, so this bounds how many texts the wrap measures without
+/// asking the whole request's bytes to.
+pub(super) const MAX_NOTICE_BYTES: usize = 64 * 1024;
+
+/// A notice drawn, its picture beside it when `svg` asks for one. A measurer
+/// that fails draws it by the ratio estimate: a notice is what a surface draws
+/// where the host's own measurer failed, so it cannot depend on it.
+fn notice(ask: &NoticeAsk, host: Option<&dyn Host>) -> String {
+    if ask.title.len().saturating_add(ask.detail.len()) > MAX_NOTICE_BYTES {
+        return refused("input-too-large", "too-large");
+    }
+    let mode = if ask.dark { SpatialThemeMode::Dark } else { SpatialThemeMode::Light };
+    let options = NoticeOptions { mode, max_width: ask.max_width, at: ask.at };
+    let draw = |measure: &dyn Measure| notice_scene(&ask.title, &ask.detail, &options, measure);
+    let scene = match with_measurer(&ask.measure, host, draw) {
+        Ok(scene) => scene,
+        Err(Unmeasured::Host) => draw(&ConstantRatioMeasure),
+        Err(Unmeasured::FontHandle) => return refused("malformed", "font-handle"),
+    };
+    let mut items =
+        vec![Tree::Text("ok".to_owned()), nodes_tree(&scene.nodes), Tree::List(Vec::new())];
+    if let Some(svg) = &ask.svg {
+        match svg_item(&scene, svg, MAX_SVG_BYTES) {
+            Ok(item) => items.push(item),
+            Err(refusal) => return refusal,
+        }
+    }
+    Tree::List(items).to_json().unwrap_or_else(|_| refused("malformed", "non-finite"))
 }
 
 /// The boxes a tidy moves, or why it is not answered: refused past the

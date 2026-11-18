@@ -73,6 +73,61 @@ describe('a query over the artifact', () => {
     )
   })
 
+  it('sends a notice as a measured query and reads its nodes and picture as an edge layer', () => {
+    const nodes = [{ kind: 'shape', bbox: { x: 0, y: 0, w: 480, h: 80 } }]
+    const { glue, sent } = glueOf(JSON.stringify(['ok', nodes, [], '<svg xmlns="x"></svg>']))
+    const got = ask(glue, {
+      query: 'notice',
+      title: 'Too much to draw here',
+      detail: 'Split it.',
+      mode: 'dark',
+      measure: { kind: 'ratio' },
+      maxWidth: 300,
+      at: [10, 20],
+      svg: { padding: 4 },
+    })
+    expect(got).toEqual({ nodes, degradations: [], svg: '<svg xmlns="x"></svg>' })
+    const [tag, ...pairs] = sent[0] as [string, ...unknown[]]
+    expect(tag).toBe('m')
+    // One whole pair per key: an unpaired or repeated key fails before the
+    // values are read by key.
+    expect(pairs.length % 2).toBe(0)
+    const keys = pairs.filter((_, i) => i % 2 === 0)
+    expect(new Set(keys).size).toBe(keys.length)
+    const fields = Object.fromEntries(
+      Array.from({ length: pairs.length / 2 }, (_, i) => [pairs[2 * i], pairs[2 * i + 1]]),
+    )
+    expect(fields).toEqual({
+      query: 'notice',
+      title: 'Too much to draw here',
+      detail: 'Split it.',
+      mode: 'dark',
+      measure: ['m', 'kind', 'ratio'],
+      maxWidth: 300,
+      at: ['s', 10, 20],
+      svg: ['m', 'padding', 4],
+    })
+  })
+
+  it('sends a notice no fence tokens, whatever sources the memo holds', () => {
+    const nodes = [{ kind: 'shape', bbox: { x: 0, y: 0, w: 480, h: 80 } }]
+    const { glue, sent } = glueOf(JSON.stringify(['ok', nodes, []]))
+    const memo = new FenceTokenMemo()
+    memo.answer([['js', 'x']], () => [[{ text: 'x', role: 'keyword' }]])
+    layoutQuery(
+      { glue, errors, highlight: () => undefined, memo, fonts: new FontHandles(glue, errors) },
+      {
+        query: 'notice',
+        title: 'Example: x',
+        detail: 'x',
+        mode: 'light',
+        measure: { kind: 'ratio' },
+      },
+      undefined,
+    )
+    expect(JSON.stringify(sent[0])).not.toContain('codeTokens')
+  })
+
   it('reads the SVG an edges query asked for last, as the document or its keyed projection', () => {
     const nodes = [{ kind: 'edge', id: 'e', path: [] }]
     const request = {

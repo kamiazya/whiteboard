@@ -4,6 +4,7 @@ use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 use std::cell::Cell;
 
 use super::host_measure::Host;
+use super::query::MAX_NOTICE_BYTES;
 use super::tests::{board, fake, m, s, text_node};
 use super::{MAX_BODY_BYTES, MAX_ELEMENTS, MAX_FRAGMENTS, query_with_host};
 use crate::input_caps::LAYOUT_QUERY;
@@ -440,4 +441,99 @@ fn a_tidy_past_its_caps_or_over_a_box_it_cannot_size_is_refused() {
     // A row that is not six fields is no box.
     let short = s(vec![json!("a"), json!(false)]);
     assert_eq!(tidy(vec![short], &[]), refused("malformed", "request"));
+}
+
+fn notice(measure: &Json, extra: &[(&str, Json)]) -> Json {
+    let mut fields = vec![
+        ("query", json!("notice")),
+        ("title", json!("Title")),
+        ("detail", json!("some words to wrap")),
+        ("mode", json!("light")),
+        ("measure", measure.clone()),
+    ];
+    fields.retain(|(name, _)| extra.iter().all(|(key, _)| key != name));
+    fields.extend(extra.iter().map(|(key, value)| (*key, value.clone())));
+    m(&fields)
+}
+
+fn ratio() -> Json {
+    m(&[("kind", json!("ratio"))])
+}
+
+fn host() -> Json {
+    m(&[("kind", json!("host"))])
+}
+
+#[test]
+fn a_notice_is_a_box_and_its_runs_with_no_degradations() {
+    let answer = ask(&notice(&fake(), &[]));
+    assert_eq!(answer.get(0), Some(&json!("ok")));
+    let nodes = answer.get(1).and_then(Json::as_array).map_or(0, Vec::len);
+    assert!(nodes >= 3, "a box and a run for the title and the detail: {answer}");
+    assert_eq!(answer.get(2), Some(&json!([])));
+    assert_eq!(answer.as_array().map(Vec::len), Some(3));
+}
+
+#[test]
+fn a_notice_carries_the_svg_it_is_asked_to_be_drawn_in() {
+    let svg = m(&[("padding", f(8.0))]);
+    let answer = ask(&notice(&fake(), &[("svg", svg)]));
+    let drawn = answer.get(3).and_then(Json::as_str).unwrap_or_default();
+    assert!(drawn.starts_with("<svg") && drawn.ends_with("</svg>"), "{answer}");
+}
+
+#[test]
+fn a_host_that_does_not_answer_draws_the_notice_by_the_ratio_estimate() {
+    let refusing = Counting { refuse: true, ..Counting::default() };
+    let drawn = query_with_host(&notice(&host(), &[]).to_string(), Some(&refusing));
+    let by_ratio = query_with_host(&notice(&ratio(), &[]).to_string(), None);
+    assert_eq!(drawn, by_ratio);
+    assert!(drawn.starts_with(r#"["ok","#));
+}
+
+#[test]
+fn a_host_asked_for_with_none_handed_over_draws_by_the_ratio_estimate_too() {
+    let none = query_with_host(&notice(&host(), &[]).to_string(), None);
+    assert_eq!(none, query_with_host(&notice(&ratio(), &[]).to_string(), None));
+}
+
+#[test]
+fn a_notice_is_read_as_strictly_as_every_other_query() {
+    assert_eq!(ask(&notice(&fake(), &[("stray", json!(true))])), refused("malformed", "request"));
+    let no_title = m(&[
+        ("query", json!("notice")),
+        ("detail", json!("d")),
+        ("mode", json!("light")),
+        ("measure", fake()),
+    ]);
+    assert_eq!(ask(&no_title), refused("malformed", "request"));
+    let at = |at: Json| ask(&notice(&fake(), &[("at", at)]));
+    assert_eq!(at(numbers(&[1.0])), refused("malformed", "request"));
+    assert_eq!(
+        ask(&notice(&fake(), &[("maxWidth", json!("wide"))])),
+        refused("malformed", "request")
+    );
+}
+
+/// A notice of "Title" and a detail of `n` bytes, drawn by ratio.
+fn notice_of(n: usize) -> Json {
+    ask(&notice(&ratio(), &[("detail", json!("x".repeat(n)))]))
+}
+
+#[test]
+fn a_notice_with_more_words_than_the_cap_is_refused() {
+    let over = MAX_NOTICE_BYTES + 1 - "Title".len();
+    assert_eq!(notice_of(over), refused("input-too-large", "too-large"));
+}
+
+#[test]
+fn a_notice_with_exactly_as_many_words_as_the_cap_is_drawn_whole() {
+    assert_eq!(MAX_NOTICE_BYTES, 65_536);
+    let detail = MAX_NOTICE_BYTES - "Title".len();
+    let answer = notice_of(detail);
+    assert_eq!(answer.get(0), Some(&json!("ok")));
+    // One unbreakable word keeps a line of its own: the whole detail is one run.
+    let nodes = answer.get(1).map(Json::to_string).unwrap_or_default();
+    assert!(nodes.contains(&"x".repeat(detail)), "the detail is not drawn whole");
+    assert!(nodes.contains("\"Title\""), "the title is not drawn");
 }

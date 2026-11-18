@@ -1,5 +1,5 @@
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
-import type { FenceHighlighter, FenceTokenMemo } from './fence-tokens.js'
+import { type FenceHighlighter, FenceTokenMemo } from './fence-tokens.js'
 import type { FontHandles } from './font-handles.js'
 import { LAYOUT_QUERY_CAPS } from './generated/input-caps.js'
 import type { HostMeasure } from './host-measure.js'
@@ -32,12 +32,23 @@ type Pair = readonly [number, number]
  * every field a canvas request carries, and an `svg` the layer is drawn in as
  * a scene of its own), the spatial digest of the scene it lays out
  * (`scene-digest`), a node's fitted height (`node-size`) or its content's
- * natural size (`node-content`).
+ * natural size (`node-content`), or the box a refused layout is drawn as
+ * (`notice`: the words it is handed, the mode, the width there is, where its
+ * corner sits and the `svg` it is drawn in; answered as an edge layer is).
  */
 type MeasuredQuery = LayoutRequest &
   (
     | { readonly query: 'edges'; readonly svg?: SvgAsk }
     | { readonly query: 'scene-digest' | 'node-size' | 'node-content' }
+    | {
+        readonly query: 'notice'
+        readonly title: string
+        readonly detail: string
+        readonly mode: 'light' | 'dark'
+        readonly maxWidth?: number
+        readonly at?: Pair
+        readonly svg?: SvgAsk
+      }
   )
 
 /** A query that measures nothing: placement geometry over boxes and points. */
@@ -209,12 +220,22 @@ export function layoutQuery(
   const { glue, errors } = calls
   if ('measure' in request) {
     const read =
-      request.query === 'edges'
+      request.query === 'edges' || request.query === 'notice'
         ? readEdges
         : request.query === 'scene-digest'
           ? readDigest
           : readNumbers
-    return layoutWith({ ...calls, entry: OPERATION }, request, read, hostMeasure, undefined)
+    // A notice holds no fence, and its reader refuses `codeTokens`: a title
+    // that happens to contain a source the memo holds must not carry its tokens.
+    const fences =
+      request.query === 'notice' ? { highlight: undefined, memo: new FenceTokenMemo() } : {}
+    return layoutWith(
+      { ...calls, ...fences, entry: OPERATION },
+      request,
+      read,
+      hostMeasure,
+      undefined,
+    )
   }
   const wire = wireOf(request, 0, true)
   if (wire === undefined) throw errors.refused(OPERATION, 'malformed', 'wire')

@@ -82,6 +82,13 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   `editor-surface-core.browser.test.tsx` and the worker parity test. The
   preview pane, a comment's body and `CanvasViewer` do too (A3.4); only the
   shortcode icon and a refused layout's notice still draw in TypeScript (A3.5).
+- The `notice` query (ABI 43) draws a refused layout's box: it is handed the
+  title and the detail (`refusalCopy`'s words stay TypeScript's), lays them out
+  as `refusalScene` does and answers as `edges` does, nodes and the `svg` it
+  asks; a host measurer that fails or answers no finite advance or ascent draws
+  the whole notice by the ratio estimate, never a refusal. Held to
+  `refusalScene` and the TypeScript backend by canvas-render's
+  `core-notice.rust.test.ts`; canvas-render's `layoutNoticePicture` asks it.
 - `core.search` (`search.ts`): lexical search over the one `search_op` export.
   Text calls are stateless; a `SearchIndex` (a corpus's token bags, upserted per
   changed document, queried by string) and a set of link labels live in the

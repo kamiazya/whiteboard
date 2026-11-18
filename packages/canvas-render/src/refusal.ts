@@ -191,7 +191,8 @@ function drawn(refusal: LayoutRefusal, options: RefusalSceneOptions): Scene {
   const { measure, mode } = options
   const palette = mode === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
   const width = Math.min(options.maxWidth ?? WIDTH_PX, WIDTH_PX)
-  const inner = width - 2 * PADDING_PX
+  // A width too narrow for the padding leaves no room, never a negative one.
+  const inner = Math.max(width - 2 * PADDING_PX, 0)
   const { title, detail } = refusalCopy(refusal)
   const { x: left, y: top } = options.at ?? { x: 0, y: 0 }
   const runs: SceneNode[] = []
