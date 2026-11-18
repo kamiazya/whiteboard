@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { decodeLines, type SvgRecord, svgAnswer } from '../test-utils/render-oracle/oracle.js'
+import {
+  decodeLines,
+  type SvgRecord,
+  svgAnswer,
+  svgGoldenInputs,
+} from '../test-utils/render-oracle/oracle.js'
 
 /**
  * The committed recording of what the SVG backend alone answered for a scene
@@ -36,6 +41,13 @@ describe('the recorded SVG backend oracle', () => {
         `scenes drawn with ${option}`,
       ).toBeGreaterThan(5)
     }
+  })
+
+  it('records the goldens the builders build today', () => {
+    const goldens = recorded
+      .filter((r) => !r.id.startsWith('layout/'))
+      .map(({ id, scene, options }) => ({ id, scene, options }))
+    expect(goldens).toEqual(svgGoldenInputs())
   })
 
   it('equals what the TypeScript answers today', () => {
