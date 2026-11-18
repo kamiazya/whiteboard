@@ -163,7 +163,7 @@ export function layoutSpatialEdgesPicture(
   options: SpatialLayoutOptions,
   svg: CorePictureAsk,
 ): { readonly nodes: SceneNode[]; readonly svg: string } {
-  const layer = edgeLayerThroughCore(canvas, options, svg)
-  const { svg: drawn } = pictured({ scene: { nodes: layer.nodes }, svg: layer.svg }, svg)
-  return { nodes: layer.nodes, svg: drawn }
+  const { nodes, ...picture } = edgeLayerThroughCore(canvas, options, svg)
+  const { svg: drawn } = pictured({ scene: { nodes }, ...picture }, svg)
+  return { nodes, svg: drawn }
 }
