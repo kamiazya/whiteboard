@@ -21,7 +21,7 @@ fn paragraph(text: &str) -> Root {
 fn inline(root: &Root) -> &[Phrasing] {
     match root.children.as_slice() {
         [Flow::Paragraph { children }] => children,
-        other => panic!("expected one paragraph, got {other:?}"),
+        other => unreachable!("expected one paragraph, got {other:?}"),
     }
 }
 
