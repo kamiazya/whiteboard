@@ -2,7 +2,7 @@ import { createElement, type HTMLAttributes, type Ref } from 'react'
 
 interface SceneSvgProps
   extends Omit<HTMLAttributes<HTMLElement>, 'children' | 'dangerouslySetInnerHTML'> {
-  /** canvas-render's serializer output (or `fitSvgToBox` of it) — never any other string. */
+  /** The core's SVG (or a root-size derivation of it, below) — never any other string. */
   readonly svg: string
   /** The host element; `figure` for a region that names its content, `span` inside a line. */
   readonly as?: 'div' | 'figure' | 'span'
@@ -18,8 +18,10 @@ interface SceneSvgProps
  * values: there is no untrusted-HTML path, so this is not a sink that needs
  * a sanitizer, and none must be added. Two derivations keep that true and
  * are the only ones allowed — the keyed projection's group strings, which
- * are the same serializer's bytes, and `fitSvgToBox`, which only drops the
- * root tag's `width`/`height`/`preserveAspectRatio` attributes. If a
+ * are the same serializer's bytes, and the two that touch only the root
+ * tag's size: `fitSvgToBox`, which drops its `width`/`height`/
+ * `preserveAspectRatio`, and `CanvasViewer`'s `fillingItsHost`, which sets its
+ * `width`/`height` to `100%`. If a
  * caller's string comes from anywhere else this reasoning no longer holds
  * and the caller must not use this component.
  *

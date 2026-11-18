@@ -14,8 +14,8 @@
  * renderer is how a surface comes to disagree with the export. The
  * producer is `layoutCommentBody`, which fixes the metrics a comment is
  * laid out with, so this and the bubble cannot pick different ones; it is
- * reached through `layoutCommentDocument`, which answers it from the Rust
- * core's markdown entry.
+ * reached through `layoutCommentDocumentKeyedPicture`, which the Rust core
+ * answers with the body laid out and drawn as its keyed projection in one call.
  *
  * What that costs, said plainly because it is a real cost and not an
  * oversight: the body is `<text>` elements rather than a paragraph, so it
@@ -24,9 +24,8 @@
  * one here would leave the app with two conventions for the same question.
  */
 import {
-  layoutCommentDocument,
+  layoutCommentDocumentKeyedPicture,
   type MeasureText,
-  renderSceneToKeyedSvg,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -78,18 +77,22 @@ export function CommentBody({ body, compact, className, measure }: CommentBodyPr
   }, [])
 
   const keyed = useMemo(() => {
-    const scene = layoutCommentDocument(body, {
-      measure: resolvedMeasure,
-      core: requireLayoutCore(),
-      maxWidth: (width ?? UNMEASURED_WIDTH_PX) - 2 * BODY_PADDING_PX,
-      // What `compact` has always claimed and, until this, did not do: it
-      // set a `text-xs` class the SVG never reads, so a rail whose chrome
-      // runs at 11-12px drew its prose at the bubble's 16px — the largest
-      // text on the surface, and a third bigger than the row summarising
-      // the same sentence above it.
-      density: compact === true ? 'compact' : 'comfortable',
-    })
-    return renderSceneToKeyedSvg(scene, { padding: BODY_PADDING_PX })
+    const { keyed: drawn } = layoutCommentDocumentKeyedPicture(
+      body,
+      {
+        measure: resolvedMeasure,
+        core: requireLayoutCore(),
+        maxWidth: (width ?? UNMEASURED_WIDTH_PX) - 2 * BODY_PADDING_PX,
+        // What `compact` has always claimed and, until this, did not do: it
+        // set a `text-xs` class the SVG never reads, so a rail whose chrome
+        // runs at 11-12px drew its prose at the bubble's 16px — the largest
+        // text on the surface, and a third bigger than the row summarising
+        // the same sentence above it.
+        density: compact === true ? 'compact' : 'comfortable',
+      },
+      { padding: BODY_PADDING_PX },
+    )
+    return drawn
   }, [body, compact, resolvedMeasure, width])
 
   const mount = useKeyedSvg(keyed)
