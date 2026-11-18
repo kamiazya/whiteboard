@@ -16,5 +16,6 @@ export {
   type SearchIndex,
   searchableTexts,
   searchCoreInstalled,
+  searchIndexCapacity,
   snippetAround,
 } from './core.js'

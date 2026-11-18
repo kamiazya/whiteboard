@@ -259,3 +259,59 @@ describe('wb_document_search over hits too long to excerpt in one request', () =
     expect(out.results).toHaveLength(12)
   }, 60_000)
 })
+
+describe('wb_document_search over more documents than one index holds', () => {
+  it('evicts no other workspace for a corpus no index can hold', async () => {
+    const first = await workspace()
+    await first.write('a', 'rocket launch window')
+    const second = await workspace()
+    await second.write('b', 'rocket staging area', 'tags:\n  - ops\n')
+    await second.write('c', 'rocket fuel depot', 'tags:\n  - ops\n')
+    // A stand-in core whose indexes hold one document, refused past it as the
+    // core refuses past its own capacity, with memory to spare.
+    const real = installSearchCore(undefined)
+    if (real === undefined) throw new Error('the test realm installs a search core')
+    realm = real
+    const state = { released: 0 }
+    const full = () => {
+      const err = new Error('the index holds no more documents')
+      err.name = 'CoreInputRefused'
+      return err
+    }
+    installSearchCore({
+      ...real,
+      indexCapacity: 1,
+      createIndex: () => {
+        const index = real.createIndex()
+        let held = 0
+        return {
+          ...index,
+          upsert: (doc, alsoIndex) => {
+            if (held >= 1) throw full()
+            held++
+            return index.upsert(doc, alsoIndex)
+          },
+          remove: (id) => index.remove(id),
+          search: (query, limit) => index.search(query, limit),
+          release: () => {
+            state.released++
+            index.release()
+          },
+        }
+      },
+      fullTextSearch: (documents, query, options) => {
+        if (documents.length > 1) throw full()
+        return real.fullTextSearch(documents, query, options)
+      },
+    })
+    const one = createDocumentSearchTool(first.deps, vectorCacheFor(first.deps))
+    const two = createDocumentSearchTool(second.deps, vectorCacheFor(second.deps))
+
+    await one.execute({ workspaceId: WS, query: 'rocket' })
+    expect((await two.execute({ workspaceId: WS, query: 'rocket' })).results).toEqual([])
+    expect(
+      (await two.execute({ workspaceId: WS, query: 'rocket', tags: ['ops'] })).results,
+    ).toEqual([])
+    expect(state.released).toBe(0)
+  })
+})

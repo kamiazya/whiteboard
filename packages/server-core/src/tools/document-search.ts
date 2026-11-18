@@ -19,7 +19,7 @@ import {
 import { type DocumentVectorCache, vectorCacheFor } from '../search/document-vector-cache.js'
 import type { Embedder } from '../search/embedder.js'
 import { assertVectorWidth, rankByVector } from '../search/embedder.js'
-import { rankHeld, withHeldBudget } from '../search/held-index.js'
+import { fitsAnIndex, rankHeld, withHeldBudget } from '../search/held-index.js'
 import { fuseByRank } from '../search/rrf.js'
 import type { ServerDeps } from '../server-deps.js'
 
@@ -227,15 +227,16 @@ function rank(
     )
     if (ranked !== undefined) return withContexts(ranked, searchable, query, options)
   }
+  const stateless = () =>
+    fullTextSearch(searchable, query, {
+      limit: options.limit,
+      alsoIndex: emojiSearchText,
+      ...(options.excerpts === undefined ? {} : { excerpts: options.excerpts }),
+      ...(options.linkLabels === undefined ? {} : { linkLabels: options.linkLabels }),
+    })
+  // Evicting other workspaces frees memory, never room for more documents.
   return refusedAs([], () =>
-    withHeldBudget(() =>
-      fullTextSearch(searchable, query, {
-        limit: options.limit,
-        alsoIndex: emojiSearchText,
-        ...(options.excerpts === undefined ? {} : { excerpts: options.excerpts }),
-        ...(options.linkLabels === undefined ? {} : { linkLabels: options.linkLabels }),
-      }),
-    ),
+    fitsAnIndex(searchable.length) ? withHeldBudget(stateless) : stateless(),
   )
 }
 

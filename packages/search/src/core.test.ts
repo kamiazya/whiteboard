@@ -14,6 +14,7 @@ import {
   type SearchHit,
   searchableTexts,
   searchCoreInstalled,
+  searchIndexCapacity,
   snippetAround,
 } from './index.js'
 import { tokenize, tokenizeForIndex } from './tokens.js'
@@ -38,6 +39,7 @@ const index = {
 }
 const hits: SearchHit[] = [{ documentId: 'a', score: 1, contexts: ['x'] }]
 const stub: SearchCore = {
+  indexCapacity: 7,
   foldForSearch: record('foldForSearch', 'folded') as SearchCore['foldForSearch'],
   findFolded: record('findFolded', { index: 1, length: 2 }) as SearchCore['findFolded'],
   tokenize: record('tokenize', ['q']) as SearchCore['tokenize'],
@@ -62,6 +64,7 @@ const everyCall: [string, () => unknown][] = [
   ['snippetAround', () => snippetAround('a', 0, 1)],
   ['excerpts', () => excerpts('a', [['b']])],
   ['createIndex', () => createIndex()],
+  ['searchIndexCapacity', () => searchIndexCapacity()],
   ['fullTextSearch', () => fullTextSearch([], 'a')],
 ]
 
@@ -105,6 +108,7 @@ describe('a realm that installed a core', () => {
     expect(snippetAround('text', 1, 2, labels)).toBe('s')
     expect(excerpts('q', [['a']], labels)).toEqual([['e']])
     expect(createIndex()).toBe(index)
+    expect(searchIndexCapacity()).toBe(7)
     expect(fullTextSearch([], 'q', { limit: 3 })).toBe(hits)
     expect(calls.map((c) => c.fn)).toEqual([
       'foldForSearch',

@@ -96,6 +96,8 @@ export interface SearchIndex {
  * degraded answer.
  */
 export interface SearchCore {
+  /** The most documents one index holds; an upsert past it is refused however much memory is free. */
+  readonly indexCapacity: number
   foldForSearch(text: string): string
   findFolded(text: string, needle: string): FoundSpan | undefined
   tokenize(text: string): string[]
@@ -218,6 +220,8 @@ export const excerpts = (
 
 /** An empty corpus the caller keeps between queries and releases when done. */
 export const createIndex = (): SearchIndex => searchCore('createIndex').createIndex()
+
+export const searchIndexCapacity = (): number => searchCore('searchIndexCapacity').indexCapacity
 
 /**
  * BM25 over the documents' token bags, name and path included as text. Scores

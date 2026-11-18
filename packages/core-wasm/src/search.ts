@@ -318,6 +318,8 @@ function expander(alsoIndex: AlsoIndex | undefined): (text: string) => string {
 
 /** Lexical search over an initialised core: what `packages/search` answered. */
 export interface SearchCore {
+  /** The most documents one index holds (`search_op`'s `maxNodes`). */
+  readonly indexCapacity: number
   /** `foldForSearch`: what a text is compared as. */
   foldForSearch(text: string): string
   /** `findFolded`: where `needle` occurs in `text`, as a span of the ORIGINAL text. */
@@ -582,6 +584,7 @@ export function searchOver(
     ...textCalls(channel),
     ...contentCalls(channel),
     ...excerpts,
+    indexCapacity: SEARCH_OP_CAPS.maxNodes,
     createIndex,
     fullTextSearch: fullTextSearchOver(createIndex, excerpts.excerpts),
   }

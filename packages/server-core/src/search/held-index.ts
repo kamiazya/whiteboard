@@ -5,6 +5,7 @@ import {
   isSearchRefusal,
   type SearchableDocument,
   type SearchIndex,
+  searchIndexCapacity,
 } from '@kamiazya/whiteboard-search'
 
 interface HeldDocument {
@@ -65,6 +66,9 @@ export function rankHeld(
   query: string,
   limit: number,
 ): { documentId: string; score: number }[] | undefined {
+  // Past what one index holds, no eviction makes room: a stateless ranking
+  // refuses the same corpus, so neither is worth evicting other workspaces for.
+  if (!fitsAnIndex(documents.length)) return undefined
   let workspace: HeldWorkspace | undefined
   try {
     return withHeldBudget(
@@ -105,6 +109,9 @@ export function withHeldBudget<T>(
     }
   }
 }
+
+/** Whether a corpus of `count` documents fits one index at all, memory aside. */
+export const fitsAnIndex = (count: number): boolean => count <= searchIndexCapacity()
 
 function evictOldestExcept(keep: HeldWorkspace | undefined): boolean {
   const at = held.findIndex((w) => w !== keep)
