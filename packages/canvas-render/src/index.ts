@@ -148,7 +148,6 @@ export {
 } from './references/content-budget.js'
 export type { LoadedReference, ReferenceGraph } from './references/loaded-reference.js'
 export type {
-  EmbeddedDocument,
   FacetCardData,
   ResolvedReference,
 } from './references/resolved.js'

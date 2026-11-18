@@ -1,7 +1,11 @@
 import ts from '@typescript/typescript6'
 import { parseSource, unwrapExpression } from './ast-helpers.js'
 
-/** The four seams a layout reads to draw what a document points at. */
+/**
+ * The seams the reference bundle carried. The core answers what a layout
+ * draws of a reference from the wire now, so a function by one of these names
+ * outside `references/` is a hand-made seam nothing reads.
+ */
 const SEAM_NAMES: ReadonlySet<string> = new Set([
   'resolveAlias',
   'resolveTitle',

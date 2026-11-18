@@ -321,6 +321,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the equivalence the markdown round-trip contract is stated modulo, read by the codec and editor round-trip properties and named in package-codec.md',
   'packages/codec/src/markdown/pipeline.ts#stringifyMarkdownBody':
     'the writer half of the markdown pipeline: held to parseMarkdownBody by the round-trip properties, and to the reference syntax the reader recognises by reference-writer.property.test.ts, ready for the bundle export that has no caller yet',
+  'packages/codec/src/references/resolve.ts#resolveReferences':
+    "the reading half of the reference grammar: references-roundtrip.property.test.ts holds it against resolveReferencesForExport, and the TypeScript parser's retirement (ADR-0054 A5) is what removes both",
   'packages/codec/src/references/resolve-for-export.ts#resolveReferencesForExport':
     'the export seam ADR-0017 decision 2 holds ready for the bundle export: it emits link and image nodes that stringifyMarkdownBody writes as links, waiting only on an injected resolver',
   'packages/codec/src/spatial/codecs.ts#foreignRoundTrip':

@@ -443,7 +443,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/test-utils/document-page.contract.tsx#describeDocumentPageContract': 86,
   'packages/canvas-render/src/quality/drawing-score.ts#scoreDrawing': 63,
   'packages/canvas-render/src/quality/facet-score.ts#scoreFacets': 67,
-  'packages/canvas-render/src/references/seams.ts#referenceSeams': 76,
   'packages/canvas-render/src/test-utils/annotation-density-metrics.ts#scoreCommentDensity': 51,
   'packages/canvas-render/src/test-utils/annotation-density-metrics.ts#scoreProposalDensity': 51,
   'packages/canvas-render/src/test-utils/routing-corpus.ts#clusteredLayout': 53,

@@ -64,7 +64,7 @@ pub struct ExtraImage {
 pub struct ReferenceExtra {
     pub label: Option<String>,
     pub missing: Option<bool>,
-    /// Still loading in the caller (`isLoading`): an embed of it draws as pending.
+    /// Still loading in the caller: an embed of it draws as pending.
     pub pending: Option<bool>,
     pub image: Option<ExtraImage>,
     pub facets: Option<FacetCard>,

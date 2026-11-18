@@ -17,6 +17,7 @@ import { cleanup, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { rowOf, wireSeenByCore } from '../test-utils/core-wire.js'
 import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
@@ -61,6 +62,18 @@ function markdownSnapshot(body: string): Uint8Array {
 
 function latestReferences(): ReferenceSeams | undefined {
   return captured.references.at(-1) as ReferenceSeams | undefined
+}
+
+/** What the core is handed for `ref` on the page's latest bundle. */
+function seen(ref: string) {
+  const references = latestReferences()
+  return references === undefined ? rowOf(undefined, ref) : rowOf(wireSeenByCore(references), ref)
+}
+
+/** The title table the core is handed, the only place an embed is named. */
+function titleOf(id: string): string | undefined {
+  const references = latestReferences()
+  return new Map(references === undefined ? [] : (wireSeenByCore(references)?.titles ?? [])).get(id)
 }
 
 describe('DaemonDocumentPage embedded note title', () => {
@@ -116,11 +129,12 @@ describe('DaemonDocumentPage embedded note title', () => {
 
     await waitFor(
       () => {
-        expect(latestReferences()?.resolveEmbed(OTHER_ID)?.title).toBe('Other note')
+        expect(titleOf(OTHER_ID)).toBe('Other note')
+        expect(seen('notes/other').record?.body).toBeDefined()
       },
       { timeout: 10_000 },
     )
-    expect(JSON.stringify(latestReferences()?.resolveEmbed(OTHER_ID))).toContain('embedded prose')
+    expect(seen('notes/other').record?.body).toContain('embedded prose')
     expect(latestReferences()?.resolveAlias('notes/other')).toBe(OTHER_ID)
   })
 
@@ -142,7 +156,7 @@ describe('DaemonDocumentPage embedded note title', () => {
     // document's snapshot route answers 404, so only the list knows it.
     await waitFor(
       () => {
-        expect(latestReferences()?.resolveEmbed(OTHER_ID)).toBeDefined()
+        expect(seen('notes/other').record).toBeDefined()
       },
       { timeout: 10_000 },
     )
@@ -182,9 +196,7 @@ describe('DaemonDocumentPage embedded note title', () => {
 
     await waitFor(
       () => {
-        expect(JSON.stringify(latestReferences()?.resolveEmbed(OTHER_ID))).toContain(
-          'embedded prose',
-        )
+        expect(seen('notes/other').record?.body).toContain('embedded prose')
       },
       { timeout: 10_000 },
     )
