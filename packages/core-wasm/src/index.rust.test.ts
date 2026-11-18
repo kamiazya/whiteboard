@@ -14,6 +14,7 @@ import {
   register_layout_fonts,
   release_layout_cache,
   release_layout_fonts,
+  search_op,
 } from '#glue'
 import { loadCore } from './load.js'
 import type { RoutingBudget } from './types.js'
@@ -50,8 +51,9 @@ describe('the core-wasm shim over the built artifact', () => {
         register_layout_fonts,
         release_layout_fonts,
         release_layout_cache,
+        search_op,
       ].map((f) => typeof f),
-    ).toEqual(Array(12).fill('function'))
+    ).toEqual(Array(13).fill('function'))
   })
 
   it('routes a layout from the bytes, and again from a compiled module', async () => {

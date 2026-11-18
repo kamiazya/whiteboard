@@ -36,6 +36,10 @@ pub const OKF_PARSE: InputCaps =
 pub const OKF_SERIALIZE: InputCaps =
     InputCaps { max_bytes: 4_718_592, max_depth: 64, max_millis: 3000, max_nodes: None };
 
+/// The caps of `whiteboard-wasm::search::search_op`.
+pub const SEARCH_OP: InputCaps =
+    InputCaps { max_bytes: 8_388_608, max_depth: 4, max_millis: 20_000, max_nodes: Some(4096) };
+
 /// The caps of `whiteboard-wasm::spatial_edges::edge_route_layout`.
 pub const EDGE_ROUTE_LAYOUT: InputCaps =
     InputCaps { max_bytes: 262_144, max_depth: 2, max_millis: 5000, max_nodes: None };

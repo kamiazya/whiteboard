@@ -13,9 +13,11 @@
 mod cluster;
 pub mod excerpt;
 pub mod fold;
+pub mod index;
 mod markup;
 pub mod rank;
 pub mod snippet;
+mod tables;
 pub mod terms;
 pub mod texts;
 pub mod tokenize;
@@ -25,6 +27,9 @@ mod units;
 pub use cluster::grapheme_cuts;
 pub use excerpt::{EXCERPT_TOKENS_MAX, Excerpter, excerpter_for};
 pub use fold::{Folded, Found, find_folded, fold_for_search, fold_with_offsets, span_of};
+pub use index::{
+    DEFAULT_LIMIT, DOCUMENT_OVERHEAD, SearchIndex, TERM_OVERHEAD, cost_of, document_cost,
+};
 pub use markup::LinkLabel;
 pub use rank::{SearchHit, SearchOptions, SearchableDocument, full_text_search};
 pub use snippet::{CONTEXT_RADIUS, LinkEntry, LinkLabels, snippet_around};

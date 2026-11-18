@@ -146,6 +146,12 @@
       "reason": "the upstream state machine and tree builder are long functions by design (`state::call` is one match arm per state, 400 lines); they are kept as they are so a later upstream fix can be compared against them, and arch-lint's function-size ledger records each one"
     },
     {
+      "crate": "crates/core/search",
+      "lint": "clippy::disallowed_methods",
+      "count": 1,
+      "reason": "tests/unicode_tables.rs regenerates src/tables.rs when a developer sets UPDATE_UNICODE_TABLES: the one environment read and the one file write, in a test only, since the generator needs the crates that stay out of the shipped module and core has no port for either"
+    },
+    {
       "crate": "crates/core/scene",
       "lint": "clippy::struct_excessive_bools",
       "count": 1,

@@ -7,7 +7,7 @@
 //! it would make が and か one character. A compatibility form whose
 //! decomposition is Latin or ASCII folds to that decomposition.
 
-use crate::unicode::{is_latin, is_mark, lowercase, nfkd, push_lowercase};
+use crate::unicode::{self, is_mark};
 
 /// A folded text with where each of its code points came from, in UTF-16 code
 /// units of the original.
@@ -43,23 +43,19 @@ pub fn fold_code_point(c: char) -> (String, bool) {
     if folds_to_itself(u32::from(c)) {
         return (c.to_string(), false);
     }
-    let mut lower = String::new();
-    push_lowercase(c, &mut lower);
-    let decomposed = lowercase(&nfkd(&lower));
-    let first_is_latin = decomposed.chars().next().is_some_and(is_latin);
-    let ascii = !decomposed.is_empty() && decomposed.chars().all(|d| matches!(d, ' '..='~'));
-    if first_is_latin || ascii {
-        let out: String = decomposed.chars().filter(|d| !is_mark(*d)).collect();
-        let latin = out.chars().next_back().is_some_and(is_latin);
-        return (out, latin);
-    }
-    (lower, false)
+    unicode::fold_of(c).unwrap_or_else(|| (c.to_string(), false))
 }
 
-/// The folded text, with where each of its code points came from.
-#[must_use]
-pub fn fold_with_offsets(text: &str) -> Folded {
-    let mut folded = Folded { text: String::new(), starts: Vec::new(), ends: Vec::new() };
+/// One step of a fold: a folded code point and the span of the original it
+/// came from, or a mark joining the letter before it.
+enum Step {
+    Push { out: char, start: usize, end: usize },
+    Extend { end: usize },
+}
+
+/// The one set of folding rules, which both the offset-keeping fold and the
+/// text-only fold read, so they cannot disagree about what a text folds to.
+fn fold_steps(text: &str, mut step: impl FnMut(Step)) {
     let mut after_latin = false;
     let mut offset = 0_usize;
     for c in text.chars() {
@@ -67,26 +63,47 @@ pub fn fold_with_offsets(text: &str) -> Folded {
         if after_latin && is_mark(c) {
             // The mark belongs to the letter before it: a match ending on that
             // letter ends after its accent, not between the two.
-            if let Some(last) = folded.ends.last_mut() {
-                *last = end;
-            }
+            step(Step::Extend { end });
         } else {
             let (out, latin) = fold_code_point(c);
             for each in out.chars() {
-                folded.starts.push(offset);
-                folded.ends.push(end);
-                folded.text.push(each);
+                step(Step::Push { out: each, start: offset, end });
             }
             after_latin = latin;
         }
         offset = end;
     }
+}
+
+/// The folded text, with where each of its code points came from.
+#[must_use]
+pub fn fold_with_offsets(text: &str) -> Folded {
+    let mut folded = Folded { text: String::new(), starts: Vec::new(), ends: Vec::new() };
+    fold_steps(text, |step| match step {
+        Step::Push { out, start, end } => {
+            folded.starts.push(start);
+            folded.ends.push(end);
+            folded.text.push(out);
+        }
+        Step::Extend { end } => {
+            if let Some(last) = folded.ends.last_mut() {
+                *last = end;
+            }
+        }
+    });
     folded
 }
 
+/// The folded text alone: no offsets are built, for callers that only compare.
 #[must_use]
 pub fn fold_for_search(text: &str) -> String {
-    fold_with_offsets(text).text
+    let mut folded = String::new();
+    fold_steps(text, |step| {
+        if let Step::Push { out, .. } = step {
+            folded.push(out);
+        }
+    });
+    folded
 }
 
 /// Where `needle` occurs in `text` once both are folded, as a span of the
@@ -144,6 +161,15 @@ mod tests {
         assert_eq!(find_folded("Bakery", "cafe"), None);
         assert_eq!(find_folded("abc", ""), None);
         assert_eq!(find_folded("x😀y", "y"), Some(Found { index: 3, length: 1 }));
+    }
+
+    #[test]
+    fn the_text_only_fold_equals_the_offset_fold_text() {
+        for text in
+            ["Café", "Cafe\u{301}", "か\u{3099}", "\u{301}x", "ﬃ ① Ａ İ", "x😀y", "ǭ\u{301}"]
+        {
+            assert_eq!(fold_for_search(text), fold_with_offsets(text).text, "{text:?}");
+        }
     }
 
     #[test]

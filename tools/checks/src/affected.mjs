@@ -127,6 +127,11 @@ export const CROSS_PACKAGE_READS = [
     target: '@kamiazya/whiteboard-arch-lint',
     why: "mcp-server's release-policy tests import arch-lint's job-section helper",
   },
+  {
+    reader: '@kamiazya/whiteboard-core-wasm',
+    target: '@kamiazya/whiteboard-search',
+    why: "core-wasm's search differential replays the recording search's own test re-records",
+  },
 ]
 
 /**

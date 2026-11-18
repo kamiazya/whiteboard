@@ -68,6 +68,15 @@ describe('PORTED_FUNCTIONS against the tree', () => {
       'parseSpatial',
       'serializeSpatial',
       'partitionFacetWrites',
+      'foldForSearch',
+      'findFolded',
+      'folderNamesOf',
+      'searchableTexts',
+      'snippetAround',
+      'linkLabelsFrom',
+      'documentTerms',
+      'excerpterFor',
+      'fullTextSearch',
     ])
     expect(checkPortedFunctions(PORTED_FUNCTIONS, readReal)).toEqual([])
   })

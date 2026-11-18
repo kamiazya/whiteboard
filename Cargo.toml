@@ -74,7 +74,8 @@ libm = "=0.2.11"
 # Pinned exactly: the grapheme tables are a determinism input (QR-20b), and a
 # bump moves which strings are one symbol.
 unicode-segmentation = "=1.13.3"
-# Pinned exactly, each: the tables are determinism inputs (QR-20b). Each crate
+# Pinned exactly, each: the tables are determinism inputs (QR-20b). Search's
+# tables are generated from them, and they are its dev-dependencies. Each crate
 # carries its own Unicode release, so search's differences from the runtime that
 # recorded its oracle are a ledger of code points, never a toolchain accident.
 unicode-case-mapping = "=1.0.0"

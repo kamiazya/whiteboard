@@ -1,0 +1,7 @@
+["index-new"]
+["index-upsert",0,"d1","notes/alpha","Alpha",["alpha beta","検索 gamma"],["ops"]]
+["index-upsert",0,"d2","notes/beta",null,["beta"],null]
+["index-query",0,"alpha 検索",10]
+["index-size",0]
+["index-remove",0,"d1"]
+["index-release",0]

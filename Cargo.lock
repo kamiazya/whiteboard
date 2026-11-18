@@ -699,6 +699,7 @@ dependencies = [
  "wasm-bindgen-test",
  "whiteboard-det",
  "whiteboard-model",
+ "whiteboard-proptest",
 ]
 
 [[package]]
@@ -716,6 +717,7 @@ dependencies = [
  "whiteboard-plugin-visual",
  "whiteboard-proptest",
  "whiteboard-scene",
+ "whiteboard-search",
 ]
 
 [[package]]

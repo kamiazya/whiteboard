@@ -377,6 +377,107 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
     },
     realm: { install: 'installFacetWriteCore', deleted: FACET_WRITE_TYPESCRIPT },
   },
+  // Lexical search (step 8, B3 slice 1): the shim answers every one through
+  // `search_op`, and the callers still ask the TypeScript package.
+  {
+    name: 'foldForSearch',
+    stage: 2,
+    ts: { file: 'packages/search/src/fold.ts', export: 'foldForSearch' },
+    rust: { file: 'crates/core/search/src/fold.rs', fn: 'fold_for_search' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/search.ts',
+      member: 'foldForSearch',
+    },
+  },
+  {
+    name: 'findFolded',
+    stage: 2,
+    ts: { file: 'packages/search/src/fold.ts', export: 'findFolded' },
+    rust: { file: 'crates/core/search/src/fold.rs', fn: 'find_folded' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/search.ts',
+      member: 'findFolded',
+    },
+  },
+  {
+    name: 'folderNamesOf',
+    stage: 2,
+    ts: { file: 'packages/search/src/folder-names.ts', export: 'folderNamesOf' },
+    rust: { file: 'crates/core/search/src/texts.rs', fn: 'folder_names_of' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/search.ts',
+      member: 'folderNamesOf',
+    },
+  },
+  {
+    name: 'searchableTexts',
+    stage: 2,
+    ts: { file: 'packages/search/src/searchable-texts.ts', export: 'searchableTexts' },
+    rust: { file: 'crates/core/search/src/texts.rs', fn: 'searchable_texts' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/search.ts',
+      member: 'searchableTexts',
+    },
+  },
+  {
+    name: 'snippetAround',
+    stage: 2,
+    ts: { file: 'packages/search/src/snippet.ts', export: 'snippetAround' },
+    rust: { file: 'crates/core/search/src/snippet.rs', fn: 'snippet_around' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/search.ts',
+      member: 'snippetAround',
+    },
+  },
+  {
+    name: 'linkLabelsFrom',
+    stage: 2,
+    ts: { file: 'packages/search/src/snippet.ts', export: 'linkLabelsFrom' },
+    rust: { file: 'crates/core/search/src/snippet.rs', fn: 'from_entries' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/search.ts',
+      member: 'linkLabels',
+    },
+  },
+  {
+    name: 'documentTerms',
+    stage: 2,
+    ts: { file: 'packages/search/src/full-text.ts', export: 'documentTerms' },
+    rust: { file: 'crates/core/search/src/terms.rs', fn: 'document_terms' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/search.ts',
+      member: 'documentTerms',
+    },
+  },
+  {
+    name: 'excerpterFor',
+    stage: 2,
+    ts: { file: 'packages/search/src/full-text.ts', export: 'excerpterFor' },
+    rust: { file: 'crates/core/search/src/excerpt.rs', fn: 'excerpter_for' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/search.ts',
+      member: 'excerpts',
+    },
+  },
+  {
+    name: 'fullTextSearch',
+    stage: 2,
+    ts: { file: 'packages/search/src/full-text.ts', export: 'fullTextSearch' },
+    rust: { file: 'crates/core/search/src/rank.rs', fn: 'full_text_search' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/search.ts',
+      member: 'fullTextSearch',
+    },
+  },
 ]
 
 /** The text of a file, or `undefined` when it does not exist. */

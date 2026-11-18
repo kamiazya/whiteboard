@@ -62,6 +62,10 @@ const ESCAPES: Readonly<Record<string, string>> = {
     'a contract test that reads the daemon-client contracts directory as source, because the enums it checks producers against are declared there',
   'packages/mcp-server/src/server/contract-enum-producers.test.ts -> packages/server-core/src':
     'a contract test that reads the server-core source tree, which holds the producers of the enums it checks against the contracts',
+  'packages/core-wasm/src/search.rust.test.ts -> packages/search/src/oracle/search.jsonl':
+    "replays the TypeScript's recorded answers through the shim: the recording is the oracle and is read as data, a file the search package's own test re-records",
+  'packages/core-wasm/src/search.rust.test.ts -> crates/core/search/tests/unicode_table_diff.json':
+    "the Unicode-table difference ledger the native replay holds from both sides, read here so the shim's replay allows exactly the differences it names",
   'apps/web/src/vitest-project-name.test.ts -> package.json':
     'asserts the root manifest and the web vitest project agree on a project name, so it has to read the root `package.json`',
   'apps/web/src/test-utils/coverage-ledger.ts -> {apps,packages,tools}/**/*.test.{ts,tsx}':
