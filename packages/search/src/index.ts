@@ -1,4 +1,5 @@
 export {
+  createIndex,
   excerpts,
   findFolded,
   folderNamesOf,
@@ -12,6 +13,7 @@ export {
   type SearchableDocument,
   type SearchCore,
   type SearchHit,
+  type SearchIndex,
   searchableTexts,
   searchCoreInstalled,
   snippetAround,

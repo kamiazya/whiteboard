@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  createIndex,
   excerpts,
   findFolded,
   folderNamesOf,
@@ -29,6 +30,12 @@ const record =
   }
 
 const labels = { release: () => undefined }
+const index = {
+  upsert: () => false,
+  remove: () => false,
+  search: () => [],
+  release: () => undefined,
+}
 const hits: SearchHit[] = [{ documentId: 'a', score: 1, contexts: ['x'] }]
 const stub: SearchCore = {
   foldForSearch: record('foldForSearch', 'folded') as SearchCore['foldForSearch'],
@@ -40,6 +47,7 @@ const stub: SearchCore = {
   linkLabels: record('linkLabels', labels) as SearchCore['linkLabels'],
   snippetAround: record('snippetAround', 's') as SearchCore['snippetAround'],
   excerpts: record('excerpts', [['e']]) as SearchCore['excerpts'],
+  createIndex: record('createIndex', index) as SearchCore['createIndex'],
   fullTextSearch: record('fullTextSearch', hits) as SearchCore['fullTextSearch'],
 }
 
@@ -53,6 +61,7 @@ const everyCall: [string, () => unknown][] = [
   ['linkLabels', () => linkLabels([])],
   ['snippetAround', () => snippetAround('a', 0, 1)],
   ['excerpts', () => excerpts('a', [['b']])],
+  ['createIndex', () => createIndex()],
   ['fullTextSearch', () => fullTextSearch([], 'a')],
 ]
 
@@ -95,6 +104,7 @@ describe('a realm that installed a core', () => {
     expect(linkLabels([{ documentId: 'a', path: 'p' }])).toBe(labels)
     expect(snippetAround('text', 1, 2, labels)).toBe('s')
     expect(excerpts('q', [['a']], labels)).toEqual([['e']])
+    expect(createIndex()).toBe(index)
     expect(fullTextSearch([], 'q', { limit: 3 })).toBe(hits)
     expect(calls.map((c) => c.fn)).toEqual([
       'foldForSearch',
@@ -106,10 +116,11 @@ describe('a realm that installed a core', () => {
       'linkLabels',
       'snippetAround',
       'excerpts',
+      'createIndex',
       'fullTextSearch',
     ])
     expect(calls[7]?.args).toEqual(['text', 1, 2, labels])
-    expect(calls[9]?.args).toEqual([[], 'q', { limit: 3 }])
+    expect(calls[10]?.args).toEqual([[], 'q', { limit: 3 }])
   })
 
   it('answers the core it replaced, so a stand-in can put the real one back', () => {

@@ -70,6 +70,22 @@ export interface LinkLabelSet {
 }
 
 /**
+ * A corpus's token bags, held by the core until released (or collected): a
+ * document is sent once when it changes and a query sends its string alone.
+ * Scores are the corpus's own, as `fullTextSearch`'s over the same documents.
+ */
+export interface SearchIndex {
+  /** Holds `doc`, replacing what the index held under its id; whether it held one. */
+  upsert(doc: SearchableDocument, alsoIndex?: AlsoIndex): boolean
+  /** Forgets a document; false when the index held none. */
+  remove(documentId: string): boolean
+  /** The best documents for `query` (ten without a `limit`), best first. */
+  search(query: string, limit?: number): { documentId: string; score: number }[]
+  /** Forgets the corpus; a later use is refused. Safe to call twice. */
+  release(): void
+}
+
+/**
  * Lexical search, as `@kamiazya/whiteboard-core-wasm`'s `core.search` answers
  * it. Declared here, structurally, so this package never imports the shim: a
  * realm's composition root holds both and hands one to the other. Methods are
@@ -93,6 +109,7 @@ export interface SearchCore {
     documents: readonly (readonly string[])[],
     labels?: LinkLabelSet,
   ): string[][]
+  createIndex(): SearchIndex
   fullTextSearch(
     documents: readonly SearchableDocument[],
     query: string,
@@ -198,6 +215,9 @@ export const excerpts = (
   documents: readonly (readonly string[])[],
   labels?: LinkLabelSet,
 ): string[][] => searchCore('excerpts').excerpts(query, documents, labels)
+
+/** An empty corpus the caller keeps between queries and releases when done. */
+export const createIndex = (): SearchIndex => searchCore('createIndex').createIndex()
 
 /**
  * BM25 over the documents' token bags, name and path included as text. Scores

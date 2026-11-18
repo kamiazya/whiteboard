@@ -11,6 +11,7 @@
  * here would put that decision in two places.
  */
 
+import { parentOfPath } from '@kamiazya/whiteboard-model'
 import { folderNamesOf, foldForSearch, isSearchUnavailable } from '@kamiazya/whiteboard-search'
 import { compareDocumentEntries, type WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { FolderNames } from '../../lib/folder-names.js'
@@ -37,21 +38,43 @@ const comparable = (text: string): string =>
   orDegraded(text.toLowerCase(), () => foldForSearch(text))
 
 /**
- * Whether one document answers a query. Lived beside the editor header's
- * switcher until that switcher was retired; the browser's search is the only
- * caller left, so it lives here now.
+ * Each text as it is compared, folded in ONE core call: this list filters
+ * every entry on every keystroke, and a call per text is a JSON request each.
+ * Folding is per character and a line break survives it, so the texts joined by
+ * one fold apart as the texts folded one by one (`search-documents.test.ts`
+ * holds that); a text holding a line break itself is folded alone.
+ */
+function foldAll(texts: Iterable<string>): ReadonlyMap<string, string> {
+  const folded = new Map<string, string>()
+  const joinable = [...new Set(texts)].filter((text) => !text.includes('\n'))
+  const apart = orDegraded(undefined, () => foldForSearch(joinable.join('\n')).split('\n'))
+  if (apart !== undefined && apart.length === joinable.length) {
+    joinable.forEach((text, at) => {
+      folded.set(text, apart[at] ?? '')
+    })
+  }
+  return folded
+}
+
+type Searchable = {
+  readonly path: string
+  readonly name?: string | undefined
+  readonly tags?: readonly string[] | undefined
+  readonly carriedTags?: readonly string[] | undefined
+}
+
+/**
+ * Whether one document answers a query, already read as `q` (trimmed and
+ * lower-cased) and its fold. Lived beside the editor header's switcher until
+ * that switcher was retired; the browser's search is the only caller left, so
+ * it lives here now.
  */
 function documentMatchesSearch(
-  query: string,
-  document: {
-    readonly path: string
-    readonly name?: string | undefined
-    readonly tags?: readonly string[] | undefined
-    readonly carriedTags?: readonly string[] | undefined
-  },
+  q: string,
+  folded: string,
+  foldOf: (text: string) => string,
+  document: Searchable,
 ): boolean {
-  const q = query.trim().toLowerCase()
-  if (q === '') return true
   // `#tag` is a FILTER, not a search: it matches only documents carrying
   // exactly that tag — themselves, or one of their boxes or edges (ADR-0040
   // decision 3: a board is found by what its contents carry, which is what
@@ -67,8 +90,7 @@ function documentMatchesSearch(
   }
   // Folded the way the content search folds, so a name answers "cafe" for
   // "Café" here exactly as a body does there.
-  const folded = comparable(q)
-  const has = (text: string) => comparable(text).includes(folded)
+  const has = (text: string) => foldOf(text).includes(folded)
   return (
     has(document.path) ||
     (document.name !== undefined && has(document.name)) ||
@@ -77,22 +99,14 @@ function documentMatchesSearch(
 }
 
 /**
- * Whether the display name of a folder the document sits in answers the
- * query — what finds a note filed under a folder renamed to "Operations
- * Team", whose address still says something else. Not for a `#tag` filter.
- */
-function folderMatchesSearch(query: string, path: string, names: FolderNames): boolean {
-  const q = comparable(query.trim())
-  if (q === '' || q.startsWith('#')) return false
-  return orDegraded([], () => folderNamesOf(path, names)).some((name) =>
-    comparable(name).includes(q),
-  )
-}
-
-/**
  * The documents whose own name, path or tags match, then those only a
  * folder's display name matched — being filed under a word says less about
  * a document than carrying it, the order the content search keeps too.
+ *
+ * A folder's display name answers a query for a note filed under a folder
+ * renamed to "Operations Team", whose address still says something else; not
+ * for a `#tag` filter. The names a path sits under are the same for every path
+ * in one folder, so they are asked once per folder.
  */
 export function searchDocuments<T extends WorkspaceDocumentEntry>(
   documents: readonly T[],
@@ -100,11 +114,34 @@ export function searchDocuments<T extends WorkspaceDocumentEntry>(
   folderNames: FolderNames = NO_NAMES,
 ): readonly T[] {
   if (query.trim() === '') return []
-  const own = documents.filter((entry) => documentMatchesSearch(query, entry))
+  const q = query.trim().toLowerCase()
+  const texts = documents.flatMap((entry) => [
+    entry.path,
+    ...(entry.name === undefined ? [] : [entry.name]),
+    ...(entry.tags ?? []),
+  ])
+  const foldedTexts = foldAll(texts)
+  const foldOf = (text: string) => foldedTexts.get(text) ?? comparable(text)
+  const folded = comparable(q)
+  const own = documents.filter((entry) => documentMatchesSearch(q, folded, foldOf, entry))
   const matched = new Set(own)
-  const byFolder = documents.filter(
-    (entry) => !matched.has(entry) && folderMatchesSearch(query, entry.path, folderNames),
-  )
+  const folderQuery = comparable(query.trim())
+  const inFolder = new Map<string, boolean>()
+  const folderMatches = (path: string): boolean => {
+    const folder = parentOfPath(path)
+    let found = inFolder.get(folder)
+    if (found === undefined) {
+      found = orDegraded([], () => folderNamesOf(path, folderNames)).some((name) =>
+        comparable(name).includes(folderQuery),
+      )
+      inFolder.set(folder, found)
+    }
+    return found
+  }
+  const byFolder =
+    folderQuery === '' || folderQuery.startsWith('#')
+      ? []
+      : documents.filter((entry) => !matched.has(entry) && folderMatches(entry.path))
   return [...own.sort(compareDocumentEntries), ...byFolder.sort(compareDocumentEntries)]
 }
 

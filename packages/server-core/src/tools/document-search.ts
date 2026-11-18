@@ -5,7 +5,7 @@ import {
   type DocumentEntry,
   hasDocumentFolders,
 } from '@kamiazya/whiteboard-ports'
-import type { ContentFacts } from '@kamiazya/whiteboard-reference-graph'
+import type { ContentFacts, ContentFactsCache } from '@kamiazya/whiteboard-reference-graph'
 import {
   excerpts,
   folderNamesOf,
@@ -19,6 +19,7 @@ import {
 import { type DocumentVectorCache, vectorCacheFor } from '../search/document-vector-cache.js'
 import type { Embedder } from '../search/embedder.js'
 import { assertVectorWidth, rankByVector } from '../search/embedder.js'
+import { rankHeld } from '../search/held-index.js'
 import { fuseByRank } from '../search/rrf.js'
 import type { ServerDeps } from '../server-deps.js'
 
@@ -179,12 +180,53 @@ function excerptsOf(
   return texts.map((_, at) => cut[at] ?? [])
 }
 
+/** A held index's ranking, with the excerpts the options ask for. */
+function withContexts(
+  ranked: readonly { documentId: string; score: number }[],
+  searchable: readonly SearchCandidate[],
+  query: string,
+  options: { excerpts?: boolean; linkLabels?: LinkLabelSet | undefined },
+): SearchHit[] {
+  const byId = new Map(searchable.map((doc) => [doc.documentId, doc]))
+  const quoted =
+    options.excerpts === false || ranked.length === 0
+      ? ranked.map(() => [])
+      : excerptsOf(
+          query,
+          ranked.map((hit) => byId.get(hit.documentId)),
+          options.linkLabels,
+        )
+  return ranked.map((hit, at) => ({ ...hit, contexts: quoted[at] ?? [] }))
+}
+
 /** The lexical ranking; empty when the core declines the corpus or the query. */
 function rank(
   searchable: readonly SearchCandidate[],
   query: string,
-  options: { limit: number; excerpts?: boolean; linkLabels?: LinkLabelSet | undefined },
+  options: {
+    limit: number
+    excerpts?: boolean
+    linkLabels?: LinkLabelSet | undefined
+    /** Where the terms of an UNFILTERED corpus are held between queries. */
+    held?: {
+      facts: ContentFactsCache
+      workspaceId: string
+      content: ReadonlyMap<string, ContentFacts>
+    }
+  },
 ): SearchHit[] {
+  const { held } = options
+  if (held !== undefined) {
+    const ranked = rankHeld(
+      held.facts,
+      held.workspaceId,
+      searchable,
+      held.content,
+      query,
+      options.limit,
+    )
+    if (ranked !== undefined) return withContexts(ranked, searchable, query, options)
+  }
   return refusedAs([], () =>
     fullTextSearch(searchable, query, {
       limit: options.limit,
@@ -295,6 +337,11 @@ export function createDocumentSearchTool(
         }
       }
       const query = parsed.query
+      // Only a corpus nothing filtered has terms worth holding: BM25 is relative to its corpus.
+      const held =
+        parsed.tags === undefined && parsed.kind === undefined
+          ? { facts: vectors.facts, workspaceId: parsed.workspaceId, content }
+          : undefined
 
       // The optional semantic half. Absent, this returns exactly what it
       // returned before embeddings existed; supplied, its ranking is FUSED
@@ -305,7 +352,7 @@ export function createDocumentSearchTool(
         if (embedder === undefined) {
           // The returned page IS the prefix of the full ranking here, so the
           // index is the rank.
-          const hits = rank(searchable, query, { limit: parsed.limit, linkLabels: labels })
+          const hits = rank(searchable, query, { limit: parsed.limit, linkLabels: labels, held })
           return {
             results: hits.map((hit, index) =>
               describe(hit.documentId, hit.score, hit.contexts, { lexical: index + 1 }),
@@ -317,7 +364,7 @@ export function createDocumentSearchTool(
         // for: a document the vector half also likes can climb from rank 20.
         // Excerpts are not part of it, so they are cut for the returned page
         // alone below, rather than for every document that scored.
-        const lexical = rank(searchable, query, { limit: searchable.length, excerpts: false })
+        const lexical = rank(searchable, query, { limit: searchable.length, excerpts: false, held })
         const excerpted = (ids: readonly string[]): Map<string, string[]> => {
           const cut = excerptsOf(
             query,

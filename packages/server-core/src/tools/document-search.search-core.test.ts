@@ -55,6 +55,9 @@ describe('wb_document_search when the search core declines an input', () => {
 
   it('answers no hits for a corpus or query the core declines', async () => {
     const out = await searchOver({
+      createIndex: () => {
+        throw refusal()
+      },
       fullTextSearch: () => {
         throw refusal()
       },
@@ -88,10 +91,19 @@ describe('wb_document_search when the search core declines an input', () => {
     expect(out.results.map((r) => [r.path, r.contexts])).toEqual([['launch', []]])
   })
 
+  it('ranks without holding an index when the core will not hold one', async () => {
+    const out = await searchOver({
+      createIndex: () => {
+        throw refusal()
+      },
+    })
+    expect(out.results.map((r) => r.path)).toEqual(['launch'])
+  })
+
   it('does not hide a failure that is not a refusal', async () => {
     await expect(
       searchOver({
-        fullTextSearch: () => {
+        createIndex: () => {
           throw new Error('a defect')
         },
       }),
