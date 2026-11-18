@@ -1,5 +1,6 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
+import type { CoreSvgAsk } from '../canvas-core.js'
 import { highlightCode } from '../highlight/lowlight.js'
 import type { LayoutCore } from '../layout-core.js'
 import { type MeasureText, measureSpecOf } from '../measure.js'
@@ -8,7 +9,14 @@ import type { LayoutRefusal } from '../refusal.js'
 import { type SceneDigest, sceneDigestSchema } from '../scene-digest-schema.js'
 import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
 import { bundledThemeModeOf } from '../theme/spatial-theme.js'
-import { CoreUnaskable, canvasLayoutRequest, hostEvent, styleOptions } from './canvas-switch.js'
+import {
+  askedPicture,
+  CoreUnaskable,
+  canvasLayoutRequest,
+  hostEvent,
+  type MaybePictured,
+  styleOptions,
+} from './canvas-switch.js'
 import type { SpatialLayoutOptions } from './layout-options.js'
 
 // The layout pieces a root calls on their own, through the Rust core's query
@@ -71,18 +79,35 @@ export function edgesThroughCore(
   stored: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): SceneNode[] {
-  const unanswered: readonly SceneNode[] = []
-  const nodes = queried<readonly SceneNode[]>(options.core, {
-    request: () => ({ ...canvasLayoutRequest(stored, options), query: 'edges' }),
+  return edgeLayerThroughCore(stored, options, undefined).nodes
+}
+
+/**
+ * `edgesThroughCore` with the picture the core drew of the layer, as a scene
+ * of its own, in the envelope and form `svg` names when it asks for one; none
+ * for a layer the core refused, which is no edges.
+ */
+export function edgeLayerThroughCore(
+  stored: SpatialCanvas,
+  options: SpatialLayoutOptions,
+  svg: CoreSvgAsk | undefined,
+): { readonly nodes: SceneNode[] } & MaybePictured {
+  const unanswered = { nodes: [] as readonly SceneNode[] }
+  const layer = queried<{ readonly nodes: readonly SceneNode[] } & MaybePictured>(options.core, {
+    request: () => {
+      const request = { ...canvasLayoutRequest(stored, options), query: 'edges' as const }
+      return svg === undefined ? request : { ...request, svg }
+    },
     unanswered: () => unanswered,
     read: (answer) => {
       if (!('nodes' in answer)) return undefined
       for (const event of answer.degradations) options.onDegrade?.(hostEvent(event))
-      return answer.nodes
+      const nodes = answer.nodes
+      return svg === undefined ? { nodes } : { nodes, ...askedPicture(svg, answer) }
     },
     measure: options.measure,
   })
-  return [...nodes]
+  return { ...layer, nodes: [...layer.nodes] }
 }
 
 /** What a digest says when nothing could be derived: a fresh one each time, so a caller's edit never reaches the next refusal. */

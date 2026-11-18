@@ -47,6 +47,8 @@ export const RUST_SCOPE = {
     // backend (ADR-0054 A2), and what that backend reads off the root.
     'packages/canvas-render/src/core-picture.ts',
     'packages/canvas-render/src/core-picture.rust.test.ts',
+    // The web's envelopes and the keyed projection, held the same way (A3.1).
+    'packages/canvas-render/src/core-picture-web.rust.test.ts',
     'packages/canvas-render/src/xml-escape.ts',
     // The bundled plugin's manifest, which the Rust crate embeds and loads.
     'packages/plugin-visual/src/visual.manifest.json',

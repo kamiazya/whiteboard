@@ -116,13 +116,14 @@ fn table_of<T>(value: &Value, read: impl Fn(&Value) -> Option<T>) -> Option<Vec<
 pub(crate) fn request_of(value: &Value) -> Option<Request> {
     let mut f = Fields::of(value)?;
     let request = request_from(&mut f)?;
-    // A whole layout's alone: a query answers no picture.
+    // Read here rather than by `request_from`, which the queries share: only
+    // the `edges` query reads one of its own.
     let svg = f.field("svg", svg_of)?;
     f.all_named().then_some(Request { svg, ..request })
 }
 
 /// A canvas request's fields read from `f`, which may hold others its caller
-/// reads; its `svg` is left to the whole layout's reader.
+/// reads; its `svg` is left to the whole layout's and the `edges` query's readers.
 pub(crate) fn request_from(f: &mut Fields<'_>) -> Option<Request> {
     Some(Request {
         canvas: f.field("canvas", canvas_of)??,

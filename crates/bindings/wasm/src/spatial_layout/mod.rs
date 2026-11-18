@@ -20,9 +20,11 @@
 //!   fifth element: the sources the table did not hold, each drawn as its
 //!   fallback, as `FragmentAsk`s once each in the order asked, which the host
 //!   renders and lays out again with; and for a request carrying `svg` (the
-//!   envelope a server render draws with, [`request`]'s `SvgAsk`), a last
-//!   element: the scene as `whiteboard-canvas-render`'s backend draws it, so a
-//!   server picture is one call (refused `input-too-large` / `svg` past
+//!   envelope the picture is drawn in, [`request`]'s `SvgAsk`), a last
+//!   element: the scene as `whiteboard-canvas-render`'s backend draws it, the
+//!   document's text or, for `form: 'keyed'`, its keyed projection as
+//!   `[rootOpen, [[name, value]...], [[key, svg, annotation?]...]]`, so a
+//!   picture is one call (refused `input-too-large` / `svg` past
 //!   [`MAX_SVG_BYTES`], never cut short);
 //! - `["refused", code, class]`: an input past this entry's caps (`code`
 //!   `input-too-large`, `class` naming the cap), or one that is not a request;
@@ -504,6 +506,8 @@ mod markdown_tests;
 mod proposal_tests;
 #[cfg(test)]
 mod query_tests;
+#[cfg(test)]
+mod svg_form_tests;
 #[cfg(test)]
 mod svg_tests;
 #[cfg(test)]

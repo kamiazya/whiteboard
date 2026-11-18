@@ -58,15 +58,23 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   (`oracle/facet-write.jsonl`) by `crates/bindings/wasm/tests/facet_write_oracle.rs`,
   the shim over the artifact by `facet-write.rust.test.ts`, and what the daemon's
   writer does with the answer by server-core's `facet-write.dispatch.test.ts`.
-- A layout or note request may carry `svg` (the envelope a server picture is
-  drawn in: `viewBox: 'document'`, `padding`, `background`, `textFill`,
-  `rasterScale`); the answer then carries the core's SVG of the scene last,
-  after any fragment sources (`layout.ts`'s `answerOf`). canvas-render's
-  `layoutSpatialCanvasPicture` / `layoutMarkdownDocumentPicture`
-  (`core-picture.ts`, held byte for byte to the TypeScript backend by
-  `core-picture.rust.test.ts`) ask for it,
-  and server-core's `wb_scene_render`, the `canvas_view` picture and
-  mcp-server's file export take their SVG from it (ADR-0054 A2).
+- A layout, note or comment request, and the `edges` query, may carry `svg`
+  (the envelope a picture is drawn in: `viewBox` — `'document'`, the
+  server's, or `{of: 'scene' | 'document', margin?}`, the web's `sceneBounds`
+  / `sceneDocumentBounds(scene, margin)` — `width`, `height`, `padding`,
+  `background`, `textFill`, `rasterScale`, `legend: 'omit'`, and
+  `form: 'keyed'`); the answer then carries the core's SVG of the scene (for
+  `edges`, of the layer as a scene of its own) last, after any fragment
+  sources, as the document's text or the keyed projection
+  `[rootOpen, attrs, groups]`, which the shim reads into
+  `KeyedSvgRender`'s shape (`layout.ts`'s `pictureOf`). canvas-render's
+  `core-picture.ts` asks for it (`layoutSpatialCanvasPicture`, its keyed
+  sibling, the note's and the comment's, `layoutSpatialEdgesPicture`), held
+  byte for byte to the TypeScript backend by `core-picture.rust.test.ts` (the
+  server's envelopes) and `core-picture-web.rust.test.ts` (each web caller's
+  exact option set). server-core's `wb_scene_render`, the `canvas_view`
+  picture and mcp-server's file export take their SVG from it (ADR-0054 A2);
+  no web caller does yet (A3.2 on).
 - `core.search` (`search.ts`): lexical search over the one `search_op` export.
   Text calls are stateless; a `SearchIndex` (a corpus's token bags, upserted per
   changed document, queried by string) and a set of link labels live in the

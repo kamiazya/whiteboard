@@ -16,7 +16,7 @@ import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
-import { CoreUnaskable, canvasLayoutRequest } from './canvas-switch.js'
+import { askedPicture, CoreUnaskable, canvasLayoutRequest } from './canvas-switch.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout-options.js'
 import { layoutSpatialCanvasWithAnchors } from './spatial-canvas.js'
 
@@ -456,5 +456,19 @@ describe('what the core can be handed', () => {
     expect(caches[0]).toBe(contentCache)
     // The cache is the object itself, never part of the request's data.
     expect(requests[0]).toEqual(requests[1])
+  })
+})
+
+describe('the picture a layout asked the core for', () => {
+  const keyed = { svg: '<svg></svg>', rootOpen: '<svg>', rootAttrs: {}, groups: [] }
+
+  it('is read in the form asked, and an answer in another form is a defect', () => {
+    expect(askedPicture({}, { svg: '<svg/>' })).toEqual({ svg: '<svg/>' })
+    expect(askedPicture({ form: 'keyed' }, { keyed })).toEqual({ keyed })
+    expect(() => askedPicture({}, { keyed })).toThrow('the core answered no SVG')
+    expect(() => askedPicture({ form: 'keyed' }, { svg: '<svg/>' })).toThrow(
+      'the core answered no SVG',
+    )
+    expect(() => askedPicture({}, {})).toThrow('the core answered no SVG')
   })
 })

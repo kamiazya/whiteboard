@@ -203,6 +203,14 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/canvas-render/src/core-picture.ts#layoutSpatialCanvasKeyedPicture':
+    "the web's picture in one core call (ADR-0054 A3.1), held byte for byte to the caller's TypeScript envelope by core-picture-web.rust.test.ts; the editor surface (`renderedCanvasKeyed`) moves to it in A3.2/A3.3, which gives it a use and takes this entry out",
+  'packages/canvas-render/src/core-picture.ts#layoutMarkdownDocumentKeyedPicture':
+    "the web's picture in one core call (ADR-0054 A3.1), held byte for byte to the caller's TypeScript envelope by core-picture-web.rust.test.ts; the preview pane (`renderMarkdownPreview`) moves to it in A3.2/A3.3, which gives it a use and takes this entry out",
+  'packages/canvas-render/src/core-picture.ts#layoutCommentDocumentKeyedPicture':
+    "the web's picture in one core call (ADR-0054 A3.1), held byte for byte to the caller's TypeScript envelope by core-picture-web.rust.test.ts; a comment's body (`CommentBody`) moves to it in A3.2/A3.3, which gives it a use and takes this entry out",
+  'packages/canvas-render/src/core-picture.ts#layoutSpatialEdgesPicture':
+    "the web's picture in one core call (ADR-0054 A3.1), held byte for byte to the caller's TypeScript envelope by core-picture-web.rust.test.ts; the drag overlay (`liveEdges`) moves to it in A3.2/A3.3, which gives it a use and takes this entry out",
   'packages/canvas-render/src/layout/markdown-switch.ts#markdownLayoutRequest':
     "which options of a markdown note the Rust core can be handed: the note's switch calls it, and markdown-switch.test.ts holds each option a surface varies, and the empty table a listener alone asks for, apart from the whole switch",
   'packages/facet-engine/src/unrecognized-keys.ts#firstUnrecognizedKey':

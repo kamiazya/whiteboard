@@ -3,6 +3,7 @@
 use whiteboard_canvas_render::compose_canvas::LaidOut;
 use whiteboard_canvas_render::compose_node::Degradation;
 use whiteboard_canvas_render::scene_wire::{Tree, scene_tree};
+use whiteboard_canvas_render::svg::KeyedSvgRender;
 use whiteboard_edge_routing::edge_geometry::Side;
 use whiteboard_edge_routing::edge_sides::EdgeAnchorPair;
 use whiteboard_edge_routing::geometry::Point;
@@ -10,7 +11,7 @@ use whiteboard_scene::Scene;
 
 use super::fragments::Ask;
 use super::request::SvgAsk;
-use super::svg::{MAX_SVG_BYTES, Unrendered, render};
+use super::svg::{Drawn, MAX_SVG_BYTES, Unrendered, render};
 
 fn text(value: &str) -> Tree {
     Tree::Text(value.to_owned())
@@ -112,12 +113,35 @@ fn ask(ask: &Ask) -> Tree {
     })
 }
 
-/// The SVG `ask` describes as the answer's last element, or the refusal that
-/// answers instead: a scene holding a number the document cannot spell, or a
-/// document past `max` bytes.
+/// A keyed projection as `[rootOpen, [[name, value]...], [[key, svg] |
+/// [key, svg, true]...]]`, the last flag marking a group of the annotation
+/// layer. The document is not sent: it is the root, the groups and `</svg>`.
+pub(super) fn keyed_tree(keyed: KeyedSvgRender) -> Tree {
+    let attrs = keyed
+        .root_attrs
+        .into_iter()
+        .map(|(name, value)| Tree::List(vec![Tree::Text(name), Tree::Text(value)]));
+    let groups = keyed.groups.into_iter().map(|group| {
+        let mut row = vec![Tree::Text(group.key), Tree::Text(group.svg)];
+        if group.annotation {
+            row.push(Tree::Flag(true));
+        }
+        Tree::List(row)
+    });
+    Tree::List(vec![
+        Tree::Text(keyed.root_open),
+        Tree::List(attrs.collect()),
+        Tree::List(groups.collect()),
+    ])
+}
+
+/// The SVG `ask` describes as the answer's last element (the document's text,
+/// or the keyed projection), or the refusal that answers instead: a scene
+/// holding a number the document cannot spell, or a document past `max` bytes.
 pub(super) fn svg_item(scene: &Scene, ask: &SvgAsk, max: usize) -> Result<Tree, String> {
     match render(scene, ask, max) {
-        Ok(svg) => Ok(Tree::Text(svg)),
+        Ok(Drawn::Document(svg)) => Ok(Tree::Text(svg)),
+        Ok(Drawn::Keyed(keyed)) => Ok(keyed_tree(keyed)),
         Err(Unrendered::NonFinite) => Err(refused("malformed", "non-finite")),
         Err(Unrendered::TooLarge) => Err(refused("input-too-large", "svg")),
     }

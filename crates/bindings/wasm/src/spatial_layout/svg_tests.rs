@@ -15,17 +15,31 @@ use super::{MAX_SVG_BYTES, layout_with_host, query_with_host};
 use crate::json_canvas_wire::canvas_json;
 
 /// The scene an answer carries, read back as the backend reads one.
-fn scene_of(answer: &Json) -> Scene {
+pub(super) fn scene_of(answer: &Json) -> Scene {
     let scene = answer.get(1).cloned().unwrap_or(Json::Null);
     serde_json::from_value(scene).unwrap_or_default()
 }
 
-fn svg_of(answer: &Json, at: usize) -> &str {
+pub(super) fn svg_of(answer: &Json, at: usize) -> &str {
     answer.get(at).and_then(Json::as_str).unwrap_or_default()
 }
 
-fn ask(view_box: Option<ViewBox>) -> SvgAsk {
-    SvgAsk { view_box, padding: None, background: None, text_fill: None, raster_scale: None }
+pub(super) fn ask(view_box: Option<ViewBox>) -> SvgAsk {
+    SvgAsk {
+        view_box,
+        width: None,
+        height: None,
+        padding: None,
+        background: None,
+        text_fill: None,
+        raster_scale: None,
+        omit_legend: false,
+        keyed: false,
+    }
+}
+
+pub(super) fn keyed_ask() -> SvgAsk {
+    SvgAsk { keyed: true, ..ask(None) }
 }
 
 #[test]
@@ -86,7 +100,7 @@ fn the_svg_follows_the_fragment_sources_a_table_asked_for() {
     assert!(svg_of(&got, 5).starts_with("<svg "), "{got}");
 }
 
-fn note(extra: &[(&str, Json)]) -> String {
+pub(super) fn note(extra: &[(&str, Json)]) -> String {
     let mut fields = vec![
         ("kind", json!("markdown")),
         ("body", json!("# Title\n\nSome *prose*.")),
@@ -98,14 +112,14 @@ fn note(extra: &[(&str, Json)]) -> String {
     m(&fields).to_string()
 }
 
-fn markdown_answer(request: &str) -> Json {
+pub(super) fn markdown_answer(request: &str) -> Json {
     serde_json::from_str(&layout_with_host(request, None)).unwrap_or(Json::Null)
 }
 
 #[test]
-fn a_note_answers_its_svg_and_a_comment_may_not_ask_for_one() {
+fn a_note_answers_its_svg() {
     let svg = m(&[("viewBox", json!("document"))]);
-    let got = markdown_answer(&note(&[("svg", svg.clone())]));
+    let got = markdown_answer(&note(&[("svg", svg)]));
     assert_eq!(got.get(0), Some(&json!("ok")), "{got}");
     let scene = scene_of(&got);
     let drawn = SvgDocumentOptions {
@@ -113,31 +127,29 @@ fn a_note_answers_its_svg_and_a_comment_may_not_ask_for_one() {
         ..SvgDocumentOptions::default()
     };
     assert_eq!(svg_of(&got, 4), render_scene_to_svg(&scene, Some(&drawn)).unwrap_or_default());
-    let comment = m(&[
-        ("kind", json!("comment")),
-        ("body", json!("hi")),
-        ("maxWidth", json!(200)),
-        ("measure", fake()),
-        ("density", json!("compact")),
-        ("svg", svg),
-    ]);
-    assert_eq!(markdown_answer(&comment.to_string()), json!(["refused", "malformed", "request"]));
 }
 
 #[test]
-fn a_query_or_an_svg_naming_what_it_does_not_hold_is_no_request() {
+fn an_svg_naming_what_it_does_not_hold_is_no_request() {
     let refused = json!(["refused", "malformed", "request"]);
     for svg in [
         m(&[("viewBox", json!("scene"))]),
         m(&[("viewBox", m(&[("x", json!(0))]))]),
-        m(&[("width", json!(10))]),
+        m(&[("viewBox", m(&[("of", json!("bounds"))]))]),
+        m(&[("viewBox", m(&[("of", json!("scene")), ("pad", json!(1))]))]),
+        m(&[("viewBox", m(&[("of", json!("scene")), ("margin", json!("8"))]))]),
+        m(&[("width", json!("10"))]),
         m(&[("padding", json!("8"))]),
+        m(&[("legend", json!("keep"))]),
+        m(&[("form", json!("plain"))]),
+        m(&[("depth", json!(1))]),
         json!("document"),
     ] {
         assert_eq!(answer(&request(board("x"), &[("svg", svg)])), refused);
     }
-    let edges = m(&[
-        ("query", json!("edges")),
+    // A digest answers no picture.
+    let digest = m(&[
+        ("query", json!("scene-digest")),
         ("canvas", board("x")),
         ("measure", fake()),
         ("mode", json!("light")),
@@ -145,7 +157,7 @@ fn a_query_or_an_svg_naming_what_it_does_not_hold_is_no_request() {
         ("svg", m(&[])),
     ]);
     let queried: Json =
-        serde_json::from_str(&query_with_host(&edges.to_string(), None)).unwrap_or(Json::Null);
+        serde_json::from_str(&query_with_host(&digest.to_string(), None)).unwrap_or(Json::Null);
     assert_eq!(queried, refused);
 }
 

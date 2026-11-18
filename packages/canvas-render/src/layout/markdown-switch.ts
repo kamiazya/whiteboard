@@ -11,7 +11,13 @@ import type { ReferenceSeams } from '../references/seams.js'
 import { wireOfSeams } from '../references/wire.js'
 import { type LayoutRefusal, refusalScene } from '../refusal.js'
 import type { SpatialThemeMode } from '../theme/spatial-theme.js'
-import { askedSvg, CoreUnaskable, hasData, styleOptions } from './canvas-switch.js'
+import {
+  askedPicture,
+  CoreUnaskable,
+  hasData,
+  type MaybePictured,
+  styleOptions,
+} from './canvas-switch.js'
 import type { SpatialRenderStyle } from './layout-options.js'
 
 // A markdown body through the Rust core's markdown entry (ADR-0054 step 7,
@@ -113,7 +119,7 @@ export function noteThroughCore(
   body: string,
   options: MarkdownDocumentOptions,
   svg: CoreSvgAsk | undefined,
-): { readonly scene: Scene; readonly svg?: string } | undefined {
+): ({ readonly scene: Scene } & MaybePictured) | undefined {
   const request = markdownLayoutRequest(body, options)
   const answer = options.core.markdown.layoutMarkdown(
     svg === undefined ? request : { ...request, svg },
@@ -132,7 +138,7 @@ export function noteThroughCore(
   if (fragmentsAsked !== undefined && fragmentsAsked.length > 0) {
     options.onFragmentsAsked?.(fragmentsAsked)
   }
-  return svg === undefined ? { scene } : { scene, svg: askedSvg(answer.svg) }
+  return svg === undefined ? { scene } : { scene, ...askedPicture(svg, answer) }
 }
 
 /**
@@ -171,20 +177,36 @@ function commentLayoutRequest(
  * the refusal.
  */
 export function layoutCommentDocument(body: string, options: CommentDocumentOptions): Scene {
+  return commentThroughCore(body, options, undefined).scene
+}
+
+/**
+ * A comment through the core, with the picture it drew in the envelope and
+ * form `svg` names when it asks for one; none for a refusal, whose scene this
+ * side built.
+ */
+export function commentThroughCore(
+  body: string,
+  options: CommentDocumentOptions,
+  svg: CoreSvgAsk | undefined,
+): { readonly scene: Scene } & MaybePictured {
+  const request = commentLayoutRequest(body, options)
   const answer = options.core.markdown.layoutMarkdown(
-    commentLayoutRequest(body, options),
+    svg === undefined ? request : { ...request, svg },
     highlightCode,
     options.measure,
   )
   if ('refused' in answer) {
-    return refusalScene(answer.refused, {
+    const scene = refusalScene(answer.refused, {
       measure: options.measure,
       mode: 'light',
       maxWidth: options.maxWidth ?? COMMENT_TEXT_MAX_WIDTH_PX,
     })
+    return { scene }
   }
   if ('missing' in answer) {
     throw new Error('the core answered a comment as a note missing its section')
   }
-  return answer.scene
+  const { scene } = answer
+  return svg === undefined ? { scene } : { scene, ...askedPicture(svg, answer) }
 }
