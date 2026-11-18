@@ -141,6 +141,31 @@ describe('the search shim over a fake glue', () => {
     expect(searchOver(one.glue, errors).snippetAround('t', 0, 1, labels)).toBe('seen')
   })
 
+  it('asks for each document alone when a page of them is past the cap, so none loses its excerpts', () => {
+    const { glue, sent } = fake([
+      '["refused","input-too-large"]',
+      '["ok",[["one"]]]',
+      '["refused","input-too-large"]',
+      '["ok",[["three"]]]',
+    ])
+    const answered = searchOver(glue, errors).excerpts('q', [['a'], ['b'], ['c']])
+    expect(answered).toEqual([['one'], [], ['three']])
+    expect(sent.map((request) => request[3])).toEqual([
+      [['a'], ['b'], ['c']],
+      [['a']],
+      [['b']],
+      [['c']],
+    ])
+  })
+
+  it('does not retry an excerpt refusal that is not about size', () => {
+    const { glue, sent } = fake(['["refused","malformed"]'])
+    expect(() => searchOver(glue, errors).excerpts('q', [['a'], ['b']])).toThrowError(
+      expect.objectContaining({ code: 'malformed', detail: 'excerpts' }),
+    )
+    expect(sent).toHaveLength(1)
+  })
+
   it('sends a lone surrogate as the replacement character', () => {
     const { glue, sent } = fake(['["ok","x"]'])
     searchOver(glue, errors).foldForSearch('a\uD800b')
