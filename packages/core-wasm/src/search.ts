@@ -332,6 +332,12 @@ export interface SearchCore {
   folderNamesOf(path: string, names: ReadonlyMap<string, string>): string[]
   /** What text a document contributes to search. */
   searchableTexts(content: SearchableContent): string[]
+  /**
+   * A markdown body as one line of plain text (`markdown_excerpt`): the
+   * parsed tree's values, one space after each block and none between inline
+   * nodes. A body past the parser's bounds answers its trimmed source.
+   */
+  markdownPlainText(body: string): string
   /** What one document contributes to an index. */
   documentTerms(
     doc: Pick<SearchableDocument, 'path' | 'name' | 'texts'>,
@@ -403,7 +409,7 @@ function textCalls(channel: Channel): TextCalls {
 const orNull = (text: string | undefined): string | null =>
   text === undefined ? null : toWellFormed(text)
 
-type ContentCalls = Pick<SearchCore, 'searchableTexts' | 'documentTerms'>
+type ContentCalls = Pick<SearchCore, 'searchableTexts' | 'markdownPlainText' | 'documentTerms'>
 
 function contentCalls(channel: Channel): ContentCalls {
   return {
@@ -430,6 +436,9 @@ function contentCalls(channel: Channel): ContentCalls {
       ])
       const edges = content.canvas.edges.map((edge) => orNull(edge.label))
       return channel.first('texts', isTexts, 'spatial', nodes, edges)
+    },
+    markdownPlainText(body) {
+      return channel.first('plain', isText, toWellFormed(body))
     },
     documentTerms(doc, alsoIndex) {
       const expand = expander(alsoIndex)

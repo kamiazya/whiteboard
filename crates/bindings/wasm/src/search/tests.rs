@@ -38,6 +38,18 @@ fn text_ops_answer_what_the_search_crate_answers() {
 }
 
 #[test]
+fn plain_answers_a_bodys_one_line_of_text_and_reads_one_argument() {
+    let mut held = fresh();
+    assert_eq!(
+        ask(&mut held, &json!(["plain", "# Ship **it**\n\n- a\n- b ![alt](x.png)"])),
+        json!(["ok", "Ship it a b alt"])
+    );
+    assert_eq!(ask(&mut held, &json!(["plain", ""])), json!(["ok", ""]));
+    assert_eq!(ask(&mut held, &json!(["plain"])), refused("malformed"));
+    assert_eq!(ask(&mut held, &json!(["plain", 1])), refused("malformed"));
+}
+
+#[test]
 fn searchable_texts_read_a_note_and_a_canvas_by_the_same_rules() {
     let mut held = fresh();
     assert_eq!(
@@ -161,6 +173,7 @@ fn a_request_the_op_does_not_read_is_refused_as_malformed() {
         json!(["index-query", -1, "a", null]),
         json!(["index-query", 4_294_967_296_u64, "a", null]),
         json!(["texts", "markdown", "b"]),
+        json!(["plain", "a", "b"]),
         json!(["texts", "spatial", [[1, null]], []]),
         json!(["texts", "spatial", [[null, ["m", "c", null]]], []]),
         json!(["texts", "bogus", 1, 2]),

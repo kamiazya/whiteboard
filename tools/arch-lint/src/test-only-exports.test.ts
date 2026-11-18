@@ -321,6 +321,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the equivalence the markdown round-trip contract is stated modulo, read by the codec and editor round-trip properties and named in package-codec.md',
   'packages/canvas-render/src/layout/markdown-switch.ts#layoutMarkdownDocument':
     "a note's scene alone: the shipped callers read the block lines beside it (layoutMarkdownDocumentBlocks), while the layout, reference and parity tests ask for the scene they compare",
+  'packages/codec/src/markdown/pipeline.ts#parseMarkdownBody':
+    'the TypeScript reader the recorded mdast oracle is made from (mdast.jsonl, replayed against the core by crates/core/codec/tests/mdast and markdown_excerpt_oracle.rs) and the round-trip properties: deleted with the TypeScript parser (A5.6)',
   'packages/codec/src/markdown/pipeline.ts#parseMarkdownBlockLines':
     'the TypeScript reader the recorded block-lines oracle is made from (mdast.jsonl, replayed against the core by crates/core/codec/tests/markdown_block_lines_oracle.rs): deleted with the TypeScript parser (A5.6)',
   'packages/codec/src/markdown/pipeline.ts#stringifyMarkdownBody':

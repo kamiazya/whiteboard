@@ -16,13 +16,15 @@ import { CommentsPanel } from './CommentsPanel.js'
 
 const work = vi.hoisted(() => ({ parses: 0 }))
 
-vi.mock('@kamiazya/whiteboard-codec', async (importOriginal) => {
-  const codec = await importOriginal<typeof import('@kamiazya/whiteboard-codec')>()
+// A row's subject is the core's parse of its body (`markdownPlainText`), so a
+// call to it is one parse of that body.
+vi.mock('@kamiazya/whiteboard-search', async (importOriginal) => {
+  const search = await importOriginal<typeof import('@kamiazya/whiteboard-search')>()
   return {
-    ...codec,
-    parseMarkdownBody: (...args: Parameters<typeof codec.parseMarkdownBody>) => {
+    ...search,
+    markdownPlainText: (...args: Parameters<typeof search.markdownPlainText>) => {
       work.parses += 1
-      return codec.parseMarkdownBody(...args)
+      return search.markdownPlainText(...args)
     },
   }
 })

@@ -1,6 +1,8 @@
 // The rail row's one-line summary of a comment. Node, not a browser: it is a
-// string transform with no DOM in it.
-import { describe, expect, it } from 'vitest'
+// string transform with no DOM in it. The jsdom realm boots the real Rust core
+// (`vitest.layout-core.setup.ts`), so these run through the artifact.
+import { installSearchCore } from '@kamiazya/whiteboard-search'
+import { afterEach, describe, expect, it } from 'vitest'
 import { commentExcerpt } from './comment-excerpt.js'
 
 it('says what the body says, without the syntax that says how to draw it', () => {
@@ -25,12 +27,27 @@ it("carries an image's alt text, which is the only thing it says", () => {
   )
 })
 
-describe('a body it cannot parse', () => {
-  it('falls back to the source, which beats an empty row', () => {
-    // Reaching this needs a body codec's parse rejects; the point of the
-    // branch is that the row still identifies its conversation.
-    expect(commentExcerpt('plain enough')).toBe('plain enough')
+describe('a realm with no core, or a body the core refuses', () => {
+  let realm: ReturnType<typeof installSearchCore>
+  afterEach(() => {
+    installSearchCore(realm)
   })
+
+  it('shows the trimmed source, which beats an empty row', () => {
+    realm = installSearchCore(undefined)
+    expect(commentExcerpt('  **tighten** it \n')).toBe('**tighten** it')
+  })
+
+  it("shows the trimmed source for a body past the core's request cap", () => {
+    const huge = `  ${'x'.repeat(9 * 1024 * 1024)}  `
+    expect(commentExcerpt(huge)).toBe(huge.trim())
+  })
+})
+
+it('reads nested lists, a table and CJK as the core does', () => {
+  expect(commentExcerpt('- a\n  - b\n- c')).toBe('a b c')
+  expect(commentExcerpt('| a | b |\n|---|---|\n| c | d |')).toBe('ab cd')
+  expect(commentExcerpt('# 見出し\n\n**太字**です')).toBe('見出し 太字です')
 })
 
 it('answers the empty string for a body with nothing in it', () => {

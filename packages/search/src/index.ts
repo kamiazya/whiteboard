@@ -10,6 +10,7 @@ export {
   isSearchUnavailable,
   type LinkLabelSet,
   linkLabels,
+  markdownPlainText,
   type SearchableDocument,
   type SearchCore,
   type SearchHit,

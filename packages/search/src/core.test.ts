@@ -10,6 +10,7 @@ import {
   isSearchRefusal,
   isSearchUnavailable,
   linkLabels,
+  markdownPlainText,
   type SearchCore,
   type SearchHit,
   searchableTexts,
@@ -46,6 +47,7 @@ const stub: SearchCore = {
   tokenizeForIndex: record('tokenizeForIndex', ['i']) as SearchCore['tokenizeForIndex'],
   folderNamesOf: record('folderNamesOf', ['f']) as SearchCore['folderNamesOf'],
   searchableTexts: record('searchableTexts', ['t']) as SearchCore['searchableTexts'],
+  markdownPlainText: record('markdownPlainText', 'plain') as SearchCore['markdownPlainText'],
   linkLabels: record('linkLabels', labels) as SearchCore['linkLabels'],
   snippetAround: record('snippetAround', 's') as SearchCore['snippetAround'],
   excerpts: record('excerpts', [['e']]) as SearchCore['excerpts'],
@@ -60,6 +62,7 @@ const everyCall: [string, () => unknown][] = [
   ['tokenizeForIndex', () => tokenizeForIndex('a')],
   ['folderNamesOf', () => folderNamesOf('a/b', new Map())],
   ['searchableTexts', () => searchableTexts({ kind: 'markdown', body: 'a' })],
+  ['markdownPlainText', () => markdownPlainText('a')],
   ['linkLabels', () => linkLabels([])],
   ['snippetAround', () => snippetAround('a', 0, 1)],
   ['excerpts', () => excerpts('a', [['b']])],
@@ -104,6 +107,7 @@ describe('a realm that installed a core', () => {
     expect(tokenizeForIndex('a b')).toEqual(['i'])
     expect(folderNamesOf('a/b', new Map([['a', 'A']]))).toEqual(['f'])
     expect(searchableTexts({ kind: 'markdown', body: 'x', description: 'd' })).toEqual(['t'])
+    expect(markdownPlainText('**x**')).toBe('plain')
     expect(linkLabels([{ documentId: 'a', path: 'p' }])).toBe(labels)
     expect(snippetAround('text', 1, 2, labels)).toBe('s')
     expect(excerpts('q', [['a']], labels)).toEqual([['e']])
@@ -117,14 +121,15 @@ describe('a realm that installed a core', () => {
       'tokenizeForIndex',
       'folderNamesOf',
       'searchableTexts',
+      'markdownPlainText',
       'linkLabels',
       'snippetAround',
       'excerpts',
       'createIndex',
       'fullTextSearch',
     ])
-    expect(calls[7]?.args).toEqual(['text', 1, 2, labels])
-    expect(calls[10]?.args).toEqual([[], 'q', { limit: 3 }])
+    expect(calls[8]?.args).toEqual(['text', 1, 2, labels])
+    expect(calls[11]?.args).toEqual([[], 'q', { limit: 3 }])
   })
 
   it('answers the core it replaced, so a stand-in can put the real one back', () => {
