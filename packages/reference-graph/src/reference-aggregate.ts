@@ -83,7 +83,9 @@ export type RawReference = z.infer<typeof rawReferenceSchema>
  * touching the source, so a label cut into the facts would go stale.
  */
 function referenceContext(ref: RawReference, labels: LinkLabelSet | undefined): string {
-  return ref.via === 'wikilink' ? excerptAround(ref.text, ref.index, ref.length, labels) : ref.context
+  return ref.via === 'wikilink'
+    ? excerptAround(ref.text, ref.index, ref.length, labels)
+    : ref.context
 }
 
 /**

@@ -9,8 +9,8 @@ type SearchableDocument = Parameters<SearchCore['fullTextSearch']>[0][number]
 type AlsoIndex = NonNullable<NonNullable<Parameters<SearchCore['fullTextSearch']>[2]>['alsoIndex']>
 
 // The shim over the artifact `stage:wasm` copied into artifacts/, held to the
-// answers `packages/search` recorded (`search.jsonl`, which the TypeScript
-// re-records and fails on when it drifts) with the same allowances the native
+// answers `packages/search` recorded (`search.jsonl`, frozen: the TypeScript
+// that wrote it is deleted) with the same allowances the native
 // replay (`crates/core/search/tests`) makes: the Unicode tables the core
 // carries differ from the recording runtime's at the code points the ledger
 // names, and a text holding one of them is replayed but may differ. An input

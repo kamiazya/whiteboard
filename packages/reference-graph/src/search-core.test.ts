@@ -39,9 +39,7 @@ const facts = new Map([
   [
     B,
     {
-      refs: [
-        { target: 'plan', via: 'wikilink' as const, byId: false, text, index: 4, length: 8 },
-      ],
+      refs: [{ target: 'plan', via: 'wikilink' as const, byId: false, text, index: 4, length: 8 }],
       texts: [],
     },
   ],

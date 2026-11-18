@@ -1,5 +1,4 @@
 import { getAppLogger } from './app-logger.js'
-import { searchReady } from './search-core.js'
 import { installLayoutCore, layoutCoreReady } from './spatial/layout-core.js'
 
 /**
@@ -16,7 +15,10 @@ import { installLayoutCore, layoutCoreReady } from './spatial/layout-core.js'
 export function startLayoutCore(): Promise<void> {
   installLayoutCore()
   return layoutCoreReady().then(
-    () => searchReady(),
+    // Dynamic, so the boot path takes no new module: the install is a few
+    // bytes, and a static import here made the search dispatch a chunk of its own
+    // on the critical path.
+    () => import('./search-core.js').then(({ searchReady }) => searchReady()),
     (err: unknown) => {
       getAppLogger('layout-core').error('the Rust core did not load; nothing can be laid out', err)
     },
