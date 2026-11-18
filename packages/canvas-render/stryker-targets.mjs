@@ -202,9 +202,14 @@ export const KNOWN_EQUIVALENT = {
     'EqualityOperator: path.length > 0 -> path.length >= 0': 1,
     'ConditionalExpression: path.length > 0 -> true': 1,
   },
+  // Both invariants are written beside the code.
+  'src/scene-bounds.ts': {
+    "ConditionalExpression: node.kind === 'edge' || node.kind === 'shape' -> true": 1,
+    'EqualityOperator: padding <= 0 -> padding < 0': 1,
+  },
   // The switch's `default` answers what falling off its end answers; the
   // invariant is beside it.
   'src/scene-children.ts': {
-    'ConditionalExpression: default: return undefined -> ': 1,
+    'ConditionalExpression: default: return undefined -> default:': 1,
   },
 }

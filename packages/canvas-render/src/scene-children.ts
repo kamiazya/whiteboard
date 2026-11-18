@@ -19,6 +19,9 @@ export type SceneWalkNode = SceneNode | ListItemNode | TableRowSceneNode | Table
  * A leaf, so a layout stage below `scene-bounds` can read it too.
  */
 export function sceneChildrenOf(node: SceneWalkNode): readonly SceneWalkNode[] | undefined {
+  // `default: return undefined` is equivalent to omitting the clause: a
+  // switch that falls off its end returns `undefined` too. Kept so the
+  // exhaustive reading stays explicit.
   switch (node.kind) {
     case 'blockquote':
     case 'group':
@@ -39,8 +42,6 @@ export function sceneChildrenOf(node: SceneWalkNode): readonly SceneWalkNode[] |
     // function says for a node with no children.
     case 'codeBlock':
       return node.runs
-    // Equivalent to omitting the clause: a switch that falls off its end
-    // returns `undefined` too. Kept so the exhaustive reading stays explicit.
     default:
       return undefined
   }

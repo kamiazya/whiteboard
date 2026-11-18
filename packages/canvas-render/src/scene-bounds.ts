@@ -75,6 +75,8 @@ const inkReach = (ink: SceneInk | undefined): number =>
  * never clips it. Nothing else moves.
  */
 function decorationReachPx(node: SceneWalkNode): number {
+  // Only an edge or a shape carries `ink`, so the kind test is equivalent to
+  // reading `node.ink` alone; it stays so the type narrows to the two.
   return Math.max(
     node.kind === 'edge' || node.kind === 'shape' ? inkReach(node.ink) : 0,
     'appearance' in node ? glowReachPx(node.appearance?.glow?.radiusPx ?? 0) : 0,
@@ -191,6 +193,8 @@ export function sceneBounds(scene: Scene): BoundingBox {
  */
 export function sceneDocumentBounds(scene: Scene, padding = 0): BoundingBox {
   const bounds = withLegendRoom(scene, sceneBounds(scene))
+  // A zero padding returns the bounds either way, so `< 0` here would answer
+  // the same; `<= 0` skips building a copy.
   if (!Number.isFinite(padding) || padding <= 0) return bounds
   return {
     x: bounds.x - padding,

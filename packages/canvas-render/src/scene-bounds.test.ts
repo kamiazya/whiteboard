@@ -521,6 +521,9 @@ describe('sceneBounds', () => {
     }
     expect(sceneBounds(inked)).toEqual({ x: -8, y: -8, w: 26, h: 26 })
     expect(sceneBounds({ nodes: [{ kind: 'shape', bbox: box }] })).toEqual(box)
+    expect(sceneBounds({ nodes: [{ kind: 'shape', bbox: box, appearance: undefined }] })).toEqual(
+      box,
+    )
   })
 
   it('widens every point of a sketch-inked edge by the ink reach', () => {
@@ -573,6 +576,7 @@ describe('sceneBounds', () => {
     })
     expect(sceneBounds({ nodes: [{ ...run, appearance: { halo: '' } }] })).toEqual(run.bbox)
     expect(sceneBounds({ nodes: [run] })).toEqual(run.bbox)
+    expect(sceneBounds({ nodes: [{ ...run, appearance: {} }] })).toEqual(run.bbox)
     expect(
       sceneBounds({ nodes: [{ kind: 'shape', bbox: run.bbox, appearance: { halo: '#fff' } }] }),
     ).toEqual(run.bbox)
@@ -670,6 +674,11 @@ describe('sceneDocumentBounds', () => {
   })
   it('pads every side by the same amount', () => {
     expect(sceneDocumentBounds({ nodes }, 16)).toEqual({ x: 34, y: 4, w: 232, h: 42 })
+  })
+  it('ignores a padding that is negative or not finite', () => {
+    for (const padding of [-5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(sceneDocumentBounds({ nodes }, padding)).toEqual(sceneBounds({ nodes }))
+    }
   })
   // The producer never attaches a legend with nothing to say, but the type
   // admits one, and a panel of no rows must reserve no band — not the bare
