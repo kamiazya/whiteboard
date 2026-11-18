@@ -70,15 +70,30 @@ mod tests {
     }
 
     #[test]
-    fn characters_xml_cannot_carry_are_removed_and_the_rest_kept() {
-        let invalid = ['\u{0}', '\u{8}', '\u{B}', '\u{C}', '\u{E}', '\u{1F}', '\u{7F}', '\u{85}'];
-        let invalid = invalid.iter().chain(&['\u{9F}', '\u{FFFE}', '\u{FFFF}']);
-        for c in invalid {
-            assert_eq!(strip_xml_invalid_chars(&format!("a{c}b")), "ab", "{c:?}");
+    fn every_c0_control_is_kept_exactly_when_xml_admits_it() {
+        // XML 1.0 section 2.2 `Char` admits tab, line feed and carriage return
+        // of the 32 C0 controls, written as code points so the table shares
+        // nothing with the predicate it judges.
+        for code in 0u32..0x20 {
+            let c = char::from_u32(code).unwrap_or_default();
+            let kept = matches!(code, 0x09 | 0x0A | 0x0D);
+            let text = format!("a{c}b");
+            let want = if kept { text.clone() } else { "ab".to_owned() };
+            assert_eq!(strip_xml_invalid_chars(&text), want, "U+{code:04X}");
+            assert_eq!(escape_xml_text(&text), want, "U+{code:04X}");
+            assert_eq!(escape_xml_attr(&text), want, "U+{code:04X}");
+        }
+    }
+
+    #[test]
+    fn the_c1_range_and_the_noncharacters_are_removed_and_the_rest_kept() {
+        for code in (0x7Fu32..=0x9F).chain([0xFFFE, 0xFFFF]) {
+            let c = char::from_u32(code).unwrap_or_default();
+            assert_eq!(strip_xml_invalid_chars(&format!("a{c}b")), "ab", "U+{code:04X}");
             assert_eq!(escape_xml_text(&format!("a{c}b")), "ab");
             assert_eq!(escape_xml_attr(&format!("a{c}b")), "ab");
         }
-        for c in ['\t', '\n', '\r', ' ', '\u{20}', '\u{A0}', '\u{100}', '\u{FFFD}', '\u{10000}'] {
+        for c in [' ', '\u{A0}', '\u{100}', '\u{FFFD}', '\u{10000}'] {
             assert_eq!(strip_xml_invalid_chars(&format!("a{c}b")), format!("a{c}b"), "{c:?}");
         }
     }

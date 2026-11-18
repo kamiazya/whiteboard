@@ -30,7 +30,7 @@ import type { BoundingBox } from './scene-graph.js'
  * stored path coordinates, so translating a scene moves the box and the
  * outline follows, and scaling one scales it implicitly.
  */
-export type NodeOutline =
+type NodeOutline =
   | {
       readonly kind: 'ellipse'
       readonly cx: number
@@ -75,13 +75,6 @@ export type NodeOutline =
 export interface ShapeContribution {
   readonly outline: (box: BoundingBox) => NodeOutline | null
 }
-
-/**
- * Shapes by namespaced id (`visual.diamond`). The namespace is COMPOSED by
- * the renderer from the declaring facet's key, never read out of a payload —
- * so a document cannot name another plugin's geometry.
- */
-export type ShapeTable = Readonly<Record<string, ShapeContribution>>
 
 /**
  * What one plugin registers with the renderer: its silhouettes and its theme

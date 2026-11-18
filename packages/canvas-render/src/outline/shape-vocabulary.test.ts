@@ -3,8 +3,7 @@
  * them together.
  *
  * `visual.shape/v0`'s enum is what a document may SAY; `BUNDLED_SHAPE_TABLE` is
- * what this renderer can DRAW (resolved from the plugin's own contribution,
- * since the renderer's hand-written copy went); and two more copies exist as hand-written
+ * what the bundled plugin can DRAW (its own render contribution); and two more copies exist as hand-written
  * arrays in a test and a bench. plugin-visual's own comment says "canvas-render
  * asserts the alignment in its own tests, since this package cannot depend on
  * it" — and the test it meant carries its own hand-written list, so an enum
@@ -20,8 +19,16 @@
  * lives on the side that can see both.
  */
 import { visualShapeFacetSchema } from '@kamiazya/whiteboard-plugin-visual'
+import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import { describe, expect, it } from 'vitest'
-import { BUNDLED_SHAPE_TABLE } from './node-outline.js'
+
+/** What the plugin can DRAW, by namespaced id: the table the core's silhouettes port. */
+const BUNDLED_SHAPE_TABLE = Object.fromEntries(
+  Object.keys(visualRenderContribution.shapes ?? {}).map((name) => [
+    `${visualRenderContribution.namespace}.${name}`,
+    true,
+  ]),
+)
 
 /** What a document may say. The enum is the single source; this reads it. */
 const DECLARED_SHAPE_KINDS = visualShapeFacetSchema.shape.kind.options

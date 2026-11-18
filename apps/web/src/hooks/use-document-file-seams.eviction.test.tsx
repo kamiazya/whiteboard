@@ -7,7 +7,6 @@
  * under the current stamp, and one older answer only while that one loads, so
  * the embed never flashes empty.
  */
-import { referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, renderHook, waitFor } from '@testing-library/react'
@@ -68,9 +67,7 @@ describe('a referenced document whose stamp keeps moving', () => {
       expect(keysFor('other').length).toBeLessThanOrEqual(2)
     }
     expect(adapter.loadDocument).toHaveBeenCalledTimes(moves + 1)
-    expect(
-      referenceSeamsFromWire(result.current.references).resolveReference('other'),
-    ).toBeDefined()
+    expect(new Map(result.current.references.entries).get('other')).toBeDefined()
   })
 
   it('draws the older answer while the current one is still loading', async () => {

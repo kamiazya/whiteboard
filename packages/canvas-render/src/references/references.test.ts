@@ -1,6 +1,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
+import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
+import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 import { referenceSeams } from './seams.js'
 import { imageTargets, REFERENCE_BUDGET, referenceTargets } from './targets.js'
@@ -10,6 +14,7 @@ import {
   referenceSeamsFromWire,
   referenceWire,
   referenceWireFor,
+  wireOfSeams,
 } from './wire.js'
 
 const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -22,6 +27,26 @@ const board: SpatialCanvas = {
 
 function graphOf(entries: Record<string, LoadedReference | null>): ReferenceGraph {
   return new Map(Object.entries(entries))
+}
+
+/**
+ * What the core draws for one file node of `file`, over the wire `wire`:
+ * the scene as JSON, since the assertions are about what text and images
+ * reach it, which is what a reader sees.
+ */
+function drawnFile(wire: ReturnType<typeof referenceWire>, file: string): string {
+  const canvas: SpatialCanvas = {
+    nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 400, height: 300, file })],
+    edges: [],
+  }
+  const scene = layoutSpatialCanvas(canvas, {
+    core: testLayoutCore(),
+    measure: createFakeMeasure(),
+    appearance: createSpatialTheme({ mode: 'light' }),
+    expandFileNode: () => true,
+    references: referenceSeamsFromWire(wire),
+  })
+  return JSON.stringify(scene)
 }
 
 /**
@@ -266,57 +291,56 @@ describe('referenceSeams', () => {
     expect(seams.resolveTitle('Z')).toBeUndefined()
   })
 
-  it('embeds a markdown record as its parsed body, references inside resolved by the same seams', () => {
-    const seams = referenceSeams(graph)
-    const embedded = seams.resolveEmbed(NOTE_ID)
-    if (embedded === undefined || !('root' in embedded)) throw new Error('expected a body')
-    expect(embedded.title).toBe('The Plan')
-    expect(JSON.stringify(embedded.root)).toContain(`"documentId":"${BOARD_ID}"`)
+  it('hands the core the wire it was rebuilt from, and no other bundle', () => {
+    const wire = referenceWire(graph)
+    const seams = referenceSeamsFromWire(wire)
+    expect(wireOfSeams(seams)).toBe(wire)
+    expect(wireOfSeams(referenceSeams(graph))).toBeUndefined()
+  })
+})
+
+describe('what the core draws of a reference record', () => {
+  const graph = graphOf({
+    'notes/plan': { documentId: NOTE_ID, name: 'The Plan', body: '## Launch\n\nbody text' },
+    'boards/roadmap': { documentId: BOARD_ID, name: 'Roadmap', canvas: board },
   })
 
-  it('embeds a spatial record as its canvas, empty or not', () => {
-    const seams = referenceSeams(graph)
-    expect(seams.resolveEmbed(BOARD_ID)).toEqual({ title: 'Roadmap', canvas: board })
-    const empty = referenceSeams(
-      graphOf({ e: { documentId: 'E', canvas: { nodes: [], edges: [] } } }),
-    )
-    expect(empty.resolveEmbed('E')).toEqual({ canvas: { nodes: [], edges: [] } })
+  it('draws a spatial record as its canvas, and a markdown record as its prose', () => {
+    const wire = referenceWire(graph)
+    expect(drawnFile(wire, 'boards/roadmap')).toContain('on the board')
+    const note = drawnFile(wire, 'notes/plan')
+    expect(note).toContain('Launch')
+    expect(note).toContain('The Plan')
   })
 
   it('a record with a body is markdown even when it also carries a canvas', () => {
-    const seams = referenceSeams(
+    const wire = referenceWire(
       graphOf({ legacy: { documentId: 'L', body: 'prose', canvas: board } }),
     )
-    expect('root' in (seams.resolveEmbed('L') ?? {})).toBe(true)
-    expect(seams.resolveReference('legacy')?.canvas).toBeUndefined()
-    expect(seams.resolveReference('legacy')?.markdown).toBeDefined()
+    const drawn = drawnFile(wire, 'legacy')
+    expect(drawn).toContain('prose')
+    expect(drawn).not.toContain('on the board')
   })
 
-  it('a file reference draws label + canvas, or label + prose, and an empty canvas as the card', () => {
-    const seams = referenceSeams(graph)
-    expect(seams.resolveReference('boards/roadmap')).toEqual({ label: 'Roadmap', canvas: board })
-    expect(seams.resolveReference('notes/plan')?.label).toBe('The Plan')
-    expect(seams.resolveReference('notes/plan')?.markdown).toBeDefined()
-    const empty = referenceSeams(
-      graphOf({ e: { name: 'Empty', canvas: { nodes: [], edges: [] } } }),
-    )
-    expect(empty.resolveReference('e')).toEqual({ label: 'Empty' })
-    expect(seams.resolveReference('missing')).toBeUndefined()
-    expect(seams.resolveReference('never-seen')).toBeUndefined()
+  it('draws an empty canvas as the card, and a blank body as the label alone', () => {
+    const empty = referenceWire(graphOf({ e: { name: 'Empty', canvas: { nodes: [], edges: [] } } }))
+    expect(drawnFile(empty, 'e')).toContain('Empty')
+    const blank = referenceWire(graphOf({ bad: { documentId: 'B', name: 'Bad', body: ' ' } }))
+    expect(() => drawnFile(blank, 'bad')).not.toThrow()
+    expect(drawnFile(blank, 'bad')).toContain('Bad')
   })
 
-  it('surface extras ride over the shared fields, and alone for a reference nothing loaded', () => {
-    const seams = referenceSeams(graph, {
-      extra: (ref) => (ref === 'asset:1' ? { image: { href: 'blob:x' } } : undefined),
+  it('draws a surface extra over the record, and alone for a reference nothing loaded', () => {
+    const wire = referenceWire(graph, {
+      extras: new Map<string, ReferenceExtra>([
+        ['asset:1', { image: { href: 'blob:x' } }],
+        ['boards/roadmap', { label: 'Board card' }],
+      ]),
     })
-    expect(seams.resolveReference('asset:1')).toEqual({ image: { href: 'blob:x' } })
-    expect(seams.resolveReference('boards/roadmap')).toEqual({ label: 'Roadmap', canvas: board })
-  })
-
-  it('a blank body answers no prose and never throws', () => {
-    const seams = referenceSeams(graphOf({ bad: { documentId: 'B', name: 'Bad', body: ' ' } }))
-    expect(() => seams.resolveEmbed('B')).not.toThrow()
-    expect(seams.resolveReference('bad')).toEqual({ label: 'Bad' })
+    expect(drawnFile(wire, 'asset:1')).toContain('blob:x')
+    const card = drawnFile(wire, 'boards/roadmap')
+    expect(card).toContain('Board card')
+    expect(card).toContain('on the board')
   })
 })
 
@@ -350,12 +374,12 @@ describe('referenceWire', () => {
     expect(seams.resolveAlias('notes/plan')).toBe(NOTE_ID)
     expect(seams.resolveTitle(BOARD_ID)).toBe('Roadmap')
     expect(seams.resolveTitle(NOTE_ID)).toBe('Plan')
-    expect(seams.resolveEmbed(NOTE_ID)?.title).toBe('Plan')
-    expect(seams.resolveReference('boards/roadmap')).toEqual({ label: 'Board card', canvas: board })
-    expect(seams.resolveReference('notes/missing')).toBeUndefined()
+    expect(wireOfSeams(seams)).toEqual(wire)
+    expect(drawnFile(wire, 'boards/roadmap')).toContain('Board card')
+    expect(drawnFile(wire, 'boards/roadmap')).toContain('on the board')
   })
 
-  it('marks the targets still loading pending, asks the tables of them, and rebuilds them as loading', () => {
+  it('marks the targets still loading pending, asks the tables of them, and keeps the marks on the wire the core reads', () => {
     // A target written by path is still loading: the alias table must be
     // asked of it, or an embed naming its id could not be told it is loading.
     const wire = referenceWire(graphOf({ 'notes/plan': { documentId: NOTE_ID, body: 'x' } }), {
@@ -371,14 +395,12 @@ describe('referenceWire', () => {
       ['boards/roadmap', { label: 'Board card', pending: true }],
       ['notes/plan', { pending: true }],
     ])
-    const seams = referenceSeamsFromWire(wire)
-    expect(seams.isLoading?.(BOARD_ID)).toBe(true)
-    expect(seams.isLoading?.(NOTE_ID)).toBe(true)
-    expect(seams.isLoading?.('01H8XJZ9K5N4M3P2Q1R0S9T8V7')).toBe(false)
-    // The mark is no part of what a reference resolves to.
-    expect(seams.resolveReference('boards/roadmap')).toEqual({ label: 'Board card' })
-    expect(seams.resolveReference('notes/plan')).toEqual({ markdown: expect.anything() })
-    expect(referenceSeamsFromWire(referenceWire(new Map())).isLoading).toBeUndefined()
+    // The core is handed these bytes, which is where an embed of the id
+    // learns it is loading.
+    expect(wireOfSeams(referenceSeamsFromWire(wire))?.extras).toEqual(wire.extras)
+    expect(referenceWire(new Map()).extras).toEqual([])
+    const quiet = referenceWire(graphOf({ 'notes/plan': { documentId: NOTE_ID, body: 'x' } }))
+    expect(quiet.extras).toEqual([])
   })
 
   it('asks the tables of every link the seeds write, past the loading budget too', () => {
@@ -415,13 +437,13 @@ describe('referenceWire', () => {
     expect(cut.titles).toContainEqual([idOf(1000 + last), `T${1000 + last}`])
   })
 
-  it('rebuilds the last extra of a key, an empty one included, as a wire without the mark did', () => {
+  it('draws the last extra of a key, an empty one included, as the reference alone', () => {
     const extras: [string, ReferenceExtra][] = [
       ['a', { label: 'Extra' }],
       ['a', {}],
     ]
-    const seams = referenceSeamsFromWire({ ...referenceWire(new Map()), extras })
-    expect(seams.resolveReference('a')).toBeUndefined()
+    const drawn = drawnFile({ ...referenceWire(new Map()), extras }, 'a')
+    expect(drawn).not.toContain('Extra')
   })
 })
 
@@ -430,21 +452,19 @@ describe('overlayReferences', () => {
     const empty = referenceWire(new Map())
     expect(overlayReferences(empty, {})).toBe(empty)
     const wire = referenceWire(graphOf({ a: { name: 'From the record', canvas: board } }), {
-      extras: new Map([['a', { image: { href: 'blob:a' } }]]),
+      extras: new Map([['asset:p', { image: { href: 'blob:a' } }]]),
     })
     const overlaid = overlayReferences(wire, {
       labels: new Map([['a', 'Alpha']]),
       missing: new Set(['gone']),
     })
     // Plain data: survives a structured clone, which is what a worker and the core receive.
-    const seams = referenceSeamsFromWire(structuredClone(overlaid))
-    expect(seams.resolveReference('a')).toEqual({
-      canvas: board,
-      image: { href: 'blob:a' },
-      label: 'Alpha',
-    })
-    expect(seams.resolveReference('gone')).toEqual({ missing: true })
-    expect(seams.resolveReference('other')).toBeUndefined()
+    const crossed = structuredClone(overlaid)
+    expect(drawnFile(crossed, 'a')).toContain('Alpha')
+    expect(drawnFile(crossed, 'a')).not.toContain('From the record')
+    expect(drawnFile(crossed, 'asset:p')).toContain('blob:a')
+    expect(drawnFile(crossed, 'gone')).toContain('Missing reference')
+    expect(drawnFile(crossed, 'other')).not.toContain('Missing reference')
   })
 })
 

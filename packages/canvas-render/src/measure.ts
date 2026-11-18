@@ -42,11 +42,6 @@ export interface TextMetrics {
  */
 export type MeasureText = (text: string, font: FontDescriptor) => TextMetrics
 
-/** Clamps a measurer's returned advance width to a finite, non-negative value. */
-export function clampAdvance(advanceWidth: number): number {
-  return Number.isFinite(advanceWidth) && advanceWidth >= 0 ? advanceWidth : 0
-}
-
 /**
  * Whether a code point occupies a full em rather than the ~half a Latin
  * letter takes: the fullwidth/CJK blocks of Unicode.

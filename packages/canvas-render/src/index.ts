@@ -10,7 +10,6 @@ export type {
   Appearance,
   BlockquoteNode,
   BoundingBox,
-  CodeBlockNode,
   EmbedPlaceholderNode,
   EmbedResolvedNode,
   GlyphSceneNode,
@@ -29,7 +28,6 @@ export type {
   SceneInk,
   SceneLegend,
   SceneNode,
-  ShapeSceneNode,
   SvgFragmentNode,
   TableBlockNode,
   TableCellSceneNode,
@@ -79,13 +77,6 @@ export type { CodeToken, CodeTokenLines, CodeTokenRole } from './highlight/code-
 export { boxContains, type HitBox, hitBoxesOf, topmostHit } from './hit-test.js'
 export { GLOW_STD_DEVIATION_RATIO, glowReachPx } from './ink/glow.js'
 export { styleRandomFromSeed } from './ink/seed.js'
-export {
-  SKETCH_INK_REACH_PX,
-  type SketchEdgeOptions,
-  type SketchInk,
-  sketchEdge,
-  sketchShape,
-} from './ink/sketch.js'
 export { CoreUnaskable } from './layout/canvas-switch.js'
 export {
   resolveCanvasPalette,
@@ -133,13 +124,11 @@ export type {
 } from './markdown-core.js'
 export type { FontDescriptor, MeasureSpec, MeasureText, TextMetrics } from './measure.js'
 export {
-  clampAdvance,
   constantRatioMeasureText,
   describeMeasure,
   isFullWidthCodePoint,
   measureSpecOf,
 } from './measure.js'
-export { type NodeOutline, nodeOutline } from './outline/node-outline.js'
 export { paintOrderOf } from './paint-order.js'
 export {
   CANVAS_VIEW_PICTURE_META_KEY,
@@ -159,7 +148,6 @@ export {
 } from './references/content-budget.js'
 export type { LoadedReference, ReferenceGraph } from './references/loaded-reference.js'
 export type {
-  EmbeddedDocument,
   FacetCardData,
   ResolvedReference,
 } from './references/resolved.js'
@@ -229,4 +217,3 @@ export { createSpatialTheme, spatialThemeModeSchema } from './theme/spatial-them
 export { paletteFromTokens } from './theme/theme-asset.js'
 export { type ThemeFont, themeFontSchema } from './theme/theme-font.js'
 export { tidyBoxes, tidyNodes } from './tidy.js'
-export { escapeXmlAttr, escapeXmlText } from './xml-escape.js'
