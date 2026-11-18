@@ -19,7 +19,7 @@ import {
 import { type DocumentVectorCache, vectorCacheFor } from '../search/document-vector-cache.js'
 import type { Embedder } from '../search/embedder.js'
 import { assertVectorWidth, rankByVector } from '../search/embedder.js'
-import { rankHeld } from '../search/held-index.js'
+import { rankHeld, withHeldBudget } from '../search/held-index.js'
 import { fuseByRank } from '../search/rrf.js'
 import type { ServerDeps } from '../server-deps.js'
 
@@ -228,12 +228,14 @@ function rank(
     if (ranked !== undefined) return withContexts(ranked, searchable, query, options)
   }
   return refusedAs([], () =>
-    fullTextSearch(searchable, query, {
-      limit: options.limit,
-      alsoIndex: emojiSearchText,
-      ...(options.excerpts === undefined ? {} : { excerpts: options.excerpts }),
-      ...(options.linkLabels === undefined ? {} : { linkLabels: options.linkLabels }),
-    }),
+    withHeldBudget(() =>
+      fullTextSearch(searchable, query, {
+        limit: options.limit,
+        alsoIndex: emojiSearchText,
+        ...(options.excerpts === undefined ? {} : { excerpts: options.excerpts }),
+        ...(options.linkLabels === undefined ? {} : { linkLabels: options.linkLabels }),
+      }),
+    ),
   )
 }
 

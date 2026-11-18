@@ -65,19 +65,52 @@ export function rankHeld(
   query: string,
   limit: number,
 ): { documentId: string; score: number }[] | undefined {
+  let workspace: HeldWorkspace | undefined
   try {
-    const workspace = heldFor(facts, workspaceId)
-    sync(workspace, documents, content, (id) => facts.stampOf(workspaceId, id) !== undefined)
-    return workspace.index.search(query, limit)
+    return withHeldBudget(
+      () => {
+        workspace ??= heldFor(facts, workspaceId)
+        sync(workspace, documents, content, (id) => facts.stampOf(workspaceId, id) !== undefined)
+        return workspace.index.search(query, limit)
+      },
+      () => workspace,
+    )
   } catch (err) {
-    // The core declined to hold this corpus (it holds a bounded number of
-    // indexes, and indexes lingering until collection count): the caller
-    // ranks it the stateless way, and the next query builds the index afresh
-    // rather than trusting a half-built one.
+    // The core will not hold this corpus even with nothing else held: the
+    // caller ranks it the stateless way, and the next query builds the index
+    // afresh rather than trusting a half-built one.
     forget(facts, workspaceId)
     if (isSearchRefusal(err)) return undefined
     throw err
   }
+}
+
+/**
+ * `run`, and again after releasing the least recently asked of the OTHER held
+ * indexes each time the core refuses it. The core's held memory (128 MiB) is
+ * shared by every index it holds, so a refusal may only mean other workspaces
+ * hold the budget this one needs; it is final once nothing else is held, and
+ * is thrown then. Also for a query that builds an index of its own inside the
+ * core (`fullTextSearch`), which draws on the same budget.
+ */
+export function withHeldBudget<T>(
+  run: () => T,
+  keep: () => HeldWorkspace | undefined = () => undefined,
+): T {
+  for (;;) {
+    try {
+      return run()
+    } catch (err) {
+      if (!isSearchRefusal(err) || !evictOldestExcept(keep())) throw err
+    }
+  }
+}
+
+function evictOldestExcept(keep: HeldWorkspace | undefined): boolean {
+  const at = held.findIndex((w) => w !== keep)
+  if (at === -1) return false
+  held.splice(at, 1)[0]?.index.release()
+  return true
 }
 
 function heldFor(facts: ContentFactsCache, workspaceId: string): HeldWorkspace {

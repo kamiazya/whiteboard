@@ -117,3 +117,80 @@ describe('wb_document_search terms held between queries', () => {
     expect(filtered.results[0]?.score).not.toBe(scoreAll)
   })
 })
+
+describe('wb_document_search when the core is out of budget for another workspace', () => {
+  // The core's held memory is shared by every index it holds, so a workspace
+  // that needs one may find the budget spent on others this process kept.
+  // A stand-in core with room for one index at a time makes that exact.
+  function budgetOfOneIndex() {
+    const real = installSearchCore(undefined)
+    if (real === undefined) throw new Error('the test realm installs a search core')
+    realm = real
+    const state = { live: 0, released: 0 }
+    const full = () => {
+      const err = new Error('the core holds no more')
+      err.name = 'CoreInputRefused'
+      return err
+    }
+    installSearchCore({
+      ...real,
+      createIndex: () => {
+        if (state.live >= 1) throw full()
+        state.live++
+        const index = real.createIndex()
+        let released = false
+        return {
+          ...index,
+          upsert: (doc, alsoIndex) => index.upsert(doc, alsoIndex),
+          remove: (id) => index.remove(id),
+          search: (query, limit) => index.search(query, limit),
+          release: () => {
+            if (released) return
+            released = true
+            state.live--
+            state.released++
+            index.release()
+          },
+        }
+      },
+      // The stateless ranking builds an index of its own inside the core.
+      fullTextSearch: (documents, query, options) => {
+        if (state.live >= 1) throw full()
+        return real.fullTextSearch(documents, query, options)
+      },
+    })
+    return state
+  }
+
+  it('releases the indexes it kept for other workspaces and holds this one', async () => {
+    const first = await workspace()
+    await first.write('a', 'rocket launch window')
+    const second = await workspace()
+    await second.write('b', 'rocket staging area')
+    const state = budgetOfOneIndex()
+    const one = createDocumentSearchTool(first.deps, vectorCacheFor(first.deps))
+    const two = createDocumentSearchTool(second.deps, vectorCacheFor(second.deps))
+
+    expect((await one.execute({ workspaceId: WS, query: 'rocket' })).results).toHaveLength(1)
+    expect(state.live).toBe(1)
+    expect((await two.execute({ workspaceId: WS, query: 'rocket' })).results).toHaveLength(1)
+    expect(state.released).toBe(1)
+    expect(state.live).toBe(1)
+  })
+
+  it('does the same for a filtered query, which ranks its own corpus', async () => {
+    const first = await workspace()
+    await first.write('a', 'rocket launch window')
+    const second = await workspace()
+    await second.write('b', 'rocket staging area', 'tags:\n  - ops\n')
+    const state = budgetOfOneIndex()
+    const one = createDocumentSearchTool(first.deps, vectorCacheFor(first.deps))
+    const two = createDocumentSearchTool(second.deps, vectorCacheFor(second.deps))
+
+    await one.execute({ workspaceId: WS, query: 'rocket' })
+    expect(state.live).toBe(1)
+    const out = await two.execute({ workspaceId: WS, query: 'rocket', tags: ['ops'] })
+    expect(out.results).toHaveLength(1)
+    expect(state.released).toBe(1)
+  })
+})
