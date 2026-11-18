@@ -17,10 +17,9 @@ import type {
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   describeMeasure,
-  layoutSpatialEdges,
+  layoutSpatialEdgesPicture,
   measureSpecOf,
   queryLabelObstacles,
-  renderSceneToSvg,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -82,6 +81,9 @@ function useFrameTitles(nodes: SpatialCanvas['nodes'], committed: Scene) {
     [nodes, committed],
   )
 }
+
+/** The live edge overlay's envelope: the layer's own bounds, at their size. */
+const LIVE_EDGES_ENVELOPE = { viewBox: { of: 'scene' } } as const
 
 /** One empty list, so a host passing no threads keeps the layers' memos stable. */
 const NO_THREADS: readonly CommentThread[] = []
@@ -386,12 +388,13 @@ export function useDragLayers({
   /**
    * EVERY edge, re-composed against the ghost's snapped live position and
    * rendered as an overlay — the per-frame half of live drag rendering.
-   * Goes through canvas-render's `layoutSpatialEdges`, the same producer
-   * the committed render uses, so routing detours around the moving node,
-   * line jumps, and label placement all match the drop result exactly
-   * (one producer per geometry). Per pointermove this is edge routing
-   * plus a small serialization; text measurement is absorbed by
-   * `dragStatic.measure`'s per-drag cache.
+   * Goes through canvas-render's `layoutSpatialEdgesPicture`: the core lays
+   * the layer out with the producer the committed render uses, so routing
+   * detours around the moving node, line jumps, and label placement all
+   * match the drop result exactly (one producer per geometry), and draws it
+   * in the same call, in the overlay's envelope (the layer's own bounds, at
+   * their size), so its SVG comes from the backend every other picture does.
+   * Text measurement is absorbed by `dragStatic.measure`'s per-drag cache.
    */
   const liveEdges = useMemo(() => {
     if (
@@ -429,13 +432,14 @@ export function useDragLayers({
     const reuse = canReuseCarriedSides(cache, cacheKey, dragPreview.box.x, dragPreview.box.y)
     const overrides =
       reuse && cache !== null ? new Map([...frozenSides, ...cache.sides]) : frozenSides
-    const nodes = layoutSpatialEdges(
+    const { nodes, svg } = layoutSpatialEdgesPicture(
       { ...canvas, nodes: liveNodes },
       {
         ...editorLayoutBase({ measure: dragStatic.measure, theme }),
         edgeSideOverrides: overrides,
         ...(tagLibrary === undefined ? {} : { tagLibrary }),
       },
+      LIVE_EDGES_ENVELOPE,
     )
     if (!reuse) {
       carriedSideCacheRef.current = {
@@ -445,14 +449,7 @@ export function useDragLayers({
         sides: carriedSidesOf(nodes, carriedEdgeIds),
       }
     }
-    const liveBounds = sceneBounds({ nodes })
-    return {
-      svg: renderSceneToSvg(
-        { nodes },
-        { width: liveBounds.w, height: liveBounds.h, viewBox: liveBounds },
-      ),
-      bounds: liveBounds,
-    }
+    return { svg, bounds: sceneBounds({ nodes }) }
   }, [gestureState, dragPreview, dragStatic, canvas, theme, gestureCommitted])
 
   /**

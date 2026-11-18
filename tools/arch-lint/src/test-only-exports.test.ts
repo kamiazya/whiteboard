@@ -209,8 +209,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "the web's picture in one core call (ADR-0054 A3.1), held byte for byte to the caller's TypeScript envelope by core-picture-web.rust.test.ts; the preview pane (`renderMarkdownPreview`) moves to it in A3.2/A3.3, which gives it a use and takes this entry out",
   'packages/canvas-render/src/core-picture.ts#layoutCommentDocumentKeyedPicture':
     "the web's picture in one core call (ADR-0054 A3.1), held byte for byte to the caller's TypeScript envelope by core-picture-web.rust.test.ts; a comment's body (`CommentBody`) moves to it in A3.2/A3.3, which gives it a use and takes this entry out",
-  'packages/canvas-render/src/core-picture.ts#layoutSpatialEdgesPicture':
-    "the web's picture in one core call (ADR-0054 A3.1), held byte for byte to the caller's TypeScript envelope by core-picture-web.rust.test.ts; the drag overlay (`liveEdges`) moves to it in A3.2/A3.3, which gives it a use and takes this entry out",
+  'packages/canvas-render/src/layout/spatial-canvas.ts#layoutSpatialEdges':
+    "the drag overlay's edge layer alone, with no picture: the overlay itself draws through `layoutSpatialEdgesPicture` (ADR-0054 A3.2), whose layer core-picture-web.rust.test.ts holds equal to this one, and live-drag-parity.rust.test.ts holds this layer to the committed layout's edges; the reference both judgements are stated against, and drag-frame-budget's layer-alone row",
   'packages/canvas-render/src/layout/markdown-switch.ts#markdownLayoutRequest':
     "which options of a markdown note the Rust core can be handed: the note's switch calls it, and markdown-switch.test.ts holds each option a surface varies, and the empty table a listener alone asks for, apart from the whole switch",
   'packages/facet-engine/src/unrecognized-keys.ts#firstUnrecognizedKey':
