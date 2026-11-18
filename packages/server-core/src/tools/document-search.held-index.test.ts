@@ -246,3 +246,16 @@ describe('wb_document_search when the core is out of budget for another workspac
     expect(state.sent).toHaveLength(3)
   })
 })
+
+describe('wb_document_search over hits too long to excerpt in one request', () => {
+  it('answers a filtered search whose hits together pass the request cap', async () => {
+    // Twelve notes of 250,000 CJK characters are about 9 MB of UTF-8 together,
+    // past the core's 8 MiB request, while each one fits alone.
+    const { deps, write } = await workspace()
+    const body = '探索'.repeat(125_000)
+    for (let n = 0; n < 12; n++) await write(`long-${n}`, `${body} rocket`, 'tags:\n  - ops\n')
+    const tool = createDocumentSearchTool(deps, vectorCacheFor(deps))
+    const out = await tool.execute({ workspaceId: WS, query: 'rocket', tags: ['ops'], limit: 12 })
+    expect(out.results).toHaveLength(12)
+  }, 60_000)
+})
