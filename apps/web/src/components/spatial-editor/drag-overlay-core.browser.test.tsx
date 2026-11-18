@@ -103,28 +103,33 @@ it("mounts the edge layer's SVG the core drew in the same call", async () => {
       clientY: r.top + y,
       buttons: 1,
     })
+    // Where the dragged note `a` sits in an edges request: the frame it lays out.
+    const xOfA = (request: QueryRequest): number =>
+      (request as { canvas?: SpatialCanvas }).canvas?.nodes.find((n) => n.id === 'a')?.x ?? 0
+    const furthest = () => Math.max(0, ...edges.map(({ request }) => xOfA(request)))
     fireEvent.pointerDown(root, at(160, 130))
-    await frame()
     for (const [x, y] of [
       [190, 150],
       [240, 230],
     ] as const) {
+      const before = furthest()
       fireEvent.pointerMove(root, at(x, y))
-      await frame()
+      // The move is answered once the core is asked for a frame with `a` further on.
+      await expect.poll(furthest).toBeGreaterThan(before)
     }
-    const overlay = () => container.querySelector('[data-testid="live-edges"]')
-    await expect.poll(() => overlay()?.querySelector('polyline')).not.toBeNull()
     expect(edges.length).toBeGreaterThan(0)
     for (const { request } of edges) {
       expect(request).toMatchObject({ svg: { viewBox: { of: 'scene' } } })
     }
-    const last = edges.at(-1)?.answer
-    const drawn = last !== undefined && 'svg' in last ? last.svg : undefined
+    // The frame for the final pointer position: `a` furthest along the drag.
+    const final = edges.find(({ request }) => xOfA(request) === furthest())?.answer
+    const drawn = final !== undefined && 'svg' in final ? final.svg : undefined
     expect(drawn).toBeTypeOf('string')
     // The DOM's own serialization of the core's markup, as the overlay's.
     const expected = document.createElement('div')
     expected.innerHTML = drawn ?? ''
-    expect(overlay()?.innerHTML).toBe(expected.innerHTML)
+    const overlay = () => container.querySelector('[data-testid="live-edges"]')
+    await expect.poll(() => overlay()?.innerHTML ?? null).toBe(expected.innerHTML)
   } finally {
     asked.mockRestore()
   }
