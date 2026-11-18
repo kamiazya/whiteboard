@@ -36,7 +36,7 @@ function recordingCore() {
             ],
           },
           degradations: [],
-          ...fakePicture(request, '<text>from the core</text>'),
+          ...fakePicture(request, '<text>the core drew this</text>'),
         }
       },
     },
@@ -64,7 +64,9 @@ describe("a comment's prose through the core", () => {
         svg: { padding: 1, form: 'keyed' },
       },
     ])
-    expect(container.textContent).toContain('from the core')
+    // The body paints the core's picture, never one drawn here from its scene.
+    expect(container.textContent).toContain('the core drew this')
+    expect(container.textContent).not.toContain('from the core')
   })
 
   it('draws the core-unavailable notice in a realm whose core did not load', () => {

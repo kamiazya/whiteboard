@@ -14,6 +14,7 @@ import { edgeLayerThroughCore } from './layout/query-switch.js'
 import { sceneBounds, sceneDocumentBounds } from './scene-bounds.js'
 import { renderSceneToSvg, type SvgDocumentOptions } from './svg/backend.js'
 import { renderSceneToKeyedSvg } from './svg/keyed.js'
+import { stripXmlInvalidChars } from './xml-escape.js'
 
 // A picture in one core call (ADR-0054 A2, A3): the layout's request carries
 // the envelope its SVG is drawn in, and the core answers the SVG (or its keyed
@@ -92,7 +93,22 @@ function keyedPictured(laid: Laid, ask: CorePictureAsk): KeyedPicture {
   return { scene: laid.scene, keyed }
 }
 
-const keyedAsk = (ask: CorePictureAsk): CoreSvgAsk => ({ ...ask, form: 'keyed' })
+/**
+ * The ask as the wire can carry it. A paint is a caller's string, and one
+ * the core's wire refuses (a lone surrogate) would refuse the whole layout;
+ * the serializer drops those characters from an attribute anyway, so
+ * dropping them here first draws the same document.
+ */
+function wireAsk<A extends CorePictureAsk>(ask: A): A {
+  const { background, textFill } = ask
+  return {
+    ...ask,
+    ...(background === undefined ? {} : { background: stripXmlInvalidChars(background) }),
+    ...(textFill === undefined ? {} : { textFill: stripXmlInvalidChars(textFill) }),
+  }
+}
+
+const keyedAsk = (ask: CorePictureAsk): CoreSvgAsk => ({ ...wireAsk(ask), form: 'keyed' })
 
 /**
  * `layoutSpatialCanvas`'s scene with its SVG, both from ONE core call: the
@@ -104,7 +120,7 @@ export function layoutSpatialCanvasPicture(
   options: SpatialLayoutOptions,
   svg: CorePictureAsk,
 ): PicturedScene & { readonly anchors: ReadonlyMap<string, EdgeAnchorPair> } {
-  const laid = canvasThroughCore(canvas, options, svg)
+  const laid = canvasThroughCore(canvas, options, wireAsk(svg))
   return { ...pictured(laid, svg), anchors: laid.anchors }
 }
 
@@ -130,7 +146,7 @@ export function layoutMarkdownDocumentPicture(
   options: MarkdownDocumentOptions,
   svg: CorePictureAsk,
 ): PicturedScene | undefined {
-  const laid = noteThroughCore(body, options, svg)
+  const laid = noteThroughCore(body, options, wireAsk(svg))
   return laid === undefined ? undefined : pictured(laid, svg)
 }
 
@@ -163,7 +179,7 @@ export function layoutSpatialEdgesPicture(
   options: SpatialLayoutOptions,
   svg: CorePictureAsk,
 ): { readonly nodes: SceneNode[]; readonly svg: string } {
-  const { nodes, ...picture } = edgeLayerThroughCore(canvas, options, svg)
+  const { nodes, ...picture } = edgeLayerThroughCore(canvas, options, wireAsk(svg))
   const { svg: drawn } = pictured({ scene: { nodes }, ...picture }, svg)
   return { nodes, svg: drawn }
 }

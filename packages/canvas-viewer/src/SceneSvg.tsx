@@ -12,9 +12,10 @@ interface SceneSvgProps
 /**
  * The one place a scene's SVG string becomes DOM.
  *
- * Injecting it as markup is sound BECAUSE canvas-render's serializer
- * (packages/canvas-render/src/svg/format.ts) is the SOLE producer of the
- * string and escapes `&`/`<`/`>` in text content plus `"`/`'` in attribute
+ * Injecting it as markup is sound BECAUSE the core's SVG serializer
+ * (crates/core/canvas-render/src/svg/serialize.rs, over `xml_escape.rs`) is
+ * the SOLE producer of the string — canvas-render's TypeScript backend still
+ * draws a refused layout's notice in the same form — and escapes `&`/`<`/`>` in text content plus `"`/`'` in attribute
  * values: there is no untrusted-HTML path, so this is not a sink that needs
  * a sanitizer, and none must be added. Two derivations keep that true and
  * are the only ones allowed — the keyed projection's group strings, which

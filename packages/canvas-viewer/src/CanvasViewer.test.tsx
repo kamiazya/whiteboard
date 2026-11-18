@@ -356,7 +356,7 @@ describe("CanvasViewer lays out through the host's core (ADR-0054)", () => {
         scene: { nodes: [marked] },
         anchors: new Map(),
         degradations: [],
-        ...fakePicture(request, '<text>from the core</text>'),
+        ...fakePicture(request, '<text>the core drew this</text>'),
       }),
     )
     const core = fakeLayoutCore({ layout: { layoutSpatialCanvas } })
@@ -364,7 +364,9 @@ describe("CanvasViewer lays out through the host's core (ADR-0054)", () => {
       <CanvasViewer canvas={canvas} measure={constantRatioMeasureText} core={core} />,
     )
     expect(layoutSpatialCanvas).toHaveBeenCalledTimes(1)
-    expect(getByTestId('canvas-viewer').textContent).toContain('from the core')
+    // The viewer paints the core's picture, never one drawn here from its scene.
+    expect(getByTestId('canvas-viewer').textContent).toContain('the core drew this')
+    expect(getByTestId('canvas-viewer').textContent).not.toContain('from the core')
     expect(getByTestId('canvas-viewer').textContent).not.toContain('hello')
   })
 })

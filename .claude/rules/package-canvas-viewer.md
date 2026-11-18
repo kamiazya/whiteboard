@@ -94,10 +94,12 @@ paths:
 - `SceneSvg`'s markup sink is deliberate, not an unguarded one, and it is
   the only one: `tools/arch-lint`'s `html-sink-ledger.test.ts` fails any
   other `dangerouslySetInnerHTML` or `innerHTML =` in shipped source until it
-  is ledgered with a reason. Canvas-render's serializer is the SOLE producer of the
-  injected string and escapes `&`/`<`/`>` in text and `"`/`'` in attribute
-  values (`packages/canvas-render/src/svg/format.ts`). No sanitizer
-  dependency is added because of this.
+  is ledgered with a reason. The Rust core's SVG serializer is the SOLE producer of the
+  injected string (`crates/core/canvas-render/src/svg/serialize.rs` over
+  `xml_escape.rs`; canvas-render's TypeScript backend still draws a refused
+  layout's notice, to the same escaping) and escapes `&`/`<`/`>` in text and
+  `"`/`'` in attribute values. No sanitizer dependency is added because of
+  this.
 - The injected SVG is wrapped in a **named `<figure>` element** (the
   element, not `role="figure"` on a div — biome's `useSemanticElements`
   enforces that, and its UA margin is cleared since this is a layout

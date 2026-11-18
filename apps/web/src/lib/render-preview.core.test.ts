@@ -43,7 +43,7 @@ function recordingCore() {
         return {
           scene: CORE_SCENE,
           degradations: [],
-          ...fakePicture(request, '<text>from the core</text>'),
+          ...fakePicture(request, '<text>the core drew this</text>'),
         }
       },
     },
@@ -76,7 +76,9 @@ describe('the preview pane lays its note out through the core', () => {
       // The keyed projection is asked in the same call, at the pane's padding.
       svg: { padding: 8, form: 'keyed' },
     })
-    expect(keyed.svg).toContain('from the core')
+    // The page paints the core's picture, never one drawn here from its scene.
+    expect(keyed.svg).toContain('the core drew this')
+    expect(keyed.svg).not.toContain('from the core')
   })
 
   it('hands the core the references as their wire', () => {

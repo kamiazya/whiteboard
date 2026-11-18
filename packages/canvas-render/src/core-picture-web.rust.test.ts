@@ -226,4 +226,22 @@ describe.runIf(built)("the web's pictures in one core call", () => {
     expect(layer.nodes).toEqual([])
     expect(layer.svg).toBe(renderSceneToSvg({ nodes: [] }, sized(sceneBounds({ nodes: [] }))))
   })
+
+  it('lays a board out whose paint carries a character the wire cannot', () => {
+    const core = oracleLayoutCore()
+    const [first] = layoutCases(1)
+    if (first === undefined) throw new Error('no layout cases')
+    const refused: string[] = []
+    const options = {
+      ...first.options,
+      core,
+      onRefused: (r: { reason: string }) => refused.push(r.reason),
+    }
+    const ask = { padding: 0, background: 'red\uD800', textFill: '\uDC00blue' }
+    const picture = layoutSpatialCanvasPicture(first.canvas, options, ask)
+    expect(refused).toEqual([])
+    expect(picture.svg).toBe(
+      renderSceneToSvg(picture.scene, { padding: 0, background: 'red', textFill: 'blue' }),
+    )
+  })
 })

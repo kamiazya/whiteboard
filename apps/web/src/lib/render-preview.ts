@@ -119,11 +119,9 @@ export function renderMarkdownPreview(
   }: RenderMarkdownPreviewOptions,
 ): RenderedMarkdownPreview {
   const options = { measure, maxWidth, references, theme, fragments, tagLibrary }
+  const ask = { padding: PREVIEW_PADDING_PX, ...(background === undefined ? {} : { background }) }
   try {
-    const drawn = layoutMarkdownDocumentKeyedPicture(value, noteOptions(options), {
-      padding: PREVIEW_PADDING_PX,
-      ...(background === undefined ? {} : { background }),
-    })
+    const drawn = layoutMarkdownDocumentKeyedPicture(value, noteOptions(options), ask)
     // Undefined only for a `section`, which the preview never asks for.
     if (drawn !== undefined) {
       const { scene, keyed } = drawn
@@ -132,15 +130,28 @@ export function renderMarkdownPreview(
   } catch (error) {
     log.warn('markdown preview layout failed; rendering an empty scene', error)
   }
-  return { keyed: NOTHING_DRAWN, anchors: [], blocks: [] }
+  return { keyed: emptyPage(options, ask), anchors: [], blocks: [] }
 }
 
 /**
- * The pane's document when the layout itself failed: no core answered, so
- * nothing was drawn, and the pane shows an empty document rather than the
- * last one. A constant, not a picture of anything — every drawn picture
- * comes from the core.
+ * The pane's document when the note's layout failed: an empty note in the
+ * pane's own envelope (its padding and paper), so the pane shows a blank
+ * page rather than the last one. Drawn by the core like every other picture;
+ * when no core answers at all, nothing was drawn and the pane gets
+ * `NOTHING_DRAWN`.
  */
+function emptyPage(
+  options: Parameters<typeof noteOptions>[0],
+  ask: { readonly padding: number; readonly background?: string },
+): KeyedSvgRender {
+  try {
+    return layoutMarkdownDocumentKeyedPicture('', noteOptions(options), ask)?.keyed ?? NOTHING_DRAWN
+  } catch {
+    return NOTHING_DRAWN
+  }
+}
+
+/** The pane's document when no core answered: a constant, not a picture of anything. */
 const NOTHING_DRAWN: KeyedSvgRender = {
   svg: '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
   rootOpen: '<svg xmlns="http://www.w3.org/2000/svg">',

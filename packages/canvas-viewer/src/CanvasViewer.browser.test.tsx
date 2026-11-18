@@ -189,6 +189,17 @@ describe('CanvasViewer fits the box it is given', () => {
     )
     const svgBox = () => container.querySelector('svg')?.getBoundingClientRect()
     await expect.poll(() => svgBox()?.width ?? 0).toBeCloseTo(400, 0)
+    // The face's arrival is the one thing that may lay the canvas out again,
+    // so the count is taken once it has landed and its re-render settled.
+    await ensureViewerFontLoaded()
+    let settled = -1
+    await expect
+      .poll(() => {
+        const stable = laid === settled
+        settled = laid
+        return stable
+      })
+      .toBe(true)
     const before = laid
     expect(before).toBeGreaterThan(0)
 
@@ -198,10 +209,17 @@ describe('CanvasViewer fits the box it is given', () => {
     await expect.poll(() => svgBox()?.width ?? 0).toBeCloseTo(600, 0)
     expect(svgBox()?.height).toBeCloseTo(200, 0)
     // The picture fits the new box, still whole, and nothing was laid out for it.
-    for (const rect of container.querySelectorAll('svg rect')) {
+    const paneBox = pane.getBoundingClientRect()
+    const rects = [...container.querySelectorAll('svg rect')]
+    expect(rects.length).toBe(2)
+    for (const rect of rects) {
       const box = rect.getBoundingClientRect()
-      expect(box.right).toBeLessThanOrEqual(pane.getBoundingClientRect().right + 1)
-      expect(box.bottom).toBeLessThanOrEqual(pane.getBoundingClientRect().bottom + 1)
+      expect(box.width).toBeGreaterThan(0)
+      expect(box.height).toBeGreaterThan(0)
+      expect(box.left).toBeGreaterThanOrEqual(paneBox.left - 1)
+      expect(box.right).toBeLessThanOrEqual(paneBox.right + 1)
+      expect(box.top).toBeGreaterThanOrEqual(paneBox.top - 1)
+      expect(box.bottom).toBeLessThanOrEqual(paneBox.bottom + 1)
     }
     expect(laid).toBe(before)
   })
