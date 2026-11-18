@@ -9,10 +9,8 @@
  * scene is.
  */
 export type {
-  NodeOutline,
   RenderContribution,
   RoutableElement,
   ShapeContribution,
-  ShapeTable,
 } from './contribution.js'
 export type * from './scene-graph.js'

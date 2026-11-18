@@ -20,7 +20,8 @@ export const MUTATED = [
   // Colour by intent (ADR-0040 decision 5): three properties over random
   // boards and libraries, stated from the declaration rather than the code.
   'src/tags/declared-colours.ts',
-  // Serialization: escaping and character legality, byte-identical output.
+  // Character legality: what XML 1.0 cannot carry, stripped from the strings
+  // an envelope hands the core.
   'src/xml-escape.ts',
   // Pure geometry and derivation with properties of their own.
   'src/scene-bounds.ts',
@@ -34,10 +35,6 @@ export const MUTATED = [
   // Moved out of the TypeScript comment-bubble placement (S18h1), then in the
   // lane, so leaving it out would have shrunk what it saw.
   'src/comment-geometry.ts',
-  // The sketch ink decomposition: reach, determinism and translation
-  // equivariance are properties over random boxes and seeds, and the
-  // silhouette per outline kind is pinned by example.
-  'src/ink/sketch.ts',
   // The pinned math layout calls instead of Math.hypot/sin/cos (ADR-0054
   // decision 11). Its oracle is independent and bit-exact — 900 answers of
   // the Rust libm crate — so a surviving mutant is a polynomial term or a
@@ -64,7 +61,7 @@ export const MUTATED = [
  * per mutant, the cost is the tests it runs, and that differs by two orders of
  * magnitude between files. Dealt by count, one run's six legs took 11 to 60
  * minutes: the grid router (the TypeScript grid router, deleted with the TypeScript
- * routing in S18h3b) was 303 mutants and 42 minutes, `sketch.ts` 473 and
+ * routing in S18h3b) was 303 mutants and 42 minutes, the sketch ink 473 and
  * under five.
  *
  * measured: 2026-10-05, weekly run 37303929216 (dealt by file count, six
@@ -91,7 +88,6 @@ export const MINUTES = {
   'src/quality/rect.ts': 7.7,
   // ESTIMATED, not yet measured: a handful of mutants each.
   'src/comment-geometry.ts': 0.5,
-  'src/ink/sketch.ts': 4.5,
   // ESTIMATED, not yet measured: about 120 mutants, one 5-test file that
   // runs in milliseconds.
   'src/det-math.ts': 1.5,
@@ -193,14 +189,6 @@ export const KNOWN_EQUIVALENT = {
     'ArrayDeclaration: [] -> ["Stryker was here"]': 1,
     'ConditionalExpression: Object.keys(library).length === 0 -> false': 1,
   },
-  // Three guards the ink cannot be made to notice. `String(-0)` is already
-  // `'0'`, so the guard that spells a negative zero as `0` drops a
-  // normalisation the string conversion performs on its own. An arc's
-  // midpoints stop one short of its vertices, and the chord loop reads only
-  // the first `n - 1`, so admitting the extra one pushes a midpoint nothing
-  // reads. And `strokeCurve`'s empty-input return is dead: every outline
-  // that reaches it carries 13 or 24 sampled vertices. Each hand-verified by
-  // applying the edit and running the ink suites, which stay green.
   // Freedoms the nearest point does not depend on, written beside the code:
   // which end a segment is walked from, which of two equally near points a
   // tie keeps, and two guards the code after them already implies (no node
@@ -214,31 +202,9 @@ export const KNOWN_EQUIVALENT = {
     'EqualityOperator: path.length > 0 -> path.length >= 0': 1,
     'ConditionalExpression: path.length > 0 -> true': 1,
   },
-  'src/ink/sketch.ts': {
-    'ConditionalExpression: rounded === 0 -> false': 1,
-    'ConditionalExpression: n === 0 -> false': 1,
-    'ConditionalExpression: i < ARC_SAMPLES -> true': 1,
-    'EqualityOperator: i < ARC_SAMPLES -> i <= ARC_SAMPLES': 1,
-    // The dead empty-curve return's own value.
-    'StringLiteral: \'\' -> "Stryker was here!"': 1,
-    // The clip's redundant checks, the hatch's last ruling, the dense arrow
-    // list and an unmatched jump — each invariant is beside its code, each
-    // hand-verified green under `ink/sketch-replay.test.ts`, whose hatch replay
-    // and degenerate-input examples kill the clip's other mutants.
-    'EqualityOperator: area >= 0 -> area > 0': 1,
-    'ArithmeticOperator: -ey * inwardSign -> -ey / inwardSign': 1,
-    'ArithmeticOperator: ex * inwardSign -> ex / inwardSign': 1,
-    'ConditionalExpression: numerator < 0 -> false': 1,
-    'EqualityOperator: denominator > 0 -> denominator >= 0': 1,
-    'ConditionalExpression: tEnter > tExit -> false': 1,
-    'EqualityOperator: tEnter > tExit -> tEnter >= tExit': 1,
-    'EqualityOperator: tExit - tEnter < 1 -> tExit - tEnter <= 1': 1,
-    'LogicalOperator: !Number.isFinite(tEnter) || !Number.isFinite(tExit) -> !Number.isFinite(tEnter) && !Number.isFinite(tExit)': 1,
-    'EqualityOperator: offset <= reach -> offset < reach': 1,
-    'ArrayDeclaration: [] -> ["Stryker was here"]': 1,
-    'ConditionalExpression: tip === undefined -> false': 1,
-    'ConditionalExpression: left === undefined -> false': 1,
-    'ConditionalExpression: tip === undefined || left === undefined -> false': 1,
-    'LogicalOperator: tip === undefined || left === undefined -> tip === undefined && left === undefined': 1,
+  // The switch's `default` answers what falling off its end answers; the
+  // invariant is beside it.
+  'src/scene-children.ts': {
+    'ConditionalExpression: default: return undefined -> ': 1,
   },
 }

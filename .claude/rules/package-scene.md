@@ -15,7 +15,7 @@ paths:
   the web editor read it. Plain TypeScript types, never Zod: a scene does not cross a
   process boundary, so per zod-schema-discipline it needs no runtime schema.
 - `contribution.ts`: what a plugin registers with the TypeScript renderer —
-  `NodeOutline`, `ShapeContribution`/`ShapeTable` (the silhouettes the SVG
+  `ShapeContribution` (the silhouettes the SVG
   backend paints, the bundled plugin's alone since the backend stopped taking
   a caller's table), `RoutableElement` (what core-wasm's routing call takes),
   and `RenderContribution` itself, which is now a namespace, those shapes,

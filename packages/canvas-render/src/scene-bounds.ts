@@ -1,7 +1,6 @@
 import type { BoundingBox, Scene, SceneInk, SceneNode } from '@kamiazya/whiteboard-scene'
 import { edgeArrowPolygons } from './edge-arrows.js'
 import { glowReachPx } from './ink/glow.js'
-import { SKETCH_INK_REACH_PX } from './ink/sketch.js'
 import { LEGEND_MARGIN_PX, legendPanelSize } from './legend/legend-geometry.js'
 import { type SceneWalkNode, sceneChildrenOf, subtreeOffsetX } from './scene-children.js'
 import { TEXT_HALO_PAD_PX } from './theme/text-halo.js'
@@ -57,6 +56,13 @@ function bboxEdges(bbox: BoundingBox): { x0: number; y0: number; x1: number; y1:
     y1: Math.max(y, cornerY),
   }
 }
+
+/**
+ * How far (px) sketch ink may leave the semantic geometry it draws: the core's
+ * `SKETCH_INK_REACH_PX`, which `sketch_properties.rs` holds every stroke
+ * to.
+ */
+const SKETCH_INK_REACH_PX = 8
 
 const inkReach = (ink: SceneInk | undefined): number =>
   ink?.style === 'sketch' ? SKETCH_INK_REACH_PX : 0

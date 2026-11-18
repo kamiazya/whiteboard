@@ -39,6 +39,8 @@ export function sceneChildrenOf(node: SceneWalkNode): readonly SceneWalkNode[] |
     // function says for a node with no children.
     case 'codeBlock':
       return node.runs
+    // Equivalent to omitting the clause: a switch that falls off its end
+    // returns `undefined` too. Kept so the exhaustive reading stays explicit.
     default:
       return undefined
   }

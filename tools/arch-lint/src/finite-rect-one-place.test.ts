@@ -8,8 +8,8 @@
  * have had to be made five times, and a sixth caller had no one place to find.
  *
  * Read from the syntax tree, not a name, because every copy named its box
- * differently. The scene's `{x, y, w, h}` box is canvas-render's
- * `isFiniteBox` and is a different shape, so it is not matched here.
+ * differently. The scene's `{x, y, w, h}` box is the core's
+ * `is_finite_box` and is a different shape, so it is not matched here.
  */
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
