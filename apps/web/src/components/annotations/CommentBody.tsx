@@ -33,7 +33,7 @@ import { useKeyedSvg } from '../../hooks/use-keyed-svg.js'
 import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
 import { undrawnRefusal } from '../../lib/undrawn-refusal.js'
 import { cn } from '../../lib/utils.js'
-import { RefusalWords } from '../RefusalWords.js'
+import { RefusalWords } from '../ui/refusal-words.js'
 
 /**
  * Until the container has been measured. A comment is read in a rail whose

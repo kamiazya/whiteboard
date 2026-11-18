@@ -1,5 +1,5 @@
 import { type LayoutRefusal, refusalCopy } from '@kamiazya/whiteboard-canvas-render'
-import { cn } from '../lib/utils.js'
+import { cn } from '../../lib/utils.js'
 
 /**
  * A refusal said in HTML, for a surface whose picture could not draw it (see

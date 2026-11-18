@@ -10,7 +10,7 @@ import {
 } from '../../lib/render-preview.js'
 import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
-import { RefusalWords } from '../RefusalWords.js'
+import { RefusalWords } from '../ui/refusal-words.js'
 import { useTaskCheckboxes } from './use-task-checkboxes.js'
 
 export interface PreviewPaneProps {
