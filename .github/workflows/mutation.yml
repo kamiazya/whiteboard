@@ -242,10 +242,7 @@ jobs:
             mkdir -p report
             # Each leg mutates a disjoint set of files, so concatenating the
             # `files` maps is the whole merge, as in `weekly-report`.
-            jq -s '.[0] + {
-              files: (map(.files) | add),
-              testFiles: (map(.testFiles // {}) | add)
-            }' "${reports[@]}" > report/mutation.json
+            node .claude/scripts/merge-mutation-reports.mjs report/mutation.json "${reports[@]}"
             node .claude/scripts/mutation-comment.mjs report/mutation.json \
               --marker "$MARKER" \
               --equivalents packages/canvas-render/stryker-targets.mjs > /tmp/mutation-comment.md
@@ -394,13 +391,19 @@ jobs:
     needs: weekly
     runs-on: ubuntu-24.04
     # measured: 2026-10-03 1 min
-    # Two jq calls over the downloaded reports (0.04 s locally over two real
-    # ones); the download and upload are the rest, and are not yet observed.
+    # One node call over the downloaded reports; the checkout, download and
+    # upload are the rest, and are not yet observed.
     timeout-minutes: 10
     env:
       # The weekly matrix's leg count; `mutation-lane.test.ts` holds it equal.
       EXPECTED_LEGS: '6'
     steps:
+      # For the merge script alone, which needs no dependencies: the runner's
+      # own node runs it, so there is no install.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: mutation-canvas-render-shard-*
@@ -416,14 +419,9 @@ jobs:
             exit 0
           fi
           mkdir -p report
-          # Each leg mutates a disjoint set of files, so concatenating the
-          # `files` maps is the whole merge; the other top-level keys are the
-          # same in every leg.
-          jq -s '.[0] + {
-            files: (map(.files) | add),
-            testFiles: (map(.testFiles // {}) | add)
-          }' "${reports[@]}" > report/mutation.json
-          echo "merged $(jq '.files | length' report/mutation.json) files from ${#reports[@]} legs"
+          # Not jq: a report embeds test sources, and a lone surrogate escape
+          # in one is JSON that jq refuses. The script says why it merges so.
+          node .claude/scripts/merge-mutation-reports.mjs report/mutation.json "${reports[@]}"
 
       - name: Upload merged mutation report
         if: hashFiles('report/mutation.json') != ''

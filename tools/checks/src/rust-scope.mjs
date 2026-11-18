@@ -35,13 +35,11 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/edge-arrows.ts',
     'packages/canvas-render/src/edge-routing.ts',
     'packages/canvas-render/src/layout-core.ts',
-    'packages/canvas-render/src/finite-box.ts',
     'packages/canvas-render/src/measure.ts',
     'packages/canvas-render/src/scene-digest-schema.ts',
     'packages/canvas-render/src/refusal.ts',
     'packages/canvas-render/src/scene-bounds.ts',
     'packages/canvas-render/src/scene-children.ts',
-    'packages/canvas-render/src/scene-entry-keys.ts',
     'packages/canvas-render/src/tidy.ts',
     // A server picture in one core call, held byte for byte to the TypeScript
     // backend (ADR-0054 A2), and what that backend reads off the root.

@@ -41,10 +41,6 @@ const LEDGER: Readonly<Record<string, LedgerEntry>> = {
     uses: 2,
     why: 'facet keys, which the grammar namespaces as namespace.name/vN and so never integer-like, and the channel records, whose keys are fixed words',
   },
-  'packages/canvas-render/src/outline/node-outline.ts': {
-    uses: 1,
-    why: 'shape names a contribution registers, which the table composes into namespaced ids before anything is ordered by them',
-  },
   'packages/canvas-render/src/layout/canvas-theme.ts': {
     uses: 1,
     why: 'theme names a contribution registers, which the table composes into namespaced ids before anything is ordered by them',

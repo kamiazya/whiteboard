@@ -104,9 +104,8 @@ impl<M: Measure + ?Sized> Measure for &M {
     }
 }
 
-/// Clamps a measurer's advance to a finite, non-negative value, as
-/// `clampAdvance` does: NaN, infinity and a negative all become 0 (and `-0`
-/// stays `-0`, which compares `>= 0`).
+/// Clamps a measurer's advance to a finite, non-negative value: NaN, infinity
+/// and a negative all become 0 (and `-0` stays `-0`, which compares `>= 0`).
 #[must_use]
 pub fn clamp_advance(advance_width: f64) -> f64 {
     if advance_width.is_finite() && advance_width >= 0.0 { advance_width } else { 0.0 }
