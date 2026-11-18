@@ -48,6 +48,7 @@ export { selectCanvasFragment } from './canvas-fragment.js'
 export {
   layoutMarkdownDocumentPicture,
   layoutSpatialCanvasPicture,
+  layoutSpatialEdgesPicture,
   type PicturedScene,
 } from './core-picture.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
