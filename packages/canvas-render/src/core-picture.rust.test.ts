@@ -2,6 +2,10 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import type { CoreSvgAsk } from './canvas-core.js'
+
+/** An envelope a picture is asked in; the function names the form. */
+type PictureAsk = Omit<CoreSvgAsk, 'form'>
+
 import { layoutMarkdownDocumentPicture, layoutSpatialCanvasPicture } from './core-picture.js'
 import type { SpatialLayoutOptions } from './layout/layout-options.js'
 import { layoutMarkdownDocument } from './layout/markdown-switch.js'
@@ -24,7 +28,7 @@ import { oracleLayoutCore } from './test-utils/wasm/oracle-layout-core.js'
  * derived envelope on a palette's paper, and the file export's padding, dark
  * text fill and raster scale.
  */
-const ASKS: readonly (readonly [string, CoreSvgAsk, (scene: Scene) => SvgDocumentOptions])[] = [
+const ASKS: readonly (readonly [string, PictureAsk, (scene: Scene) => SvgDocumentOptions])[] = [
   // `sceneEnvelope`: the document bounds, or an empty box for a scene with no node.
   [
     'scene-render',
@@ -118,7 +122,7 @@ describe.runIf(built)('a picture in one core call', () => {
       core,
       onRefused: (r: { reason: string }) => refused.push(r.reason),
     }
-    const ask: CoreSvgAsk = { viewBox: 'document', background: '#ffffff' }
+    const ask: PictureAsk = { viewBox: 'document', background: '#ffffff' }
     const picture = layoutSpatialCanvasPicture(canvas, options, ask)
     expect(refused).toEqual(['too-many-elements'])
     expect(picture.svg).toBe(

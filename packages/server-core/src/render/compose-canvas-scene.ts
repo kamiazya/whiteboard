@@ -116,7 +116,7 @@ export function composeCanvasPicture(
   canvas: SpatialCanvas,
   measure: MeasureText,
   options: ComposeCanvasSceneOptions,
-  svg: CoreSvgAsk,
+  svg: Omit<CoreSvgAsk, 'form'>,
 ): PicturedScene {
   return layoutSpatialCanvasPicture(canvas, layoutOptionsOf(measure, options), svg)
 }

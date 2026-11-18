@@ -59,7 +59,7 @@ export function composeMarkdownPicture(
   body: string,
   measure: MeasureText,
   options: ComposeMarkdownSceneOptions,
-  svg: CoreSvgAsk,
+  svg: Omit<CoreSvgAsk, 'form'>,
 ): PicturedScene | undefined {
   return layoutMarkdownDocumentPicture(body, noteOptionsOf(measure, options), svg)
 }

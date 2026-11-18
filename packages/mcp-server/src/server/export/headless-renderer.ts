@@ -215,7 +215,7 @@ export function buildSpatialPicture(
   canvas: SpatialCanvas,
   core: LayoutCore,
   measure: MeasureText,
-  svg: CoreSvgAsk,
+  svg: Omit<CoreSvgAsk, 'form'>,
   mode: ExportThemeMode = 'light',
   style?: SpatialRenderStyle,
   fontAvailable?: (family: string) => boolean,

@@ -2,6 +2,10 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import type { CoreSvgAsk } from './canvas-core.js'
+
+/** An envelope a picture is asked in; the function names the form. */
+type PictureAsk = Omit<CoreSvgAsk, 'form'>
+
 import {
   layoutCommentDocumentKeyedPicture,
   layoutMarkdownDocumentKeyedPicture,
@@ -53,10 +57,10 @@ const sized = (box: { w: number; h: number; x: number; y: number }) => ({
   viewBox: box,
 })
 
-const EDITOR_ASK: CoreSvgAsk = { viewBox: { of: 'scene' }, legend: 'omit' }
+const EDITOR_ASK: PictureAsk = { viewBox: { of: 'scene' }, legend: 'omit' }
 const editorEnvelope: Envelope = (scene) => ({ ...sized(sceneBounds(scene)), legend: 'omit' })
 
-const CANVAS_ASKS: readonly (readonly [string, CoreSvgAsk, Envelope])[] = [
+const CANVAS_ASKS: readonly (readonly [string, PictureAsk, Envelope])[] = [
   ['editor', EDITOR_ASK, editorEnvelope],
   ['export', { viewBox: { of: 'document', margin: 16 } }, (s) => sized(sceneDocumentBounds(s, 16))],
   [
