@@ -50,4 +50,22 @@ describe('a markdown body through the shim over the built artifact', () => {
     )
     expect('scene' in note, JSON.stringify(note)).toBe(true)
   })
+
+  it('answers the line each block of a note starts on', async () => {
+    const core = await loadCore(bytes())
+    const note = (body: string) =>
+      core.layoutMarkdown({ kind: 'markdown', body, maxWidth: 400, measure, mode: 'light' })
+    const laid = note('\n# One\r\n\r\ntext\n\n- a\n- b')
+    expect('blockLines' in laid && laid.blockLines).toEqual([2, 4, 6])
+    const empty = note('')
+    expect('blockLines' in empty && empty.blockLines).toEqual([])
+    const comment = core.layoutMarkdown({
+      kind: 'comment',
+      body: '# a\n\nb',
+      maxWidth: 200,
+      measure,
+      density: 'compact',
+    })
+    expect('blockLines' in comment && comment.blockLines).toEqual([])
+  })
 })

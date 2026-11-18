@@ -9,8 +9,11 @@
 //! and a paragraph that is only an embed is set as prose), the fragment table,
 //! the fences' tokens, the `#Heading` whose section alone is drawn, and the
 //! surface whose content cache an embedded board's bodies read. Its answer is
-//! the canvas's `["ok", scene, [], degradations, asked?]`, the anchors always
-//! empty; a section the note does not hold answers `["missing", "section"]`.
+//! the canvas's `["ok", scene, lines, degradations, asked?]`, where `lines`
+//! takes the place of the anchors: the 1-based line each top-level block of the
+//! body starts on, index-aligned with the scene's nodes (none for a `section`,
+//! drawn from part of the body, nor for a comment). A section the note does not
+//! hold answers `["missing", "section"]`.
 //! A body past the parser's bounds draws its literal text as one paragraph
 //! (owner decision q81, D7a), and a request past its caps is refused.
 
@@ -26,11 +29,12 @@ use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::typeset::{
     DiagramRenderer, EmbedResolver, MathRenderer, select_markdown_section,
 };
+use whiteboard_codec::markdown::parse_markdown_block_lines;
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::mdast::Root;
 use whiteboard_plugin_visual::render::StencilBadge;
-use whiteboard_scene::NodeDecoration;
+use whiteboard_scene::{NodeDecoration, Scene};
 
 use super::answer::{laid_out, missing, refused};
 use super::cache::Surface;
@@ -59,7 +63,7 @@ pub(super) fn layout_markdown(request: &MarkdownRequest, host: Option<&dyn Host>
                     .unwrap_or_else(|_| literal_root(&request.body));
                 let scene =
                     layout_comment_text(&root, request.max_width, *density, measure, &seams);
-                laid_out(&LaidOut { scene, anchors: Vec::new() }, &[], None, svg.as_ref())
+                laid_out(&LaidOut { scene, anchors: Vec::new() }, None, &[], None, svg.as_ref())
             })
         }
     }
@@ -149,5 +153,26 @@ fn lay_out_note(
         embed_path: &[],
     };
     let scene = layout_markdown_document(&root, request.max_width, &options);
-    outcome(&LaidOut { scene, anchors: Vec::new() }, &host, fragments.as_ref(), note.svg.as_ref())
+    answered(request, note, scene, &host, fragments.as_ref())
+}
+
+/// The note's laid-out answer: its scene, and the line each top-level block of
+/// the body starts on. Those are the whole body's blocks, so a section, drawn
+/// from part of it, has none to align with its scene.
+fn answered(
+    request: &MarkdownRequest,
+    note: &Note,
+    scene: Scene,
+    host: &WireHost<'_>,
+    fragments: Option<&FragmentTable<'_>>,
+) -> String {
+    let lines =
+        if note.section.is_none() { parse_markdown_block_lines(&request.body) } else { Vec::new() };
+    outcome(
+        &LaidOut { scene, anchors: Vec::new() },
+        Some(&lines),
+        host,
+        fragments,
+        note.svg.as_ref(),
+    )
 }

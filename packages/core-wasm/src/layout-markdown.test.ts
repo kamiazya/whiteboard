@@ -90,9 +90,24 @@ describe('a markdown body over the artifact', () => {
     const scene = { nodes: [] }
     const asks = [{ kind: 'math', value: 'x' }]
     const { glue } = glueOf(JSON.stringify(['ok', scene, [], [], asks]))
-    expect(lay(glue, note)).toEqual({ scene, degradations: [], fragmentsAsked: asks })
+    expect(lay(glue, note)).toEqual({
+      scene,
+      blockLines: [],
+      degradations: [],
+      fragmentsAsked: asks,
+    })
     const { glue: plain } = glueOf(JSON.stringify(['ok', scene, [], []]))
-    expect(lay(plain, comment)).toEqual({ scene, degradations: [] })
+    expect(lay(plain, comment)).toEqual({ scene, blockLines: [], degradations: [] })
+  })
+
+  it('reads the line each block starts on from where a canvas answers its anchors', () => {
+    const scene = { nodes: [] }
+    const { glue } = glueOf(JSON.stringify(['ok', scene, [1, 3, 8], []]))
+    expect(lay(glue, note)).toEqual({ scene, blockLines: [1, 3, 8], degradations: [] })
+    const bad = (lines: unknown[]) => glueOf(JSON.stringify(['ok', scene, lines, []])).glue
+    expect(() => lay(bad([1, 0]), note)).toThrow('malformed answer')
+    expect(() => lay(bad([1.5]), note)).toThrow('malformed answer')
+    expect(() => lay(bad([1, ['e', {}]]), note)).toThrow('malformed answer')
   })
 
   it('reads the keyed SVG a comment asked for', () => {
@@ -108,6 +123,7 @@ describe('a markdown body over the artifact', () => {
     const { glue, sent } = glueOf(JSON.stringify(['ok', scene, [], [], ['<svg>', [], []]]))
     expect(lay(glue, comment)).toEqual({
       scene,
+      blockLines: [],
       degradations: [],
       keyed: { svg: '<svg></svg>', rootOpen: '<svg>', rootAttrs: {}, groups: [] },
     })
@@ -120,7 +136,13 @@ describe('a markdown body over the artifact', () => {
     const svg = '<svg xmlns="http://www.w3.org/2000/svg"></svg>'
     const asking = { ...note, svg: { viewBox: 'document' } } as MarkdownLayoutRequest
     const { glue, sent } = glueOf(JSON.stringify(['ok', scene, [], [], asks, svg]))
-    expect(lay(glue, asking)).toEqual({ scene, degradations: [], fragmentsAsked: asks, svg })
+    expect(lay(glue, asking)).toEqual({
+      scene,
+      blockLines: [],
+      degradations: [],
+      fragmentsAsked: asks,
+      svg,
+    })
     expect(JSON.stringify(sent[0])).toContain('"svg",["m","viewBox","document"]')
   })
 
@@ -136,7 +158,11 @@ describe('a markdown body over the artifact', () => {
     const needs = JSON.stringify(['needs', { code: [['ts', 'x']] }])
     expect(() => lay(glueOf(needs).glue, note)).toThrow(/malformed highlight/)
     const { glue, sent } = glueOf(needs, JSON.stringify(['ok', { nodes: [] }, [], []]))
-    expect(lay(glue, note, () => undefined)).toEqual({ scene: { nodes: [] }, degradations: [] })
+    expect(lay(glue, note, () => undefined)).toEqual({
+      scene: { nodes: [] },
+      blockLines: [],
+      degradations: [],
+    })
     expect(JSON.stringify(sent[1])).toContain('"codeTokens",["s",["s","ts","x",null]]')
   })
 

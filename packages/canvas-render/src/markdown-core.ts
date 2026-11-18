@@ -62,6 +62,8 @@ type MarkdownBodyRequest = MarkdownNoteRequest | MarkdownCommentRequest
 type MarkdownLayoutAnswer =
   | {
       readonly scene: Scene
+      /** The line each top-level block starts on (1-based), index-aligned with the scene's nodes. */
+      readonly blockLines: readonly number[]
       readonly degradations: readonly CoreDegradation[]
       /** For a request carrying `fragments`: the sources it could not answer, once each in the order asked. */
       readonly fragmentsAsked?: readonly FragmentAsk[]

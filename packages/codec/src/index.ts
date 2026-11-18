@@ -1,5 +1,5 @@
 export { normalizeMdast } from './markdown/normalize.js'
-export { parseMarkdownBlockLines, parseMarkdownBody } from './markdown/pipeline.js'
+export { parseMarkdownBody } from './markdown/pipeline.js'
 export { hasOkfFrontmatter } from './okf/has-frontmatter.js'
 export type { OkfCore } from './okf/okf-core.js'
 export {

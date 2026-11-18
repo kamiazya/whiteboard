@@ -71,7 +71,11 @@ describe('the recorded mdast oracle', () => {
   it('equals what parseMarkdownBody answers today', { timeout: 300_000 }, () => {
     const parted = cases.find((c) => {
       const now = answer(c.t)
-      return now.h !== c.h || (withTree(c.i) && JSON.stringify(now.tree) !== JSON.stringify(c.m))
+      return (
+        now.h !== c.h ||
+        JSON.stringify(now.l) !== JSON.stringify(c.l) ||
+        (withTree(c.i) && JSON.stringify(now.tree) !== JSON.stringify(c.m))
+      )
     })
     expect(
       parted?.i,

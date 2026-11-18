@@ -165,10 +165,18 @@ fn answer(record: &Value, meta: &Value, table: &[Json]) -> String {
     layout_spatial_canvas(&again.to_string(), None)
 }
 
-/// The scene's own text in an `ok` answer, which the anchors (always none
-/// for a markdown body) follow.
+/// The scene's own text in an `ok` answer, which the block lines (bare
+/// numbers, where a canvas answers its anchors) follow.
 fn scene_text(answer: &str) -> &str {
-    let end = answer.rfind("},[],[").map_or(0, |at| at + 1);
+    let lines_follow = |rest: &str| {
+        rest.split_once("],[")
+            .is_some_and(|(lines, _)| lines.bytes().all(|b| b.is_ascii_digit() || b == b','))
+    };
+    let end = answer
+        .rmatch_indices("},[")
+        .map(|(at, _)| at)
+        .find(|&at| lines_follow(answer.get(at + 3..).unwrap_or_default()))
+        .map_or(0, |at| at + 1);
     answer.get(6..end).unwrap_or_default()
 }
 

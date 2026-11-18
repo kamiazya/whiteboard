@@ -113,6 +113,33 @@ fn a_section_the_note_does_not_hold_is_missing() {
     assert_eq!(count(&two, "\"text\":\"Two\""), 1, "{two}");
 }
 
+/// A note's answer carries, where a canvas carries its anchors, the 1-based
+/// line each top-level block starts on, index-aligned with the scene's nodes.
+#[test]
+fn a_note_answers_the_line_each_of_its_blocks_starts_on() {
+    let body = "\n# One\r\n\r\ntext\n\n- a\n- b\n\n```\nx\n```";
+    let laid = answer(&note(body, &[]));
+    assert_eq!(laid[2], json!([2, 4, 6, 9]), "{laid}");
+    let nodes = laid[1]["nodes"].as_array().map_or(0, Vec::len);
+    assert_eq!(nodes, 4, "one scene node per block: {laid}");
+    assert_eq!(answer(&note("", &[]))[2], json!([]));
+}
+
+#[test]
+fn a_body_past_the_parser_bounds_is_one_block_at_line_one() {
+    let deep = format!("{}deep", "> ".repeat(40));
+    assert_eq!(answer(&note(&deep, &[]))[2], json!([1]));
+}
+
+/// A section is drawn from a part of the body, so no line of the whole body
+/// stands for one of its blocks.
+#[test]
+fn a_section_and_a_comment_answer_no_lines() {
+    let body = "# One\n\ntext\n\n## Two\n\nmore";
+    assert_eq!(answer(&note(body, &[("section", json!("Two"))]))[2], json!([]));
+    assert_eq!(answer(&comment(body, "compact"))[2], json!([]));
+}
+
 fn comment(body: &str, density: &str) -> String {
     let fields = [
         ("kind", json!("comment")),
