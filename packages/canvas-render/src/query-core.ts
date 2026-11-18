@@ -1,6 +1,6 @@
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
-import type { CanvasLayoutRequest, CoreDegradation } from './canvas-core.js'
+import type { CanvasLayoutRequest, CoreDegradation, CoreKeyedSvg } from './canvas-core.js'
 import type { FragmentEntry } from './fragment-ask.js'
 import type { CodeTokenLines } from './highlight/code-token.js'
 import type { MeasureSpec, MeasureText } from './measure.js'
@@ -17,7 +17,8 @@ type QueryPair = readonly [number, number]
  * `layout_query`), every argument as data:
  *
  * - `edges`: a canvas request whose edge layer alone is laid out
- *   (`layoutSpatialEdges`), built by `canvasLayoutRequest`;
+ *   (`layoutSpatialEdges`), built by `canvasLayoutRequest`, its `svg` the
+ *   envelope the layer is drawn in as a scene of its own;
  * - `scene-digest`: the same request, answered with the spatial digest of the
  *   scene it lays out, so the scene itself never crosses the boundary;
  * - `node-size`: `fittedTextNodeHeight`; `node-content`: `naturalNodeContentSize`;
@@ -29,7 +30,8 @@ type QueryPair = readonly [number, number]
  * - `tidy`: `tidyNodes` over the board's boxes, as the moves it makes.
  */
 export type QueryRequest =
-  | (CanvasLayoutRequest & { readonly query: 'edges' | 'scene-digest' })
+  | (CanvasLayoutRequest & { readonly query: 'edges' })
+  | (Omit<CanvasLayoutRequest, 'svg'> & { readonly query: 'scene-digest' })
   | {
       readonly query: 'node-size'
       readonly node: SpatialNode
@@ -85,7 +87,14 @@ export type QueryNumbers = number | readonly QueryNumbers[]
  * how), having no scene to draw a refusal in.
  */
 export type QueryAnswer =
-  | { readonly nodes: readonly SceneNode[]; readonly degradations: readonly CoreDegradation[] }
+  | {
+      readonly nodes: readonly SceneNode[]
+      readonly degradations: readonly CoreDegradation[]
+      /** For an `edges` query carrying `svg`: the layer drawn as a scene of its own. */
+      readonly svg?: string
+      /** For an `edges` query carrying `svg` with `form: 'keyed'`: its keyed projection. */
+      readonly keyed?: CoreKeyedSvg
+    }
   | { readonly digest: string; readonly degradations: readonly CoreDegradation[] }
   | { readonly moves: readonly TidyWireMove[] }
   | { readonly numbers: readonly QueryNumbers[] }

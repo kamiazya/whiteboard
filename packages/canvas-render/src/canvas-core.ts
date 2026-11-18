@@ -37,19 +37,51 @@ export type CoreChange =
 export type CoreProposal = Pick<Proposal, 'id'> & { readonly changes: readonly CoreChange[] }
 
 /**
- * The SVG a server render asks the core to answer beside the scene: the core's
- * SVG backend over the scene it laid out, drawn with these of
- * `renderSceneToSvg`'s envelope options, so the picture is one call.
+ * The SVG a picture asks the core to answer beside the scene: the core's SVG
+ * backend over the scene it laid out, drawn with these of `renderSceneToSvg`'s
+ * envelope options, so the picture is one call. The view box names no box,
+ * since the caller has no scene to measure before the layout:
  * `viewBox: 'document'` is the scene's document bounds (`sceneDocumentBounds`,
- * an empty box for a scene with no node), since the caller has no scene to
- * measure before the layout.
+ * an empty box for a scene with no node: the server's envelope), and
+ * `{of, margin?}` is `sceneBounds(scene)` (`of: 'scene'`) or
+ * `sceneDocumentBounds(scene, margin)` (`of: 'document'`) grown by `margin`,
+ * exactly as those answer, their 1x1 fallback for an empty scene included.
+ * `legend: 'omit'` leaves the legend to the host; `form: 'keyed'` answers
+ * `renderSceneToKeyedSvg`'s projection instead of the whole SVG.
  */
 export interface CoreSvgAsk {
-  readonly viewBox?: 'document'
+  readonly viewBox?: 'document' | CoreSvgBounds
+  readonly width?: number
+  readonly height?: number
   readonly padding?: number
   readonly background?: string
   readonly textFill?: string
   readonly rasterScale?: number
+  readonly legend?: 'omit'
+  readonly form?: 'keyed'
+}
+
+/**
+ * The keyed projection the core answers for `form: 'keyed'`, as
+ * `renderSceneToKeyedSvg`'s `KeyedSvgRender` holds one (declared here,
+ * structurally, as the core is): the whole SVG text, its root's open tag and
+ * attributes, and its groups, `annotation` marking the annotation layer's.
+ */
+export interface CoreKeyedSvg {
+  readonly svg: string
+  readonly rootOpen: string
+  readonly rootAttrs: Readonly<Record<string, string>>
+  readonly groups: readonly {
+    readonly key: string
+    readonly svg: string
+    readonly annotation?: true
+  }[]
+}
+
+/** A view box over the laid-out scene's bounds, grown by `margin` when it is finite and positive. */
+export interface CoreSvgBounds {
+  readonly of: 'scene' | 'document'
+  readonly margin?: number
 }
 
 /**
@@ -121,6 +153,8 @@ type CanvasLayoutAnswer =
       readonly fragmentsAsked?: readonly FragmentAsk[]
       /** For a request carrying `svg`: the scene as the core's SVG backend draws it. */
       readonly svg?: string
+      /** For a request carrying `svg` with `form: 'keyed'`: its keyed projection. */
+      readonly keyed?: CoreKeyedSvg
     }
   | { readonly refused: LayoutRefusal }
 

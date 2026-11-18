@@ -11,6 +11,7 @@ import type {
   CanvasLayoutRequest,
   CoreChange,
   CoreDegradation,
+  CoreKeyedSvg,
   CoreProposal,
   CoreSvgAsk,
   CoreThread,
@@ -63,10 +64,24 @@ const usesFragmentTable = (
   options: Pick<SpatialLayoutOptions, 'fragments' | 'onFragmentsAsked'>,
 ): boolean => options.fragments !== undefined || options.onFragmentsAsked !== undefined
 
-/** The core's SVG for a request that asked one; an answer without it is a defect in the core. */
-export function askedSvg(svg: string | undefined): string {
-  if (svg === undefined) throw new Error('the core answered no SVG for a layout that asked one')
-  return svg
+/** What the core drew for a request asking `ask`: the document's text, or its keyed projection. */
+type AskedPicture = { readonly svg: string } | { readonly keyed: CoreKeyedSvg }
+
+/** What a layout through the core may carry beside its scene: the picture it asked for, in either form. */
+export type MaybePictured = { readonly svg?: string; readonly keyed?: CoreKeyedSvg }
+
+/**
+ * The core's picture for a request that asked one, in the form it asked for;
+ * an answer without it is a defect in the core.
+ */
+export function askedPicture(
+  ask: CoreSvgAsk,
+  answer: { readonly svg?: string; readonly keyed?: CoreKeyedSvg },
+): AskedPicture {
+  const { svg, keyed } = answer
+  if (ask.form === 'keyed' && keyed !== undefined) return { keyed }
+  if (ask.form !== 'keyed' && svg !== undefined) return { svg }
+  throw new Error('the core answered no SVG in the form a layout asked for')
 }
 
 export const hasData = (extra: ReferenceExtra): boolean =>
@@ -205,14 +220,14 @@ export function layoutThroughCore(
 }
 
 /**
- * A layout through the core, with the SVG it drew in the envelope `svg` names
- * when it asks for one; none for a refusal, whose scene this side built.
+ * A layout through the core, with the picture it drew in the envelope and form
+ * `svg` names when it asks for one; none for a refusal, whose scene this side built.
  */
 export function canvasThroughCore(
   stored: SpatialCanvas,
   options: SpatialLayoutOptions,
   svg: CoreSvgAsk | undefined,
-): LaidOutCanvas & { readonly svg?: string } {
+): LaidOutCanvas & MaybePictured {
   const core = options.core
   const request = canvasLayoutRequest(stored, options)
   const answer = core.layout.layoutSpatialCanvas(
@@ -225,7 +240,7 @@ export function canvasThroughCore(
   for (const event of answer.degradations) options.onDegrade?.(hostEvent(event))
   if (answer.fragmentsAsked?.length) options.onFragmentsAsked?.(answer.fragmentsAsked)
   const laid = { scene: answer.scene, anchors: answer.anchors }
-  return svg === undefined ? laid : { ...laid, svg: askedSvg(answer.svg) }
+  return svg === undefined ? laid : { ...laid, ...askedPicture(svg, answer) }
 }
 
 /** A refusal told to `onRefused`, and drawn where the board's boxes are. */

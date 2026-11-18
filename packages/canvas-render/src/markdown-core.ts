@@ -1,6 +1,6 @@
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { Scene } from '@kamiazya/whiteboard-scene'
-import type { CoreDegradation, CoreSvgAsk } from './canvas-core.js'
+import type { CoreDegradation, CoreKeyedSvg, CoreSvgAsk } from './canvas-core.js'
 import type { FragmentAsk, FragmentEntry } from './fragment-ask.js'
 import type { CodeTokenLines } from './highlight/code-token.js'
 import type { MeasureSpec, MeasureText } from './measure.js'
@@ -47,6 +47,8 @@ export interface MarkdownCommentRequest {
   readonly maxWidth: number
   readonly measure: MeasureSpec
   readonly density: 'comfortable' | 'compact'
+  /** Present, the answer carries the comment's SVG. */
+  readonly svg?: CoreSvgAsk
 }
 
 /** A markdown body the core's markdown entry takes: a note, or a comment's prose. */
@@ -63,8 +65,10 @@ type MarkdownLayoutAnswer =
       readonly degradations: readonly CoreDegradation[]
       /** For a request carrying `fragments`: the sources it could not answer, once each in the order asked. */
       readonly fragmentsAsked?: readonly FragmentAsk[]
-      /** For a note's request carrying `svg`: the scene as the core's SVG backend draws it. */
+      /** For a request carrying `svg`: the scene as the core's SVG backend draws it. */
       readonly svg?: string
+      /** For a request carrying `svg` with `form: 'keyed'`: its keyed projection. */
+      readonly keyed?: CoreKeyedSvg
     }
   | { readonly refused: LayoutRefusal }
   | { readonly missing: 'section' }
