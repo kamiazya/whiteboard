@@ -1,11 +1,6 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import {
-  decodeLines,
-  encodeLines,
-  type SvgRecord,
-  svgAnswer,
-} from '../test-utils/render-oracle/oracle.js'
+import { decodeLines, type SvgRecord, svgAnswer } from '../test-utils/render-oracle/oracle.js'
 import { svgEdgeCaseInputs } from '../test-utils/render-oracle/svg-edge-cases.js'
 
 /**
@@ -13,14 +8,10 @@ import { svgEdgeCaseInputs } from '../test-utils/render-oracle/svg-edge-cases.js
  * rule each (an unusable option, a link's address, a degenerate box), which
  * the goldens and laid-out canvases reach only by accident. The Rust backend
  * replays it beside `svg.jsonl` (`tests/svg_edge_cases.rs`) and is held to it
- * byte for byte. Re-record after a deliberate backend change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node svg-edge-cases`.
+ * byte for byte. It is frozen with `svg.jsonl` (ADR-0054 A3.6): nothing
+ * re-records it.
  */
 const FILE = new URL('./svg-edge-cases.jsonl', import.meta.url)
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(FILE, encodeLines(svgEdgeCaseInputs().map(svgAnswer)))
-}
 
 describe('the recorded SVG backend edge cases', () => {
   const text = readFileSync(FILE, 'utf8')

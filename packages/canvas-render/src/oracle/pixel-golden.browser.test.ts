@@ -1,47 +1,42 @@
 // Pixel-level regression harness for the shape classes a byte-level SVG-
-// string golden cannot protect (see determinism.test.ts / golden-scene.ts
-// for that guarantee): a sweep-flag or coordinate-sign bug still produces
-// well-formed, merely byte-DIFFERENT XML, so a string-equality golden only
-// catches it by accident. `toMatchScreenshot` pins the actual painted
-// pixels instead. Fixtures and the deliberate-regeneration flow live in
-// ../test-utils/pixel-golden-scenes.ts.
+// string golden cannot protect: a sweep-flag or coordinate-sign bug still
+// produces well-formed, merely byte-DIFFERENT XML, so a string-equality golden
+// only catches it by accident. `toMatchScreenshot` pins the actual painted
+// pixels instead.
+//
+// What it paints is the recorded `pixel-mount/` picture of each golden in
+// svg.jsonl, which the Rust SVG backend is held to byte for byte
+// (`svg_oracle.rs`), so these screenshots judge the core's drawing. The scenes
+// and the regeneration flow are ../test-utils/pixel-golden-scenes.ts.
 
-import type { Scene } from '@kamiazya/whiteboard-scene'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { page, server } from 'vitest/browser'
-import {
-  buildArrowheadsScene,
-  buildIconSetScene,
-  buildJumpHopScene,
-  buildNeonLookScene,
-  buildNodeOutlinesScene,
-  buildRoundedCornersScene,
-  buildRoundedRectScene,
-  buildSketchLookScene,
-} from '../test-utils/pixel-golden-scenes.js'
-import { renderSceneToSvg } from './backend.js'
+import type { SvgRecord } from '../test-utils/render-oracle/oracle.js'
+import recording from './svg.jsonl?raw'
 
-// Fixed integer padding + a solid background keep every baseline's canvas
-// deterministic across runs and across the four scenes.
-const ENVELOPE_PADDING_PX = 8
-const ENVELOPE_BACKGROUND = '#ffffff'
+const MOUNTED = new Map(
+  recording
+    .trimEnd()
+    .split('\n')
+    .map((line) => JSON.parse(line) as SvgRecord)
+    .filter((record) => record.id.startsWith('pixel-mount/'))
+    .map((record) => [record.id.slice('pixel-mount/'.length), record.svg]),
+)
 
 /**
- * Renders `scene` to SVG and mounts the resulting `<svg>` as the page's
- * only content, tagged for `page.getByTestId`. The `<svg>`'s own `width`/
- * `height` attributes (derived from the scene's integer bounds) size the
- * element, so the locator's screenshot is cropped tightly to the drawn
- * content rather than the full fixed viewport.
+ * Mounts the recorded picture of the golden `name` as the page's only
+ * content, tagged for `page.getByTestId`. The `<svg>`'s own `width`/`height`
+ * attributes (the scene's integer bounds plus the padding) size the element,
+ * so the locator's screenshot is cropped tightly to the drawn content rather
+ * than the full fixed viewport.
  */
-function mountScene(scene: Scene, testId: string, background = ENVELOPE_BACKGROUND): void {
-  const markup = renderSceneToSvg(scene, {
-    padding: ENVELOPE_PADDING_PX,
-    background,
-  })
+function mountScene(name: string, testId: string): void {
+  const markup = MOUNTED.get(name)
+  if (markup === undefined) throw new Error(`svg.jsonl holds no pixel-mount/${name}`)
   const container = document.createElement('div')
   container.innerHTML = markup
   const svg = container.firstElementChild
-  if (svg === null) throw new Error('renderSceneToSvg produced no root element')
+  if (svg === null) throw new Error(`pixel-mount/${name} has no root element`)
   svg.setAttribute('data-testid', testId)
   document.body.append(svg)
 }
@@ -70,32 +65,32 @@ describe('pixel-level golden regression (real browser)', () => {
   })
 
   it('jump-hop: the later edge hops over the earlier, bulging to the drawn side', async () => {
-    mountScene(buildJumpHopScene(), 'jump-hop')
+    mountScene('jump-hop', 'jump-hop')
     await expect.element(page.getByTestId('jump-hop')).toMatchScreenshot('jump-hop')
   })
 
   it('rounded-corners: a bent edge draws its interior vertex as a Q-curve', async () => {
-    mountScene(buildRoundedCornersScene(), 'rounded-corners')
+    mountScene('rounded-corners', 'rounded-corners')
     await expect.element(page.getByTestId('rounded-corners')).toMatchScreenshot('rounded-corners')
   })
 
   it('arrowheads: triangle orientation at each end (left/right/up/down)', async () => {
-    mountScene(buildArrowheadsScene(), 'arrowheads')
+    mountScene('arrowheads', 'arrowheads')
     await expect.element(page.getByTestId('arrowheads')).toMatchScreenshot('arrowheads')
   })
 
   it('rect-radius: a shape node with a corner radius renders rx', async () => {
-    mountScene(buildRoundedRectScene(), 'rect-radius')
+    mountScene('rounded-rect', 'rect-radius')
     await expect.element(page.getByTestId('rect-radius')).toMatchScreenshot('rect-radius')
   })
 
   it('node-outlines: the five non-rect silhouettes, cylinder arcs included', async () => {
-    mountScene(buildNodeOutlinesScene(), 'node-outlines')
+    mountScene('node-outlines', 'node-outlines')
     await expect.element(page.getByTestId('node-outlines')).toMatchScreenshot('node-outlines')
   })
 
   it('icon-set: every vendored lucide glyph draws as itself', async () => {
-    mountScene(buildIconSetScene(), 'icon-set')
+    mountScene('icon-set', 'icon-set')
     await expect.element(page.getByTestId('icon-set')).toMatchScreenshot('icon-set')
   })
 
@@ -104,14 +99,12 @@ describe('pixel-level golden regression (real browser)', () => {
   // look layer was judged by nothing. Each draws the SAME canvas on the
   // theme's own paper, since a halo on the wrong ground says nothing.
   it('sketch look: jittered outlines, a hatched preset node, a dashed frame', async () => {
-    const { scene, background } = buildSketchLookScene()
-    mountScene(scene, 'sketch-look', background)
+    mountScene('sketch-look', 'sketch-look')
     await expect.element(page.getByTestId('sketch-look')).toMatchScreenshot('sketch-look')
   })
 
   it('neon look: a halo of each element’s own paint over crisp geometry', async () => {
-    const { scene, background } = buildNeonLookScene()
-    mountScene(scene, 'neon-look', background)
+    mountScene('neon-look', 'neon-look')
     await expect.element(page.getByTestId('neon-look')).toMatchScreenshot('neon-look')
   })
 })

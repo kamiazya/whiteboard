@@ -1,6 +1,6 @@
 /**
  * Text-free, geometry-only fixtures for the pixel-level golden regression
- * harness (`svg/pixel-golden.browser.test.ts`). Each builder covers exactly
+ * harness (`oracle/pixel-golden.browser.test.ts`). Each builder covers exactly
  * one shape class that a byte-level SVG-string golden cannot protect: a
  * sweep-flag or coordinate-sign bug still produces well-formed, merely
  * byte-DIFFERENT XML (`svg/determinism.test.ts` would only catch it by
@@ -19,6 +19,10 @@
  * midpoints) stays integer too — the alignment `pixel-golden-scenes.test.ts`
  * asserts.
  *
+ * The harness paints each scene's `pixel-mount/` record in `oracle/svg.jsonl`,
+ * the picture the Rust SVG backend is held to byte for byte, so a baseline
+ * moves only when that record does.
+ *
  * ## Regenerating a baseline
  *
  * A screenshot diff is a rendering-format change and gets the same review
@@ -28,7 +32,7 @@
  * 1. From `packages/canvas-render`: `pnpm vitest run --project
  *    canvas-render-browser --update` (or `pnpm test:browser --update` from
  *    the repo root).
- * 2. Eyeball every regenerated PNG under `svg/__screenshots__/` for the
+ * 2. Eyeball every regenerated PNG under `oracle/__screenshots__/` for the
  *    INTENDED geometry — hop bulge on the drawn side, arrowhead orientation,
  *    corner curvature, rect radius — not just "a diff exists". `--update`
  *    happily photographs a bug as readily as a fix.
@@ -41,14 +45,14 @@
  * non-linux machine is not CI-valid — regenerate on linux, or take CI's:
  * push the change, and when `test-browser` fails, download the run's
  * `browser-traces-test-browser-<shard>-attempt-<n>` artifact (the shard
- * that failed). Under `.vitest/attachments/src/svg/pixel-golden.browser.test.ts/`
+ * that failed). Under `.vitest/attachments/src/oracle/pixel-golden.browser.test.ts/`
  * — a hidden directory once unzipped — a missing baseline left
  * `<scene>-reference-chromium-linux.png`, and a mismatch left
  * `<scene>-actual-chromium-linux.png`. Eyeball it (step 2), then commit it
- * as `src/svg/__screenshots__/pixel-golden.browser.test.ts/<scene>-chromium-linux.png`,
+ * as `src/oracle/__screenshots__/pixel-golden.browser.test.ts/<scene>-chromium-linux.png`,
  * dropping the `-reference`/`-actual` infix. Only
  * `-chromium-linux` baselines are committed, so the harness skips off linux
- * (saying so) rather than writing one, and `svg/pixel-golden-baselines.test.ts`
+ * (saying so) rather than writing one, and `oracle/pixel-golden-baselines.test.ts`
  * fails on a scene without one or on a baseline for any other platform.
  * A missing baseline is CREATED and the test still FAILS ("a new one was
  * created. Review it before running tests again"), so a forgotten PNG

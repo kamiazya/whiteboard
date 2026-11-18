@@ -1,116 +1,70 @@
-import type { Scene } from '@kamiazya/whiteboard-scene'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import type { CoreSvgAsk } from './canvas-core.js'
-
-/** An envelope a picture is asked in; the function names the form. */
-type PictureAsk = Omit<CoreSvgAsk, 'form'>
-
 import { layoutNoticeKeyedPicture, layoutNoticePicture } from './core-picture.js'
 import { constantRatioMeasureText, type MeasureText } from './measure.js'
-import { type LayoutRefusal, refusalCopy, refusalScene } from './refusal.js'
-import { sceneBounds } from './scene-bounds.js'
-import { renderSceneToSvg } from './svg/backend.js'
-import { renderSceneToKeyedSvg } from './svg/keyed.js'
+import { type LayoutRefusal, refusalCopy } from './refusal.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
+import {
+  type Digest,
+  ENVELOPE_BY_NAME,
+  envelopesOf,
+  KEYED_ENVELOPE,
+  keyedDigest,
+  type NoticeRecord,
+  noticeOptions,
+  sceneDigest,
+  svgDigest,
+} from './test-utils/render-oracle/notice-oracle.js'
+import { decodeLines } from './test-utils/render-oracle/oracle.js'
 import { built } from './test-utils/wasm/glue.js'
 import { oracleLayoutCore } from './test-utils/wasm/oracle-layout-core.js'
 
 // The core draws the notice a refused layout is shown as; the words stay
-// `refusalCopy`'s. Each case below is held to what `refusalScene` draws and
-// `renderSceneToSvg` serializes, the picture every surface drew before the
-// core did.
+// `refusalCopy`'s. Each notice is held to `oracle/notice.jsonl`, the picture
+// every surface drew before the core did, recorded from the TypeScript notice
+// drawing and SVG backend (ADR-0054 A3.6).
 
-const WORDED = [
-  'too-many-elements',
-  'referenced-elements',
-  'bodies',
-  'too-large',
-  'comments',
-  'proposals',
-  'fragments',
-  'non-finite',
-  'host-measure',
-  'core-unavailable',
-] as const
+const RECORDED = decodeLines<NoticeRecord>(
+  readFileSync(new URL('./oracle/notice.jsonl', import.meta.url), 'utf8'),
+)
 
-const REFUSALS: readonly LayoutRefusal[] = [
-  ...WORDED.map((reason): LayoutRefusal => ({ code: 'malformed', reason })),
-  { code: 'input-too-large', reason: 'no-words-of-its-own' },
-  { code: 'malformed', reason: 'no-words-of-its-own' },
-]
-
-const WIDTHS = [undefined, 480, 300, 120, 40, 20] as const
-const POINTS = [undefined, { x: 0, y: 0 }, { x: 37.5, y: -12 }] as const
-const MODES = ['light', 'dark'] as const
-
-/** The scene `refusalScene` draws, less the refusal it attaches and the core has no use for. */
-function drawnByTypeScript(
-  refusal: LayoutRefusal,
-  options: Parameters<typeof refusalScene>[1],
-): Scene {
-  const { refusal: _attached, ...scene } = refusalScene(refusal, options)
-  return scene
+const recordOf = (id: string): NoticeRecord => {
+  const record = RECORDED.find((r) => r.id === id)
+  if (record === undefined) throw new Error(`notice.jsonl holds no ${id}`)
+  return record
 }
 
-const ENVELOPES: readonly (readonly [string, PictureAsk])[] = [
-  ['padding', { padding: 12 }],
-  ['scene-box', { viewBox: { of: 'scene' }, legend: 'omit' }],
-  ['paper', { viewBox: { of: 'document', margin: 16 }, background: '#ffffff' }],
-]
+/** A digest's length and hash as one text, so a failure names both. */
+const text = ({ n, h }: Digest) => `${n}/${h}`
 
-const envelopeOf = (ask: PictureAsk, scene: Scene) => {
-  if (ask.padding !== undefined) return { padding: ask.padding }
-  if (ask.background !== undefined) {
-    const { x, y, w, h } = sceneBounds(scene)
-    return {
-      width: w + 32,
-      height: h + 32,
-      viewBox: { x: x - 16, y: y - 16, w: w + 32, h: h + 32 },
-      background: ask.background,
-    }
-  }
-  const box = sceneBounds(scene)
-  return { width: box.w, height: box.h, viewBox: box, legend: 'omit' as const }
-}
-
-describe.runIf(built)("the notice the core draws is the TypeScript's", () => {
-  it('draws every refusal, mode, width and place as refusalScene does', {
+describe.runIf(built)('the notice the core draws is the recorded one', () => {
+  it('draws every recorded notice in every envelope and in the keyed form', {
     timeout: 120_000,
   }, () => {
     const core = oracleLayoutCore()
-    const measure = createFakeMeasure()
     let compared = 0
-    for (const refusal of REFUSALS) {
-      const words = refusalCopy(refusal)
-      for (const mode of MODES) {
-        for (const maxWidth of WIDTHS) {
-          for (const at of POINTS) {
-            const options = {
-              measure,
-              mode,
-              ...(maxWidth === undefined ? {} : { maxWidth }),
-              ...(at === undefined ? {} : { at }),
-            }
-            const name = `${refusal.reason} ${mode} ${maxWidth} ${JSON.stringify(at)}`
-            const expected = drawnByTypeScript(refusal, options)
-            for (const [label, ask] of ENVELOPES) {
-              const picture = layoutNoticePicture(core, words, options, ask)
-              expect(picture.scene, `${name} ${label}`).toStrictEqual(expected)
-              const svg = renderSceneToSvg(expected, envelopeOf(ask, expected))
-              expect(picture.svg === svg, `${name} ${label}`).toBe(true)
-              compared += 1
-            }
-            const keyed = layoutNoticeKeyedPicture(core, words, options, ENVELOPES[1]?.[1] ?? {})
-            expect(keyed.scene, `${name} keyed`).toStrictEqual(expected)
-            expect(keyed.keyed, `${name} keyed`).toEqual(
-              renderSceneToKeyedSvg(expected, envelopeOf(ENVELOPES[1]?.[1] ?? {}, expected)),
-            )
-            compared += 1
-          }
-        }
+    for (const record of RECORDED) {
+      const words = refusalCopy(record.refusal)
+      const options = noticeOptions(record)
+      for (const name of envelopesOf(record)) {
+        const picture = layoutNoticePicture(core, words, options, ENVELOPE_BY_NAME.get(name) ?? {})
+        expect(text(sceneDigest(picture.scene)), `${record.id} ${name} scene`).toBe(
+          text(record.scene),
+        )
+        expect(text(svgDigest(picture.svg)), `${record.id} ${name}`).toBe(
+          text(record.svg[name] ?? { n: -1, h: -1 }),
+        )
+        compared += 1
+      }
+      if (record.keyed !== undefined) {
+        const ask = ENVELOPE_BY_NAME.get(KEYED_ENVELOPE) ?? {}
+        const keyed = layoutNoticeKeyedPicture(core, words, options, ask)
+        expect(text(sceneDigest(keyed.scene)), `${record.id} keyed scene`).toBe(text(record.scene))
+        expect(text(keyedDigest(keyed.keyed)), `${record.id} keyed`).toBe(text(record.keyed))
+        compared += 1
       }
     }
-    expect(compared, 'notices compared').toBeGreaterThan(900)
+    expect(compared, 'notices compared').toBe(432 * 4 + 5)
   })
 
   it('wraps to the width there is and draws the words in the notice', () => {
@@ -126,28 +80,31 @@ describe.runIf(built)("the notice the core draws is the TypeScript's", () => {
   })
 
   describe('a measurer that cannot place the notice', () => {
-    const refusal: LayoutRefusal = { code: 'malformed', reason: 'host-measure' }
-    const words = refusalCopy(refusal)
-    const ratio = (options: { maxWidth?: number }) =>
-      drawnByTypeScript(refusal, { measure: constantRatioMeasureText, mode: 'dark', ...options })
+    const words = refusalCopy({ code: 'malformed', reason: 'host-measure' })
 
-    const drawnWith = (measure: MeasureText, maxWidth: number) =>
-      layoutNoticePicture(
+    /** The host-measure notice drawn at `maxWidth` by `measure`, as recorded. */
+    const drawnWith = (measure: MeasureText, maxWidth: number) => {
+      const picture = layoutNoticePicture(
         oracleLayoutCore(),
         words,
         { measure, mode: 'dark', maxWidth },
-        { padding: 4 },
+        ENVELOPE_BY_NAME.get('padding-4') ?? {},
       )
+      return { scene: text(sceneDigest(picture.scene)), svg: text(svgDigest(picture.svg)) }
+    }
+
+    /** The recorded notice `kind` drew at `maxWidth`. */
+    const recorded = (kind: 'ratio' | 'wide', maxWidth: number) => {
+      const record = recordOf(`host/${kind}/${maxWidth}`)
+      return { scene: text(record.scene), svg: text(record.svg['padding-4'] ?? { n: -1, h: -1 }) }
+    }
 
     it('draws the whole notice by the ratio estimate when the host throws', () => {
       const throws: MeasureText = () => {
         throw new Error('no canvas context')
       }
       for (const maxWidth of [480, 200, 40]) {
-        const picture = drawnWith(throws, maxWidth)
-        expect(picture.scene).toStrictEqual(ratio({ maxWidth }))
-        const svg = renderSceneToSvg(ratio({ maxWidth }), { padding: 4 })
-        expect(picture.svg === svg).toBe(true)
+        expect(drawnWith(throws, maxWidth)).toEqual(recorded('ratio', maxWidth))
       }
     })
 
@@ -158,12 +115,12 @@ describe.runIf(built)("the notice the core draws is the TypeScript's", () => {
         descent: 2,
         lineGap: 0,
       })
-      expect(drawnWith(nan, 300).scene).toStrictEqual(ratio({ maxWidth: 300 }))
+      expect(drawnWith(nan, 300)).toEqual(recorded('ratio', 300))
       const noAscent: MeasureText = (text, font) => ({
         ...constantRatioMeasureText(text, font),
         ascent: Number.POSITIVE_INFINITY,
       })
-      expect(drawnWith(noAscent, 300).scene).toStrictEqual(ratio({ maxWidth: 300 }))
+      expect(drawnWith(noAscent, 300)).toEqual(recorded('ratio', 300))
     })
 
     it('draws all of it by the ratio estimate when only one text goes unanswered', () => {
@@ -171,20 +128,21 @@ describe.runIf(built)("the notice the core draws is the TypeScript's", () => {
         text.length > 40
           ? { ...constantRatioMeasureText(text, font), advanceWidth: Number.NaN }
           : { advanceWidth: 5, ascent: 9, descent: 1, lineGap: 0 }
-      expect(drawnWith(once, 300).scene).toStrictEqual(ratio({ maxWidth: 300 }))
+      expect(drawnWith(once, 300)).toEqual(recorded('ratio', 300))
     })
 
     it('draws by the host measurer when it answers every text', () => {
       const answers: MeasureText = (text, font) => constantRatioMeasureText(text, font)
-      expect(drawnWith(answers, 300).scene).toStrictEqual(ratio({ maxWidth: 300 }))
+      expect(drawnWith(answers, 300)).toEqual(recorded('ratio', 300))
       const wide: MeasureText = (text, font) => ({
         advanceWidth: text.length * 7,
         ascent: font.sizePx * 0.8,
         descent: font.sizePx * 0.2,
         lineGap: 0,
       })
-      const expected = drawnByTypeScript(refusal, { measure: wide, mode: 'dark', maxWidth: 300 })
-      expect(drawnWith(wide, 300).scene).toStrictEqual(expected)
+      expect(drawnWith(wide, 300)).toEqual(recorded('wide', 300))
+      // The two measurers place it differently, so neither answer is the other's.
+      expect(recorded('wide', 300)).not.toEqual(recorded('ratio', 300))
     })
   })
 })
