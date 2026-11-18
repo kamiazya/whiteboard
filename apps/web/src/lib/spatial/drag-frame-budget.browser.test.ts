@@ -5,17 +5,20 @@ import {
   type LayoutCore,
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,
+  layoutSpatialEdgesPicture,
   type MeasureText,
   measureSpecOf,
   type QueryLayoutCore,
   renderSceneToSvg,
   type SceneNode,
   type SpatialContentCache,
+  type SpatialLayoutOptions,
   sceneBounds,
   type TextMetrics,
 } from '@kamiazya/whiteboard-canvas-render'
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { commands } from 'vitest/browser'
 import { type WebLayoutBoard, webLayoutBoards } from '../../test-utils/web-layout-boards.js'
@@ -50,8 +53,9 @@ import type { WebCore } from './web-core.js'
  * Every browser run needs the artifact: a missing one FAILS this file's first
  * test, and the timed cases skip, saying so (as layout-core.browser.test.ts does).
  *
- * The overlay frame's SPLIT — the edge layer alone against the layer drawn as
- * the SVG `use-drag-layers.ts` draws it — is a measurement, not a guard: it
+ * The overlay frame's SPLIT — the edge layer alone, against the layer with its
+ * SVG drawn by the core in the same call (what `use-drag-layers.ts` draws),
+ * against the layer with the TypeScript backend's SVG — is a measurement, not a guard: it
  * asserts only that it measured something, and runs when
  * `VITE_MEASURE_DRAG_SVG=1` (a timing loop has no place in every CI run).
  * Run from the repository root:
@@ -138,18 +142,21 @@ function busiest(board: WebLayoutBoard): string {
   return [...touches].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
 }
 
+/** One overlay frame's input: the canvas and options its edge layer is laid out from. */
+type OverlayFrame = readonly [SpatialCanvas, SpatialLayoutOptions]
+
 /**
  * Overlay frames of `board` with its busiest node carried 4 px further each
- * frame, as `use-drag-layers.ts` lays one out: `lay(at)` lays frame `at`'s edge
- * layer alone, every bystander pinned at its committed anchors and, `cached`,
- * the carried edges at their committed sides too, which skips the side search.
+ * frame, as `use-drag-layers.ts` lays one out: `frame(at)` is frame `at`'s
+ * input, every bystander pinned at its committed anchors and, `cached`, the
+ * carried edges at their committed sides too, which skips the side search.
  */
-function overlayFrames(
+function overlayInputs(
   board: WebLayoutBoard,
   page: MeasureText,
   cached: boolean,
   core: LayoutCore,
-): (at: number) => SceneNode[] {
+): (at: number) => OverlayFrame {
   const measure = gestureMeasure(page)
   const base = editorLayoutBase({ measure })
   const { scene, anchors } = layoutSpatialCanvasWithAnchors(board.canvas, { ...base, core })
@@ -167,16 +174,25 @@ function overlayFrames(
     }
     overrides.set(node.id, { ...sides, ...anchors.get(node.id) })
   }
-  return (at: number) =>
-    layoutSpatialEdges(
-      {
-        ...board.canvas,
-        nodes: board.canvas.nodes.map((n) =>
-          n.id === moved ? { ...n, x: n.x + (at % 40) * 4 } : n,
-        ),
-      },
-      { ...base, core, edgeSideOverrides: overrides },
-    )
+  const options: SpatialLayoutOptions = { ...base, core, edgeSideOverrides: overrides }
+  return (at: number) => [
+    {
+      ...board.canvas,
+      nodes: board.canvas.nodes.map((n) => (n.id === moved ? { ...n, x: n.x + (at % 40) * 4 } : n)),
+    },
+    options,
+  ]
+}
+
+/** `overlayInputs`' frames, each laid out as its edge layer alone. */
+function overlayFrames(
+  board: WebLayoutBoard,
+  page: MeasureText,
+  cached: boolean,
+  core: LayoutCore,
+): (at: number) => SceneNode[] {
+  const frame = overlayInputs(board, page, cached, core)
+  return (at: number) => layoutSpatialEdges(...frame(at))
 }
 
 /** The batch medians of `board`'s overlay frames; see `overlayFrames`. */
@@ -189,7 +205,10 @@ function timedOverlay(
   return batchMedians(overlayFrames(board, page, cached, core))
 }
 
-/** An edge layer drawn in the overlay's envelope: its own bounds, as `liveEdges` spells it. */
+/** The overlay's envelope as the core's ask: the layer's own bounds, at their size. */
+const OVERLAY_ASK = { viewBox: { of: 'scene' } } as const
+
+/** An edge layer drawn by the TypeScript backend in the overlay's envelope: its own bounds. */
 function overlaySvg(nodes: SceneNode[]): string {
   const bounds = sceneBounds({ nodes })
   return renderSceneToSvg({ nodes }, { width: bounds.w, height: bounds.h, viewBox: bounds })
@@ -342,7 +361,7 @@ describe('a drag frame laid out by the core', () => {
   )
 
   it.runIf(SPLIT && !ABSENT)(
-    'splits the overlay frame into its edge layer and its SVG',
+    'splits the overlay frame into its edge layer and either SVG',
     { timeout: 120_000 },
     async () => {
       if ('failure' in real) return
@@ -361,9 +380,17 @@ describe('a drag frame laid out by the core', () => {
       }
       for (const cached of [false, true]) {
         const mode = cached ? 'cached sides' : 're-siding'
-        const lay = overlayFrames(board, browser, cached, core)
+        const frame = overlayInputs(board, browser, cached, core)
+        const lay = (at: number) => layoutSpatialEdges(...frame(at))
+        // The two pictures are the same bytes (core-picture-web.rust.test.ts);
+        // asserted once here too, so the rows time the same work.
+        const [canvas, options] = frame(0)
+        expect(layoutSpatialEdgesPicture(canvas, options, OVERLAY_ASK).svg).toBe(
+          overlaySvg(layoutSpatialEdges(canvas, options)),
+        )
         const medians = interleavedMedians({
           layer: lay,
+          'layer + core svg': (at) => layoutSpatialEdgesPicture(...frame(at), OVERLAY_ASK),
           'layer + TS svg': (at) => overlaySvg(lay(at)),
         })
         for (const [row, values] of Object.entries(medians)) {

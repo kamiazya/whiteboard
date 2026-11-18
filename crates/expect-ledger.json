@@ -40,8 +40,8 @@
     {
       "crate": "crates/core/canvas-render",
       "lint": "clippy::cast_possible_truncation",
-      "count": 1,
-      "reason": "the digest's free-region grid counts cells as doubles the way the TypeScript does, and a u32 index is made once from a double already known to be a whole number in 0..=250_000 (the cell budget, or a clamped span inside it)"
+      "count": 2,
+      "reason": "the digest's free-region grid counts cells as doubles the way the TypeScript does, and a u32 index is made once from a double already known to be a whole number in 0..=250_000 (the cell budget, or a clamped span inside it); and the SVG serializer writes a coordinate that is a whole number below 2^53 in magnitude through an i64, which holds it exactly, rather than through the exact toFixed expansion"
     },
     {
       "crate": "crates/core/canvas-render",

@@ -74,7 +74,9 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   server's envelopes) and `core-picture-web.rust.test.ts` (each web caller's
   exact option set). server-core's `wb_scene_render`, the `canvas_view`
   picture and mcp-server's file export take their SVG from it (ADR-0054 A2);
-  no web caller does yet (A3.2 on).
+  in the web, the drag overlay's edge layer does (`use-drag-layers.ts`'s
+  `liveEdges`, A3.2), held by `drag-overlay-core.browser.test.tsx`; the
+  editor surface, previews and bodies still draw in TypeScript (A3.3 on).
 - `core.search` (`search.ts`): lexical search over the one `search_op` export.
   Text calls are stateless; a `SearchIndex` (a corpus's token bags, upserted per
   changed document, queried by string) and a set of link labels live in the

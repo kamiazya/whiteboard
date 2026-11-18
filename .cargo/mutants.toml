@@ -396,4 +396,12 @@ exclude_re = [
   # det fdlibm reduced: the same `lower | upper` is never zero, so `> 0` and
   # `>= 0` are one answer.
   'fdlibm\.rs:\d+:24: replace > with >= in reduced$',
+  # svg format_coord's whole-number fast path: `exact_integer` only skips the
+  # exact `toFixed` expansion for an integral double below 2^53, whose
+  # expansion is its digits plus zeros the canonical form strips. Answering
+  # None, or admitting exactly 2^53 (`<=`) or only 2^53 (`==`), sends a value
+  # down the exact path, which spells the same bytes; the property in
+  # tests/svg_format.rs holds both paths to `toFixed`, and the speed is what
+  # drag-frame-budget's split measures.
+  '^crates/core/canvas-render/src/svg/format\.rs:\d+:\d+: (replace exact_integer -> |replace < with (==|<=) in exact_integer$)',
 ]
