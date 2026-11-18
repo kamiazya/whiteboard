@@ -1,5 +1,5 @@
 import {
-  layoutMarkdownDocument,
+  layoutMarkdownDocumentKeyedPicture,
   referenceSeamsFromWire,
   referenceWire,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -17,9 +17,12 @@ const wired = (...args: Parameters<typeof referenceWire>) =>
 // how many times the editor laid a note out on the main thread.
 vi.mock('@kamiazya/whiteboard-canvas-render', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@kamiazya/whiteboard-canvas-render')>()
-  return { ...actual, layoutMarkdownDocument: vi.fn(actual.layoutMarkdownDocument) }
+  return {
+    ...actual,
+    layoutMarkdownDocumentKeyedPicture: vi.fn(actual.layoutMarkdownDocumentKeyedPicture),
+  }
 })
-const layouts = vi.mocked(layoutMarkdownDocument)
+const layouts = vi.mocked(layoutMarkdownDocumentKeyedPicture)
 
 /** Math loaders whose renders land only when the test says so. */
 function heldMathLoaders() {

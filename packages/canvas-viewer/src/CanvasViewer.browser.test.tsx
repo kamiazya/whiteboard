@@ -169,4 +169,40 @@ describe('CanvasViewer fits the box it is given', () => {
       expect(box.bottom).toBeLessThanOrEqual(paneBox.bottom + 1)
     }
   })
+
+  it('follows a resized pane by scaling, without laying the canvas out again', async () => {
+    const layout = CORE.layout
+    let laid = 0
+    const counted = {
+      ...CORE,
+      layout: {
+        layoutSpatialCanvas: (...args: Parameters<typeof layout.layoutSpatialCanvas>) => {
+          laid += 1
+          return layout.layoutSpatialCanvas(...args)
+        },
+      },
+    }
+    const { container } = render(
+      <div data-testid="pane" style={{ width: '400px', height: '300px' }}>
+        <CanvasViewer core={counted} canvas={farCanvas} measure={fakeMeasure} />
+      </div>,
+    )
+    const svgBox = () => container.querySelector('svg')?.getBoundingClientRect()
+    await expect.poll(() => svgBox()?.width ?? 0).toBeCloseTo(400, 0)
+    const before = laid
+    expect(before).toBeGreaterThan(0)
+
+    const pane = container.querySelector('[data-testid="pane"]') as HTMLElement
+    pane.style.width = '600px'
+    pane.style.height = '200px'
+    await expect.poll(() => svgBox()?.width ?? 0).toBeCloseTo(600, 0)
+    expect(svgBox()?.height).toBeCloseTo(200, 0)
+    // The picture fits the new box, still whole, and nothing was laid out for it.
+    for (const rect of container.querySelectorAll('svg rect')) {
+      const box = rect.getBoundingClientRect()
+      expect(box.right).toBeLessThanOrEqual(pane.getBoundingClientRect().right + 1)
+      expect(box.bottom).toBeLessThanOrEqual(pane.getBoundingClientRect().bottom + 1)
+    }
+    expect(laid).toBe(before)
+  })
 })
