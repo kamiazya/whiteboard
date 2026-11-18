@@ -515,11 +515,25 @@ fn a_notice_is_read_as_strictly_as_every_other_query() {
     );
 }
 
+/// A notice of "Title" and a detail of `n` bytes, drawn by ratio.
+fn notice_of(n: usize) -> Json {
+    ask(&notice(&ratio(), &[("detail", json!("x".repeat(n)))]))
+}
+
 #[test]
 fn a_notice_with_more_words_than_the_cap_is_refused() {
-    let long = "x".repeat(MAX_NOTICE_BYTES + 1);
-    assert_eq!(
-        ask(&notice(&fake(), &[("detail", json!(long))])),
-        refused("input-too-large", "too-large")
-    );
+    let over = MAX_NOTICE_BYTES + 1 - "Title".len();
+    assert_eq!(notice_of(over), refused("input-too-large", "too-large"));
+}
+
+#[test]
+fn a_notice_with_exactly_as_many_words_as_the_cap_is_drawn_whole() {
+    assert_eq!(MAX_NOTICE_BYTES, 65_536);
+    let detail = MAX_NOTICE_BYTES - "Title".len();
+    let answer = notice_of(detail);
+    assert_eq!(answer.get(0), Some(&json!("ok")));
+    // One unbreakable word keeps a line of its own: the whole detail is one run.
+    let nodes = answer.get(1).map(Json::to_string).unwrap_or_default();
+    assert!(nodes.contains(&"x".repeat(detail)), "the detail is not drawn whole");
+    assert!(nodes.contains("\"Title\""), "the title is not drawn");
 }

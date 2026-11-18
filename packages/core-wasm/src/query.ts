@@ -1,5 +1,5 @@
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
-import type { FenceHighlighter, FenceTokenMemo } from './fence-tokens.js'
+import { type FenceHighlighter, FenceTokenMemo } from './fence-tokens.js'
 import type { FontHandles } from './font-handles.js'
 import { LAYOUT_QUERY_CAPS } from './generated/input-caps.js'
 import type { HostMeasure } from './host-measure.js'
@@ -225,7 +225,17 @@ export function layoutQuery(
         : request.query === 'scene-digest'
           ? readDigest
           : readNumbers
-    return layoutWith({ ...calls, entry: OPERATION }, request, read, hostMeasure, undefined)
+    // A notice holds no fence, and its reader refuses `codeTokens`: a title
+    // that happens to contain a source the memo holds must not carry its tokens.
+    const fences =
+      request.query === 'notice' ? { highlight: undefined, memo: new FenceTokenMemo() } : {}
+    return layoutWith(
+      { ...calls, ...fences, entry: OPERATION },
+      request,
+      read,
+      hostMeasure,
+      undefined,
+    )
   }
   const wire = wireOf(request, 0, true)
   if (wire === undefined) throw errors.refused(OPERATION, 'malformed', 'wire')

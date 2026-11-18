@@ -1,6 +1,10 @@
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import type { CoreSvgAsk } from './canvas-core.js'
+
+/** An envelope a picture is asked in; the function names the form. */
+type PictureAsk = Omit<CoreSvgAsk, 'form'>
+
 import { layoutNoticeKeyedPicture, layoutNoticePicture } from './core-picture.js'
 import { constantRatioMeasureText, type MeasureText } from './measure.js'
 import { type LayoutRefusal, refusalCopy, refusalScene } from './refusal.js'
@@ -35,7 +39,7 @@ const REFUSALS: readonly LayoutRefusal[] = [
   { code: 'malformed', reason: 'no-words-of-its-own' },
 ]
 
-const WIDTHS = [undefined, 480, 300, 120, 40] as const
+const WIDTHS = [undefined, 480, 300, 120, 40, 20] as const
 const POINTS = [undefined, { x: 0, y: 0 }, { x: 37.5, y: -12 }] as const
 const MODES = ['light', 'dark'] as const
 
@@ -48,13 +52,13 @@ function drawnByTypeScript(
   return scene
 }
 
-const ENVELOPES: readonly (readonly [string, CoreSvgAsk])[] = [
+const ENVELOPES: readonly (readonly [string, PictureAsk])[] = [
   ['padding', { padding: 12 }],
   ['scene-box', { viewBox: { of: 'scene' }, legend: 'omit' }],
   ['paper', { viewBox: { of: 'document', margin: 16 }, background: '#ffffff' }],
 ]
 
-const envelopeOf = (ask: CoreSvgAsk, scene: Scene) => {
+const envelopeOf = (ask: PictureAsk, scene: Scene) => {
   if (ask.padding !== undefined) return { padding: ask.padding }
   if (ask.background !== undefined) {
     const { x, y, w, h } = sceneBounds(scene)

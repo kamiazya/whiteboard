@@ -23,9 +23,13 @@ export interface NoticeOptions {
 
 /**
  * The notice `words` say, drawn by `core` as one box and its text runs, with
- * the picture the core drew of it in the envelope and form `svg` names. The
- * core answers every notice (a measurer that fails draws it by the ratio
- * estimate), so a refusal here is a defect in the asking, not an input.
+ * the picture the core drew of it in the envelope and form `svg` names. A
+ * measurer that fails does not refuse it (the core draws it by the ratio
+ * estimate); what does is words past 64 KiB together (`input-too-large`), a
+ * picture past the SVG cap, or a font handle the core does not hold. Each of
+ * those throws here, as an `Error` whose message names the refusal's code and
+ * reason: a refusal's words are `refusalCopy`'s sentence or two, so none is
+ * an input this has to answer. `askedNotice` answers the refusal instead.
  */
 export function noticeThroughCore(
   core: LayoutCore,

@@ -13,8 +13,9 @@ describe('an edge layer pictured through the core', () => {
     const core = fakeLayoutCore({
       query: { layoutQuery: () => ({ nodes: [], degradations: [], keyed }) },
     })
-    // A keyed ask is assignable to the envelope; the core then answers keyed.
-    const ask: CoreSvgAsk = { padding: 0, form: 'keyed' }
+    // The type refuses a keyed ask; this pins the run-time guard behind it,
+    // for a caller that reaches the envelope through a cast.
+    const ask = { padding: 0, form: 'keyed' } as CoreSvgAsk as { padding: number }
     const canvas = {
       nodes: [textNode({ id: 'n', x: 0, y: 0, width: 80, height: 40, text: 'a' })],
       edges: [],

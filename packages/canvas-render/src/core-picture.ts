@@ -35,7 +35,7 @@ export interface KeyedPicture {
 }
 
 /** The envelope a picture is asked in; its form is the function's to name. */
-type CorePictureAsk = Omit<CoreSvgAsk, 'form'>
+export type CorePictureAsk = Omit<CoreSvgAsk, 'form'> & { readonly form?: undefined }
 
 /**
  * The picture drawn where no core drew one: nothing, sized to nothing so it
