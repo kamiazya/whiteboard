@@ -8,10 +8,10 @@ import { decodeLines, type RenderRecord, renderAnswer } from '../test-utils/rend
  * bits), the SVG, the keyed groups and the scene digest — taken from the
  * TypeScript composer before it was deleted (ADR-0054 step 7, S18h) and
  * frozen: the layout is now the Rust core's, so a re-recording would be the
- * core judging itself. Each line is laid out again through canvas-render's
- * entry over the real core, and drawn and digested again by the TypeScript
- * SVG backend and digest, which are still this package's. A change that
- * moves an answer must say so by editing the recording.
+ * core judging itself. Each line is laid out, drawn (whole and keyed) and
+ * digested again by the core through canvas-render's entries, and the pictures
+ * equal what the TypeScript SVG backend drew when the recording was taken. A
+ * change that moves an answer must say so by editing the recording.
  */
 const FILE = new URL('./render.jsonl', import.meta.url)
 
@@ -44,7 +44,7 @@ describe('the recorded render oracle', () => {
     expect(new Set(recorded.map((r) => r.options.mode)).size, 'modes').toBe(2)
   })
 
-  it('equals what the core lays out and the backend draws today', { timeout: 120_000 }, () => {
+  it('equals what the core lays out and draws today', { timeout: 120_000 }, () => {
     const lines = text.trimEnd().split('\n')
     const parted = recorded.findIndex(
       (r, i) =>

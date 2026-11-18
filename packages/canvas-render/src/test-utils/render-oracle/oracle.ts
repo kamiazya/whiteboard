@@ -1,6 +1,7 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { spatialCanvasArbitrary, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene } from '@kamiazya/whiteboard-scene'
+import { layoutSpatialCanvasKeyedPicture, layoutSpatialCanvasPicture } from '../../core-picture.js'
 import { layoutSceneDigest } from '../../layout/query-switch.js'
 import { layoutSpatialCanvas } from '../../layout/spatial-canvas.js'
 import type { SceneDigest } from '../../scene-digest-schema.js'
@@ -98,16 +99,26 @@ function layoutRecorded(canvas: SpatialCanvas, options: RenderOptions): Scene {
   return layoutSpatialCanvas(canvas, layoutOptionsRecorded(options))
 }
 
+/**
+ * What the core answers for a recorded canvas: the scene, and the picture
+ * and keyed groups it drew of it in the bodyless root an empty ask names.
+ */
 export function renderAnswer(input: RenderInput): RenderRecord {
-  const scene = layoutRecorded(input.canvas, input.options)
+  const options = layoutOptionsRecorded(input.options)
+  const { scene, svg } = layoutSpatialCanvasPicture(input.canvas, options, {})
+  const { rootOpen, rootAttrs, groups } = layoutSpatialCanvasKeyedPicture(
+    input.canvas,
+    options,
+    {},
+  ).keyed
   return {
     id: input.id,
     canvas: input.canvas,
     options: input.options,
     scene: dumpScene(scene),
-    svg: renderSceneToSvg(scene),
-    keyed: keyedAnswer(scene),
-    digest: layoutSceneDigest(input.canvas, layoutOptionsRecorded(input.options)),
+    svg,
+    keyed: { rootOpen, rootAttrs, groups },
+    digest: layoutSceneDigest(input.canvas, options),
   }
 }
 
