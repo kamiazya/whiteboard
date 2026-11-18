@@ -3,12 +3,14 @@ import {
   describeMeasure,
   type EdgeAnchorOverride,
   type LayoutCore,
+  layoutSpatialCanvasKeyedPicture,
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,
   layoutSpatialEdgesPicture,
   type MeasureText,
   measureSpecOf,
   type QueryLayoutCore,
+  renderSceneToKeyedSvg,
   renderSceneToSvg,
   type SceneNode,
   type SpatialContentCache,
@@ -58,7 +60,12 @@ import type { WebCore } from './web-core.js'
  * against the layer with the TypeScript backend's SVG — is a measurement, not a guard: it
  * asserts only that it measured something, and runs when
  * `VITE_MEASURE_DRAG_SVG=1` (a timing loop has no place in every CI run).
- * Run from the repository root:
+ * The committed layout's split — the layout alone, against the layout with the
+ * editor surface's keyed projection drawn by the core in the same call, against
+ * the layout with the TypeScript backend's keyed projection (what the main
+ * thread derived from a worker's scene until ADR-0054 A3.3) — and what handing
+ * the keyed answer or the scene across `postMessage` costs, run under the same
+ * switch. Run from the repository root:
  *   VITE_MEASURE_DRAG_SVG=1 pnpm vitest run --project web-browser apps/web/src/lib/spatial/drag-frame-budget
  */
 const SPLIT = import.meta.env.VITE_MEASURE_DRAG_SVG === '1'
@@ -301,6 +308,33 @@ const largest = (): WebLayoutBoard =>
     (a, b) => b.canvas.nodes.length - a.canvas.nodes.length,
   )[0] as WebLayoutBoard
 
+/** The editor surface's envelope, as the core is asked for it (`scene-render-core.ts`). */
+const EDITOR_ASK = { viewBox: { of: 'scene' }, legend: 'omit' } as const
+
+/** The same envelope as `renderSceneToKeyedSvg`'s options over `scene`. */
+function editorKeyedTs(scene: Parameters<typeof sceneBounds>[0]) {
+  const bounds = sceneBounds(scene)
+  return renderSceneToKeyedSvg(scene, {
+    width: bounds.w,
+    height: bounds.h,
+    viewBox: bounds,
+    legend: 'omit',
+  })
+}
+
+/** The options a committed layout is composed with, over its own content cache. */
+function committedOptions(board: WebLayoutBoard, measure: MeasureText, core: LayoutCore) {
+  return {
+    ...editorLayoutBase({ measure }),
+    core,
+    contentCache: createSpatialContentCache(),
+    fragments: [],
+    onFragmentsAsked: () => {},
+    threads: board.threads,
+    proposals: board.proposals,
+  } satisfies SpatialLayoutOptions
+}
+
 describe('a drag frame laid out by the core', () => {
   it('finds the staged artifact where the pipeline promised it', () => {
     if ('failure' in real) throw real.failure
@@ -396,6 +430,52 @@ describe('a drag frame laid out by the core', () => {
         for (const [row, values] of Object.entries(medians)) {
           expect(values).toHaveLength(BATCHES)
           reading[`${mode}: ${row} p50 ms per batch`] = readings(values)
+        }
+      }
+      await commands.printReading(JSON.stringify(reading))
+    },
+  )
+  it.runIf(SPLIT && !ABSENT)(
+    'splits the committed layout into its layout and either keyed picture',
+    { timeout: 120_000 },
+    async () => {
+      if ('failure' in real) return
+      await ensureViewerFontLoaded()
+      const browser = createBrowserMeasureText()
+      const core: LayoutCore = {
+        routing: real.core,
+        layout: real.core,
+        markdown: real.core,
+        query: real.core,
+      }
+      const reading: Record<string, string | number> = {}
+      for (const board of [mostEdges(), largest()]) {
+        const plain = committedOptions(board, browser, core)
+        const withCore = committedOptions(board, browser, core)
+        const withTs = committedOptions(board, browser, core)
+        const at0 = frameOf(board, 0)
+        // The same bytes either way (core-picture-web.rust.test.ts), asserted
+        // once here too so the rows time the same work.
+        const scene = layoutSpatialCanvasWithAnchors(at0, plain).scene
+        const keyed = layoutSpatialCanvasKeyedPicture(at0, withCore, EDITOR_ASK).keyed
+        expect(keyed.svg).toBe(editorKeyedTs(scene).svg)
+        const medians = interleavedMedians({
+          layout: (at) => layoutSpatialCanvasWithAnchors(frameOf(board, (at % 40) * 4), plain),
+          'layout + core keyed': (at) =>
+            layoutSpatialCanvasKeyedPicture(frameOf(board, (at % 40) * 4), withCore, EDITOR_ASK),
+          'layout + TS keyed': (at) =>
+            editorKeyedTs(
+              layoutSpatialCanvasWithAnchors(frameOf(board, (at % 40) * 4), withTs).scene,
+            ),
+          'TS keyed alone': () => editorKeyedTs(scene),
+          'clone keyed': () => structuredClone(keyed),
+          'clone scene': () => structuredClone(scene),
+        })
+        reading[`${board.name}: nodes`] = board.canvas.nodes.length
+        reading[`${board.name}: keyed chars`] = keyed.svg.length
+        for (const [row, values] of Object.entries(medians)) {
+          expect(values).toHaveLength(BATCHES)
+          reading[`${board.name}: ${row} p50 ms per batch`] = readings(values)
         }
       }
       await commands.printReading(JSON.stringify(reading))

@@ -46,7 +46,9 @@ export type {
 } from './canvas-core.js'
 export { selectCanvasFragment } from './canvas-fragment.js'
 export {
+  type KeyedPicture,
   layoutMarkdownDocumentPicture,
+  layoutSpatialCanvasKeyedPicture,
   layoutSpatialCanvasPicture,
   layoutSpatialEdgesPicture,
   type PicturedScene,
