@@ -317,20 +317,14 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the reading half of the PNG-embedded document format, the only way the export tests can prove a shared PNG carries its document',
   'apps/web/src/lib/render-surfaces.ts#RENDER_SURFACES':
     'the render-surface ledger to review against, whose reasons and kind coverage render-surfaces.test.ts holds',
-  'packages/codec/src/markdown/normalize.ts#normalizeMdast':
-    'the equivalence the markdown round-trip contract is stated modulo, read by the codec and editor round-trip properties and named in package-codec.md',
+  'packages/model/src/mdast/index.ts#mdastRootSchema':
+    "the model tree's validator, which no shipped reader calls now that the core parses a body: the web-rust bridge holds the core's tree to it, and the model's own suites hold the schema",
+  'packages/model/src/mdast/index.ts#MdastFlowContent':
+    "a block of the model tree, named by the tests that build or walk one; no shipped code does since the core's parse replaced the TypeScript reader",
+  'packages/model/src/mdast/index.ts#MdastPhrasingContent':
+    "an inline node of the model tree, named by the tests that build or walk one; no shipped code does since the core's parse replaced the TypeScript reader",
   'packages/canvas-render/src/layout/markdown-switch.ts#layoutMarkdownDocument':
     "a note's scene alone: the shipped callers read the block lines beside it (layoutMarkdownDocumentBlocks), while the layout, reference and parity tests ask for the scene they compare",
-  'packages/codec/src/markdown/pipeline.ts#parseMarkdownBody':
-    'the TypeScript reader the recorded mdast oracle is made from (mdast.jsonl, replayed against the core by crates/core/codec/tests/mdast and markdown_excerpt_oracle.rs) and the round-trip properties: deleted with the TypeScript parser (A5.6)',
-  'packages/codec/src/markdown/pipeline.ts#parseMarkdownBlockLines':
-    'the TypeScript reader the recorded block-lines oracle is made from (mdast.jsonl, replayed against the core by crates/core/codec/tests/markdown_block_lines_oracle.rs): deleted with the TypeScript parser (A5.6)',
-  'packages/codec/src/markdown/pipeline.ts#stringifyMarkdownBody':
-    'the writer half of the markdown pipeline: held to parseMarkdownBody by the round-trip properties, and to the reference syntax the reader recognises by reference-writer.property.test.ts, ready for the bundle export that has no caller yet',
-  'packages/codec/src/references/resolve.ts#resolveReferences':
-    "the reading half of the reference grammar: references-roundtrip.property.test.ts holds it against resolveReferencesForExport, and the TypeScript parser's retirement (ADR-0054 A5) is what removes both",
-  'packages/codec/src/references/resolve-for-export.ts#resolveReferencesForExport':
-    'the export seam ADR-0017 decision 2 holds ready for the bundle export: it emits link and image nodes that stringifyMarkdownBody writes as links, waiting only on an injected resolver',
   'packages/codec/src/spatial/codecs.ts#foreignRoundTrip':
     'the foreign-reader trip of the codec registry that codecs.property.test.ts checks every projection ledger against',
   'packages/codec/src/spatial/json-schema.ts#xWhiteboardJsonSchema':

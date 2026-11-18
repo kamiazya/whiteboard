@@ -1,4 +1,4 @@
-//! markdown-rs's tree as the model tree (`from-remark.ts`'s `fromRemarkRoot`):
+//! markdown-rs's tree as the model tree:
 //! what the model does not hold is dropped (positions) or written as text
 //! (a footnote), and a tree nested past [`MAX_NESTING_DEPTH`] is flattened to
 //! its text there, since every reader of the model tree recurses.

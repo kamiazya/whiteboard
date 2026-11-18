@@ -139,6 +139,24 @@ describe('the layout functions at stage 4', () => {
   })
 })
 
+describe('the absorbed functions at stage 4', () => {
+  const absorbed = PORTED_FUNCTIONS.filter((f) => f.absorbed !== undefined)
+
+  it('are the markdown parse and the reference resolution, with no TypeScript left', () => {
+    expect(absorbed.map((f) => [f.name, f.stage])).toEqual([
+      ['parseMarkdownBody', 4],
+      ['resolveReferences', 4],
+    ])
+    for (const f of absorbed) {
+      // The real files the entry says are gone are gone, so an empty `deleted` list cannot pass.
+      expect(f.absorbed?.deleted.length).toBeGreaterThanOrEqual(2)
+      for (const path of [f.ts.file, ...(f.absorbed?.deleted ?? [])]) {
+        expect(readReal(path), path).toBeUndefined()
+      }
+    }
+  })
+})
+
 describe('the ledger checker', () => {
   it('passes the fixture tree', () => {
     expect(checkPortedFunctions([entry], tree())).toEqual([])
@@ -222,6 +240,42 @@ describe('the ledger checker', () => {
     it('is stage 4 only', () => {
       expect(checkPortedFunctions([{ ...handed, stage: 3 }], tree())).toEqual([
         expect.stringContaining("a handed core is stage 4's shape, not stage 3's"),
+      ])
+    })
+  })
+
+  describe('an absorbed function at stage 4', () => {
+    const absorbed: PortedFunction = { ...entry, stage: 4, absorbed: { deleted: ['old/impl.ts'] } }
+    const gone: ReadFile = (path) => (path === entry.ts.file ? undefined : tree()(path))
+
+    it('passes when no TypeScript file is left, the named one included', () => {
+      expect(checkPortedFunctions([absorbed], gone)).toEqual([])
+    })
+
+    it('fails when the file the entry names still exists', () => {
+      expect(checkPortedFunctions([absorbed], tree())).toEqual([
+        expect.stringContaining(`${entry.ts.file}, where the TypeScript lived, still exists`),
+      ])
+    })
+
+    it('fails when a file where the TypeScript lived still exists', () => {
+      const read: ReadFile = (path) => (path === 'old/impl.ts' ? 'export {}' : gone(path))
+      expect(checkPortedFunctions([absorbed], read)).toEqual([
+        expect.stringContaining('old/impl.ts, where the TypeScript lived, still exists'),
+      ])
+    })
+
+    it('fails when the Rust export is gone, which is now the only implementation', () => {
+      const read: ReadFile = (path) =>
+        path === entry.rust.file ? 'pub fn other() {}\n' : gone(path)
+      expect(checkPortedFunctions([absorbed], read)).toEqual([
+        expect.stringContaining('declares no `pub fn edge_route_layout`'),
+      ])
+    })
+
+    it('is stage 4 only', () => {
+      expect(checkPortedFunctions([{ ...absorbed, stage: 3 }], gone)).toEqual([
+        expect.stringContaining("an absorbed function is stage 4's shape, not stage 3's"),
       ])
     })
   })

@@ -92,7 +92,7 @@ export type MdastPhrasingContent =
   | { type: 'embed'; documentId: string; fragment?: string }
 
 /** PhrasingContent minus `break` — see the TableCell note above. */
-export type MdastCellPhrasingContent =
+type MdastCellPhrasingContent =
   | { type: 'text'; value: string }
   | { type: 'emphasis'; children: MdastCellPhrasingContent[] }
   | { type: 'strong'; children: MdastCellPhrasingContent[] }
@@ -137,7 +137,7 @@ export type MdastFlowContent =
   | { type: 'table'; align?: MdastAlign[]; children: MdastTableRow[] }
   | { type: 'math'; value: string; meta?: string | null }
 
-export type MdastListItem = {
+type MdastListItem = {
   type: 'listItem'
   checked?: boolean | null
   spread?: boolean
@@ -145,7 +145,7 @@ export type MdastListItem = {
 }
 
 export type MdastTableRow = { type: 'tableRow'; children: MdastTableCell[] }
-export type MdastTableCell = { type: 'tableCell'; children: MdastCellPhrasingContent[] }
+type MdastTableCell = { type: 'tableCell'; children: MdastCellPhrasingContent[] }
 
 /** Document root. See the doc comment above re: the flow-only application subset. */
 export type MdastRoot = { type: 'root'; children: MdastFlowContent[] }

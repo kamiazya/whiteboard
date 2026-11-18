@@ -51,7 +51,32 @@ export interface PortedFunction {
    * every file in `deleted` (where the TypeScript lived) no longer exists.
    */
   readonly handed?: { readonly deleted: readonly string[] }
+  /**
+   * Stage 4's fourth shape, for a function the Rust core absorbed with no
+   * TypeScript left anywhere: `ts.file` and every file in `deleted` no longer
+   * exist, and the Rust export is the only implementation. Nothing is
+   * dispatched or handed, since no caller outside the core's own layout asks
+   * for the function alone; the recorded answers it replays are what hold it.
+   */
+  readonly absorbed?: { readonly deleted: readonly string[] }
 }
+
+/**
+ * Where the markdown parse and the reference resolution lived (ADR-0054 A5.6),
+ * which stage 4 requires gone: the remark pipeline, its two conversions and the
+ * guards that kept its worst cases bounded, the canonicaliser, the resolver of
+ * references and its export-side twin.
+ */
+const MARKDOWN_TYPESCRIPT = [
+  'packages/codec/src/markdown/pipeline.ts',
+  'packages/codec/src/markdown/from-remark.ts',
+  'packages/codec/src/markdown/to-remark.ts',
+  'packages/codec/src/markdown/normalize.ts',
+  'packages/codec/src/markdown/closing-runs.ts',
+  'packages/codec/src/markdown/delimiter-budget.ts',
+  'packages/codec/src/references/resolve.ts',
+  'packages/codec/src/references/resolve-for-export.ts',
+] as const
 
 /** Where the OKF envelope's TypeScript lived, which stage 4 requires gone. */
 const OKF_TYPESCRIPT = [
@@ -307,7 +332,7 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   // the shim's member.
   {
     name: 'parseMarkdownBody',
-    stage: 2,
+    stage: 4,
     ts: { file: 'packages/codec/src/markdown/pipeline.ts', export: 'parseMarkdownBody' },
     rust: { file: 'crates/core/codec/src/markdown/mod.rs', fn: 'parse_markdown_body' },
     shim: {
@@ -315,10 +340,11 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       file: 'packages/core-wasm/src/index.ts',
       member: 'layoutSpatialCanvas',
     },
+    absorbed: { deleted: MARKDOWN_TYPESCRIPT },
   },
   {
     name: 'resolveReferences',
-    stage: 2,
+    stage: 4,
     ts: { file: 'packages/codec/src/references/resolve.ts', export: 'resolveReferences' },
     rust: { file: 'crates/core/codec/src/references/resolve.rs', fn: 'resolve_references' },
     shim: {
@@ -326,6 +352,7 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       file: 'packages/core-wasm/src/index.ts',
       member: 'layoutSpatialCanvas',
     },
+    absorbed: { deleted: MARKDOWN_TYPESCRIPT },
   },
   {
     name: 'parseOkf',
@@ -603,8 +630,25 @@ function checkRealm(
   return problems
 }
 
+/** Stage 4's fourth shape: no TypeScript at all, the file the entry names included. */
+function checkAbsorbed(
+  f: PortedFunction,
+  absorbed: NonNullable<PortedFunction['absorbed']>,
+  read: ReadFile,
+): string[] {
+  const gone = [f.ts.file, ...absorbed.deleted]
+  return gone
+    .filter((path) => read(path) !== undefined)
+    .map((path) => `${f.name}: stage 4 but ${path}, where the TypeScript lived, still exists`)
+}
+
 /** How the TypeScript export stands against the entry's stage. */
 function checkTsExport(f: PortedFunction, read: ReadFile): string[] {
+  if (f.absorbed !== undefined) {
+    return f.stage === 4
+      ? checkAbsorbed(f, f.absorbed, read)
+      : [`${f.name}: an absorbed function is stage 4's shape, not stage ${f.stage}'s`]
+  }
   const tsText = read(f.ts.file)
   if (tsText === undefined) return [`${f.name}: ${f.ts.file} does not exist`]
   const file = parseSource(f.ts.file, tsText, false)

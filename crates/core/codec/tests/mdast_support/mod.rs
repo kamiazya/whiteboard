@@ -1,5 +1,4 @@
-//! A model tree as the canonical text the TypeScript recorders digest
-//! (`packages/codec/src/test-utils/mdast-oracle/oracle.ts`'s `canonical`):
+//! A model tree as the canonical text the TypeScript recorders digested:
 //! JSON with every object's keys sorted and nothing absent written. The
 //! recorded trees are written the same way, so a tree and a recording compare
 //! as text and a difference reads as one.

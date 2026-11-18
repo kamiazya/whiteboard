@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "license": "Apache-2.0",
-  "description": "Single-document codec: OKF-Markdown + JSON Canvas serialize/parse and a remark-based markdown pipeline. Shared layer — no node:*, DOM, inversify, or loro-crdt.",
+  "description": "Single-document codec: OKF-Markdown and JSON Canvas parse/serialize through the Rust core, and the reference grammar's scanner, writer and rewrite. Shared layer — no node:*, DOM, inversify, or loro-crdt.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -25,16 +25,10 @@
   "dependencies": {
     "@kamiazya/whiteboard-model": "workspace:*",
     "zod": "catalog:",
-    "unified": "catalog:",
-    "remark-parse": "catalog:",
-    "remark-stringify": "catalog:",
-    "remark-gfm": "catalog:",
-    "remark-math": "catalog:",
     "yaml": "catalog:"
   },
   "devDependencies": {
     "@kamiazya/whiteboard-core-wasm": "workspace:*",
-    "micromark-util-types": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

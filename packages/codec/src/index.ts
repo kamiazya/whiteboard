@@ -1,5 +1,3 @@
-export { normalizeMdast } from './markdown/normalize.js'
-export { parseMarkdownBody } from './markdown/pipeline.js'
 export { hasOkfFrontmatter } from './okf/has-frontmatter.js'
 export type { OkfCore } from './okf/okf-core.js'
 export {
@@ -14,9 +12,8 @@ export type {
   OkfMarkdownFrontmatter,
 } from './okf/schema.js'
 export { okfMarkdownFrontmatterSchema } from './okf/schema.js'
+export type { AliasResolver } from './references/alias-resolver.js'
 export { documentReferenceMarkup, referenceMarkup } from './references/markup.js'
-export type { AliasResolver } from './references/resolve.js'
-export { resolveReferences } from './references/resolve.js'
 export {
   type DocumentMove,
   movesForPathChange,

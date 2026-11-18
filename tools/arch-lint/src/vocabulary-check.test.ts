@@ -179,7 +179,7 @@ const BANNED = [
       'docs/tutorials/getting-started.md',
       // The rule this test is the executable half of. It is the one file that
       // HAS to spell the retired words, because naming them is how it retires
-      // them — the same reason `resolve.test.ts` still writes `[[canvas:…]]`.
+      // them — the same reason the codec crate's `crates/core/codec/tests/references_examples.rs` still writes `[[canvas:…]]`.
       '.claude/rules/vocabulary.md',
     ],
   },

@@ -47,15 +47,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   },
   '@kamiazya/whiteboard-codec': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
-    allowedThirdParty: [
-      'zod',
-      'unified',
-      'remark-parse',
-      'remark-stringify',
-      'remark-gfm',
-      'remark-math',
-      'yaml',
-    ],
+    allowedThirdParty: ['zod', 'yaml'],
   },
   '@kamiazya/whiteboard-scene': {
     // The scene vocabulary and the renderer/plugin contract. Types only, and

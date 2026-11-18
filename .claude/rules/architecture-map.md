@@ -5,7 +5,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | Package | Role | Checked dependencies |
 |---|---|---|
 | `packages/model` | Zod schemas for the whiteboard document model (single source of truth) | zod only |
-| `packages/codec` | OKF Markdown / JSON Canvas serialize+parse, remark pipeline | model, remark, unified, yaml, zod |
+| `packages/codec` | OKF Markdown / JSON Canvas serialize+parse, the reference grammar | model, yaml, zod |
 | `packages/scene` | the scene VOCABULARY and the renderer/plugin contract — what a laid-out document is, and the shape a plugin contributes. Types only; it exists for its position, below both sides | model, facet-engine |
 | `packages/canvas-render` | the SVG backend, sceneDigest, tidy, hit testing and the render theme layer (ADR-0030), plus the requests a root asks the Rust layout core and the answers it reads back (ADR-0054) — the scene vocabulary is `scene`'s | model, codec, scene, plugin-visual, facet-engine, zod, lowlight, highlight.js |
 | `packages/ports` | store/sync port contracts + Symbol `TOKENS` | model, zod |

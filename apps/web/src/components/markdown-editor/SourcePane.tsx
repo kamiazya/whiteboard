@@ -289,9 +289,9 @@ export function SourcePane({
     const state = EditorState.create({
       doc: value,
       extensions: [
-        // GFM, because the preview pane parses through codec's
-        // pipeline (`remark-parse` + `remark-gfm` + `remark-math`) and
-        // `markdown()`'s default base is plain CommonMark. Left unmatched,
+        // GFM, because the preview pane parses through the core's CommonMark,
+        // GFM and math parser and `markdown()`'s default base is plain
+        // CommonMark. Left unmatched,
         // the two panes disagree about what the document even IS: a
         // `~~strikethrough~~` or a table renders in the preview while
         // staying unrecognized, and therefore unstyled, in the source.

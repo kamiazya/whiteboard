@@ -46,7 +46,7 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: Wh
     count: 1,
     why: 'says the flow is gone, or what a migration drops',
   },
-  'apps/web/src/components/markdown-editor/editor-verbs.property.test.ts': {
+  'apps/web/src/components/markdown-editor/editor-verbs.property.rust.test.ts': {
     count: 1,
     why: 'ordinary English',
   },

@@ -121,7 +121,8 @@ a later sweep does not "fix" them.
   sbom/import guards proving the old deps stay gone, and history in ADRs.
 - **User-visible copy** ("New canvas", "Canvas actions"). What the product
   calls a thing to its users is a product decision this rule does not reach.
-- **Assertions ABOUT the old word.** `resolve.test.ts` still writes
+- **Assertions ABOUT the old word.**
+  `crates/core/codec/tests/references_examples.rs` still writes
   `[[canvas:<ULID>]]` — it exists to prove that spelling has no meaning left.
   Rewriting it inverts what it says.
 - **Migrations, their fixtures, and the ADRs.** Each names the shape as it

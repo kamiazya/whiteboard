@@ -45,11 +45,11 @@
  * that, so the run still checks the string the parser was given.
  */
 import { EditorSelection, EditorState } from '@codemirror/state'
-import { normalizeMdast, parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
+import { parseMarkdownModel } from '../../test-utils/markdown-model.js'
 import {
   cycleHeadingLevel,
   type MarkdownVerbId,
@@ -71,15 +71,15 @@ const VERB_COVERAGE = {
   'ordered-list': 'covered',
   'toggle-task': 'covered',
   outdent:
-    'not modelled: its meaning comes from the lines above; list-nesting.model.property.test.ts',
+    'not modelled: its meaning comes from the lines above; list-nesting.model.property.rust.test.ts',
   indent:
-    'not modelled: its meaning comes from the lines above; list-nesting.model.property.test.ts',
+    'not modelled: its meaning comes from the lines above; list-nesting.model.property.rust.test.ts',
   'code-block':
-    'not modelled: takes the caret into the fence, where what a verb means is undecided; B1-B3 in editor-verbs.property.test.ts',
+    'not modelled: takes the caret into the fence, where what a verb means is undecided; B1-B3 in editor-verbs.property.rust.test.ts',
   image:
     'not modelled: writes nothing until the keeper has stored a file; image-markup.test.ts and note-image.browser.test.tsx',
   table:
-    'not modelled: takes the caret into a cell, where what a verb means is undecided; B1 and B3 in editor-verbs.property.test.ts',
+    'not modelled: takes the caret into a cell, where what a verb means is undecided; B1 and B3 in editor-verbs.property.rust.test.ts',
 } satisfies Record<MarkdownVerbId, SurfaceCoverage>
 
 const drives = emptyTally(VERB_COVERAGE)
@@ -236,7 +236,7 @@ function observeBlock(block: Node): Shape {
 }
 
 function observe(doc: string): Shape[] {
-  const root = normalizeMdast(parseMarkdownBody(doc)) as unknown as Node
+  const root = parseMarkdownModel(doc) as unknown as Node
   return (root.children ?? []).map(observeBlock)
 }
 

@@ -136,5 +136,5 @@ surface holds is evidence the fixture missed, never good news.
 set, its gesture events, its keyboard catalog, its verbs), are
 `.claude/rules/coverage-ledger.md` — path-scoped to `apps/web/**` and `packages/*/src/**`, so it
 loads itself when you are in those files. Worked examples: `editor-state.property.test.ts` (three
-union ledgers), `editor-verbs.property.test.ts` (one), `editor-state-surface.test.ts` (the source
+union ledgers), `editor-verbs.property.rust.test.ts` (one), `editor-state-surface.test.ts` (the source
 scan).

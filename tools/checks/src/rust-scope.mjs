@@ -52,6 +52,14 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/xml-escape.ts',
     // The bundled plugin's manifest, which the Rust crate embeds and loads.
     'packages/plugin-visual/src/visual.manifest.json',
+    // The editor and reference tests held to the core's markdown parse (web-rust).
+    'apps/web/vitest.rust.config.ts',
+    'apps/web/vitest.markdown-model.setup.ts',
+    'apps/web/src/test-utils/markdown-model.ts',
+    'apps/web/src/lib/link-target.ts',
+    'apps/web/src/lib/link-entries.ts',
+    'apps/web/src/lib/link-target.roundtrip.rust.test.ts',
+    'apps/web/src/lib/reference-survival.rust.test.ts',
   ],
   trees: [
     '.cargo',
@@ -97,12 +105,12 @@ export const RUST_SCOPE = {
     // the Rust markdown and codec crates and by codec-node.
     'packages/codec/src/markdown/oracle',
     'packages/codec/src/references/oracle',
-    'packages/codec/src/test-utils/mdast-oracle',
-    'packages/codec/src/test-utils/parse-body-oracle',
     'packages/codec/src/test-utils/scan-oracle',
     // The bundled plugin's asset tables, which the Rust crate embeds, and the
     // facet-write recording it replays.
     'packages/plugin-visual/src/assets',
     'packages/plugin-visual/src/oracle',
+    // The markdown editor's verbs and the property tests that read them against the core's parse.
+    'apps/web/src/components/markdown-editor',
   ],
 }

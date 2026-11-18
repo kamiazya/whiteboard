@@ -115,6 +115,14 @@ export const PROJECTS_RUN_ELSEWHERE = {
     mechanism: 'flag',
     marker: '--project=canvas-render-rust',
   },
+  // The editor's property tests and the reference tests hold their reading of a
+  // markdown text to the Rust core's parse, an `oracle-surface` export: the rust
+  // job, after the oracle build.
+  'apps/web/vitest.rust.config.ts': {
+    job: 'rust',
+    mechanism: 'flag',
+    marker: '--project=web-rust',
+  },
   // The core-wasm shim over the staged artifact: runs in the rust job after
   // the wasm build and `stage:wasm`, the only job that has the artifact.
   'packages/core-wasm/vitest.rust.config.ts': {

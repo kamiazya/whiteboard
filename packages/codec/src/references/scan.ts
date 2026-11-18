@@ -1,8 +1,10 @@
 /**
- * The reference GRAMMAR, shared by the two consumers that must agree on it:
- * `resolveReferences` (turning matches into mdast wikiLink/embed nodes for
- * rendering) and reference indexing (finding which documents a body points
- * at). One scanner, or the index would report links the reader never draws.
+ * The reference GRAMMAR, shared by the consumers that must agree on it: the
+ * core's resolution of matches into mdast wikiLink/embed nodes for rendering
+ * (`crates/core/codec`'s `resolve_references`, held to this scanner by a
+ * recorded oracle) and reference indexing (finding which documents a body
+ * points at). One grammar, or the index would report links the reader never
+ * draws.
  */
 export interface ReferenceMatch {
   /** Index of the match start (the `!` when present, otherwise the first `[`). */

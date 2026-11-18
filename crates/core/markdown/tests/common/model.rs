@@ -1,5 +1,4 @@
-//! A markdown-rs tree as the model tree the TypeScript hands the layout: what
-//! `fromRemarkRoot` and `mdastRootSchema` make of remark's, written as the
+//! A markdown-rs tree as the model tree the layout reads, written as the
 //! canonical text the recorded oracle digests.
 //!
 //! Kept beside the oracle test rather than in the crate: nothing outside the

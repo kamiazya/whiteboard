@@ -1176,6 +1176,10 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm exec vitest run --project=canvas-render-rust
 
+      - name: Editor and reference tests against the core's markdown parse (web-rust)
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm exec vitest run --project=web-rust
+
       # The core-wasm shim over the staged artifact: its hand-written glue
       # declaration held to the generated one, and its own tests run against
       # the real instance.

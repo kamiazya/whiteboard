@@ -3,13 +3,13 @@
 // only pins one half of that, and the half that matters is whether the
 // reference survives the reader — a single `]` in an alias produced a string
 // that looked right and resolved to nothing. So this test runs what
-// `linkMarkupFor` emits through the real parser and reference resolver, and
+// `linkMarkupFor` emits through the core's parser and reference resolver, and
 // asserts the result is exactly one link with no literal remainder.
 //
 // It lives here, not in codec: apps/web may depend on codec, and the reverse
 // import would be an architecture violation.
-import { parseMarkdownBody, resolveReferences } from '@kamiazya/whiteboard-codec'
 import { describe, expect, it } from 'vitest'
+import { parseMarkdownModel } from '../test-utils/markdown-model.js'
 import { type LinkTarget, linkMarkupFor } from './link-target.js'
 
 const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -23,7 +23,7 @@ const target: LinkTarget = {
 const resolver = (alias: string) => (alias === 'reviews/weekly' ? ID : null)
 
 function nodeTypesFor(markup: string): string[] {
-  const root = resolveReferences(parseMarkdownBody(markup), resolver)
+  const root = parseMarkdownModel(markup, resolver)
   const paragraph = root.children[0] as { children: { type: string }[] }
   return paragraph.children.map((child) => child.type)
 }

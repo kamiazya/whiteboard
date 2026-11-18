@@ -1,4 +1,5 @@
-//! A parsed body's references resolved (`resolve.ts`'s `resolveReferences`).
+//! A parsed body's references resolved, held to the answers the TypeScript
+//! resolver recorded (`packages/codec/src/references/oracle/parse-body.jsonl`).
 
 use std::collections::BTreeMap;
 
@@ -122,8 +123,8 @@ fn table_row(row: &TableRow, aliases: &BTreeMap<String, String>) -> TableRow {
     TableRow { children: row.children.iter().map(cell).collect() }
 }
 
-/// `root` with every `[[…]]`/`![[…]]` in its text resolved through `aliases`
-/// (`resolveReferences`). A `[[<ULID>]]` resolves with no table; a reference
+/// `root` with every `[[…]]`/`![[…]]` in its text resolved through `aliases`.
+/// A `[[<ULID>]]` resolves with no table; a reference
 /// that does not resolve stays literal text, so a link this version cannot
 /// honour is visible rather than missing. Code, math, HTML and definitions are
 /// not text a reference is read from.
