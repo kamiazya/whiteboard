@@ -198,7 +198,12 @@ describe('the popup under the app theme', () => {
       expect(glyph).not.toBeNull()
       // Inside the row, before the label — the emoji rows' character column.
       expect(row.firstElementChild?.nextElementSibling?.contains(glyph)).toBe(true)
-      expect(glyph.getAttribute('stroke')).toBe('currentColor')
+      // The core's own picture of a one-icon note, framed on the icon: the
+      // body strokes it in currentColor, so it follows the row's colour.
+      expect(glyph.querySelector('use')?.getAttribute('href')).toBe('#wb-icon-star')
+      expect(glyph.querySelector('[stroke="currentColor"]')).not.toBeNull()
+      const box = glyph.getBoundingClientRect()
+      expect([box.width, box.height]).toEqual([16, 16])
     } finally {
       themed.destroy()
       host.remove()
