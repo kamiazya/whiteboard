@@ -29,7 +29,6 @@ use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::typeset::{
     DiagramRenderer, EmbedResolver, MathRenderer, select_markdown_section,
 };
-use whiteboard_codec::markdown::parse_markdown_block_lines;
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::mdast::Root;
@@ -96,12 +95,19 @@ fn layout_note(request: &MarkdownRequest, note: &Note, host: Option<&dyn Host>) 
     })
 }
 
-/// The root the note draws: its whole body, or the section its heading names.
-fn root_of(body: &str, note: &Note, host: &WireHost<'_>) -> Result<Root, String> {
-    let whole = host.parse_body(body).unwrap_or_else(|_| literal_root(body));
+/// The root the note draws, from the body's one parse, with the start line of
+/// each of its top-level blocks: the whole body, or the section its heading
+/// names. A body past the parser's bounds is one literal paragraph at line 1.
+/// A section is drawn from part of the body, so no line of the whole stands
+/// for one of its blocks and it has none.
+fn root_of(body: &str, note: &Note, host: &WireHost<'_>) -> Result<(Root, Vec<usize>), String> {
+    let (whole, lines) =
+        host.parse_body_with_lines(body).unwrap_or_else(|_| (literal_root(body), vec![1]));
     match &note.section {
-        None => Ok(whole),
-        Some(heading) => select_markdown_section(&whole, heading).ok_or_else(|| missing("section")),
+        None => Ok((whole, lines)),
+        Some(heading) => select_markdown_section(&whole, heading)
+            .map(|root| (root, Vec::new()))
+            .ok_or_else(|| missing("section")),
     }
 }
 
@@ -115,8 +121,8 @@ fn lay_out_note(
     let empty = ReferenceWire::default();
     let host = WireHost::new(note.references.as_ref().unwrap_or(&empty), Expansion::Every(false))
         .with_code_tokens(&note.code_tokens);
-    let root = match root_of(&request.body, note, &host) {
-        Ok(root) => root,
+    let (root, lines) = match root_of(&request.body, note, &host) {
+        Ok(parsed) => parsed,
         Err(answer) => return answer,
     };
     let mode = if note.dark { SpatialThemeMode::Dark } else { SpatialThemeMode::Light };
@@ -153,26 +159,17 @@ fn lay_out_note(
         embed_path: &[],
     };
     let scene = layout_markdown_document(&root, request.max_width, &options);
-    answered(request, note, scene, &host, fragments.as_ref())
+    answered(note, scene, &lines, &host, fragments.as_ref())
 }
 
-/// The note's laid-out answer: its scene, and the line each top-level block of
-/// the body starts on. Those are the whole body's blocks, so a section, drawn
-/// from part of it, has none to align with its scene.
+/// The note's laid-out answer: its scene and the lines its blocks start on.
 fn answered(
-    request: &MarkdownRequest,
     note: &Note,
     scene: Scene,
+    lines: &[usize],
     host: &WireHost<'_>,
     fragments: Option<&FragmentTable<'_>>,
 ) -> String {
-    let lines =
-        if note.section.is_none() { parse_markdown_block_lines(&request.body) } else { Vec::new() };
-    outcome(
-        &LaidOut { scene, anchors: Vec::new() },
-        Some(&lines),
-        host,
-        fragments,
-        note.svg.as_ref(),
-    )
+    let laid = LaidOut { scene, anchors: Vec::new() };
+    outcome(&laid, Some(lines), host, fragments, note.svg.as_ref())
 }

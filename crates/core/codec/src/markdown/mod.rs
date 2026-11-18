@@ -24,24 +24,33 @@ pub fn parse_markdown_body(text: &str) -> Result<Root, Refusal> {
     whiteboard_markdown::parse(text).map(|tree| convert::root(&tree))
 }
 
-/// The 1-based start line of each top-level block of `text`, in document
-/// order, index-aligned with [`parse_markdown_body`]'s root children
-/// (`parseMarkdownBlockLines`). Source positions never enter the model; this
-/// is the one place they surface, for a consumer that correlates source lines
-/// with laid-out blocks (the preview's scroll sync). A block the parser gave no
-/// position takes its index order; a text past the parser's bounds is one
-/// block at line 1, as the layout draws it.
-#[must_use]
-pub fn parse_markdown_block_lines(text: &str) -> Vec<usize> {
-    let Ok(tree) = whiteboard_markdown::parse(text) else {
-        return vec![1];
-    };
+/// [`parse_markdown_body`]'s tree with the 1-based start line of each of its
+/// top-level blocks, from the ONE parse (`parseMarkdownBlockLines`): index-aligned
+/// with the root's children. Source positions never enter the model; this is the
+/// one place they surface, for a consumer that correlates source lines with
+/// laid-out blocks (the preview's scroll sync). A block the parser gave no
+/// position takes its index order.
+///
+/// # Errors
+///
+/// As [`parse_markdown_body`].
+pub fn parse_markdown_body_with_lines(text: &str) -> Result<(Root, Vec<usize>), Refusal> {
+    let tree = whiteboard_markdown::parse(text)?;
     let blocks = tree.children().map(Vec::as_slice).unwrap_or_default();
-    blocks
+    let lines = blocks
         .iter()
         .enumerate()
         .map(|(index, block)| {
             block.position().map_or_else(|| index.saturating_add(1), |p| p.start.line)
         })
-        .collect()
+        .collect();
+    Ok((convert::root(&tree), lines))
+}
+
+/// The start lines of `text`'s top-level blocks, as
+/// [`parse_markdown_body_with_lines`] answers them; a text past the parser's
+/// bounds is one block at line 1, as the layout draws it.
+#[must_use]
+pub fn parse_markdown_block_lines(text: &str) -> Vec<usize> {
+    parse_markdown_body_with_lines(text).map_or_else(|_| vec![1], |(_, lines)| lines)
 }

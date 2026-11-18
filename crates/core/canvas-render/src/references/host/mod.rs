@@ -4,7 +4,7 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
-use whiteboard_codec::markdown::parse_markdown_body;
+use whiteboard_codec::markdown::{parse_markdown_body, parse_markdown_body_with_lines};
 use whiteboard_codec::references::resolve_references;
 use whiteboard_det::utf16::is_js_whitespace;
 use whiteboard_model::mdast::Root;
@@ -54,6 +54,17 @@ fn is_blank(text: &str) -> bool {
 }
 
 impl<'w> WireHost<'w> {
+    /// `parse_body`'s tree with the start line of each top-level block, from
+    /// the one parse.
+    ///
+    /// # Errors
+    ///
+    /// [`ParseFailed`] for a body past the parser's bounds.
+    pub fn parse_body_with_lines(&self, text: &str) -> Result<(Root, Vec<usize>), ParseFailed> {
+        let (root, lines) = parse_markdown_body_with_lines(text).map_err(|_| ParseFailed)?;
+        Ok((resolve_references(&root, &self.aliases), lines))
+    }
+
     /// The host over `wire`, drawing a file node's resolved canvas open when
     /// `expand` (the caller's policy, settled ahead) names it.
     #[must_use]
@@ -169,8 +180,7 @@ impl<'w> WireHost<'w> {
 
 impl ComposeHost for WireHost<'_> {
     fn parse_body(&self, text: &str) -> Result<Root, ParseFailed> {
-        let root = parse_markdown_body(text).map_err(|_| ParseFailed)?;
-        Ok(resolve_references(&root, &self.aliases))
+        self.parse_body_with_lines(text).map(|(root, _)| root)
     }
 
     fn resolve_reference(&self, reference: &str) -> Option<ResolvedReference> {
