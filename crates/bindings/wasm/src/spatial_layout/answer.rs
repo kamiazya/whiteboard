@@ -13,6 +13,12 @@ use super::fragments::Ask;
 use super::request::SvgAsk;
 use super::svg::{Drawn, MAX_SVG_BYTES, Unrendered, render};
 
+/// A line as the JSON number it is spelled as: the parser's bounds keep it far
+/// below the integers an `f64` holds exactly.
+fn line_number(line: usize) -> f64 {
+    f64::from(u32::try_from(line).unwrap_or(u32::MAX))
+}
+
 fn text(value: &str) -> Tree {
     Tree::Text(value.to_owned())
 }
@@ -151,19 +157,25 @@ pub(super) fn svg_item(scene: &Scene, ask: &SvgAsk, max: usize) -> Result<Tree, 
 /// the request carried a table and the SVG it asked for last, or refused when
 /// it holds a number JSON cannot spell, which no canvas the model admits holds
 /// (its coordinates are safe integers), or an SVG past [`MAX_SVG_BYTES`].
+///
+/// The third element is the canvas's anchors as `[id, pair]` rows. A note's
+/// answer sends `block_lines` there instead (its anchors are always none): the
+/// 1-based line each top-level block starts on, as bare numbers.
 pub(super) fn laid_out(
     laid: &LaidOut,
+    block_lines: Option<&[usize]>,
     degradations: &[Degradation],
     asked: Option<Vec<Ask>>,
     svg: Option<&SvgAsk>,
 ) -> String {
-    let anchors = laid.anchors.iter().map(|(id, pair)| Tree::List(vec![text(id), anchor(pair)]));
-    let mut items = vec![
-        text("ok"),
-        scene_tree(&laid.scene),
-        Tree::List(anchors.collect()),
-        events(degradations),
-    ];
+    let anchors = match block_lines {
+        Some(lines) => lines.iter().map(|&line| Tree::Number(line_number(line))).collect(),
+        None => {
+            laid.anchors.iter().map(|(id, pair)| Tree::List(vec![text(id), anchor(pair)])).collect()
+        }
+    };
+    let mut items =
+        vec![text("ok"), scene_tree(&laid.scene), Tree::List(anchors), events(degradations)];
     items.extend(asked.map(|asked| Tree::List(asked.iter().map(ask).collect())));
     if let Some(svg) = svg {
         match svg_item(&laid.scene, svg, MAX_SVG_BYTES) {

@@ -126,14 +126,17 @@ export function layoutMarkdownDocumentPicture(
   return laid === undefined ? undefined : pictured(laid)
 }
 
-/** `layoutMarkdownDocumentPicture` answered as the keyed projection. */
+/**
+ * `layoutMarkdownDocumentPicture` answered as the keyed projection, with the
+ * line each top-level block starts on (`layoutMarkdownDocumentBlocks`).
+ */
 export function layoutMarkdownDocumentKeyedPicture(
   body: string,
   options: MarkdownDocumentOptions,
   svg: CorePictureAsk,
-): KeyedPicture | undefined {
+): (KeyedPicture & { readonly blockLines: readonly number[] }) | undefined {
   const laid = noteThroughCore(body, options, keyedAsk(svg))
-  return laid === undefined ? undefined : keyedPictured(laid)
+  return laid === undefined ? undefined : { ...keyedPictured(laid), blockLines: laid.blockLines }
 }
 
 /** `layoutCommentDocument`'s scene with its keyed projection, both from ONE core call. */

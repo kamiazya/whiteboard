@@ -9,8 +9,11 @@
 //! and a paragraph that is only an embed is set as prose), the fragment table,
 //! the fences' tokens, the `#Heading` whose section alone is drawn, and the
 //! surface whose content cache an embedded board's bodies read. Its answer is
-//! the canvas's `["ok", scene, [], degradations, asked?]`, the anchors always
-//! empty; a section the note does not hold answers `["missing", "section"]`.
+//! the canvas's `["ok", scene, lines, degradations, asked?]`, where `lines`
+//! takes the place of the anchors: the 1-based line each top-level block of the
+//! body starts on, index-aligned with the scene's nodes (none for a `section`,
+//! drawn from part of the body, nor for a comment). A section the note does not
+//! hold answers `["missing", "section"]`.
 //! A body past the parser's bounds draws its literal text as one paragraph
 //! (owner decision q81, D7a), and a request past its caps is refused.
 
@@ -30,7 +33,7 @@ use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::mdast::Root;
 use whiteboard_plugin_visual::render::StencilBadge;
-use whiteboard_scene::NodeDecoration;
+use whiteboard_scene::{NodeDecoration, Scene};
 
 use super::answer::{laid_out, missing, refused};
 use super::cache::Surface;
@@ -59,7 +62,7 @@ pub(super) fn layout_markdown(request: &MarkdownRequest, host: Option<&dyn Host>
                     .unwrap_or_else(|_| literal_root(&request.body));
                 let scene =
                     layout_comment_text(&root, request.max_width, *density, measure, &seams);
-                laid_out(&LaidOut { scene, anchors: Vec::new() }, &[], None, svg.as_ref())
+                laid_out(&LaidOut { scene, anchors: Vec::new() }, None, &[], None, svg.as_ref())
             })
         }
     }
@@ -92,12 +95,19 @@ fn layout_note(request: &MarkdownRequest, note: &Note, host: Option<&dyn Host>) 
     })
 }
 
-/// The root the note draws: its whole body, or the section its heading names.
-fn root_of(body: &str, note: &Note, host: &WireHost<'_>) -> Result<Root, String> {
-    let whole = host.parse_body(body).unwrap_or_else(|_| literal_root(body));
+/// The root the note draws, from the body's one parse, with the start line of
+/// each of its top-level blocks: the whole body, or the section its heading
+/// names. A body past the parser's bounds is one literal paragraph at line 1.
+/// A section is drawn from part of the body, so no line of the whole stands
+/// for one of its blocks and it has none.
+fn root_of(body: &str, note: &Note, host: &WireHost<'_>) -> Result<(Root, Vec<usize>), String> {
+    let (whole, lines) =
+        host.parse_body_with_lines(body).unwrap_or_else(|_| (literal_root(body), vec![1]));
     match &note.section {
-        None => Ok(whole),
-        Some(heading) => select_markdown_section(&whole, heading).ok_or_else(|| missing("section")),
+        None => Ok((whole, lines)),
+        Some(heading) => select_markdown_section(&whole, heading)
+            .map(|root| (root, Vec::new()))
+            .ok_or_else(|| missing("section")),
     }
 }
 
@@ -111,8 +121,8 @@ fn lay_out_note(
     let empty = ReferenceWire::default();
     let host = WireHost::new(note.references.as_ref().unwrap_or(&empty), Expansion::Every(false))
         .with_code_tokens(&note.code_tokens);
-    let root = match root_of(&request.body, note, &host) {
-        Ok(root) => root,
+    let (root, lines) = match root_of(&request.body, note, &host) {
+        Ok(parsed) => parsed,
         Err(answer) => return answer,
     };
     let mode = if note.dark { SpatialThemeMode::Dark } else { SpatialThemeMode::Light };
@@ -149,5 +159,17 @@ fn lay_out_note(
         embed_path: &[],
     };
     let scene = layout_markdown_document(&root, request.max_width, &options);
-    outcome(&LaidOut { scene, anchors: Vec::new() }, &host, fragments.as_ref(), note.svg.as_ref())
+    answered(note, scene, &lines, &host, fragments.as_ref())
+}
+
+/// The note's laid-out answer: its scene and the lines its blocks start on.
+fn answered(
+    note: &Note,
+    scene: Scene,
+    lines: &[usize],
+    host: &WireHost<'_>,
+    fragments: Option<&FragmentTable<'_>>,
+) -> String {
+    let laid = LaidOut { scene, anchors: Vec::new() };
+    outcome(&laid, Some(lines), host, fragments, note.svg.as_ref())
 }

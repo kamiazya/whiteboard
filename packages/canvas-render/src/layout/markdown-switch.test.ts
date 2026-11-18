@@ -16,6 +16,7 @@ import { CoreUnaskable } from './canvas-switch.js'
 import {
   layoutCommentDocument,
   layoutMarkdownDocument,
+  layoutMarkdownDocumentBlocks,
   type MarkdownDocumentOptions,
   markdownLayoutRequest,
 } from './markdown-switch.js'
@@ -54,7 +55,7 @@ function coreOf(answer: Answering) {
   return { core, requests, highlighters, measurers }
 }
 
-const agreeing: Answering = () => ({ scene: reference, degradations: [] })
+const agreeing: Answering = () => ({ scene: reference, blockLines: [], degradations: [] })
 
 function run(answer: Answering, options: Partial<MarkdownDocumentOptions> = {}, text = body) {
   const { core, requests, highlighters } = coreOf(answer)
@@ -62,10 +63,30 @@ function run(answer: Answering, options: Partial<MarkdownDocumentOptions> = {}, 
   return { scene, requests, highlighters }
 }
 
+describe('the lines a note answers beside its scene', () => {
+  it('hands the core answer lines through with the scene, and none for a refusal', () => {
+    const lines = [1, 4]
+    const { core } = coreOf(() => ({ scene: reference, blockLines: lines, degradations: [] }))
+    expect(layoutMarkdownDocumentBlocks(body, { ...base, core })).toEqual({
+      scene: reference,
+      blockLines: lines,
+    })
+    const refused = coreOf(() => ({ refused: { code: 'input-too-large', reason: 'bodies' } }))
+    expect(layoutMarkdownDocumentBlocks(body, { ...base, core: refused.core })?.blockLines).toEqual(
+      [],
+    )
+    expect(layoutMarkdownDocumentBlocks(body, { ...base, section: 'Nowhere' })).toBeUndefined()
+  })
+})
+
 describe('a markdown note through the core', () => {
   it('answers with the core, handing it the default highlighter', () => {
     const moved = { nodes: reference.nodes.slice(1) }
-    const { scene, requests, highlighters } = run(() => ({ scene: moved, degradations: [] }))
+    const { scene, requests, highlighters } = run(() => ({
+      scene: moved,
+      blockLines: [],
+      degradations: [],
+    }))
     expect(scene).toBe(moved)
     expect(requests).toEqual([
       {
@@ -128,6 +149,7 @@ describe('a markdown note through the core', () => {
     run(
       () => ({
         scene: reference,
+        blockLines: [],
         degradations: [],
         fragmentsAsked: [{ kind: 'math', value: 'x^2' }],
       }),
@@ -184,7 +206,10 @@ describe("a comment's prose through the core", () => {
   const sceneOf = { nodes: [] }
 
   it("answers with the core, handing it a comment's request", () => {
-    const { scene, requests } = lay(() => ({ scene: sceneOf, degradations: [] }), 'compact')
+    const { scene, requests } = lay(
+      () => ({ scene: sceneOf, blockLines: [], degradations: [] }),
+      'compact',
+    )
     expect(scene).toBe(sceneOf)
     expect(requests).toEqual([
       {
@@ -232,7 +257,11 @@ describe("a comment's prose through the core", () => {
   })
 
   it('names a measurer nobody named as the host, and hands the core that measurer', () => {
-    const { core, requests, measurers } = coreOf(() => ({ scene: sceneOf, degradations: [] }))
+    const { core, requests, measurers } = coreOf(() => ({
+      scene: sceneOf,
+      blockLines: [],
+      degradations: [],
+    }))
     const unnamed = (...args: Parameters<typeof measure>) => measure(...args)
     layoutCommentDocument(prose, { measure: unnamed, maxWidth: 260, core })
     expect(requests).toHaveLength(1)

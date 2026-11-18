@@ -32,6 +32,9 @@ const CORE_SCENE = {
   ],
 } as unknown as Scene
 
+/** The line the core says the one block starts on: no parse of this body would answer 7. */
+const CORE_LINES = [7]
+
 /** A core recording every note it is handed. */
 function recordingCore() {
   const asked: MarkdownNoteRequest[] = []
@@ -42,6 +45,7 @@ function recordingCore() {
         if (request.kind === 'markdown') asked.push(request)
         return {
           scene: CORE_SCENE,
+          blockLines: CORE_LINES,
           degradations: [],
           ...fakePicture(request, '<text>the core drew this</text>'),
         }
@@ -81,6 +85,14 @@ describe('the preview pane lays its note out through the core', () => {
     expect(keyed.svg).not.toContain('from the core')
   })
 
+  it('anchors its blocks at the lines the core answered, never from a parse of its own', () => {
+    const { core } = recordingCore()
+    vi.mocked(currentLayoutCore).mockReturnValue(core)
+    const { anchors } = renderMarkdownPreview('# Title', { measure, maxWidth: 480 })
+    expect(anchors).toEqual([{ line: 7, y: 8 }])
+    expect(layoutMarkdownOutline('# Title', { measure, maxWidth: 480 }).anchors).toEqual(anchors)
+  })
+
   it('hands the core the references as their wire', () => {
     const { core, asked } = recordingCore()
     vi.mocked(currentLayoutCore).mockReturnValue(core)
@@ -100,6 +112,7 @@ describe('the preview pane lays its note out through the core', () => {
       markdown: {
         layoutMarkdown: (request) => ({
           scene: CORE_SCENE,
+          blockLines: [],
           degradations: [],
           fragmentsAsked: [{ kind: 'math', value: 'x' }],
           ...fakePicture(request, ''),

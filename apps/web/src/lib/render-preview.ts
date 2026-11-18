@@ -6,13 +6,12 @@ import type {
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   type KeyedSvgRender,
-  layoutMarkdownDocument,
+  layoutMarkdownDocumentBlocks,
   layoutMarkdownDocumentKeyedPicture,
   type MarkdownDocumentOptions,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import { hasLoadedFace } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
-import { parseMarkdownBlockLines } from '@kamiazya/whiteboard-codec'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { getAppLogger } from './app-logger.js'
 import { outlineBlocks } from './document-outline.js'
@@ -96,10 +95,9 @@ export { PREVIEW_PADDING_PX }
  * that would be a second renderer and would reintroduce the preview/export
  * drift this migration exists to remove.
  *
- * Total by construction: `parseMarkdownBody` ends in a Zod `.parse()` call
- * and can throw on a tree shape the schema rejects, so a malformed body
- * (e.g. mid-edit) degrades to an empty scene instead of crashing the editor
- * on a keystroke.
+ * Total by construction: a layout that throws (a core that is not there, an
+ * answer the shim refuses) degrades to an empty scene instead of crashing the
+ * editor on a keystroke.
  *
  * `fragments` comes from the host (useMarkdownFragments' table over the
  * async MathJax/mermaid engines), as data rather than as the
@@ -108,10 +106,9 @@ export { PREVIEW_PADDING_PX }
  *
  * The SVG plus per-block scroll-sync anchors from the SAME layout pass —
  * anchors derived from a second layout could disagree with what is
- * painted (fragment seams change block heights). Source lines come from
- * codec's position sidecar, index-aligned with the scene's
- * top-level nodes (both map `root.children` 1:1). Empty anchors (an
- * unparseable mid-edit body) tell the caller to keep its proportional
+ * painted (fragment seams change block heights). Source lines come from the
+ * same core answer as the scene, index-aligned with its top-level nodes. Empty
+ * anchors (a layout that failed) tell the caller to keep its proportional
  * fallback.
  */
 export function renderMarkdownPreview(
@@ -132,11 +129,11 @@ export function renderMarkdownPreview(
     const drawn = layoutMarkdownDocumentKeyedPicture(value, noteOptions(options), ask)
     // Undefined only for a `section`, which the preview never asks for.
     if (drawn !== undefined) {
-      const { scene, keyed } = drawn
+      const { scene, keyed, blockLines } = drawn
       const undrawn = undrawnRefusal(scene)
       return {
         keyed,
-        anchors: blockAnchors(value, scene),
+        anchors: blockAnchors(blockLines, scene),
         blocks: blockBoxes(scene),
         ...(undrawn === undefined ? {} : { undrawn }),
       }
@@ -186,8 +183,8 @@ export function layoutMarkdownOutline(
   value: string,
   options: Omit<RenderMarkdownPreviewOptions, 'background'>,
 ): Pick<RenderedMarkdownPreview, 'anchors' | 'blocks'> {
-  const scene = layoutMarkdownScene(value, options)
-  return { anchors: blockAnchors(value, scene), blocks: blockBoxes(scene) }
+  const { scene, blockLines } = layoutMarkdownScene(value, options)
+  return { anchors: blockAnchors(blockLines, scene), blocks: blockBoxes(scene) }
 }
 
 /** Top-level block boxes, shifted onto the SVG's pixel origin like anchors. */
@@ -205,14 +202,8 @@ function blockBoxes(scene: Scene): readonly RailBlock[] {
   }))
 }
 
-function blockAnchors(value: string, scene: Scene): readonly PreviewBlockAnchor[] {
+function blockAnchors(lines: readonly number[], scene: Scene): readonly PreviewBlockAnchor[] {
   if (scene.nodes.length === 0) return []
-  let lines: readonly number[]
-  try {
-    lines = parseMarkdownBlockLines(value)
-  } catch {
-    return []
-  }
   // The SVG's pixel origin is the padded viewBox top (the core
   // derives viewBox = bounds expanded by padding).
   const originY = sceneBounds(scene).y - PREVIEW_PADDING_PX
@@ -264,16 +255,18 @@ function noteOptions({
   }
 }
 
-/** The note's scene alone, for the rail, which draws no picture. */
+const EMPTY_NOTE = { scene: { nodes: [] }, blockLines: [] } as const
+
+/** The note's scene and block lines alone, for the rail, which draws no picture. */
 function layoutMarkdownScene(
   value: string,
   options: Omit<RenderMarkdownPreviewOptions, 'background'>,
-): Scene {
+): { readonly scene: Scene; readonly blockLines: readonly number[] } {
   try {
     // Undefined only for a `section`, which the rail never asks for.
-    return layoutMarkdownDocument(value, noteOptions(options)) ?? { nodes: [] }
+    return layoutMarkdownDocumentBlocks(value, noteOptions(options)) ?? EMPTY_NOTE
   } catch (error) {
     log.warn('markdown preview layout failed; rendering an empty scene', error)
-    return { nodes: [] }
+    return EMPTY_NOTE
   }
 }

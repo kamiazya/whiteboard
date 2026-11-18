@@ -75,6 +75,7 @@ const marked: MarkdownLayoutCore['layoutMarkdown'] = () => ({
       },
     ],
   } as never,
+  blockLines: [],
   degradations: [],
   svg: '<svg>from the core</svg>',
 })

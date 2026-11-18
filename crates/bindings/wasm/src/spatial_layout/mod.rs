@@ -308,7 +308,7 @@ fn lay_out(
 ) -> String {
     with_options(request, measure, surface, plugin, &mut |options, host, fragments| {
         let laid = compose_canvas::layout_spatial_canvas(&request.canvas, options);
-        outcome(&laid, host, fragments, request.svg.as_ref())
+        outcome(&laid, None, host, fragments, request.svg.as_ref())
     })
 }
 
@@ -363,11 +363,14 @@ fn with_options(
 /// What a layout through `host` and `fragments` answers, its SVG drawn when `svg` asks for one.
 fn outcome(
     laid: &LaidOut,
+    block_lines: Option<&[usize]>,
     host: &WireHost<'_>,
     fragments: Option<&FragmentTable<'_>>,
     svg: Option<&SvgAsk>,
 ) -> String {
-    let ok = || laid_out(laid, &host.degradations(), fragments.map(FragmentTable::asked), svg);
+    let ok = || {
+        laid_out(laid, block_lines, &host.degradations(), fragments.map(FragmentTable::asked), svg)
+    };
     settled(host, ok)
 }
 

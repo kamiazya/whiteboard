@@ -61,7 +61,11 @@ describe('the recorded mdast oracle', () => {
   }, () => {
     const parted = cases.find((c) => {
       const now = answer(c.t)
-      return now.h !== c.h || (withTree(c.i) && JSON.stringify(now.tree) !== JSON.stringify(c.m))
+      return (
+        now.h !== c.h ||
+        JSON.stringify(now.l) !== JSON.stringify(c.l) ||
+        (withTree(c.i) && JSON.stringify(now.tree) !== JSON.stringify(c.m))
+      )
     })
     expect(
       parted?.i,

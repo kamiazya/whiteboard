@@ -1,5 +1,5 @@
 import { mdastRootSchema } from '@kamiazya/whiteboard-model/mdast'
-import { parseMarkdownBody } from '../../markdown/pipeline.js'
+import { parseMarkdownBlockLines, parseMarkdownBody } from '../../markdown/pipeline.js'
 import { toWellFormed } from '../frontmatter-oracle/oracle.js'
 import { type Input, PAST_BOUND_PREFIX, RANDOM_COUNT, SEED } from './corpus.js'
 
@@ -14,10 +14,14 @@ import { type Input, PAST_BOUND_PREFIX, RANDOM_COUNT, SEED } from './corpus.js'
  * hand-written dialect cases hold the tree too, so a mismatch there reads as
  * a difference rather than as two hashes.
  *
+ * A case also holds `l`, what `parseMarkdownBlockLines` answers for it — the
+ * start line of each top-level block — which the Rust core's layout answer
+ * carries (`crates/core/codec/tests/markdown_block_lines_oracle.rs`).
+ *
  * A body is made well-formed first, as wasm-bindgen's string passing does it,
  * because JSON cannot spell a lone surrogate and a Rust `&str` cannot hold one.
  */
-export type Case = Input & { h: string; m?: unknown }
+export type Case = Input & { h: string; l: number[]; m?: unknown }
 
 /** Sets whose trees are recorded in full: small, and read by a person. */
 export const withTree = (id: string): boolean => /^(cm#|gfm#|d\d)/.test(id)
@@ -45,9 +49,14 @@ export function fnv64(text: string): string {
   return h.toString(16).padStart(16, '0')
 }
 
-export function answer(body: string): { h: string; tree: unknown } {
-  const tree = mdastRootSchema.parse(parseMarkdownBody(toWellFormed(body)))
-  return { h: fnv64(canonical(tree)), tree: JSON.parse(canonical(tree)) }
+export function answer(body: string): { h: string; l: number[]; tree: unknown } {
+  const text = toWellFormed(body)
+  const tree = mdastRootSchema.parse(parseMarkdownBody(text))
+  return {
+    h: fnv64(canonical(tree)),
+    l: parseMarkdownBlockLines(text),
+    tree: JSON.parse(canonical(tree)),
+  }
 }
 
 export type Meta = { kind: 'meta'; seed: number; random: number; pastBound: string }

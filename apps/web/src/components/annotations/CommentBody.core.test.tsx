@@ -38,6 +38,7 @@ function recordingCore() {
               } as never,
             ],
           },
+          blockLines: [],
           degradations: [],
           ...fakePicture(request, '<text>the core drew this</text>'),
         }

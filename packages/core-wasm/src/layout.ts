@@ -460,6 +460,13 @@ export type MarkdownLayoutRequest = LayoutRequest &
 export type MarkdownLayoutAnswer =
   | {
       readonly scene: Scene
+      /**
+       * The 1-based line each top-level block of the body starts on, index-aligned
+       * with the scene's nodes; none for a comment and for a `section`, which is
+       * drawn from part of the body. `[1]` for a body past the parser's bounds,
+       * which is drawn as one paragraph.
+       */
+      readonly blockLines: readonly number[]
       readonly degradations: readonly LayoutEvent[]
       /** For a request carrying `fragments`: what the table did not hold. */
       readonly fragmentsAsked?: readonly FragmentAsk[]
@@ -501,15 +508,24 @@ export function layoutMarkdown(
   return layoutWith(calls, request, markdownAnswerOf, hostMeasure, surface)
 }
 
-/** A markdown answer: a canvas's, its anchors always none, or a missing section. */
+const isBlockLines = (v: unknown): v is number[] =>
+  Array.isArray(v) && v.every((line) => Number.isInteger(line) && line >= 1)
+
+/**
+ * A markdown answer: a canvas's, with the block lines where the anchors would
+ * be (a markdown body has none), or a missing section.
+ */
 function markdownAnswerOf(parsed: unknown[], errors: LayoutErrors): MarkdownLayoutAnswer {
   if (parsed[0] === 'missing' && parsed[1] === 'section') return { missing: 'section' }
-  const laid = answerOf(parsed, errors)
+  const [kind, scene0, third, ...rest] = parsed
+  const blockLines = kind === 'ok' && isBlockLines(third) ? third : []
+  const laid = answerOf(blockLines.length > 0 ? [kind, scene0, [], ...rest] : parsed, errors)
   if ('refused' in laid) return laid
   if (laid.anchors.size > 0) throw errors.refused(OPERATION, 'malformed', 'answer')
   const { scene, degradations, fragmentsAsked, svg, keyed } = laid
   return {
     scene,
+    blockLines,
     degradations,
     ...(fragmentsAsked === undefined ? {} : { fragmentsAsked }),
     ...(svg === undefined ? {} : { svg }),

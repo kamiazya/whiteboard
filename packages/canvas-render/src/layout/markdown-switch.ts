@@ -103,7 +103,22 @@ export function layoutMarkdownDocument(
   body: string,
   options: MarkdownDocumentOptions,
 ): Scene | undefined {
-  return noteThroughCore(body, options, undefined)?.scene
+  return layoutMarkdownDocumentBlocks(body, options)?.scene
+}
+
+/**
+ * `layoutMarkdownDocument`'s scene with the line each top-level block starts
+ * on, from the same core call: index-aligned with the scene's top-level nodes,
+ * so a consumer correlating source lines with laid-out blocks reads them from
+ * the layout it drew rather than from a parse of its own. None for a refusal
+ * (the scene is its notice) and for a `section`.
+ */
+export function layoutMarkdownDocumentBlocks(
+  body: string,
+  options: MarkdownDocumentOptions,
+): { readonly scene: Scene; readonly blockLines: readonly number[] } | undefined {
+  const laid = noteThroughCore(body, options, undefined)
+  return laid === undefined ? undefined : { scene: laid.scene, blockLines: laid.blockLines }
 }
 
 /**
@@ -115,7 +130,7 @@ export function noteThroughCore(
   body: string,
   options: MarkdownDocumentOptions,
   svg: CoreSvgAsk | undefined,
-): ({ readonly scene: Scene } & MaybePictured) | undefined {
+): ({ readonly scene: Scene; readonly blockLines: readonly number[] } & MaybePictured) | undefined {
   const request = markdownLayoutRequest(body, options)
   const answer = options.core.markdown.layoutMarkdown(
     svg === undefined ? request : { ...request, svg },
@@ -130,14 +145,16 @@ export function noteThroughCore(
       mode: options.mode ?? 'light',
       maxWidth: options.maxWidth,
     }
-    return refusalThroughCore(options.core, refusal, notice, svg)
+    return { ...refusalThroughCore(options.core, refusal, notice, svg), blockLines: [] }
   }
   if ('missing' in answer) return undefined
-  const { scene, fragmentsAsked } = answer
+  const { scene, blockLines, fragmentsAsked } = answer
   if (fragmentsAsked !== undefined && fragmentsAsked.length > 0) {
     options.onFragmentsAsked?.(fragmentsAsked)
   }
-  return svg === undefined ? { scene } : { scene, ...askedPicture(svg, answer) }
+  return svg === undefined
+    ? { scene, blockLines }
+    : { scene, blockLines, ...askedPicture(svg, answer) }
 }
 
 /**
