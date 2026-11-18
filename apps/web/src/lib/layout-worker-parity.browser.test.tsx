@@ -209,11 +209,8 @@ it('draws what a text node embeds and what a file node shows from one wire on bo
 }, 60_000)
 
 it('parses markdown itself — no pre-parsed bodies cross the wire', async () => {
-  // The named character reference is the load-bearing detail: decoding it
-  // walks decode-named-character-reference, whose `browser` entry touches
-  // `document` at module top level and killed any worker importing remark
-  // until the vite alias pinned the worker-safe entry. A worker that cannot
-  // parse — or cannot even evaluate its chunk — fails this case loudly.
+  // A worker that cannot parse — or cannot even evaluate its chunk — fails
+  // this case loudly.
   expect(await ensureViewerFontLoaded()).toBe('loaded')
   const withMarkdown: SpatialCanvas = {
     nodes: [
