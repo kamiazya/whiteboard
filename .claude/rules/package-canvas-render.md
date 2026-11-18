@@ -53,7 +53,7 @@ D10's decision, and the thin TypeScript a root asks the core through:
 - **The SVG backend is the core's** (`crates/core/canvas-render/src/svg/`):
   scene -> SVG string, whole and keyed, one implementation for Node, the
   browser and Workers, held byte for byte to the frozen `oracle/svg.jsonl`.
-  Its inputs here are `outline/node-outline.ts`, `ink/`, the edge path
+  Its inputs here are the edge path
   flatteners (`edge-path/`) and `edgeArrowPolygons`, the hit test's one curve.
 - **The scene digest** is the Rust core's (`scene_digest`): `layoutSceneDigest`
   asks the `scene-digest` query (no scene crosses back) and
@@ -112,9 +112,8 @@ cost of the exhaustiveness checking the SVG backend relies on. That has not
 changed and should not. The union itself is `packages/scene`'s
 (`scene-graph.ts`), the core's answer type.
 
-**Silhouettes are the bundled table** (`BUNDLED_SHAPE_TABLE`,
-`outline/node-outline.ts`), keyed by namespaced id and built from the
-`visual` plugin's `ShapeContribution`s. The SVG backend takes no table of its
+**Silhouettes are the bundled table**, keyed by namespaced id and built from the
+`visual` plugin's `ShapeContribution`s (`node_outline` in the core). The SVG backend takes no table of its
 own: the core lays out, anchors edges and contains content against its port
 of the same silhouettes, so a caller's table could only draw an outline the
 core never used. An unknown id draws a plain rect.
@@ -205,7 +204,7 @@ backend's x-transform-boundary convention (decision #5).
    composition-root measurer (opentype.js on Node/Workers, Canvas
    `measureText` in the browser). Layout never passes a string containing
    a newline to `measure`, and clamps any non-finite `advanceWidth` to `0`
-   (`clampAdvance`) before it reaches geometry.
+   before it reaches geometry.
    `constantRatioMeasureText` — the measurer of last resort — lives here
    too, beside the contract it satisfies. Three composition roots had grown
    their own copy (server-core cannot load a font itself and gets one
@@ -699,18 +698,18 @@ backend's x-transform-boundary convention (decision #5).
     that PREVIEWS paint rather than painting — the editor's paper and its
     colour swatches — so a picker and the render read one table; it answers
     the bundled palette for the mode wherever layout would draw clean.
-    **Ink** (decision #10's geometry half, `ink/sketch.ts`): a theme
+    **Ink** (decision #10's geometry half, the core's `ink/`): a theme
     whose tokens say `ink: 'sketch'` puts `ink: { style, seed, fill? }` on
     every DOCUMENT shape and edge the layout composes — a kind plus
     the core's `seed_from_id(id)`, never coordinates, so translate/scale carry it
     untouched and `sceneDigest` sees nothing. Comment and proposal chrome
     are built elsewhere and stay crisp on purpose: the annotation layer has
-    to keep reading as chrome. `sketchShape` (rect, ellipse, polygon, the
-    cylinder's caps+sides+lid) and `sketchEdge` (the SAME flattened polyline
+    to keep reading as chrome. `sketch_shape` (rect, ellipse, polygon, the
+    cylinder's caps+sides+lid) and `sketch_edge` (the SAME flattened polyline
     the hit-test uses, arrowheads as wing strokes instead of markers) are
     the one decomposition the SVG backend draws from; a coloured node is
     hatched (`fill: 'hatch'`) rather than tinted. Two contracts, both
-    property-tested and in the mutation lane: every named coordinate lies
+    property-tested (`sketch_properties.rs`): every named coordinate lies
     within the semantic bounds plus `SKETCH_INK_REACH_PX`, which
     `sceneBounds` adds for an inked node (a quadratic never leaves the
     triangle of its three points, so checking the named points checks the

@@ -82,10 +82,6 @@ describe('the mutation lane covers what it says it covers', () => {
     // the memo test on a fresh object per call. A mutation score would count
     // 30 property copies.
     //
-    // 60 and 11 since `ink/sketch.ts`, which the lane DOES cover: its
-    // reach and determinism claims are properties, exactly what a survivor
-    // would expose as decorative.
-    //
     // 63 since the SVG backend's paint module and the SVG backend's shapes module left the SVG backend's backend module:
     // the paint helpers and the shape/edge renderers it had grown past its
     // line ceiling with. Not in the lane — their properties are the
@@ -272,7 +268,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // pinned them, and a split moved none of that. All three went with the
     // composer in S18h2.
     //
-    // 100 since `finite-box.ts` became the one definition of a box with
+    // 100 since the finite-box predicate became the one definition of a box with
     // finite sides, which three SVG leaves and two layout leaves each spelled
     // for themselves. A predicate the painting suites pin at every call.
     //
@@ -514,9 +510,16 @@ describe('the mutation lane covers what it says it covers', () => {
     // the SVG backend's hoist module), as did their equivalents; the decoder of a scene's
     // document link (the document-href module) outlives the backend as a root leaf, its table
     // test pinning every branch, and stays outside the lane.
+    //
+    // 69 and 7 since the TypeScript sketch ink (in the lane), the silhouette
+    // producer and the finite-box predicate were deleted with no shipped
+    // caller left: the core's sketch ink holds the reach, determinism and
+    // translation properties itself (its `sketch_properties.rs` test). The
+    // scene-entry keying moved under `test-utils/`, its one reader being a
+    // scoreboard, and `xml-escape.ts` kept only the character-legality strip.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 8,
-      production: 73,
+      mutated: 7,
+      production: 69,
     })
   })
 
