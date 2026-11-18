@@ -1,7 +1,9 @@
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete'
 import type { EditorView } from '@codemirror/view'
-import { renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
+import { layoutMarkdownDocumentPicture, type Scene } from '@kamiazya/whiteboard-canvas-render'
+import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import { searchIconShortcodes } from '@kamiazya/whiteboard-plugin-visual/icons/shortcode'
+import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
 
 // `:` completion for BOTH shortcode vocabularies — emoji and vendored icons
 // — the typing half of the `:name:` syntax canvas-render draws.
@@ -103,26 +105,87 @@ const EMOJI_SECTION = { name: 'Emoji', rank: 1 }
 /**
  * The icon as it appears ON ITS ROW, where an emoji row shows its character.
  *
- * Drawn by the SAME producer that will draw it in the body — a one-node
- * scene through `renderSceneToSvg`. Not hand-built markup: a second emitter
- * of an icon `<use>` is two places for a set's viewBox and paint convention
- * to be got wrong, which is the reason `svg/icon.ts` exists at all.
+ * Drawn by the SAME producer that draws it in the body (owner decision q90):
+ * the core lays out a note holding nothing but `:icon-<name>:` and answers its
+ * picture, and only the root tag changes here — framed on the icon's own
+ * square and sized to the gutter. Not hand-built markup: a second emitter of
+ * an icon `<use>` is two places for a set's viewBox and paint convention to be
+ * got wrong. Laid out once per name, since a list re-renders its rows often.
  *
- * `currentColor` rather than a fixed stroke, so the glyph follows the row —
- * including the selected row, which paints `--accent-foreground`. That is
- * also why this is real DOM and not a CSS `background-image`: a background
- * image is an isolated document and cannot see the colour it sits on.
+ * The body already strokes an icon in `currentColor`, so the glyph follows
+ * the row — including the selected row, which paints
+ * `--accent-foreground`. That is also why this is real DOM and not a CSS
+ * `background-image`: a background image is an isolated document and cannot
+ * see the colour it sits on.
  */
 function iconGlyph(name: string): HTMLElement {
   const host = document.createElement('span')
   host.className = 'cm-completionIcon-wb-icon'
   host.setAttribute('aria-hidden', 'true')
-  host.innerHTML = renderSceneToSvg(
-    { nodes: [{ kind: 'icon', bbox: { x: 0, y: 0, w: 16, h: 16 }, icon: name }] },
-    { width: 16, height: 16, viewBox: { x: 0, y: 0, w: 16, h: 16 } },
-  )
-  host.firstElementChild?.setAttribute('stroke', 'currentColor')
+  host.innerHTML = glyphSvg(name)
   return host
+}
+
+const GLYPH_PX = 16
+const glyphs = new Map<string, string>()
+let measure: ReturnType<typeof createBrowserMeasureText> | undefined
+
+/** The row's glyph for `name`, or nothing where no core answers or the name draws no icon. */
+function glyphSvg(name: string): string {
+  const known = glyphs.get(name)
+  if (known !== undefined) return known
+  // Only a drawn glyph is kept: a core that is not loaded throws, and one that
+  // failed to load refuses every layout, so its answer holds no icon. Either
+  // way the row keeps an empty gutter and the next render asks again.
+  try {
+    measure ??= createBrowserMeasureText()
+    const picture = layoutMarkdownDocumentPicture(
+      `:icon-${name}:`,
+      { measure, maxWidth: GLYPH_PX * 4, core: requireLayoutCore() },
+      { padding: 0 },
+    )
+    const square = picture === undefined ? undefined : iconSquare(picture.scene)
+    if (picture === undefined || square === undefined) return ''
+    const drawn = framedOn(picture.svg, square)
+    glyphs.set(name, drawn)
+    return drawn
+  } catch {
+    return ''
+  }
+}
+
+type Square = { readonly x: number; readonly y: number; readonly side: number }
+
+/**
+ * Where the icon run paints: a `<use>` across the run's box, which its
+ * symbol fits by `xMidYMid meet`, so the icon is the square of the box's
+ * shorter side, centred in it.
+ */
+function iconSquare(scene: Scene): Square | undefined {
+  const stack = [...scene.nodes] as unknown[]
+  while (stack.length > 0) {
+    const node = stack.pop() as {
+      bbox?: { x: number; y: number; w: number; h: number }
+      paints?: { kind?: string }
+      runs?: unknown[]
+      children?: unknown[]
+    }
+    if (node.paints?.kind === 'icon' && node.bbox !== undefined) {
+      const { x, y, w, h } = node.bbox
+      const side = Math.min(w, h)
+      return { x: x + (w - side) / 2, y: y + (h - side) / 2, side }
+    }
+    stack.push(...(node.runs ?? []), ...(node.children ?? []))
+  }
+  return undefined
+}
+
+/** The ROOT TAG's view box framed on `square` and its size set to the gutter's; nothing else changes. */
+function framedOn(svg: string, { x, y, side }: Square): string {
+  return svg.replace(
+    /^(<svg\b[^>]*?)\swidth="[^"]*"\sheight="[^"]*"\sviewBox="[^"]*"/,
+    `$1 width="${GLYPH_PX}" height="${GLYPH_PX}" viewBox="${x} ${y} ${side} ${side}"`,
+  )
 }
 
 /**
