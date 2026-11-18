@@ -1,17 +1,19 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { CoreSvgAsk } from '../canvas-core.js'
-import { renderSceneToSvg } from '../svg/backend.js'
-import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
-import { bodyName, PAST_THE_PARSER } from '../test-utils/markdown-document-oracle/oracle.js'
-import { noteOptionsOf, recordedSurface } from '../test-utils/markdown-document-oracle/replay.js'
-import { built } from '../test-utils/wasm/glue.js'
-import { layoutCases } from '../test-utils/wasm/layout-cases.js'
-import { oracleLayoutCore } from '../test-utils/wasm/oracle-layout-core.js'
-import { svgDocumentOptionsOf } from './core-svg.js'
-import type { SpatialLayoutOptions } from './layout-options.js'
-import { layoutMarkdownDocument, layoutMarkdownDocumentPicture } from './markdown-switch.js'
-import { layoutSpatialCanvas, layoutSpatialCanvasPicture } from './spatial-canvas.js'
+import type { CoreSvgAsk } from './canvas-core.js'
+import { layoutMarkdownDocumentPicture, layoutSpatialCanvasPicture } from './core-picture.js'
+import type { SpatialLayoutOptions } from './layout/layout-options.js'
+import { layoutMarkdownDocument } from './layout/markdown-switch.js'
+import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
+import { sceneDocumentBounds } from './scene-bounds.js'
+import { renderSceneToSvg, type SvgDocumentOptions } from './svg/backend.js'
+import { fakeLayoutCore } from './test-utils/fake-layout-core.js'
+import { bodyName, PAST_THE_PARSER } from './test-utils/markdown-document-oracle/oracle.js'
+import { noteOptionsOf, recordedSurface } from './test-utils/markdown-document-oracle/replay.js'
+import { built } from './test-utils/wasm/glue.js'
+import { layoutCases } from './test-utils/wasm/layout-cases.js'
+import { oracleLayoutCore } from './test-utils/wasm/oracle-layout-core.js'
 
 /**
  * A server picture in ONE core call is the picture the two-step path drew:
@@ -22,11 +24,30 @@ import { layoutSpatialCanvas, layoutSpatialCanvasPicture } from './spatial-canva
  * derived envelope on a palette's paper, and the file export's padding, dark
  * text fill and raster scale.
  */
-const ASKS: readonly (readonly [string, CoreSvgAsk])[] = [
-  ['scene-render', { viewBox: 'document' }],
-  ['view-picture', { padding: 0, background: '#ffffff' }],
-  ['export-light', { padding: 16, background: '#fafafa', rasterScale: 1 }],
-  ['export-dark', { padding: 16, background: '#1e1e1e', rasterScale: 3, textFill: '#e6e6e6' }],
+const ASKS: readonly (readonly [string, CoreSvgAsk, (scene: Scene) => SvgDocumentOptions])[] = [
+  // `sceneEnvelope`: the document bounds, or an empty box for a scene with no node.
+  [
+    'scene-render',
+    { viewBox: 'document' },
+    (scene) => ({
+      viewBox: scene.nodes.length === 0 ? { x: 0, y: 0, w: 0, h: 0 } : sceneDocumentBounds(scene),
+    }),
+  ],
+  [
+    'view-picture',
+    { padding: 0, background: '#ffffff' },
+    () => ({ padding: 0, background: '#ffffff' }),
+  ],
+  [
+    'export-light',
+    { padding: 16, background: '#fafafa', rasterScale: 1 },
+    () => ({ padding: 16, background: '#fafafa', rasterScale: 1 }),
+  ],
+  [
+    'export-dark',
+    { padding: 16, background: '#1e1e1e', rasterScale: 3, textFill: '#e6e6e6' },
+    () => ({ padding: 16, background: '#1e1e1e', rasterScale: 3, textFill: '#e6e6e6' }),
+  ],
 ]
 
 describe.runIf(built)('a picture in one core call', () => {
@@ -38,10 +59,10 @@ describe.runIf(built)('a picture in one core call', () => {
     for (const { name, canvas, options } of layoutCases(8)) {
       const laid = (o: Omit<SpatialLayoutOptions, 'core'>) => ({ ...o, core })
       const scene = layoutSpatialCanvas(canvas, laid(options))
-      for (const [label, ask] of ASKS) {
+      for (const [label, ask, before] of ASKS) {
         const picture = layoutSpatialCanvasPicture(canvas, laid(options), ask)
         expect(picture.scene, `${name} ${label}`).toEqual(scene)
-        const expected = renderSceneToSvg(scene, svgDocumentOptionsOf(ask, scene))
+        const expected = renderSceneToSvg(scene, before(scene))
         expect(picture.svg === expected, `${name} ${label}`).toBe(true)
         compared += 1
       }
@@ -63,14 +84,14 @@ describe.runIf(built)('a picture in one core call', () => {
         if (PAST_THE_PARSER.has(bodyName(record.id))) continue
         const options = { ...noteOptionsOf(record, meta), core }
         const scene = layoutMarkdownDocument(record.body, options)
-        for (const [label, ask] of ASKS) {
+        for (const [label, ask, before] of ASKS) {
           const picture = layoutMarkdownDocumentPicture(record.body, options, ask)
           if (scene === undefined) {
             expect(picture, `${record.id} ${label}`).toBeUndefined()
             continue
           }
           expect(picture?.scene, `${record.id} ${label}`).toEqual(scene)
-          const expected = renderSceneToSvg(scene, svgDocumentOptionsOf(ask, scene))
+          const expected = renderSceneToSvg(scene, before(scene))
           expect(picture?.svg === expected, `${record.id} ${label}`).toBe(true)
           compared += 1
         }
@@ -101,7 +122,10 @@ describe.runIf(built)('a picture in one core call', () => {
     const picture = layoutSpatialCanvasPicture(canvas, options, ask)
     expect(refused).toEqual(['too-many-elements'])
     expect(picture.svg).toBe(
-      renderSceneToSvg(picture.scene, svgDocumentOptionsOf(ask, picture.scene)),
+      renderSceneToSvg(picture.scene, {
+        viewBox: sceneDocumentBounds(picture.scene),
+        background: '#ffffff',
+      }),
     )
     expect(picture.svg).toContain('fill="#ffffff"')
   })

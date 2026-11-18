@@ -11,8 +11,7 @@ import type { ReferenceSeams } from '../references/seams.js'
 import { wireOfSeams } from '../references/wire.js'
 import { type LayoutRefusal, refusalScene } from '../refusal.js'
 import type { SpatialThemeMode } from '../theme/spatial-theme.js'
-import { CoreUnaskable, hasData, styleOptions } from './canvas-switch.js'
-import { askedSvg, type PicturedScene, svgOfDrawnHere } from './core-svg.js'
+import { askedSvg, CoreUnaskable, hasData, styleOptions } from './canvas-switch.js'
 import type { SpatialRenderStyle } from './layout-options.js'
 
 // A markdown body through the Rust core's markdown entry (ADR-0054 step 7,
@@ -106,22 +105,11 @@ export function layoutMarkdownDocument(
 }
 
 /**
- * `layoutMarkdownDocument`'s scene with its SVG, both from ONE core call: the
- * core draws the note it laid out in the envelope `svg` names. A refusal's
- * scene, which this side builds, is drawn here in that envelope.
+ * A note through the core, with the SVG it drew in the envelope `svg` names
+ * when it asks for one; none for a refusal, whose scene this side built.
+ * `undefined` for a `section` the note holds no heading for.
  */
-export function layoutMarkdownDocumentPicture(
-  body: string,
-  options: MarkdownDocumentOptions,
-  svg: CoreSvgAsk,
-): PicturedScene | undefined {
-  const laid = noteThroughCore(body, options, svg)
-  if (laid === undefined) return undefined
-  return { scene: laid.scene, svg: laid.svg ?? svgOfDrawnHere(laid.scene, svg) }
-}
-
-/** A note through the core, with the SVG it drew when `svg` asks for one (none for a refusal). */
-function noteThroughCore(
+export function noteThroughCore(
   body: string,
   options: MarkdownDocumentOptions,
   svg: CoreSvgAsk | undefined,

@@ -62,7 +62,9 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   drawn in: `viewBox: 'document'`, `padding`, `background`, `textFill`,
   `rasterScale`); the answer then carries the core's SVG of the scene last,
   after any fragment sources (`layout.ts`'s `answerOf`). canvas-render's
-  `layoutSpatialCanvasPicture` / `layoutMarkdownDocumentPicture` ask for it,
+  `layoutSpatialCanvasPicture` / `layoutMarkdownDocumentPicture`
+  (`core-picture.ts`, held byte for byte to the TypeScript backend by
+  `core-picture.rust.test.ts`) ask for it,
   and server-core's `wb_scene_render`, the `canvas_view` picture and
   mcp-server's file export take their SVG from it (ADR-0054 A2).
 - `core.search` (`search.ts`): lexical search over the one `search_op` export.

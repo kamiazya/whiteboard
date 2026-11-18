@@ -498,9 +498,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // recording, and `tidy.ts` kept the boxes a canvas gives it and the one
     // adapter call, which leaves nothing for a mutant to weaken that a test
     // could not see.
+    // 85 and 10 with `core-picture.ts` (ADR-0054 A2), a server picture's one
+    // core call: an envelope handed through and a refusal drawn by the
+    // backend, held byte for byte by `core-picture.rust.test.ts`, which is the
+    // stronger check; nothing in it is a heuristic for a mutant to weaken.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 10,
-      production: 84,
+      production: 85,
     })
   })
 

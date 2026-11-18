@@ -45,6 +45,11 @@ export type {
   CoreSvgAsk,
 } from './canvas-core.js'
 export { selectCanvasFragment } from './canvas-fragment.js'
+export {
+  layoutMarkdownDocumentPicture,
+  layoutSpatialCanvasPicture,
+  type PicturedScene,
+} from './core-picture.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
 export { flattenDrawnEdgePath } from './edge-path/edge-flatten.js'
 export { flattenRoundedEdgePath } from './edge-path/edge-rounding.js'
@@ -78,13 +83,11 @@ export {
   resolveCanvasThemeFontFamily,
   resolveThemeTable,
 } from './layout/canvas-theme.js'
-export type { PicturedScene } from './layout/core-svg.js'
 export { fittedTextNodeHeight } from './layout/fitted-height.js'
 export {
   type CommentDocumentOptions,
   layoutCommentDocument,
   layoutMarkdownDocument,
-  layoutMarkdownDocumentPicture,
 } from './layout/markdown-switch.js'
 export {
   type LabelObstacle,
@@ -107,7 +110,6 @@ export {
   commentAnchor,
   type EdgePathLookup,
   layoutSpatialCanvas,
-  layoutSpatialCanvasPicture,
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,
   naturalNodeContentSize,

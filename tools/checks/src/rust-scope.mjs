@@ -43,6 +43,11 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/scene-children.ts',
     'packages/canvas-render/src/scene-entry-keys.ts',
     'packages/canvas-render/src/tidy.ts',
+    // A server picture in one core call, held byte for byte to the TypeScript
+    // backend (ADR-0054 A2), and what that backend reads off the root.
+    'packages/canvas-render/src/core-picture.ts',
+    'packages/canvas-render/src/core-picture.rust.test.ts',
+    'packages/canvas-render/src/xml-escape.ts',
     // The bundled plugin's manifest, which the Rust crate embeds and loads.
     'packages/plugin-visual/src/visual.manifest.json',
   ],
@@ -67,6 +72,9 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/edge-path',
     'packages/canvas-render/src/ink',
     'packages/canvas-render/src/legend',
+    // The TypeScript SVG backend the core's SVG is held to, and the outlines it draws.
+    'packages/canvas-render/src/svg',
+    'packages/canvas-render/src/outline',
     'packages/canvas-render/src/test-utils/wasm',
     // The layout scoreboards judge the core in canvas-render-rust (S18h): the
     // instruments they score with, the corpora they read, and the recordings

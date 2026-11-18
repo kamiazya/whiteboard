@@ -23,7 +23,6 @@ import { type LayoutRefusal, refusalScene } from '../refusal.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { bundledThemeModeOf, type SpatialThemeMode } from '../theme/spatial-theme.js'
 import { resolveThemeTable } from './canvas-theme.js'
-import { askedSvg, type PicturedScene, svgOfDrawnHere } from './core-svg.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout-options.js'
 
 // The whole layout through the Rust core (ADR-0054 step 7): the request a
@@ -63,6 +62,12 @@ function expansion(
 const usesFragmentTable = (
   options: Pick<SpatialLayoutOptions, 'fragments' | 'onFragmentsAsked'>,
 ): boolean => options.fragments !== undefined || options.onFragmentsAsked !== undefined
+
+/** The core's SVG for a request that asked one; an answer without it is a defect in the core. */
+export function askedSvg(svg: string | undefined): string {
+  if (svg === undefined) throw new Error('the core answered no SVG for a layout that asked one')
+  return svg
+}
 
 export const hasData = (extra: ReferenceExtra): boolean =>
   extra.canvas === undefined && extra.markdown === undefined
@@ -195,26 +200,15 @@ export function layoutThroughCore(
   stored: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): LaidOutCanvas {
-  const { scene, anchors } = throughCore(stored, options, undefined)
+  const { scene, anchors } = canvasThroughCore(stored, options, undefined)
   return { scene, anchors }
 }
 
 /**
- * `layoutThroughCore`'s scene with its SVG, drawn by the core in the same call
- * in the envelope `svg` names; a refusal's scene, which the core does not draw,
- * is drawn here in the same envelope.
+ * A layout through the core, with the SVG it drew in the envelope `svg` names
+ * when it asks for one; none for a refusal, whose scene this side built.
  */
-export function pictureThroughCore(
-  stored: SpatialCanvas,
-  options: SpatialLayoutOptions,
-  svg: CoreSvgAsk,
-): PicturedScene {
-  const laid = throughCore(stored, options, svg)
-  return { scene: laid.scene, svg: laid.svg ?? svgOfDrawnHere(laid.scene, svg) }
-}
-
-/** A layout through the core, with the SVG it drew when `svg` asks for one (none for a refusal). */
-function throughCore(
+export function canvasThroughCore(
   stored: SpatialCanvas,
   options: SpatialLayoutOptions,
   svg: CoreSvgAsk | undefined,

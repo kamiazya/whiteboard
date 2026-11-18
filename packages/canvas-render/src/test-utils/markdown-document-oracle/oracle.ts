@@ -13,7 +13,7 @@ import { answerText } from '../wasm/answer-text.js'
  * A surface is the options its root hands the layout, restated here as data
  * because canvas-render cannot import the roots:
  *
- * - `daemon`: server-core's `composeMarkdownScene` under `wb_scene_render`
+ * - `daemon`: server-core's `composeMarkdownPicture` under `wb_scene_render`
  *   (720px, the document theme, the MCP light appearance), with a `#Heading`
  *   part selected first as `canvas-render-svg.ts` does;
  * - `preview`: apps/web's `layoutMarkdownScene` behind the preview pane and a

@@ -126,6 +126,9 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   'scene-bounds.ts': 'scene-bounds',
   // The digest's schema, which a query's answer names and a root's tool output spreads.
   'scene-digest-schema.ts': 'leaf',
+  // A server picture: the layout's scene and its SVG from one core call, a
+  // refusal's drawn by the backend, so it sits above both.
+  'core-picture.ts': 'surface',
   'scoring.ts': 'surface',
   'tidy.ts': 'surface',
   'index.ts': 'surface',

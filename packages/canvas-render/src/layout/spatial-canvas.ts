@@ -5,10 +5,8 @@
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
-import type { CoreSvgAsk } from '../canvas-core.js'
 import type { EdgeAnchorPair } from '../edge-routing.js'
-import { layoutThroughCore, pictureThroughCore } from './canvas-switch.js'
-import type { PicturedScene } from './core-svg.js'
+import { layoutThroughCore } from './canvas-switch.js'
 import type { SpatialLayoutOptions } from './layout-options.js'
 import { edgesThroughCore, naturalSizeThroughCore } from './query-switch.js'
 
@@ -23,20 +21,6 @@ export {
 /** Composes a canvas-render `Scene` from a `SpatialCanvas`, by the core. Pure: no I/O. */
 export function layoutSpatialCanvas(canvas: SpatialCanvas, options: SpatialLayoutOptions): Scene {
   return layoutSpatialCanvasWithAnchors(canvas, options).scene
-}
-
-/**
- * `layoutSpatialCanvas` with the scene's SVG, both from ONE core call: the
- * core draws the scene it laid out with its own SVG backend, in the envelope
- * `svg` names, so a server picture never serializes the scene on this side.
- * A refusal's scene, which this side builds, is drawn here in that envelope.
- */
-export function layoutSpatialCanvasPicture(
-  canvas: SpatialCanvas,
-  options: SpatialLayoutOptions,
-  svg: CoreSvgAsk,
-): PicturedScene {
-  return pictureThroughCore(canvas, options, svg)
 }
 
 /**
