@@ -37,21 +37,9 @@ const LEDGER: Readonly<Record<string, LedgerEntry>> = {
     uses: 1,
     why: "a natural size's layout options asked whether any is one the core's query does not take: the walk answers yes or no, and its order never reaches a request or a scene",
   },
-  'packages/canvas-render/src/references/wire.ts': {
-    uses: 1,
-    why: 'an emptiness check on an extra rebuilt from the wire, where the count is read and the order never is',
-  },
-  'packages/canvas-render/src/references/seams.ts': {
-    uses: 1,
-    why: 'an emptiness check on the resolved seams, where the count is read and the order never is',
-  },
   'packages/canvas-render/src/quality/facet-score.ts': {
     uses: 2,
     why: 'facet keys, which the grammar namespaces as namespace.name/vN and so never integer-like, and the channel records, whose keys are fixed words',
-  },
-  'packages/canvas-render/src/outline/node-outline.ts': {
-    uses: 1,
-    why: 'shape names a contribution registers, which the table composes into namespaced ids before anything is ordered by them',
   },
   'packages/canvas-render/src/layout/canvas-theme.ts': {
     uses: 1,

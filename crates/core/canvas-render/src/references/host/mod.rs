@@ -124,7 +124,7 @@ impl<'w> WireHost<'w> {
         })
     }
 
-    /// Whether the caller is still loading `document_id` (`isLoading`): an
+    /// Whether the caller is still loading `document_id`: an
     /// extra marked pending names it as written, or as a target the alias
     /// table resolves to it.
     fn pending(&self, document_id: &str) -> bool {

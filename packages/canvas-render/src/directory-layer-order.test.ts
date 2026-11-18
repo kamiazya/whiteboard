@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
  * `highlight/` tokenises a code fence; `leaf` is everything that reads no
  * other stage (references, tags, the generated
  * contract types, the small root helpers, the legend's measurements, a
- * node's silhouette in `outline/` and a drawn edge's path in `edge-path/`);
+ * drawn edge's path in `edge-path/`);
  * `quality/` scores a drawing;
  * `engines` is the core's contract — the request and answer types of each
  * entry and the `LayoutCore` that names them, root files all, since the
@@ -67,7 +67,6 @@ const DIRECTORY_LAYERS: Readonly<Record<string, Layer>> = {
   quality: 'quality',
   legend: 'leaf',
   ink: 'ink',
-  outline: 'leaf',
   'edge-path': 'leaf',
   layout: 'layout',
   // The MCP Apps widget's picture contract: what a consumer receives once a
@@ -114,13 +113,11 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   'edge-arrows.ts': 'leaf',
   'hit-boxes.ts': 'leaf',
   'hit-test.ts': 'surface',
-  'finite-box.ts': 'leaf',
   'measure.ts': 'leaf',
   // The refusal's words: read by the answers that carry a refusal and by the
   // switches that draw one.
   'refusal.ts': 'leaf',
   'scene-children.ts': 'leaf',
-  'scene-entry-keys.ts': 'leaf',
   'xml-escape.ts': 'leaf',
   'scene-bounds.ts': 'scene-bounds',
   // The digest's schema, which a query's answer names and a root's tool output spreads.

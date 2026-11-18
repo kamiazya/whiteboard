@@ -35,13 +35,11 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/edge-arrows.ts',
     'packages/canvas-render/src/edge-routing.ts',
     'packages/canvas-render/src/layout-core.ts',
-    'packages/canvas-render/src/finite-box.ts',
     'packages/canvas-render/src/measure.ts',
     'packages/canvas-render/src/scene-digest-schema.ts',
     'packages/canvas-render/src/refusal.ts',
     'packages/canvas-render/src/scene-bounds.ts',
     'packages/canvas-render/src/scene-children.ts',
-    'packages/canvas-render/src/scene-entry-keys.ts',
     'packages/canvas-render/src/tidy.ts',
     // A server picture in one core call, held byte for byte to the TypeScript
     // backend (ADR-0054 A2), and what that backend reads off the root.
@@ -95,6 +93,13 @@ export const RUST_SCOPE = {
     // The JSON Canvas codec's recording, replayed by the Rust crate and by codec-node.
     'packages/codec/src/spatial/oracle',
     'packages/codec/src/test-utils/json-canvas-oracle',
+    // The markdown parse, parse-body and reference-scan recordings, replayed by
+    // the Rust markdown and codec crates and by codec-node.
+    'packages/codec/src/markdown/oracle',
+    'packages/codec/src/references/oracle',
+    'packages/codec/src/test-utils/mdast-oracle',
+    'packages/codec/src/test-utils/parse-body-oracle',
+    'packages/codec/src/test-utils/scan-oracle',
     // The bundled plugin's asset tables, which the Rust crate embeds, and the
     // facet-write recording it replays.
     'packages/plugin-visual/src/assets',

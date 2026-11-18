@@ -1,9 +1,6 @@
-// What a reference RESOLVES to, as plain data: the contents a file node
-// draws, the card a facet maps to, and the body an embed lays out inline.
-// They live under `references/` because decision 14 gives that directory the
-// seams, and a seam's answer type is part of the seam — leaving them in the
-// layout modules made the producer of the seams import the layout back, a
-// loop that only `import type` kept from failing at load.
+// What a surface knows of one reference, as plain data: the card a facet maps
+// to, a picture's href, a label. It lives under `references/` so the wire that
+// carries it never imports the layout.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 
@@ -28,13 +25,11 @@ export interface FacetCardData {
  * decides what gets painted.
  *
  * The content fields are ranked, highest first: `image` (a scaled-down
- * picture is still a meaningful thumbnail, so it is not LOD-gated),
- * `canvas` (inline-embedded, depth-capped at 3 with path-local cycle
- * detection, and gated by `expandFileNode`), `markdown` (the document's own
- * prose, which says more about it than the facets describing it), then
- * `facets`. Anything that produces no usable content — an empty body, a
- * card with no title or rows, a box too small for one block — falls through
- * to the next rank and finally to the plain chrome+label rendering.
+ * picture is still a meaningful thumbnail, so it is not LOD-gated), then
+ * `facets`; the core ranks a loaded canvas or body between them. Anything
+ * that produces no usable content — an empty body, a card with no title or
+ * rows, a box too small for one block — falls through to the next rank and
+ * finally to the plain chrome+label rendering.
  */
 export interface ResolvedReference {
   /**
@@ -72,19 +67,13 @@ export interface ResolvedReference {
     readonly width?: number
     readonly height?: number
   }
-  /** The referenced spatial canvas, for inline embedding. */
+  /**
+   * Content as a resolution, not data: the core reads a referenced document
+   * from its loaded record, so a wire extra carrying either is refused
+   * (`reference-content`) rather than drawn.
+   */
   readonly canvas?: SpatialCanvas
-  /** A referenced markdown document's already-parsed body. */
   readonly markdown?: MdastRoot
   /** Card content built from the referenced document's facet data. */
   readonly facets?: FacetCardData
 }
-
-/**
- * What an embed target resolves to: a markdown document's parsed body, or a
- * spatial document's canvas. Discriminated by which field is present, the
- * way `ResolvedReference` is on the spatial side.
- */
-export type EmbeddedDocument =
-  | { readonly title?: string; readonly root: MdastRoot }
-  | { readonly title?: string; readonly canvas: SpatialCanvas }

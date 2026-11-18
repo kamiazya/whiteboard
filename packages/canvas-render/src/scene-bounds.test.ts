@@ -512,6 +512,76 @@ describe('sceneBounds', () => {
     expect(bounds.x + bounds.w).toBe(180)
   })
 
+  // Decoration reach (ADR-0038 decision #10): literal numbers rather than the
+  // module's constants, so the reach is asserted, not echoed.
+  it('widens a sketch-inked shape by the ink reach on every side, and a plain one not at all', () => {
+    const box = { x: 0, y: 0, w: 10, h: 10 }
+    const inked: Scene = {
+      nodes: [{ kind: 'shape', bbox: box, ink: { style: 'sketch', seed: 1 } }],
+    }
+    expect(sceneBounds(inked)).toEqual({ x: -8, y: -8, w: 26, h: 26 })
+    expect(sceneBounds({ nodes: [{ kind: 'shape', bbox: box }] })).toEqual(box)
+    expect(sceneBounds({ nodes: [{ kind: 'shape', bbox: box, appearance: undefined }] })).toEqual(
+      box,
+    )
+  })
+
+  it('widens every point of a sketch-inked edge by the ink reach', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'edge',
+          id: 'e1',
+          path: [
+            { x: 0, y: 0 },
+            { x: 30, y: 20 },
+          ],
+          fromSide: 'right',
+          toSide: 'left',
+          fromEnd: 'none',
+          toEnd: 'none',
+          ink: { style: 'sketch', seed: 1 },
+        },
+      ],
+    }
+    expect(sceneBounds(scene)).toEqual({ x: -8, y: -8, w: 46, h: 36 })
+  })
+
+  it('widens a glowing shape by three deviations of its glow, rounded up', () => {
+    // radius 4 -> deviation 2 -> reach 6.
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'shape',
+          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          appearance: { glow: { radiusPx: 4 } },
+        },
+      ],
+    }
+    expect(sceneBounds(scene)).toEqual({ x: -6, y: -6, w: 22, h: 22 })
+  })
+
+  it('pads a haloed text run by its pill, and only a text run with a halo', () => {
+    const run = {
+      kind: 'textRun' as const,
+      bbox: { x: 0, y: 0, w: 10, h: 10 },
+      baseline: 8,
+      text: 'a',
+    }
+    expect(sceneBounds({ nodes: [{ ...run, appearance: { halo: '#fff' } }] })).toEqual({
+      x: -2,
+      y: -2,
+      w: 14,
+      h: 14,
+    })
+    expect(sceneBounds({ nodes: [{ ...run, appearance: { halo: '' } }] })).toEqual(run.bbox)
+    expect(sceneBounds({ nodes: [run] })).toEqual(run.bbox)
+    expect(sceneBounds({ nodes: [{ ...run, appearance: {} }] })).toEqual(run.bbox)
+    expect(
+      sceneBounds({ nodes: [{ kind: 'shape', bbox: run.bbox, appearance: { halo: '#fff' } }] }),
+    ).toEqual(run.bbox)
+  })
+
   it('includes a top-level shape bbox', () => {
     const scene: Scene = {
       nodes: [
@@ -604,6 +674,11 @@ describe('sceneDocumentBounds', () => {
   })
   it('pads every side by the same amount', () => {
     expect(sceneDocumentBounds({ nodes }, 16)).toEqual({ x: 34, y: 4, w: 232, h: 42 })
+  })
+  it('ignores a padding that is negative or not finite', () => {
+    for (const padding of [-5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(sceneDocumentBounds({ nodes }, padding)).toEqual(sceneBounds({ nodes }))
+    }
   })
   // The producer never attaches a legend with nothing to say, but the type
   // admits one, and a panel of no rows must reserve no band — not the bare

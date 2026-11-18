@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
@@ -67,14 +67,21 @@ function fenceRows(): Row[] {
 const text = (rows: readonly Row[]) => `${rows.map((row) => JSON.stringify(row)).join('\n')}\n`
 
 describe('the recorded fence tokens of the markdown-document oracle', () => {
-  const fresh = fenceRows()
-  if (process.env.WHITEBOARD_RECORD_ORACLE === '1') writeFileSync(FILE, text(fresh))
+  const recorded = readFileSync(FILE, 'utf8')
+  const rows = recorded
+    .trimEnd()
+    .split('\n')
+    .map((line) => JSON.parse(line) as Row)
 
   it('holds fences the highlighter colours and fences it does not', () => {
-    expect(fresh.filter((row) => row[2] !== null).length, 'coloured').toBeGreaterThan(2)
+    expect(rows.filter((row) => row[2] !== null).length, 'coloured').toBeGreaterThan(2)
     expect(
-      fresh.some((row) => row[2] === null),
+      rows.some((row) => row[2] === null),
       'plain',
     ).toBe(true)
+  })
+
+  it('equals the fences the TypeScript parser finds today (deleted with the parser)', () => {
+    expect(recorded).toBe(text(fenceRows()))
   })
 })
