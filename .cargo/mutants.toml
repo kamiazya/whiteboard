@@ -30,6 +30,14 @@ exclude_re = [
   # declines every layout; a wrong one differs) and by apps/web's
   # host-measure-layout.browser.test.ts in Chromium.
   '^crates/bindings/wasm/src/spatial_layout/host_measure\.rs:\d+:\d+: replace <impl Host for HostMeasurer>::measure -> ',
+  # The `oracle-surface` test export: `markdown_model.rs` is compiled only
+  # under that feature, and cargo-mutants builds the default features, so a
+  # mutant here changes code the build never contains and no test in the run
+  # can see it. Judged where the feature is on: its unit tests, which
+  # `pnpm rust:check` runs with `--features oracle-surface`, and the
+  # `web-rust` project, whose editor and reference oracles read every tree
+  # it answers.
+  '^crates/bindings/wasm/src/markdown_model\.rs:',
   # `cargo xtask wasm-imports`' process plumbing: `run` builds every core
   # crate and the bindings to wasm32 and scans each artifact. Its decisions
   # are the tested `scan`, `disallowed_imports` and `host_import_drift`; the

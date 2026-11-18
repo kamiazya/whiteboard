@@ -25,6 +25,7 @@ import { spawnSync } from 'node:child_process'
 
 const FUZZ = ['--manifest-path', 'crates/fuzz/Cargo.toml']
 const FUZZ_STABLE = [...FUZZ, '--no-default-features', '--locked']
+const ORACLE_SURFACE = ['-p', 'whiteboard-wasm', '--features', 'oracle-surface', '--locked']
 
 const STEPS = [
   ['cargo', ['fmt', '--all', '--check']],
@@ -33,6 +34,11 @@ const STEPS = [
   ['cargo', ['clippy', ...FUZZ_STABLE, '--all-targets', '--', '-D', 'warnings']],
   ['cargo', ['test', '--workspace', '--locked']],
   ['cargo', ['test', ...FUZZ_STABLE]],
+  // The wasm crate's `oracle-surface` exports (test-only, never shipped) are
+  // compiled only under that feature, which neither step above enables: lint
+  // and test them with it on, or they are judged by nothing native.
+  ['cargo', ['clippy', ...ORACLE_SURFACE, '--all-targets', '--', '-D', 'warnings']],
+  ['cargo', ['test', ...ORACLE_SURFACE, '--lib']],
   ['cargo', ['xtask', 'codegen', '--check']],
   ['cargo', ['xtask', 'arch-map']],
   ['cargo', ['xtask', 'inputs']],
