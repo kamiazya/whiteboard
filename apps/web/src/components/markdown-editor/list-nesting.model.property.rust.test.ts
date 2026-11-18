@@ -23,9 +23,9 @@
  *             that item's continuation text.)
  */
 import { EditorSelection, EditorState } from '@codemirror/state'
-import { normalizeMdast, parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
+import { parseMarkdownModel } from '../../test-utils/markdown-model.js'
 import { selfContainedCommand, verb } from './editor-verbs.js'
 
 interface Item {
@@ -79,7 +79,7 @@ function flatten(doc: string): Item[] {
       for (const child of item.children ?? []) if (child.type === 'list') walkList(child, depth + 1)
     }
   }
-  const root = normalizeMdast(parseMarkdownBody(doc)) as unknown as Node
+  const root = parseMarkdownModel(doc) as unknown as Node
   for (const block of root.children ?? []) {
     if (block.type === 'list') walkList(block, 0)
     else

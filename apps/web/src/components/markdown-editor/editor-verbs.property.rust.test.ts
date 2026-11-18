@@ -21,11 +21,11 @@
  * counter got wrong, passing on 16 attempts and 2 actual effects.
  */
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state'
-import { normalizeMdast, parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
+import { parseMarkdownModel } from '../../test-utils/markdown-model.js'
 import {
   cycleHeadingLevel,
   inVerbTableOrder,
@@ -196,7 +196,7 @@ function blocksOf(doc: string): { readonly type: string; readonly text: string }
   const textUnder = (node: { type: string; value?: string; children?: unknown[] }): string =>
     (node.value ?? '') +
     (node.children ?? []).map((child) => textUnder(child as typeof node)).join('')
-  return normalizeMdast(parseMarkdownBody(doc)).children.map((block) => ({
+  return parseMarkdownModel(doc).children.map((block) => ({
     type: block.type,
     text: textUnder(block),
   }))

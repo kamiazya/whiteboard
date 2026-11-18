@@ -21,13 +21,10 @@
  * reader at render time instead (`resolveTitle` labeling a bare `[[path]]`).
  */
 
-import {
-  createUniqueNameResolver,
-  parseMarkdownBody,
-  resolveReferences,
-} from '@kamiazya/whiteboard-codec'
+import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import type { DocumentSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { describe, expect, it } from 'vitest'
+import { parseMarkdownModel } from '../test-utils/markdown-model.js'
 import { linkEntries } from './link-entries.js'
 
 const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -39,10 +36,7 @@ const listed = (path: string, name: string): DocumentSummary[] => [
 
 /** How many references in `body` resolve against the documents in `docs`. */
 function resolvedCount(body: string, docs: readonly DocumentSummary[]): number {
-  const root = resolveReferences(
-    parseMarkdownBody(body),
-    createUniqueNameResolver(linkEntries(docs)),
-  )
+  const root = parseMarkdownModel(body, createUniqueNameResolver(linkEntries(docs)))
   let found = 0
   const walk = (node: { type: string; children?: unknown[] }): void => {
     if (node.type === 'wikiLink' || node.type === 'embed') found += 1

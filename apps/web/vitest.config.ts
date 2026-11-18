@@ -65,6 +65,8 @@ export default defineConfig({
       'src/**/*.browser.test.ts',
       'src/**/*.browser.test.tsx',
       'src/**/*.docs-snapshot.test.tsx',
+      // Need the oracle wasm artifact only the rust job builds (vitest.rust.config.ts).
+      'src/**/*.rust.test.ts',
     ],
   },
 })

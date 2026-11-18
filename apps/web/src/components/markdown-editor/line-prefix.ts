@@ -5,7 +5,7 @@ import type { EditorState, StateCommand } from '@codemirror/state'
  * an optional quote marker, a list marker (none, bullet, or a numbered
  * `1.`) with an optional task checkbox — which GFM only recognises after a
  * marker — a heading marker, and then the text. The bands' buttons are
- * moves in this space, spelled out in `editor-verbs.model.property.test.ts`;
+ * moves in this space, spelled out in `editor-verbs.model.property.rust.test.ts`;
  * this module is the real side of that table.
  *
  * The order is the one nesting GFM reads back the way it was written: a

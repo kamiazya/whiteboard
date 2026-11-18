@@ -25,6 +25,8 @@ pub mod facet_write;
 pub mod input_caps;
 pub mod json_canvas;
 pub mod json_canvas_wire;
+#[cfg(feature = "oracle-surface")]
+pub mod markdown_model;
 pub mod okf;
 pub mod okf_wire;
 pub mod routing_wire;

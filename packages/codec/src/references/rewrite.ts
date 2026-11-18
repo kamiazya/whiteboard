@@ -1,6 +1,6 @@
 /**
  * Rewriting references when a document's ADDRESS changes — the follow half
- * of the survival table in apps/web's `reference-survival.test.ts`: a
+ * of the survival table in apps/web's `reference-survival.rust.test.ts`: a
  * reference written as the path breaks on a move, one written as the
  * display name breaks on a rename, and nothing rewrote either. These
  * helpers are that rewriting pass, shared by both keepers (the daemon's
