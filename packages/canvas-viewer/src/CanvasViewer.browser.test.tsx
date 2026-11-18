@@ -246,7 +246,8 @@ describe('CanvasViewer in a page whose core did not load (real browser)', () => 
       markdown: { layoutMarkdown: () => ({ refused }) },
       query: { layoutQuery: () => ({ refused }) },
     }
-    const { getByTestId } = render(
+    // Scoped to this render: the file leaves earlier mounts in the document.
+    const { container } = render(
       <div style={{ width: 400, height: 300 }}>
         <CanvasViewer
           core={unavailable}
@@ -257,12 +258,13 @@ describe('CanvasViewer in a page whose core did not load (real browser)', () => 
       </div>,
     )
     const { title, detail } = refusalCopy(refused)
-    const status = getByTestId('no-core').querySelector('[role="status"]') as HTMLElement
+    const figure = container.querySelector('[data-testid="no-core"]') as HTMLElement
+    const status = figure.querySelector('[role="status"]') as HTMLElement
     await expect.element(status).toBeVisible()
     expect(status.textContent).toBe(`${title}${detail}`)
     const box = status.getBoundingClientRect()
     expect(box.width).toBeGreaterThan(0)
     expect(box.height).toBeGreaterThan(0)
-    expect(getByTestId('no-core').querySelector('svg')).toBeNull()
+    expect(figure.querySelector('svg')).toBeNull()
   })
 })
