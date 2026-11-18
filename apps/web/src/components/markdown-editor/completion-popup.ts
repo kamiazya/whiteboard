@@ -282,6 +282,10 @@ export const completionPopupTheme = EditorView.theme({
     alignItems: 'center',
     verticalAlign: 'text-bottom',
     marginRight: '0.375rem',
+    // The gutter is held whether or not a glyph was drawn, so a row the core
+    // could not draw for keeps its label in line with the others.
+    width: '16px',
+    height: '16px',
   },
   '.cm-tooltip.cm-tooltip-autocomplete > ul': {
     fontFamily: 'inherit',

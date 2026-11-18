@@ -134,7 +134,9 @@ let measure: ReturnType<typeof createBrowserMeasureText> | undefined
 function glyphSvg(name: string): string {
   const known = glyphs.get(name)
   if (known !== undefined) return known
-  let drawn = ''
+  // Only a drawn glyph is kept: a core that is not loaded throws, and one that
+  // failed to load refuses every layout, so its answer holds no icon. Either
+  // way the row keeps an empty gutter and the next render asks again.
   try {
     measure ??= createBrowserMeasureText()
     const picture = layoutMarkdownDocumentPicture(
@@ -143,14 +145,13 @@ function glyphSvg(name: string): string {
       { padding: 0 },
     )
     const square = picture === undefined ? undefined : iconSquare(picture.scene)
-    if (picture !== undefined && square !== undefined) drawn = framedOn(picture.svg, square)
+    if (picture === undefined || square === undefined) return ''
+    const drawn = framedOn(picture.svg, square)
+    glyphs.set(name, drawn)
+    return drawn
   } catch {
-    // No core in this realm yet: the row keeps an empty gutter and the next
-    // render asks again, since nothing was cached.
     return ''
   }
-  glyphs.set(name, drawn)
-  return drawn
 }
 
 type Square = { readonly x: number; readonly y: number; readonly side: number }
