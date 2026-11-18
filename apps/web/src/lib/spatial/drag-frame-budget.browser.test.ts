@@ -64,9 +64,10 @@ import type { WebCore } from './web-core.js'
  * editor surface's keyed projection drawn by the core in the same call, against
  * the layout with the TypeScript backend's keyed projection (what the main
  * thread derived from a worker's scene until ADR-0054 A3.3) — and what a
- * `structuredClone` of the keyed answer or of the scene costs in this realm,
- * the clone `postMessage` makes of a reply (not its delivery), run under the
- * same switch. Run from the repository root:
+ * `structuredClone` of the keyed answer alone, and of the scene alone, costs
+ * in this realm: two fields of a worker's reply, not the whole reply (which
+ * also carries bounds and anchors) and not its delivery, run under the same
+ * switch. Run from the repository root:
  *   VITE_MEASURE_DRAG_SVG=1 pnpm vitest run --project web-browser apps/web/src/lib/spatial/drag-frame-budget
  */
 const SPLIT = import.meta.env.VITE_MEASURE_DRAG_SVG === '1'
