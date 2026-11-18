@@ -197,9 +197,11 @@ const SUBJECT_EXCERPT_CHARS = 40
 /**
  * A verb's accessible name for one conversation: several rows carry the same
  * verb, so the name must say which, and still begins with the visible word.
+ * The excerpt is the row's own plain text, so a screen reader is not read the
+ * markup the row itself does not show.
  */
 function verbLabel(verb: string, thread: CommentThread): string {
-  const body = (thread.messages[0]?.body ?? '').trim().replace(/\s+/g, ' ')
+  const body = commentExcerpt(thread.messages[0]?.body ?? '').replace(/\s+/g, ' ')
   if (body === '') return verb
   const excerpt =
     body.length > SUBJECT_EXCERPT_CHARS ? `${body.slice(0, SUBJECT_EXCERPT_CHARS)}…` : body
