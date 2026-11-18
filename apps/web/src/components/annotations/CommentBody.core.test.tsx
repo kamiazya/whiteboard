@@ -12,6 +12,9 @@ import { CommentBody } from './CommentBody.js'
 vi.mock('../../lib/spatial/layout-core.js', () => ({
   currentLayoutCore: vi.fn(),
   layoutCoreReady: vi.fn(),
+  // The body redraws when the core loads; nothing here announces one.
+  layoutCoreGeneration: () => 0,
+  subscribeLayoutCore: () => () => undefined,
 }))
 
 afterEach(cleanup)
@@ -74,14 +77,17 @@ describe("a comment's prose through the core", () => {
     // `core-unavailable`; the prose is not drawn by anything in its place.
     const unavailable = { code: 'malformed', reason: 'core-unavailable' } as const
     vi.mocked(currentLayoutCore).mockReturnValue(
-      fakeLayoutCore({ markdown: { layoutMarkdown: () => ({ refused: unavailable }) } }),
+      fakeLayoutCore({
+        markdown: { layoutMarkdown: () => ({ refused: unavailable }) },
+        // It refuses the notice too, so the words are said in HTML.
+        query: { layoutQuery: () => ({ refused: unavailable }) },
+      }),
     )
     const { container } = render(
       <CommentBody body="Please **tighten** this" measure={constantRatioMeasureText} />,
     )
-    // The title wraps into runs the DOM's text joins without a space.
-    const squash = (text: string | null) => (text ?? '').replace(/\s+/g, '')
-    expect(squash(container.textContent)).toContain(squash(refusalCopy(unavailable).title))
+    const { title, detail } = refusalCopy(unavailable)
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(`${title}${detail}`)
     expect(container.textContent).not.toContain('tighten')
   })
 })

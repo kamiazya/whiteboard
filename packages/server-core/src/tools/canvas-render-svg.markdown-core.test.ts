@@ -4,6 +4,7 @@ import type {
   MarkdownNoteRequest,
 } from '@kamiazya/whiteboard-canvas-render'
 import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import {
   writeDocumentKind,
   writeMarkdownBody,
@@ -56,6 +57,8 @@ function markingCore(answer: MarkdownLayoutCore['layoutMarkdown']) {
         return answer(request, highlight, measure)
       },
     },
+    // A refused note is drawn as the real core's notice.
+    query: testLayoutCore().query,
   })
   return { core, requests }
 }

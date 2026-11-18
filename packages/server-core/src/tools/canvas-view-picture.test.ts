@@ -11,6 +11,7 @@ import {
   SPATIAL_LIGHT_PALETTE,
 } from '@kamiazya/whiteboard-canvas-render'
 import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { fromJsonCanvas } from '@kamiazya/whiteboard-codec'
 import {
   writeCommentThread,
@@ -92,6 +93,8 @@ describe('canvas_view picture', () => {
           return { refused }
         },
       },
+      // The refusal is drawn as the real core's notice.
+      query: testLayoutCore().query,
     })
     const deps = {
       ...makeTestDeps({ documentStore: store, documentIndex: store.documentIndex }),

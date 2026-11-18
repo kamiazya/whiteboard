@@ -10,6 +10,7 @@ import {
 } from '../../lib/render-preview.js'
 import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
+import { RefusalWords } from '../ui/refusal-words.js'
 import { useTaskCheckboxes } from './use-task-checkboxes.js'
 
 export interface PreviewPaneProps {
@@ -97,7 +98,7 @@ export function PreviewPane({
 }: PreviewPaneProps) {
   // Draws again when the page's core loads on a retry after a failed boot load.
   const coreGeneration = useLayoutCoreGeneration()
-  const { keyed, anchors, blocks } = useMemo(
+  const { keyed, anchors, blocks, undrawn } = useMemo(
     () =>
       renderMarkdownPreview(value, {
         measure,
@@ -134,6 +135,7 @@ export function PreviewPane({
         ref={setHost}
         {...task.handlers}
       />
+      {undrawn === undefined ? null : <RefusalWords refusal={undrawn} className="p-4" />}
       <span role="status" aria-live="polite" data-testid="task-announcement" className="sr-only">
         {task.announcement}
       </span>

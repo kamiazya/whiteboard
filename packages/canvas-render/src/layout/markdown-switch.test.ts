@@ -33,11 +33,15 @@ type Answering = (
   request: MarkdownNoteRequest | MarkdownCommentRequest,
 ) => ReturnType<MarkdownLayoutCore['layoutMarkdown']>
 
+const realCore = testLayoutCore()
+
 function coreOf(answer: Answering) {
   const requests: (MarkdownNoteRequest | MarkdownCommentRequest)[] = []
   const highlighters: unknown[] = []
   const measurers: unknown[] = []
   const core = fakeLayoutCore({
+    // A refusal is drawn as the real core's notice.
+    query: realCore.query,
     markdown: {
       layoutMarkdown: (request, highlight, measurer) => {
         requests.push(request)

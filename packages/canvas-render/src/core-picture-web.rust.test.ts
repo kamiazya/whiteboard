@@ -225,10 +225,11 @@ describe.runIf(built)("the web's pictures in one core call", () => {
     expect(keyed.scene).toEqual(layoutSpatialCanvas(canvas, options))
     expect(keyed.keyed).toEqual(renderSceneToKeyedSvg(keyed.scene, editorEnvelope(keyed.scene)))
     expect(keyed.keyed.groups.length).toBeGreaterThan(0)
-    // A refused edge layer is no edges, drawn here in the overlay's envelope.
+    // A refused edge layer is no edges, and the core drew no picture of it:
+    // an empty one that takes no room where it lands.
     const layer = layoutSpatialEdgesPicture(canvas, options, { viewBox: { of: 'scene' } })
     expect(layer.nodes).toEqual([])
-    expect(layer.svg).toBe(renderSceneToSvg({ nodes: [] }, sized(sceneBounds({ nodes: [] }))))
+    expect(layer.svg).toBe('<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0"></svg>')
   })
 
   it('lays a board out whose paint carries a character the wire cannot', () => {

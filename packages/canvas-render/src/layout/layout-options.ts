@@ -128,10 +128,12 @@ export interface SpatialLayoutOptions {
   /**
    * Told when the core REFUSED the layout (owner decision q81, D7): a request
    * past one of its caps, a number its answer cannot spell, or a host
-   * measurer that did not answer. The scene answered is then the
-   * refusal (`refusalScene`), so a caller that also says why in words (the
-   * daemon's log, `wb_scene_render`'s text) learns it here. Omitted, the
-   * scene is the same.
+   * measurer that did not answer. The scene answered then always carries the
+   * refusal, and holds the core's notice (`refusalThroughCore`) only where
+   * the core could draw one: a realm whose core did not load answers it with
+   * no nodes, so a surface says why from `scene.refusal` or from here. A
+   * caller that also says why in words (the daemon's log, `wb_scene_render`'s
+   * text) learns it here too. Omitted, the scene is the same.
    */
   readonly onRefused?: (refusal: LayoutRefusal) => void
   /**

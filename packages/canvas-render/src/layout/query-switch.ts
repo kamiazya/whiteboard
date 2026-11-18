@@ -1,22 +1,14 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import type { CoreSvgAsk } from '../canvas-core.js'
-import { highlightCode } from '../highlight/lowlight.js'
-import type { LayoutCore } from '../layout-core.js'
-import { type MeasureText, measureSpecOf } from '../measure.js'
-import type { QueryAnswer, QueryNumbers, QueryRequest } from '../query-core.js'
-import type { LayoutRefusal } from '../refusal.js'
+import { measureSpecOf } from '../measure.js'
+import type { QueryNumbers } from '../query-core.js'
 import { type SceneDigest, sceneDigestSchema } from '../scene-digest-schema.js'
 import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
-import { bundledThemeModeOf, type SpatialThemeMode } from '../theme/spatial-theme.js'
-import {
-  askedPicture,
-  CoreUnaskable,
-  canvasLayoutRequest,
-  hostEvent,
-  type MaybePictured,
-  styleOptions,
-} from './canvas-switch.js'
+import { bundledThemeModeOf } from '../theme/spatial-theme.js'
+import { askedPicture, type MaybePictured } from './asked-picture.js'
+import { CoreUnaskable, canvasLayoutRequest, hostEvent, styleOptions } from './canvas-switch.js'
+import { type Answered, queried } from './core-query.js'
 import type { SpatialLayoutOptions } from './layout-options.js'
 
 // The layout pieces a root calls on their own, through the Rust core's query
@@ -24,39 +16,6 @@ import type { SpatialLayoutOptions } from './layout-options.js'
 // answered with. Handed a core, the core answers, and a query it refused is
 // answered as the query itself says (`unanswered`), since there
 // is no TypeScript behind it any more (S18g); handed none, the TypeScript does.
-
-/** A query the core answered, in the core's shape. */
-type Answered = Exclude<QueryAnswer, { readonly refused: unknown }>
-
-/** How a query asks the core and reads its answer. */
-export interface Querying<T> {
-  /** The request; throwing `CoreUnaskable` for one it cannot be. */
-  readonly request: () => QueryRequest
-  /**
-   * The answer to a query the core refused (a request past its
-   * caps, a number it cannot spell, a host measurer that did not answer): what
-   * the surface asking can show without the core's geometry.
-   */
-  readonly unanswered: (refused: LayoutRefusal) => T
-  /** The core's answer in the query's shape, or undefined when it is not one. */
-  readonly read: (answer: Answered) => T | undefined
-  /** The host's measurer, for a request naming `{kind: 'host'}`. */
-  readonly measure?: MeasureText
-}
-
-/**
- * A query answered by `core`. A query the core refused is answered by `unanswered`; a core
- * that throws, or answers in a shape the query does not have, throws to the
- * caller, since either is a defect rather than an input.
- */
-export function queried<T>(core: LayoutCore, querying: Querying<T>): T {
-  const request = querying.request()
-  const answer = core.query.layoutQuery(request, highlightCode, querying.measure)
-  if ('refused' in answer) return querying.unanswered(answer.refused)
-  const read = querying.read(answer)
-  if (read === undefined) throw new Error(`the core answered ${request.query} in another shape`)
-  return read
-}
 
 /** The numbers of a query's answer, or undefined when it answered an edge layer. */
 export const numbersOf = (answer: Answered): readonly QueryNumbers[] | undefined =>
@@ -106,58 +65,6 @@ export function edgeLayerThroughCore(
       return svg === undefined ? { nodes } : { nodes, ...askedPicture(svg, answer) }
     },
     measure: options.measure,
-  })
-  return { ...layer, nodes: [...layer.nodes] }
-}
-
-/** What a notice says; the words are the caller's. */
-export interface NoticeWords {
-  readonly title: string
-  readonly detail: string
-}
-
-/** How a notice is drawn: see `refusalScene`'s options, whose drawing the core repeats. */
-export interface NoticeOptions {
-  readonly measure: MeasureText
-  readonly mode: SpatialThemeMode
-  readonly maxWidth?: number
-  readonly at?: { readonly x: number; readonly y: number }
-}
-
-/**
- * The notice `words` say, drawn by `core` as one box and its text runs, with
- * the picture the core drew of it in the envelope and form `svg` names. A
- * measurer that fails does not refuse it (the core draws it by the ratio
- * estimate); what does is words past 64 KiB together (`input-too-large`), a
- * picture past the SVG cap, or a font handle the core does not hold. Each of
- * those throws here, as an `Error` whose message names the refusal's code and
- * reason: a refusal's words are `refusalCopy`'s sentence or two, so none is
- * an input this has to answer.
- */
-export function noticeThroughCore(
-  core: LayoutCore,
-  words: NoticeWords,
-  options: NoticeOptions,
-  svg: CoreSvgAsk,
-): { readonly nodes: SceneNode[] } & MaybePictured {
-  const { measure, mode, maxWidth, at } = options
-  const layer = queried<{ readonly nodes: readonly SceneNode[] } & MaybePictured>(core, {
-    request: () => ({
-      query: 'notice',
-      title: words.title,
-      detail: words.detail,
-      mode,
-      measure: measureSpecOf(measure),
-      ...(maxWidth === undefined ? {} : { maxWidth }),
-      ...(at === undefined ? {} : { at: [at.x, at.y] as const }),
-      svg,
-    }),
-    unanswered: (refused) => {
-      throw new Error(`the core refused a notice: ${refused.code} ${refused.reason}`)
-    },
-    read: (answer) =>
-      !('nodes' in answer) ? undefined : { nodes: answer.nodes, ...askedPicture(svg, answer) },
-    measure,
   })
   return { ...layer, nodes: [...layer.nodes] }
 }

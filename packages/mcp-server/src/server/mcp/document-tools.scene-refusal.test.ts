@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import type { LayoutCore } from '@kamiazya/whiteboard-canvas-render'
 import { refusalCopy } from '@kamiazya/whiteboard-canvas-render'
 import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport } from '@modelcontextprotocol/server'
@@ -48,6 +49,8 @@ const refused = { code: 'input-too-large', reason: 'too-many-elements' } as cons
 
 const refusing: LayoutCore = fakeLayoutCore({
   layout: { layoutSpatialCanvas: () => ({ refused }) },
+  // The notice is drawn by the core that refused the board.
+  query: testLayoutCore().query,
 })
 
 type Content = readonly { readonly type: string; readonly text?: string }[]

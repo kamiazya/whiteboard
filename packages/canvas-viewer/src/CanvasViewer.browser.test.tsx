@@ -3,6 +3,11 @@
 // or a real mount produces a non-empty rendered <svg>. This is the nearest
 // real-browser layer for both claims.
 
+import {
+  type LayoutCore,
+  type LayoutRefusal,
+  refusalCopy,
+} from '@kamiazya/whiteboard-canvas-render'
 import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { browserLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/browser-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -223,5 +228,43 @@ describe('CanvasViewer fits the box it is given', () => {
       expect(box.bottom).toBeLessThanOrEqual(paneBox.bottom + 1)
     }
     expect(laid).toBe(before)
+  })
+})
+
+describe('CanvasViewer in a page whose core did not load (real browser)', () => {
+  it('says why the board is not drawn, in words a reader can see', async () => {
+    // The core a page installs when its wasm failed to load (apps/web's
+    // `unavailableCore`): every layout and every notice is refused.
+    const refused: LayoutRefusal = { code: 'malformed', reason: 'core-unavailable' }
+    const unavailable: LayoutCore = {
+      routing: {
+        routeLayout() {
+          throw new Error('the Rust core did not load')
+        },
+      },
+      layout: { layoutSpatialCanvas: () => ({ refused }) },
+      markdown: { layoutMarkdown: () => ({ refused }) },
+      query: { layoutQuery: () => ({ refused }) },
+    }
+    // Scoped to this render: the file leaves earlier mounts in the document.
+    const { container } = render(
+      <div style={{ width: 400, height: 300 }}>
+        <CanvasViewer
+          core={unavailable}
+          canvas={goldenCanvas}
+          measure={fakeMeasure}
+          testId="no-core"
+        />
+      </div>,
+    )
+    const { title, detail } = refusalCopy(refused)
+    const figure = container.querySelector('[data-testid="no-core"]') as HTMLElement
+    const status = figure.querySelector('[role="status"]') as HTMLElement
+    await expect.element(status).toBeVisible()
+    expect(status.textContent).toBe(`${title}${detail}`)
+    const box = status.getBoundingClientRect()
+    expect(box.width).toBeGreaterThan(0)
+    expect(box.height).toBeGreaterThan(0)
+    expect(figure.querySelector('svg')).toBeNull()
   })
 })

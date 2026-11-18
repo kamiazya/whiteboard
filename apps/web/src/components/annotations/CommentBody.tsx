@@ -30,8 +30,11 @@ import {
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useKeyedSvg } from '../../hooks/use-keyed-svg.js'
+import { useLayoutCoreGeneration } from '../../hooks/use-layout-core-generation.js'
 import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
+import { undrawnRefusal } from '../../lib/undrawn-refusal.js'
 import { cn } from '../../lib/utils.js'
+import { RefusalWords } from '../ui/refusal-words.js'
 
 /**
  * Until the container has been measured. A comment is read in a rail whose
@@ -64,7 +67,7 @@ function drawBody(body: string, measure: MeasureText, width: number, compact: bo
       density: compact ? 'compact' : 'comfortable',
     },
     { padding: BODY_PADDING_PX },
-  ).keyed
+  )
 }
 
 export interface CommentBodyProps {
@@ -95,10 +98,13 @@ export function CommentBody({ body, compact, className, measure }: CommentBodyPr
     return () => observer.disconnect()
   }, [])
 
-  const keyed = useMemo(
+  // Draws again when the page's core loads on a retry after a failed boot load.
+  const coreGeneration = useLayoutCoreGeneration()
+  const { scene, keyed } = useMemo(
     () => drawBody(body, resolvedMeasure, width ?? UNMEASURED_WIDTH_PX, compact === true),
-    [body, compact, resolvedMeasure, width],
+    [body, compact, resolvedMeasure, width, coreGeneration],
   )
+  const undrawn = undrawnRefusal(scene)
 
   const mount = useKeyedSvg(keyed)
   // One stable callback: an inline arrow here changes identity every render,
@@ -113,20 +119,23 @@ export function CommentBody({ body, compact, className, measure }: CommentBodyPr
     [mount],
   )
   return (
-    <div
-      ref={attach}
-      data-comment-body=""
-      className={cn(className)}
-      // `currentColor`, not a palette value: canvas-render assigns markdown
-      // body runs no fill of their own precisely so they inherit one, and
-      // each `<text>` would otherwise take the SVG default — black — on
-      // every theme. Taking the colour the host's own CSS already resolves
-      // means this follows the theme with no theme prop threaded down to it
-      // and no second copy of the palette. (The preview pane needs the
-      // literal value instead, because it also feeds a `--preview-fill`
-      // custom property that Chromium's :visited handling will not read
-      // through `inherit`.)
-      style={{ fill: 'currentColor' } as CSSProperties}
-    />
+    <>
+      <div
+        ref={attach}
+        data-comment-body=""
+        className={cn(className)}
+        // `currentColor`, not a palette value: canvas-render assigns markdown
+        // body runs no fill of their own precisely so they inherit one, and
+        // each `<text>` would otherwise take the SVG default — black — on
+        // every theme. Taking the colour the host's own CSS already resolves
+        // means this follows the theme with no theme prop threaded down to it
+        // and no second copy of the palette. (The preview pane needs the
+        // literal value instead, because it also feeds a `--preview-fill`
+        // custom property that Chromium's :visited handling will not read
+        // through `inherit`.)
+        style={{ fill: 'currentColor' } as CSSProperties}
+      />
+      {undrawn === undefined ? null : <RefusalWords refusal={undrawn} />}
+    </>
   )
 }

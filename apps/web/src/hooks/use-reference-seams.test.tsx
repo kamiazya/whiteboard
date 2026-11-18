@@ -28,6 +28,8 @@ function askCore(body: string, references: ReferenceSeams) {
         return { refused: { code: 'malformed', reason: 'recording' } }
       },
     },
+    // The refusal's notice is not what this records.
+    query: { layoutQuery: () => ({ refused: { code: 'malformed', reason: 'recording' } }) },
   })
   try {
     layoutMarkdownDocument(body, {

@@ -502,9 +502,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // core call: an envelope handed through and a refusal drawn by the
     // backend, held byte for byte by `core-picture.rust.test.ts`, which is the
     // stronger check; nothing in it is a heuristic for a mutant to weaken.
+    // 88 and 10 when the refusal moved to the core's notice (A3.5): the
+    // switches' shared helpers left them as leaf modules (`layout/asked-picture.ts`,
+    // `layout/core-query.ts`) beside `layout/notice-switch.ts`, each an adapter call whose
+    // answer the core's parity tests hold.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 10,
-      production: 85,
+      production: 88,
     })
   })
 

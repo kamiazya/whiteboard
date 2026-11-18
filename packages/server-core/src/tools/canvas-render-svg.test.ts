@@ -4,6 +4,7 @@ import {
   SPATIAL_THEME_FONT_FAMILY,
 } from '@kamiazya/whiteboard-canvas-render'
 import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import {
   writeCommentThread,
   writeDocumentKind,
@@ -681,7 +682,11 @@ describe('wb_scene_render of a board the core refuses', () => {
     const deps = {
       ...(await makeDeps(store)),
       layoutCore: async () =>
-        fakeLayoutCore({ layout: { layoutSpatialCanvas: () => ({ refused }) } }),
+        fakeLayoutCore({
+          layout: { layoutSpatialCanvas: () => ({ refused }) },
+          // The notice is drawn by the core that refused the board.
+          query: testLayoutCore().query,
+        }),
     }
     const input = {
       workspaceId: WORKSPACE_ID,

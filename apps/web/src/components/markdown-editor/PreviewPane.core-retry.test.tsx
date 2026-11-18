@@ -38,6 +38,7 @@ const CORE_UNAVAILABLE = { code: 'malformed', reason: 'core-unavailable' } as co
 it('draws the note again once a retry loads the core it drew the notice without', () => {
   realm.core = fakeLayoutCore({
     markdown: { layoutMarkdown: () => ({ refused: CORE_UNAVAILABLE }) },
+    query: { layoutQuery: () => ({ refused: CORE_UNAVAILABLE }) },
   })
   const { container } = render(
     <PreviewPane theme="light" value="# Hello" maxWidth={480} measure={fakeMeasure} />,

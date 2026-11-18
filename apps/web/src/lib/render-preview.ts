@@ -1,4 +1,9 @@
-import type { MeasureText, ReferenceSeams, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  LayoutRefusal,
+  MeasureText,
+  ReferenceSeams,
+  Scene,
+} from '@kamiazya/whiteboard-canvas-render'
 import {
   type KeyedSvgRender,
   layoutMarkdownDocument,
@@ -16,6 +21,7 @@ import { PREVIEW_PADDING_PX } from './preview-padding.js'
 import type { RailBlock } from './rail-geometry.js'
 import { requireLayoutCore } from './spatial/require-layout-core.js'
 import type { ResolvedTheme } from './theme.js'
+import { undrawnRefusal } from './undrawn-refusal.js'
 
 export interface RenderMarkdownPreviewOptions {
   readonly measure: MeasureText
@@ -69,6 +75,8 @@ export interface RenderedMarkdownPreview {
    * byte-identical document for string consumers (the worker protocol); the groups feed the pane's DOM patcher. */
   readonly keyed: KeyedSvgRender
   readonly anchors: readonly PreviewBlockAnchor[]
+  /** A refusal the picture could not draw (`undrawnRefusal`), for the pane to say in words. */
+  readonly undrawn?: LayoutRefusal
   /**
    * Each top-level block's box, in the SVG's own pixel space — the same
    * origin the anchors use, and from the SAME layout pass, so the rail that
@@ -125,7 +133,13 @@ export function renderMarkdownPreview(
     // Undefined only for a `section`, which the preview never asks for.
     if (drawn !== undefined) {
       const { scene, keyed } = drawn
-      return { keyed, anchors: blockAnchors(value, scene), blocks: blockBoxes(scene) }
+      const undrawn = undrawnRefusal(scene)
+      return {
+        keyed,
+        anchors: blockAnchors(value, scene),
+        blocks: blockBoxes(scene),
+        ...(undrawn === undefined ? {} : { undrawn }),
+      }
     }
   } catch (error) {
     log.warn('markdown preview layout failed; rendering an empty scene', error)

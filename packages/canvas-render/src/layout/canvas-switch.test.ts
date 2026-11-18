@@ -8,7 +8,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { CanvasLayoutCore, CanvasLayoutRequest } from '../canvas-core.js'
 import { highlightCode } from '../highlight/lowlight.js'
-import { constantRatioMeasureText, describeMeasure } from '../measure.js'
+import { constantRatioMeasureText, describeMeasure, measureSpecOf } from '../measure.js'
 import { referenceSeams } from '../references/seams.js'
 import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../references/wire.js'
 import { type LayoutRefusal, refusalScene } from '../refusal.js'
@@ -16,7 +16,8 @@ import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
-import { askedPicture, CoreUnaskable, canvasLayoutRequest } from './canvas-switch.js'
+import { askedPicture } from './asked-picture.js'
+import { CoreUnaskable, canvasLayoutRequest } from './canvas-switch.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout-options.js'
 import { layoutSpatialCanvasWithAnchors } from './spatial-canvas.js'
 
@@ -47,12 +48,16 @@ const reference = layoutSpatialCanvasWithAnchors(canvas, base)
 type Answering = CanvasLayoutCore['layoutSpatialCanvas']
 
 /** A core answering as `answer` says, keeping each request it was handed. */
+const realCore = testLayoutCore()
+
 function coreOf(answer: Answering) {
   const requests: CanvasLayoutRequest[] = []
   const highlighters: unknown[] = []
   const measurers: unknown[] = []
   const caches: unknown[] = []
   const core = fakeLayoutCore({
+    // A refusal is drawn as the real core's notice.
+    query: realCore.query,
     layout: {
       layoutSpatialCanvas: (request, highlight, measure, cache) => {
         requests.push(request)
@@ -132,6 +137,27 @@ describe('the whole layout through the core', () => {
       { kind: 'host' },
     )
     const { laid } = run(() => ({ refused }), { measure: failing })
+    const drawn = refusalScene(refused, { measure: constantRatioMeasureText, mode: 'light' })
+    expect(laid.scene).toEqual(drawn)
+  })
+
+  it('draws a refusal for the faces a layout named by ratio, since the notice needs none', () => {
+    const refused: LayoutRefusal = { code: 'input-too-large', reason: 'handles' }
+    const asked: string[] = []
+    // The faces are refused for the notice too, as they were for the layout;
+    // only a notice asked by ratio is drawn.
+    const core = fakeLayoutCore({
+      layout: { layoutSpatialCanvas: () => ({ refused }) },
+      query: {
+        layoutQuery: (request, ...rest) => {
+          const kind = 'measure' in request ? request.measure.kind : 'none'
+          asked.push(kind)
+          return kind === 'ratio' ? realCore.query.layoutQuery(request, ...rest) : { refused }
+        },
+      },
+    })
+    const laid = layoutSpatialCanvasWithAnchors(canvas, { ...base, core })
+    expect(asked).toEqual([measureSpecOf(measure).kind, 'ratio'])
     const drawn = refusalScene(refused, { measure: constantRatioMeasureText, mode: 'light' })
     expect(laid.scene).toEqual(drawn)
   })

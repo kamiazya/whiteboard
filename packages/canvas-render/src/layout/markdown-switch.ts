@@ -9,16 +9,12 @@ import type { MarkdownCommentRequest, MarkdownNoteRequest } from '../markdown-co
 import { type MeasureText, measureSpecOf } from '../measure.js'
 import type { ReferenceSeams } from '../references/seams.js'
 import { wireOfSeams } from '../references/wire.js'
-import { type LayoutRefusal, refusalScene } from '../refusal.js'
+import type { LayoutRefusal } from '../refusal.js'
 import type { SpatialThemeMode } from '../theme/spatial-theme.js'
-import {
-  askedPicture,
-  CoreUnaskable,
-  hasData,
-  type MaybePictured,
-  styleOptions,
-} from './canvas-switch.js'
+import { askedPicture, type MaybePictured } from './asked-picture.js'
+import { CoreUnaskable, hasData, styleOptions } from './canvas-switch.js'
 import type { SpatialRenderStyle } from './layout-options.js'
+import { refusalThroughCore } from './notice-switch.js'
 
 // A markdown body through the Rust core's markdown entry (ADR-0054 step 7,
 // S18c): the request a note or a comment makes, and what a surface is answered
@@ -129,9 +125,12 @@ export function noteThroughCore(
   if ('refused' in answer) {
     const refusal = answer.refused
     options.onRefused?.(refusal)
-    const mode = options.mode ?? 'light'
-    const measure = options.measure
-    return { scene: refusalScene(refusal, { measure, mode, maxWidth: options.maxWidth }) }
+    const notice = {
+      measure: options.measure,
+      mode: options.mode ?? 'light',
+      maxWidth: options.maxWidth,
+    }
+    return refusalThroughCore(options.core, refusal, notice, svg)
   }
   if ('missing' in answer) return undefined
   const { scene, fragmentsAsked } = answer
@@ -197,12 +196,12 @@ export function commentThroughCore(
     options.measure,
   )
   if ('refused' in answer) {
-    const scene = refusalScene(answer.refused, {
+    const notice = {
       measure: options.measure,
-      mode: 'light',
+      mode: 'light' as const,
       maxWidth: options.maxWidth ?? COMMENT_TEXT_MAX_WIDTH_PX,
-    })
-    return { scene }
+    }
+    return refusalThroughCore(options.core, answer.refused, notice, svg)
   }
   if ('missing' in answer) {
     throw new Error('the core answered a comment as a note missing its section')

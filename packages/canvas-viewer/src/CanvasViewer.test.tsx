@@ -2,6 +2,7 @@ import {
   constantRatioMeasureText,
   type FragmentAsk,
   fragmentAskKey,
+  refusalCopy,
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -368,5 +369,37 @@ describe("CanvasViewer lays out through the host's core (ADR-0054)", () => {
     expect(getByTestId('canvas-viewer').textContent).toContain('the core drew this')
     expect(getByTestId('canvas-viewer').textContent).not.toContain('from the core')
     expect(getByTestId('canvas-viewer').textContent).not.toContain('hello')
+  })
+})
+
+describe('CanvasViewer in a realm whose core did not load', () => {
+  it('says the refusal in words where the core could not draw its notice', () => {
+    const unavailable = { code: 'malformed', reason: 'core-unavailable' } as const
+    // A core that did not load refuses the layout and the notice alike.
+    const core = fakeLayoutCore({
+      layout: { layoutSpatialCanvas: () => ({ refused: unavailable }) },
+      query: { layoutQuery: () => ({ refused: unavailable }) },
+    })
+    const { getByTestId } = render(
+      <CanvasViewer core={core} canvas={canvas} measure={fakeMeasure} testId="viewer" />,
+    )
+    const { title, detail } = refusalCopy(unavailable)
+    const figure = getByTestId('viewer')
+    expect(figure.querySelector('[role="status"]')?.textContent).toBe(`${title}${detail}`)
+    expect(figure.querySelector('svg')).toBeNull()
+  })
+
+  it('draws the notice the core drew where it could, with no words beside it', () => {
+    const refused = { code: 'input-too-large', reason: 'too-many-elements' } as const
+    const core = fakeLayoutCore({
+      layout: { layoutSpatialCanvas: () => ({ refused }) },
+      query: CORE.query,
+    })
+    const { getByTestId } = render(
+      <CanvasViewer core={core} canvas={canvas} measure={fakeMeasure} testId="viewer" />,
+    )
+    const figure = getByTestId('viewer')
+    expect(figure.querySelector('svg')?.textContent).toContain(refusalCopy(refused).title)
+    expect(figure.querySelector('[role="status"]')).toBeNull()
   })
 })
