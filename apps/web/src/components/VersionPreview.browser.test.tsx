@@ -101,14 +101,14 @@ function viewOf(container: HTMLElement): { zoom: number; x: number; y: number } 
 }
 
 /**
- * Mounts and waits out the first ResizeObserver reflow, so coordinates taken
+ * Mounts and waits until the picture fills the surface, so coordinates taken
  * from the layout box are the ones the gesture lands on.
  */
 async function mountSettled(offsetPx = 0): Promise<HTMLElement> {
   const { container } = mount('light', offsetPx)
   await expect
-    .poll(() => container.querySelector('svg')?.getAttribute('width'))
-    .toBe(String(SURFACE_PX))
+    .poll(() => container.querySelector('svg')?.getBoundingClientRect().width)
+    .toBe(SURFACE_PX)
   return container
 }
 
@@ -131,12 +131,11 @@ describe('VersionPreview', () => {
 
   it('pans the past canvas under a drag', async () => {
     const { container } = mount('dark')
-    // The viewer sizes itself from a ResizeObserver, so the drawn box moves
-    // once after the first paint. Measuring the baseline before that settles
-    // reads that reflow as part of the pan.
+    // The picture is mounted once the viewer has laid it out; measuring the
+    // baseline before it fills the surface would read its arrival as a pan.
     await expect
-      .poll(() => container.querySelector('svg')?.getAttribute('width'))
-      .toBe(String(SURFACE_PX))
+      .poll(() => container.querySelector('svg')?.getBoundingClientRect().width)
+      .toBe(SURFACE_PX)
     const rect = () =>
       (container.querySelector('svg rect') as SVGRectElement).getBoundingClientRect()
     const before = rect()
@@ -153,8 +152,8 @@ describe('VersionPreview', () => {
   it('offers the way back to the fitted view once it has been moved', async () => {
     const { container } = mount('dark')
     await expect
-      .poll(() => container.querySelector('svg')?.getAttribute('width'))
-      .toBe(String(SURFACE_PX))
+      .poll(() => container.querySelector('svg')?.getBoundingClientRect().width)
+      .toBe(SURFACE_PX)
     expect(container.querySelector('[data-testid="preview-fit-view"]')).toBeNull()
     drag()
 
@@ -171,8 +170,8 @@ describe('VersionPreview', () => {
   it('drops a mouse drag whose release the surface never saw', async () => {
     const { container } = mount('dark')
     await expect
-      .poll(() => container.querySelector('svg')?.getAttribute('width'))
-      .toBe(String(SURFACE_PX))
+      .poll(() => container.querySelector('svg')?.getBoundingClientRect().width)
+      .toBe(SURFACE_PX)
 
     pointer('pointerdown', 1, 200, 200, { pointerType: 'mouse', buttons: 1 })
     pointer('pointermove', 1, 260, 240, { pointerType: 'mouse', buttons: 1 })
@@ -197,8 +196,8 @@ describe('VersionPreview', () => {
   it('drops a drag whose capture the platform revoked', async () => {
     const { container } = mount('dark')
     await expect
-      .poll(() => container.querySelector('svg')?.getAttribute('width'))
-      .toBe(String(SURFACE_PX))
+      .poll(() => container.querySelector('svg')?.getBoundingClientRect().width)
+      .toBe(SURFACE_PX)
 
     pointer('pointerdown', 1, 200, 200)
     pointer('pointermove', 1, 260, 240)
@@ -219,8 +218,8 @@ describe('VersionPreview', () => {
   it('zooms the past canvas under a two-finger pinch', async () => {
     const { container } = mount('dark')
     await expect
-      .poll(() => container.querySelector('svg')?.getAttribute('width'))
-      .toBe(String(SURFACE_PX))
+      .poll(() => container.querySelector('svg')?.getBoundingClientRect().width)
+      .toBe(SURFACE_PX)
     expect(scaleOf(container)).toBe(1)
 
     pointer('pointerdown', 1, 180, 200)
@@ -251,8 +250,8 @@ describe('the preview view control', () => {
     // The surface reflows once the scene is measured, and a drag dispatched
     // at coordinates from before that lands somewhere else.
     await expect
-      .poll(() => container.querySelector('svg')?.getAttribute('width'))
-      .toBe(String(SURFACE_PX))
+      .poll(() => container.querySelector('svg')?.getBoundingClientRect().width)
+      .toBe(SURFACE_PX)
 
     // Move it, so the control is on screen at all.
     drag()
