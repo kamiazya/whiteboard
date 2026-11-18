@@ -4,7 +4,7 @@
 
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -30,12 +30,13 @@ test('the legs’ files and testFiles maps are concatenated; the rest is the fir
   })
 })
 
-test('a report carrying a lone surrogate escape merges, where jq refuses it', () => {
+test('a report carrying a lone surrogate escape merges, where jq refuses it', (t) => {
   // Stryker writes a test's source into the report, and a test about lone
   // surrogates holds one as `\ud800` — valid JSON text that jq rejects
   // ("Invalid \uXXXX\uXXXX surrogate pair escape") and would fail the
   // report step outright.
   const dir = mkdtempSync(join(tmpdir(), 'merge-mutation-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
   const a = join(dir, 'a.json')
   const b = join(dir, 'b.json')
   writeFileSync(a, '{"files":{"x.ts":{"source":"\\ud800"}},"testFiles":{}}')
