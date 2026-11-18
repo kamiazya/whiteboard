@@ -79,7 +79,7 @@ export interface CoreKeyedSvg {
 }
 
 /** A view box over the laid-out scene's bounds, grown by `margin` when it is finite and positive. */
-export interface CoreSvgBounds {
+interface CoreSvgBounds {
   readonly of: 'scene' | 'document'
   readonly margin?: number
 }
