@@ -79,8 +79,9 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   do the editor surface, the drag layers, a list row's picture and the export
   (`scene-render-core.ts`, A3.3): the editor asks its layout worker for the
   keyed form (`form: 'keyed'`, answered `laid-out-keyed`), held by
-  `editor-surface-core.browser.test.tsx` and the worker parity test. Previews
-  and comment bodies still draw in TypeScript (A3.4 on).
+  `editor-surface-core.browser.test.tsx` and the worker parity test. The
+  preview pane, a comment's body and `CanvasViewer` do too (A3.4); only the
+  shortcode icon and a refused layout's notice still draw in TypeScript (A3.5).
 - `core.search` (`search.ts`): lexical search over the one `search_op` export.
   Text calls are stateless; a `SearchIndex` (a corpus's token bags, upserted per
   changed document, queried by string) and a set of link labels live in the

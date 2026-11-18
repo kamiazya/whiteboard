@@ -7,14 +7,13 @@ import type {
   SpatialThemeMode,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
+  type CoreSvgAsk,
   createSpatialTheme,
-  layoutSpatialCanvas,
-  renderSceneToSvg,
+  layoutSpatialCanvasPicture,
   type SpatialAppearanceResolver,
-  type SvgDocumentOptions,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { hasLoadedFace } from './font-loading.js'
 import { createBrowserMeasureText } from './measure-text.js'
 import { SceneSvg } from './SceneSvg.js'
@@ -41,10 +40,10 @@ const VIEWER_APPEARANCES = {
 
 export interface CanvasViewerProps {
   canvas: SpatialCanvas
-  width?: SvgDocumentOptions['width']
-  height?: SvgDocumentOptions['height']
-  padding?: SvgDocumentOptions['padding']
-  background?: SvgDocumentOptions['background']
+  width?: CoreSvgAsk['width']
+  height?: CoreSvgAsk['height']
+  padding?: CoreSvgAsk['padding']
+  background?: CoreSvgAsk['background']
   /** Injection seam for tests; defaults to the real Canvas 2D measurer. */
   measure?: MeasureText
   /**
@@ -128,33 +127,11 @@ export function CanvasViewer({
   testId = DEFAULT_TEST_ID,
   label = DEFAULT_LABEL,
 }: CanvasViewerProps) {
-  const hostRef = useRef<HTMLElement | null>(null)
-  const [box, setBox] = useState<{ readonly w: number; readonly h: number } | null>(null)
+  // What the host did not say. The picture is drawn at the scene's own size
+  // and scaled by CSS into the figure (owner decision q89): a host resize
+  // then costs no layout and no serialization, and `preserveAspectRatio`'s
+  // default fits it exactly as drawing it at the box's size did.
   const hostSized = width === undefined && height === undefined
-
-  // What the host did not say. `renderSceneToSvg` maps the scene's own
-  // coordinates into whatever box it is given, so a viewer with no box has
-  // nowhere to map them TO — see the envelope note at the render call. The
-  // figure's size does not depend on the SVG inside it (it is a fixed 100%
-  // either way), so observing it cannot feed back.
-  useEffect(() => {
-    const host = hostRef.current
-    if (!hostSized || host === null || typeof ResizeObserver === 'undefined') return
-    const observer = new ResizeObserver((entries) => {
-      const rect = entries[0]?.contentRect
-      if (rect === undefined || rect.width <= 0 || rect.height <= 0) return
-      setBox((prev) =>
-        prev !== null && Math.abs(prev.w - rect.width) < 1 && Math.abs(prev.h - rect.height) < 1
-          ? prev
-          : { w: rect.width, h: rect.height },
-      )
-    })
-    observer.observe(host)
-    return () => observer.disconnect()
-  }, [hostSized])
-
-  const renderWidth = width ?? (hostSized ? box?.w : undefined)
-  const renderHeight = height ?? (hostSized ? box?.h : undefined)
   // Stable across re-renders of the same component instance so layoutSpatialCanvas
   // doesn't recreate the (lazily-created) Canvas 2D context on every render.
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
@@ -169,46 +146,45 @@ export function CanvasViewer({
   const fontReady = useViewerFontReady()
 
   const svg = useMemo(() => {
-    const scene = layoutSpatialCanvas(canvas, {
-      measure: resolvedMeasure,
-      appearance: VIEWER_APPEARANCES[theme],
-      ...(style === undefined ? {} : { style }),
-      // A theme's family is declared only where this realm can measure it,
-      // so the SVG names the face its coordinates came from.
-      fontAvailable: hasLoadedFace,
-      // A viewer has no zoom to gate a miniature by: a referenced canvas
-      // draws at the node's intrinsic size, export's policy.
-      ...(references === undefined ? {} : { references, expandFileNode: () => true }),
-      ...(threads === undefined ? {} : { threads }),
-      ...fragments,
-      core,
-      // No onDegrade: the viewer degrades silently by choice — it has no
-      // logger to report through, and a malformed body/unrecognized node
-      // still renders (chrome-only or a literal fallback run).
-    })
-    // `padding` is passed even when the host named none, and that is the
-    // whole of the framing fix rather than a style choice: canvas-render
-    // emits the `width`/`height`/`viewBox` envelope only when SOME envelope
-    // option is present — right for a scene composed into a larger document,
-    // wrong for this component, which is always a whole SVG in a browser.
-    // Without it the root carries `xmlns` alone and the children keep raw
-    // scene coordinates, so a canvas whose nodes start at x=400 draws as
-    // blank space with one clipped corner. `?? 0` is what `sanitizePadding`
-    // already substituted for `undefined`, so a host that was passing a size
-    // gets byte-identical output.
-    return renderSceneToSvg(scene, {
-      width: renderWidth,
-      height: renderHeight,
-      padding: padding ?? 0,
-      background,
-    })
+    const { svg: drawn } = layoutSpatialCanvasPicture(
+      canvas,
+      {
+        measure: resolvedMeasure,
+        appearance: VIEWER_APPEARANCES[theme],
+        ...(style === undefined ? {} : { style }),
+        // A theme's family is declared only where this realm can measure it,
+        // so the SVG names the face its coordinates came from.
+        fontAvailable: hasLoadedFace,
+        // A viewer has no zoom to gate a miniature by: a referenced canvas
+        // draws at the node's intrinsic size, export's policy.
+        ...(references === undefined ? {} : { references, expandFileNode: () => true }),
+        ...(threads === undefined ? {} : { threads }),
+        ...fragments,
+        core,
+        // No onDegrade: the viewer degrades silently by choice — it has no
+        // logger to report through, and a malformed body/unrecognized node
+        // still renders (chrome-only or a literal fallback run).
+      },
+      {
+        // `padding` is asked even when the host named none: it is what asks
+        // for a whole document — the `width`/`height`/`viewBox` envelope —
+        // rather than a fragment whose children keep raw scene coordinates,
+        // so a canvas whose nodes start at x=400 would draw as blank space.
+        padding: padding ?? 0,
+        ...(width === undefined ? {} : { width }),
+        ...(height === undefined ? {} : { height }),
+        ...(background === undefined ? {} : { background }),
+      },
+    )
+    return hostSized ? fillingItsHost(drawn) : drawn
     // fontReady is a pure re-measure trigger, not a value read inside the
     // callback.
   }, [
     canvas,
     resolvedMeasure,
-    renderWidth,
-    renderHeight,
+    width,
+    height,
+    hostSized,
     padding,
     background,
     references,
@@ -231,7 +207,6 @@ export function CanvasViewer({
   return (
     <SceneSvg
       as="figure"
-      ref={hostRef}
       svg={svg}
       data-testid={testId}
       aria-label={label}
@@ -246,4 +221,17 @@ export function CanvasViewer({
       }}
     />
   )
+}
+
+/** The root tag's numeric `width` and `height`, which the core writes as the view box's size. */
+const ROOT_SIZE = /^(<svg\b[^>]*?)\swidth="[^"]*"\sheight="[^"]*"/
+
+/**
+ * The picture sized by the figure rather than by its own extent: the root's
+ * `width`/`height` become `100%`, so the SVG fills its host and its view box
+ * scales to fit (`xMidYMid meet`, the default). Only the root tag's two size
+ * attributes change, the derivation `SceneSvg` names as allowed.
+ */
+function fillingItsHost(svg: string): string {
+  return svg.replace(ROOT_SIZE, '$1 width="100%" height="100%"')
 }

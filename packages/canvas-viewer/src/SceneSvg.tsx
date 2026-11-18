@@ -2,7 +2,7 @@ import { createElement, type HTMLAttributes, type Ref } from 'react'
 
 interface SceneSvgProps
   extends Omit<HTMLAttributes<HTMLElement>, 'children' | 'dangerouslySetInnerHTML'> {
-  /** canvas-render's serializer output (or `fitSvgToBox` of it) — never any other string. */
+  /** A trusted serializer's SVG (the core's, or canvas-render's for a refused layout's notice), or a root-size derivation of it, below — never any other string. */
   readonly svg: string
   /** The host element; `figure` for a region that names its content, `span` inside a line. */
   readonly as?: 'div' | 'figure' | 'span'
@@ -12,14 +12,27 @@ interface SceneSvgProps
 /**
  * The one place a scene's SVG string becomes DOM.
  *
- * Injecting it as markup is sound BECAUSE canvas-render's serializer
- * (packages/canvas-render/src/svg/format.ts) is the SOLE producer of the
- * string and escapes `&`/`<`/`>` in text content plus `"`/`'` in attribute
- * values: there is no untrusted-HTML path, so this is not a sink that needs
- * a sanitizer, and none must be added. Two derivations keep that true and
+ * Injecting it as markup is sound BECAUSE the string has exactly two
+ * producers, both serializers this repo owns: the core's
+ * (crates/core/canvas-render/src/svg/serialize.rs, over `xml_escape.rs`),
+ * and canvas-render's TypeScript backend, which still draws a refused
+ * layout's notice. Both escape `&`/`<`/`>` in text content plus `"`/`'` in
+ * attribute values, so document text and attributes have no untrusted-HTML
+ * path; this is not a sink that needs a sanitizer, and none must be added.
+ *
+ * One part is NOT escaped: an `svgFragment` (a formula or a diagram) is
+ * emitted verbatim by both serializers, after a well-formedness check. That
+ * check is not what makes it safe — it is trusted because the HOST's own
+ * renderer (MathJax, mermaid) produced it from the source, never because a
+ * document supplied SVG. A host that fed a fragment table from anywhere else
+ * would void this argument.
+ *
+ * Two derivations keep the rest true and
  * are the only ones allowed — the keyed projection's group strings, which
- * are the same serializer's bytes, and `fitSvgToBox`, which only drops the
- * root tag's `width`/`height`/`preserveAspectRatio` attributes. If a
+ * are the same serializer's bytes, and the two that touch only the root
+ * tag's size: `fitSvgToBox`, which drops its `width`/`height`/
+ * `preserveAspectRatio`, and `CanvasViewer`'s `fillingItsHost`, which sets its
+ * `width`/`height` to `100%`. If a
  * caller's string comes from anywhere else this reasoning no longer holds
  * and the caller must not use this component.
  *

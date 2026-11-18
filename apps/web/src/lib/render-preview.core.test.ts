@@ -7,7 +7,7 @@ import {
   referenceWire,
   type Scene,
 } from '@kamiazya/whiteboard-canvas-render'
-import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { fakeLayoutCore, fakePicture } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { recordingFragmentTable } from './fragment-requests.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
@@ -40,7 +40,11 @@ function recordingCore() {
       layoutMarkdown: (request) => {
         // A note's layout only: a comment never reaches these surfaces.
         if (request.kind === 'markdown') asked.push(request)
-        return { scene: CORE_SCENE, degradations: [] }
+        return {
+          scene: CORE_SCENE,
+          degradations: [],
+          ...fakePicture(request, '<text>the core drew this</text>'),
+        }
       },
     },
   })
@@ -69,8 +73,12 @@ describe('the preview pane lays its note out through the core', () => {
       style: 'document',
       measure: { kind: 'ratio' },
       fragments: [],
+      // The keyed projection is asked in the same call, at the pane's padding.
+      svg: { padding: 8, form: 'keyed' },
     })
-    expect(keyed.svg).toContain('from the core')
+    // The page paints the core's picture, never one drawn here from its scene.
+    expect(keyed.svg).toContain('the core drew this')
+    expect(keyed.svg).not.toContain('from the core')
   })
 
   it('hands the core the references as their wire', () => {
@@ -90,10 +98,11 @@ describe('the preview pane lays its note out through the core', () => {
     vi.mocked(currentLayoutCore).mockReturnValue({
       ...core,
       markdown: {
-        layoutMarkdown: () => ({
+        layoutMarkdown: (request) => ({
           scene: CORE_SCENE,
           degradations: [],
           fragmentsAsked: [{ kind: 'math', value: 'x' }],
+          ...fakePicture(request, ''),
         }),
       },
     })

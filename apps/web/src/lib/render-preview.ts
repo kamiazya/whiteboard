@@ -2,7 +2,8 @@ import type { MeasureText, ReferenceSeams, Scene } from '@kamiazya/whiteboard-ca
 import {
   type KeyedSvgRender,
   layoutMarkdownDocument,
-  renderSceneToKeyedSvg,
+  layoutMarkdownDocumentKeyedPicture,
+  type MarkdownDocumentOptions,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import { hasLoadedFace } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
@@ -79,11 +80,11 @@ export interface RenderedMarkdownPreview {
 export { PREVIEW_PADDING_PX }
 
 /**
- * Parse -> layout -> serialize, backing the preview pane. This is the ONLY
- * renderer for markdown in this component: it goes through canvas-render's
- * `layoutMarkdownDocument` (the Rust core's markdown entry) and
- * `renderSceneToSvg`, the same path CanvasViewer uses for spatial text nodes
- * and export. There is no markdown-to-HTML fallback anywhere in this file —
+ * Parse -> layout -> picture, backing the preview pane. This is the ONLY
+ * renderer for markdown in this component: the Rust core lays the note out
+ * and draws its keyed projection in the same call
+ * (`layoutMarkdownDocumentKeyedPicture`, ADR-0054 A3.4), the backend every
+ * other surface's picture comes from. There is no markdown-to-HTML fallback anywhere in this file —
  * that would be a second renderer and would reintroduce the preview/export
  * drift this migration exists to remove.
  *
@@ -117,16 +118,45 @@ export function renderMarkdownPreview(
     tagLibrary,
   }: RenderMarkdownPreviewOptions,
 ): RenderedMarkdownPreview {
-  const scene = layoutMarkdownScene(value, {
-    measure,
-    maxWidth,
-    references,
-    theme,
-    fragments,
-    tagLibrary,
-  })
-  const keyed = renderSceneToKeyedSvg(scene, { padding: PREVIEW_PADDING_PX, background })
-  return { keyed, anchors: blockAnchors(value, scene), blocks: blockBoxes(scene) }
+  const options = { measure, maxWidth, references, theme, fragments, tagLibrary }
+  const ask = { padding: PREVIEW_PADDING_PX, ...(background === undefined ? {} : { background }) }
+  try {
+    const drawn = layoutMarkdownDocumentKeyedPicture(value, noteOptions(options), ask)
+    // Undefined only for a `section`, which the preview never asks for.
+    if (drawn !== undefined) {
+      const { scene, keyed } = drawn
+      return { keyed, anchors: blockAnchors(value, scene), blocks: blockBoxes(scene) }
+    }
+  } catch (error) {
+    log.warn('markdown preview layout failed; rendering an empty scene', error)
+  }
+  return { keyed: emptyPage(options, ask), anchors: [], blocks: [] }
+}
+
+/**
+ * The pane's document when the note's layout failed: an empty note in the
+ * pane's own envelope (its padding and paper), so the pane shows a blank
+ * page rather than the last one. Drawn by the core like every other picture;
+ * when no core answers at all, nothing was drawn and the pane gets
+ * `NOTHING_DRAWN`.
+ */
+function emptyPage(
+  options: Parameters<typeof noteOptions>[0],
+  ask: { readonly padding: number; readonly background?: string },
+): KeyedSvgRender {
+  try {
+    return layoutMarkdownDocumentKeyedPicture('', noteOptions(options), ask)?.keyed ?? NOTHING_DRAWN
+  } catch {
+    return NOTHING_DRAWN
+  }
+}
+
+/** The pane's document when no core answered: a constant, not a picture of anything. */
+const NOTHING_DRAWN: KeyedSvgRender = {
+  svg: '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+  rootOpen: '<svg xmlns="http://www.w3.org/2000/svg">',
+  rootAttrs: { xmlns: 'http://www.w3.org/2000/svg' },
+  groups: [],
 }
 
 /**
@@ -169,7 +199,7 @@ function blockAnchors(value: string, scene: Scene): readonly PreviewBlockAnchor[
   } catch {
     return []
   }
-  // The SVG's pixel origin is the padded viewBox top (renderSceneToSvg
+  // The SVG's pixel origin is the padded viewBox top (the core
   // derives viewBox = bounds expanded by padding).
   const originY = sceneBounds(scene).y - PREVIEW_PADDING_PX
   const anchors: PreviewBlockAnchor[] = []
@@ -182,46 +212,52 @@ function blockAnchors(value: string, scene: Scene): readonly PreviewBlockAnchor[
   return anchors
 }
 
-/** The note's scene itself, before the pane pads and keys it. */
-function layoutMarkdownScene(
-  value: string,
-  {
+/**
+ * How a note is laid out for the pane and its rail alike. A page, not an
+ * object: the document theme and the bundled family are the markdown entry's
+ * own, so the minimap rail, which maps THESE blocks, is laid out from the same
+ * metrics as the pane beside it.
+ */
+function noteOptions({
+  measure,
+  maxWidth,
+  references,
+  theme,
+  fragments,
+  tagLibrary,
+}: Omit<RenderMarkdownPreviewOptions, 'background'>): MarkdownDocumentOptions {
+  return {
     measure,
     maxWidth,
-    references,
-    theme,
-    fragments,
-    tagLibrary,
-  }: Omit<RenderMarkdownPreviewOptions, 'background'>,
+    // The app theme an embedded board is painted in, so its miniature
+    // matches the page around it.
+    mode: theme ?? 'light',
+    // A human surface draws the document (ADR-0030 decision 6), so a
+    // board embedded in a note is pencilled or glowing here exactly as
+    // it is on the canvas — the same default the spatial surfaces take.
+    style: 'document',
+    // The note's own prose is measured in the bundled family. A board
+    // EMBEDDED in it declares its theme's family only where a face for it
+    // is held, exactly as `editorLayoutBase` answers for the canvas
+    // surfaces (ADR-0011's invariant).
+    fontAvailable: hasLoadedFace,
+    core: requireLayoutCore(),
+    ...(references !== undefined ? { references } : {}),
+    ...(fragments !== undefined
+      ? { fragments: fragments.fragments, onFragmentsAsked: fragments.onFragmentsAsked }
+      : {}),
+    ...(tagLibrary !== undefined ? { tagLibrary } : {}),
+  }
+}
+
+/** The note's scene alone, for the rail, which draws no picture. */
+function layoutMarkdownScene(
+  value: string,
+  options: Omit<RenderMarkdownPreviewOptions, 'background'>,
 ): Scene {
   try {
-    // A page, not an object: the document theme and the bundled family are
-    // the markdown entry's own, so the minimap rail, which maps THESE blocks, is
-    // laid out from the same metrics as the pane beside it.
-    const scene = layoutMarkdownDocument(value, {
-      measure,
-      maxWidth,
-      // The app theme an embedded board is painted in, so its miniature
-      // matches the page around it.
-      mode: theme ?? 'light',
-      // A human surface draws the document (ADR-0030 decision 6), so a
-      // board embedded in a note is pencilled or glowing here exactly as
-      // it is on the canvas — the same default the spatial surfaces take.
-      style: 'document',
-      // The note's own prose is measured in the bundled family. A board
-      // EMBEDDED in it declares its theme's family only where a face for it
-      // is held, exactly as `editorLayoutBase` answers for the canvas
-      // surfaces (ADR-0011's invariant).
-      fontAvailable: hasLoadedFace,
-      core: requireLayoutCore(),
-      ...(references !== undefined ? { references } : {}),
-      ...(fragments !== undefined
-        ? { fragments: fragments.fragments, onFragmentsAsked: fragments.onFragmentsAsked }
-        : {}),
-      ...(tagLibrary !== undefined ? { tagLibrary } : {}),
-    })
-    // Undefined only for a `section`, which the preview never asks for.
-    return scene ?? { nodes: [] }
+    // Undefined only for a `section`, which the rail never asks for.
+    return layoutMarkdownDocument(value, noteOptions(options)) ?? { nodes: [] }
   } catch (error) {
     log.warn('markdown preview layout failed; rendering an empty scene', error)
     return { nodes: [] }

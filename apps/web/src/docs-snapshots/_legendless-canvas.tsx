@@ -10,11 +10,7 @@
 // (the light appearance, the bundled face, the clean style), so a scene
 // differs from the viewer's output by that one element.
 
-import {
-  createSpatialTheme,
-  layoutSpatialCanvas,
-  renderSceneToSvg,
-} from '@kamiazya/whiteboard-canvas-render'
+import { createSpatialTheme, layoutSpatialCanvasPicture } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText, SceneSvg } from '@kamiazya/whiteboard-canvas-viewer'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
@@ -40,16 +36,11 @@ export function LegendlessCanvas({
   const measure = useMemo(() => createBrowserMeasureText(), [])
   const svg = useMemo(
     () =>
-      renderSceneToSvg(
-        layoutSpatialCanvas(canvas, { measure, appearance: LIGHT, core: requireLayoutCore() }),
-        {
-          width,
-          height,
-          padding,
-          background: '#ffffff',
-          legend: 'omit',
-        },
-      ),
+      layoutSpatialCanvasPicture(
+        canvas,
+        { measure, appearance: LIGHT, core: requireLayoutCore() },
+        { width, height, padding, background: '#ffffff', legend: 'omit' },
+      ).svg,
     [canvas, measure, width, height, padding],
   )
   return (

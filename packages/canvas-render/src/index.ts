@@ -47,6 +47,8 @@ export type {
 export { selectCanvasFragment } from './canvas-fragment.js'
 export {
   type KeyedPicture,
+  layoutCommentDocumentKeyedPicture,
+  layoutMarkdownDocumentKeyedPicture,
   layoutMarkdownDocumentPicture,
   layoutSpatialCanvasKeyedPicture,
   layoutSpatialCanvasPicture,
@@ -89,8 +91,8 @@ export {
 export { fittedTextNodeHeight } from './layout/fitted-height.js'
 export {
   type CommentDocumentOptions,
-  layoutCommentDocument,
   layoutMarkdownDocument,
+  type MarkdownDocumentOptions,
 } from './layout/markdown-switch.js'
 export {
   type LabelObstacle,

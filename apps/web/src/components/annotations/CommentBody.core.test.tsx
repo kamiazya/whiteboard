@@ -3,7 +3,7 @@ import {
   type MarkdownLayoutCore,
   refusalCopy,
 } from '@kamiazya/whiteboard-canvas-render'
-import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { fakeLayoutCore, fakePicture } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { currentLayoutCore } from '../../lib/spatial/layout-core.js'
@@ -36,6 +36,7 @@ function recordingCore() {
             ],
           },
           degradations: [],
+          ...fakePicture(request, '<text>the core drew this</text>'),
         }
       },
     },
@@ -59,9 +60,13 @@ describe("a comment's prose through the core", () => {
         maxWidth: 198,
         measure: { kind: 'ratio' },
         density: 'compact',
+        // The keyed projection is asked in the same call, at the body's padding.
+        svg: { padding: 1, form: 'keyed' },
       },
     ])
-    expect(container.textContent).toContain('from the core')
+    // The body paints the core's picture, never one drawn here from its scene.
+    expect(container.textContent).toContain('the core drew this')
+    expect(container.textContent).not.toContain('from the core')
   })
 
   it('draws the core-unavailable notice in a realm whose core did not load', () => {

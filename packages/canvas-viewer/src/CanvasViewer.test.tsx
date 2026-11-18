@@ -5,7 +5,11 @@ import {
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
 } from '@kamiazya/whiteboard-canvas-render'
-import { createFixedMeasure, fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import {
+  createFixedMeasure,
+  fakeLayoutCore,
+  fakePicture,
+} from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -347,17 +351,22 @@ describe("CanvasViewer lays out through the host's core (ADR-0054)", () => {
       baseline: 16,
       font: { family: 'Roboto', weight: 400, style: 'normal', sizePx: 16 },
     } as const
-    const layoutSpatialCanvas = vi.fn(() => ({
-      scene: { nodes: [marked] },
-      anchors: new Map(),
-      degradations: [],
-    }))
+    const layoutSpatialCanvas = vi.fn(
+      (request: { readonly svg?: { readonly form?: 'keyed' } }) => ({
+        scene: { nodes: [marked] },
+        anchors: new Map(),
+        degradations: [],
+        ...fakePicture(request, '<text>the core drew this</text>'),
+      }),
+    )
     const core = fakeLayoutCore({ layout: { layoutSpatialCanvas } })
     const { getByTestId } = render(
       <CanvasViewer canvas={canvas} measure={constantRatioMeasureText} core={core} />,
     )
     expect(layoutSpatialCanvas).toHaveBeenCalledTimes(1)
-    expect(getByTestId('canvas-viewer').textContent).toContain('from the core')
+    // The viewer paints the core's picture, never one drawn here from its scene.
+    expect(getByTestId('canvas-viewer').textContent).toContain('the core drew this')
+    expect(getByTestId('canvas-viewer').textContent).not.toContain('from the core')
     expect(getByTestId('canvas-viewer').textContent).not.toContain('hello')
   })
 })
