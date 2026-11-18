@@ -1,7 +1,9 @@
 import type {
   LayoutCore,
+  LayoutRefusal,
   MeasureText,
   ReferenceSeams,
+  Scene,
   SpatialLayoutOptions,
   SpatialRenderStyle,
   SpatialThemeMode,
@@ -10,6 +12,7 @@ import {
   type CoreSvgAsk,
   createSpatialTheme,
   layoutSpatialCanvasPicture,
+  refusalCopy,
   type SpatialAppearanceResolver,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -145,8 +148,8 @@ export function CanvasViewer({
   // recomputed exactly when readiness ticks, not on every render.
   const fontReady = useViewerFontReady()
 
-  const svg = useMemo(() => {
-    const { svg: drawn } = layoutSpatialCanvasPicture(
+  const { svg, undrawn } = useMemo(() => {
+    const { svg: drawn, scene } = layoutSpatialCanvasPicture(
       canvas,
       {
         measure: resolvedMeasure,
@@ -176,7 +179,10 @@ export function CanvasViewer({
         ...(background === undefined ? {} : { background }),
       },
     )
-    return hostSized ? fillingItsHost(drawn) : drawn
+    return {
+      svg: hostSized ? fillingItsHost(drawn) : drawn,
+      undrawn: undrawnRefusal(scene),
+    }
     // fontReady is a pure re-measure trigger, not a value read inside the
     // callback.
   }, [
@@ -204,6 +210,21 @@ export function CanvasViewer({
   // reachable. Reading it is still choppy (one run per wrapped line, in
   // document order), which is what the deferred a11y projection is for; a
   // name and reachable text is the honest floor until then.
+  if (undrawn !== undefined) {
+    const { title, detail } = refusalCopy(undrawn)
+    return (
+      <figure
+        data-testid={testId}
+        aria-label={label}
+        style={{ width: width ?? '100%', height: height ?? '100%', overflow: 'hidden', margin: 0 }}
+      >
+        <figcaption role="status">
+          <strong>{title}</strong>
+          <span style={{ display: 'block' }}>{detail}</span>
+        </figcaption>
+      </figure>
+    )
+  }
   return (
     <SceneSvg
       as="figure"
@@ -221,6 +242,16 @@ export function CanvasViewer({
       }}
     />
   )
+}
+
+/**
+ * The refusal a scene carries that nothing drew. A realm whose core did not
+ * load cannot draw even the refusal's notice, so its scene holds the refusal
+ * and no nodes, and the viewer says the reason in words rather than showing a
+ * blank figure.
+ */
+function undrawnRefusal(scene: Scene): LayoutRefusal | undefined {
+  return scene.refusal !== undefined && scene.nodes.length === 0 ? scene.refusal : undefined
 }
 
 /** The root tag's numeric `width` and `height`, which the core writes as the view box's size. */

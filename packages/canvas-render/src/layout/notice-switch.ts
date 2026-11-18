@@ -1,7 +1,7 @@
 import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import type { CoreSvgAsk } from '../canvas-core.js'
 import type { LayoutCore } from '../layout-core.js'
-import { type MeasureText, measureSpecOf } from '../measure.js'
+import { constantRatioMeasureText, type MeasureText, measureSpecOf } from '../measure.js'
 import { type LayoutRefusal, refusalCopy } from '../refusal.js'
 import type { SpatialThemeMode } from '../theme/spatial-theme-mode.js'
 import { askedPicture, type MaybePictured } from './asked-picture.js'
@@ -90,7 +90,14 @@ export function refusalThroughCore(
   options: NoticeOptions,
   svg?: CoreSvgAsk,
 ): { readonly scene: Scene } & MaybePictured {
-  const drawn = askedNotice(core, refusalCopy(refusal), options, svg)
+  const words = refusalCopy(refusal)
+  let drawn = askedNotice(core, words, options, svg)
+  // A layout refused for the faces it named (a font handle the core would not
+  // hold) names them again for its notice and is refused the same way; the
+  // notice needs no face, so it is asked again by the ratio estimate.
+  if ('refused' in drawn && drawn.refused.code === 'input-too-large') {
+    drawn = askedNotice(core, words, { ...options, measure: constantRatioMeasureText }, svg)
+  }
   if ('refused' in drawn) return { scene: { nodes: [], refusal } }
   const { nodes, ...picture } = drawn
   return { scene: { nodes, refusal }, ...picture }

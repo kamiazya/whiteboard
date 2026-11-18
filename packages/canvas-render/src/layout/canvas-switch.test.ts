@@ -8,7 +8,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { CanvasLayoutCore, CanvasLayoutRequest } from '../canvas-core.js'
 import { highlightCode } from '../highlight/lowlight.js'
-import { constantRatioMeasureText, describeMeasure } from '../measure.js'
+import { constantRatioMeasureText, describeMeasure, measureSpecOf } from '../measure.js'
 import { referenceSeams } from '../references/seams.js'
 import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../references/wire.js'
 import { type LayoutRefusal, refusalScene } from '../refusal.js'
@@ -137,6 +137,27 @@ describe('the whole layout through the core', () => {
       { kind: 'host' },
     )
     const { laid } = run(() => ({ refused }), { measure: failing })
+    const drawn = refusalScene(refused, { measure: constantRatioMeasureText, mode: 'light' })
+    expect(laid.scene).toEqual(drawn)
+  })
+
+  it('draws a refusal for the faces a layout named by ratio, since the notice needs none', () => {
+    const refused: LayoutRefusal = { code: 'input-too-large', reason: 'handles' }
+    const asked: string[] = []
+    // The faces are refused for the notice too, as they were for the layout;
+    // only a notice asked by ratio is drawn.
+    const core = fakeLayoutCore({
+      layout: { layoutSpatialCanvas: () => ({ refused }) },
+      query: {
+        layoutQuery: (request, ...rest) => {
+          const kind = 'measure' in request ? request.measure.kind : 'none'
+          asked.push(kind)
+          return kind === 'ratio' ? realCore.query.layoutQuery(request, ...rest) : { refused }
+        },
+      },
+    })
+    const laid = layoutSpatialCanvasWithAnchors(canvas, { ...base, core })
+    expect(asked).toEqual([measureSpecOf(measure).kind, 'ratio'])
     const drawn = refusalScene(refused, { measure: constantRatioMeasureText, mode: 'light' })
     expect(laid.scene).toEqual(drawn)
   })

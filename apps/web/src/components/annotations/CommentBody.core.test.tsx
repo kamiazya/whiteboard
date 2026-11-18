@@ -12,6 +12,9 @@ import { CommentBody } from './CommentBody.js'
 vi.mock('../../lib/spatial/layout-core.js', () => ({
   currentLayoutCore: vi.fn(),
   layoutCoreReady: vi.fn(),
+  // The body redraws when the core loads; nothing here announces one.
+  layoutCoreGeneration: () => 0,
+  subscribeLayoutCore: () => () => undefined,
 }))
 
 afterEach(cleanup)

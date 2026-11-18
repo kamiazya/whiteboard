@@ -30,6 +30,7 @@ import {
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useKeyedSvg } from '../../hooks/use-keyed-svg.js'
+import { useLayoutCoreGeneration } from '../../hooks/use-layout-core-generation.js'
 import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
 import { undrawnRefusal } from '../../lib/undrawn-refusal.js'
 import { cn } from '../../lib/utils.js'
@@ -97,9 +98,11 @@ export function CommentBody({ body, compact, className, measure }: CommentBodyPr
     return () => observer.disconnect()
   }, [])
 
+  // Draws again when the page's core loads on a retry after a failed boot load.
+  const coreGeneration = useLayoutCoreGeneration()
   const { scene, keyed } = useMemo(
     () => drawBody(body, resolvedMeasure, width ?? UNMEASURED_WIDTH_PX, compact === true),
-    [body, compact, resolvedMeasure, width],
+    [body, compact, resolvedMeasure, width, coreGeneration],
   )
   const undrawn = undrawnRefusal(scene)
 
