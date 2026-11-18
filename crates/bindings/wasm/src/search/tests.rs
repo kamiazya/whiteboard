@@ -1,6 +1,6 @@
 use super::{
     Held, MAX_HELD_BYTES, MAX_INDEX_DOCUMENTS, MAX_INDEXES, MAX_LABEL_SETS, MAX_QUERY_BYTES,
-    answer, search_op,
+    answer, search_op, search_ops_in_fresh_instance,
 };
 use crate::input_caps::SEARCH_OP;
 use serde_json::{Value as Json, json};
@@ -275,6 +275,17 @@ fn a_replacement_is_judged_by_the_corpus_it_leaves_and_a_refused_one_keeps_the_o
 }
 
 #[test]
+fn the_default_budget_holds_megabytes_and_refuses_past_its_hundred_and_twenty_eight() {
+    // A 2 MiB id costs its bytes, so an instance at the default budget holds
+    // it: the budget is 128 MiB, far past one.
+    let mut held = fresh();
+    let handle = handle_of(&ask(&mut held, &json!(["index-new"])));
+    let id = "i".repeat(2 * 1024 * 1024);
+    let upsert = json!(["index-upsert", handle, id, "", null, [], null]);
+    assert_eq!(ask(&mut held, &upsert), json!(["ok", false]));
+}
+
+#[test]
 fn a_document_is_charged_its_id_even_with_no_terms() {
     let id = "i".repeat(1000);
     let mut tight = Held::new(1000 + whiteboard_search::DOCUMENT_OVERHEAD - 1);
@@ -286,6 +297,25 @@ fn a_document_is_charged_its_id_even_with_no_terms() {
     let upsert = json!(["index-upsert", handle, id, "", null, [], null]);
     assert_eq!(ask(&mut exact, &upsert), json!(["ok", false]));
     assert_eq!(exact.bytes(), 1000 + whiteboard_search::DOCUMENT_OVERHEAD);
+}
+
+#[test]
+fn a_fresh_instance_answers_each_request_in_order_and_holds_nothing_from_another() {
+    let sequence = [
+        r#"["index-new"]"#,
+        r#"["index-upsert",0,"d","p",null,["alpha"],null]"#,
+        r#"["index-size",0]"#,
+        r#"["nope"]"#,
+    ];
+    let first = search_ops_in_fresh_instance(sequence);
+    assert_eq!(first.len(), 4);
+    assert_eq!(first[0], "[\"ok\",0]");
+    assert_eq!(first[1], "[\"ok\",false]");
+    assert!(first[2].starts_with("[\"ok\",1,"), "{}", first[2]);
+    assert_eq!(first[3], "[\"refused\",\"malformed\"]");
+    // A second instance mints handle 0 again and holds no document of the first.
+    let second = search_ops_in_fresh_instance([r#"["index-new"]"#, r#"["index-size",0]"#]);
+    assert_eq!(second, ["[\"ok\",0]", "[\"ok\",0,0]"]);
 }
 
 #[test]
