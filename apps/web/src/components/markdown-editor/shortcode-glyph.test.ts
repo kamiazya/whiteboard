@@ -1,6 +1,7 @@
 import { CompletionContext } from '@codemirror/autocomplete'
 import { EditorState } from '@codemirror/state'
 import type { LayoutCore } from '@kamiazya/whiteboard-canvas-render'
+import { BUILT_IN_ICON_NAMES } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it, vi } from 'vitest'
 import { shortcodeCompletionSource, shortcodeOptionRenderers } from './shortcode-completion.js'
 
@@ -23,23 +24,34 @@ vi.mock('../../lib/spatial/require-layout-core.js', async (importOriginal) => {
   }
 })
 
-async function starRow() {
-  const doc = ':icon-st'
+// The module keeps every glyph it drew, for the life of the module, so each
+// run (a repeat included) asks for an icon no earlier run has drawn.
+let runs = 0
+
+async function freshIconRow() {
+  const name = BUILT_IN_ICON_NAMES[runs++ % BUILT_IN_ICON_NAMES.length]
+  if (name === undefined) throw new Error('expected a vendored icon')
+  const doc = `:icon-${name}`
   const ctx = new CompletionContext(EditorState.create({ doc }), doc.length, true)
-  const row = (await shortcodeCompletionSource(ctx))?.options.find((o) => o.label === 'icon-star')
-  if (row === undefined) throw new Error('expected the icon-star row')
-  return row
+  const row = (await shortcodeCompletionSource(ctx))?.options.find(
+    (o) => o.label === `icon-${name}`,
+  )
+  if (row === undefined) throw new Error(`expected the icon-${name} row`)
+  return { name, row }
 }
 
 describe('a row glyph the core could not draw', () => {
   it('is asked for again once the core answers, not kept empty', async () => {
     const [renderer] = shortcodeOptionRenderers
     if (renderer === undefined) throw new Error('expected the glyph renderer')
-    const row = await starRow()
+    const { name, row } = await freshIconRow()
     realm.refusing = true
-    expect((renderer.render(row) as HTMLElement).querySelector('svg')).toBeNull()
-    realm.refusing = false
+    try {
+      expect((renderer.render(row) as HTMLElement).querySelector('svg')).toBeNull()
+    } finally {
+      realm.refusing = false
+    }
     const drawn = renderer.render(row) as HTMLElement
-    expect(drawn.querySelector('use')?.getAttribute('href')).toBe('#wb-icon-star')
+    expect(drawn.querySelector('use')?.getAttribute('href')).toBe(`#wb-icon-${name}`)
   })
 })
