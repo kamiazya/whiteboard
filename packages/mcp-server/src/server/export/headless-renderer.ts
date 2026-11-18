@@ -1,20 +1,18 @@
 // Render a `SpatialCanvas` to PNG/SVG without an attached browser client.
 //
 // Pipeline:
-//   1. canvas-render's `layoutSpatialCanvas` turns the persisted canvas
-//      into a canvas-render `Scene`, using the vendored opentype.js
-//      measurer (measure-text.ts) as the injected text-measurement seam,
-//      codec's `parseMarkdownBody` as the injected body parser, and
-//      canvas-render's shared `createSpatialTheme` for the requested mode as
-//      the injected appearance resolver. That mode is an explicit per-request
-//      argument and defaults to light (package-canvas-render.md decision #8),
-//      so a user's ambient UI theme can never change exported bytes.
-//   2. `renderSceneToSvg` (canvas-render) serializes the scene to an SVG
-//      string, with document options (padding/background) so the root
-//      carries a real `width`/`height`/`viewBox` envelope — canvas-render
-//      emits the bare, undimensioned root when no document option is set,
-//      which would hand resvg a degenerate raster.
-//   3. `@resvg/resvg-js` rasterises that SVG to PNG, with the vendored
+//   1. canvas-render's `layoutSpatialCanvasPicture` asks the Rust core to lay
+//      the persisted canvas out as a `Scene` AND serialize it to an SVG
+//      string in one call, using the vendored opentype.js measurer
+//      (measure-text.ts) as the text-measurement seam and canvas-render's
+//      shared `createSpatialTheme` for the requested mode as the appearance.
+//      That mode is an explicit per-request argument and defaults to light
+//      (package-canvas-render.md decision #8), so a user's ambient UI theme
+//      can never change exported bytes. The SVG carries document options
+//      (padding/background) so the root has a real `width`/`height`/`viewBox`
+//      envelope — the bare, undimensioned root a scene gets with no document
+//      option would hand resvg a degenerate raster.
+//   2. `@resvg/resvg-js` rasterises that SVG to PNG, with the vendored
 //      Roboto TTF registered directly and system-font loading disabled, so
 //      the same canvas rasterises identically on any machine.
 //
@@ -36,7 +34,7 @@ import type {
 import {
   createSpatialTheme,
   layoutSpatialCanvas,
-  renderSceneToSvg as renderSceneToSvgString,
+  layoutSpatialCanvasPicture,
   resolveCanvasPalette,
   type SpatialPalette,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -263,26 +261,29 @@ function buildSvg(
   const mode = exportMode(options)
   const palette = exportPalette(canvas, options)
   const background = palette.surface
-  const scene = buildSpatialScene(
-    canvas,
-    options.core,
+  const layout = exportLayoutOptions(
     measure,
     mode,
     options.style,
     fontAvailable,
     options.tagLibrary,
   )
-  const svg = renderSceneToSvgString(scene, {
-    padding: options.padding ?? DEFAULT_PADDING_PX,
-    background,
-    // resvg blurs filter regions at device resolution, so the backend's
-    // filter budget has to know the zoom the PNG is drawn at.
-    rasterScale,
-    // Dark node chrome uses transparent fills, so body runs sit directly on
-    // the dark background — the root-level inheritable fill is what keeps
-    // them legible. Light stays byte-identical (no root fill).
-    ...(mode === 'dark' ? { textFill: palette.labelFill } : {}),
-  })
+  // The scene and its SVG from one core call: the core draws what it laid out.
+  const { scene, svg } = layoutSpatialCanvasPicture(
+    canvas,
+    { ...layout, core: options.core },
+    {
+      padding: options.padding ?? DEFAULT_PADDING_PX,
+      background,
+      // resvg blurs filter regions at device resolution, so the backend's
+      // filter budget has to know the zoom the PNG is drawn at.
+      rasterScale,
+      // Dark node chrome uses transparent fills, so body runs sit directly on
+      // the dark background — the root-level inheritable fill is what keeps
+      // them legible. Light stays byte-identical (no root fill).
+      ...(mode === 'dark' ? { textFill: palette.labelFill } : {}),
+    },
+  )
   return { svg, scene, background }
 }
 

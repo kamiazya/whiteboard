@@ -1,7 +1,9 @@
 import type {
+  CoreSvgAsk,
   LayoutCore,
   LayoutRefusal,
   MeasureText,
+  PicturedScene,
   ReferenceSeams,
   Scene,
   SceneDigest,
@@ -13,6 +15,7 @@ import {
   createSpatialTheme,
   layoutSceneDigest,
   layoutSpatialCanvas,
+  layoutSpatialCanvasPicture,
   sceneDocumentBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -117,6 +120,20 @@ export function composeCanvasScene(
 }
 
 /**
+ * `composeCanvasScene`'s scene with its SVG, from ONE core call: the core draws
+ * the scene it laid out in the envelope `svg` names, so a server picture never
+ * serializes the scene here.
+ */
+export function composeCanvasPicture(
+  canvas: SpatialCanvas,
+  measure: MeasureText,
+  options: ComposeCanvasSceneOptions,
+  svg: CoreSvgAsk,
+): PicturedScene {
+  return layoutSpatialCanvasPicture(canvas, layoutOptionsOf(measure, options), svg)
+}
+
+/**
  * The spatial digest of the scene `composeCanvasScene` would compose, read by
  * the core where it lays the canvas out, so the scene is never built on this
  * side. The same options, so a digest never describes a different layout than
@@ -154,7 +171,9 @@ function layoutOptionsOf(measure: MeasureText, options: ComposeCanvasSceneOption
 }
 
 /**
- * The box `wb_scene_render`'s SVG is drawn in: the scene's own bounds, so
+ * The box `wb_scene_render`'s SVG is drawn in, and the size it reports: the
+ * core draws the SVG in the same box (`viewBox: 'document'`), and this answers
+ * its width and height. The scene's own bounds, so
  * the viewBox starts where the drawing starts. A container's label sits
  * ABOVE its frame, and an SVG anchored at 0,0 cropped every label of a layer
  * drawn at y=0 — the lane's architecture diagram came back without its

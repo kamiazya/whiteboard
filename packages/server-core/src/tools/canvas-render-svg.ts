@@ -5,8 +5,8 @@ import type {
   ReferenceGraph,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
-  renderSceneToSvg,
-  type Scene,
+  type CoreSvgAsk,
+  type PicturedScene,
   selectCanvasFragment,
   spatialRenderStyleSchema,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -21,8 +21,8 @@ import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import { loadDocument } from '../document-io.js'
-import { composeCanvasScene, sceneEnvelope } from '../render/compose-canvas-scene.js'
-import { composeMarkdownScene } from '../render/compose-markdown-scene.js'
+import { composeCanvasPicture, sceneEnvelope } from '../render/compose-canvas-scene.js'
+import { composeMarkdownPicture } from '../render/compose-markdown-scene.js'
 import { loadReferenceGraph } from '../render/reference-graph.js'
 import { REFUSAL_NOTE, refusalNote } from '../render/refusal-note.js'
 import { fontAvailableOf, resolveTextMeasurer } from '../render/text-measurer.js'
@@ -100,7 +100,13 @@ class FragmentNotFoundError extends Error {
 }
 
 /**
- * The scene a MARKDOWN document renders as, from its body.
+ * The SVG's envelope: the scene's own document bounds (`sceneEnvelope`), so the
+ * viewBox starts where the drawing starts and makes room for the legend.
+ */
+const SCENE_RENDER_SVG: CoreSvgAsk = { viewBox: 'document' }
+
+/**
+ * The picture a MARKDOWN document renders as, from its body.
  *
  * One function per kind, dispatched on the kind alone: the two differ in what
  * they read (a body against a canvas), what a fragment SELECTS (a section
@@ -108,35 +114,40 @@ class FragmentNotFoundError extends Error {
  * two arms of one `if`, those three differences were interleaved with the
  * setup shared around them.
  */
-async function markdownScene(
+async function markdownPicture(
   deps: ServerDeps,
   input: CanvasRenderSvgInput,
   doc: LoroDoc,
   measure: MeasureText,
   fontAvailable: ReturnType<typeof fontAvailableOf>,
   onRefused: (refusal: LayoutRefusal) => void,
-): Promise<Scene> {
+): Promise<PicturedScene> {
   const body = readMarkdownBody(doc)
   const loaded = input.embedReferences
     ? await loadReferenceGraph(deps, input.workspaceId, { bodies: [body] })
     : undefined
-  const scene = composeMarkdownScene(body, measure, {
-    references: loaded?.seams,
-    style: input.style,
-    fontAvailable,
-    onRefused,
-    ...(input.fragment === undefined ? {} : { section: input.fragment }),
-    ...(await laidOutBy(deps)),
-    ...(await drawnTagLibrary(deps, input.workspaceId, [], loaded?.graph)),
-  })
-  if (scene === undefined) {
+  const picture = composeMarkdownPicture(
+    body,
+    measure,
+    {
+      references: loaded?.seams,
+      style: input.style,
+      fontAvailable,
+      onRefused,
+      ...(input.fragment === undefined ? {} : { section: input.fragment }),
+      ...(await laidOutBy(deps)),
+      ...(await drawnTagLibrary(deps, input.workspaceId, [], loaded?.graph)),
+    },
+    SCENE_RENDER_SVG,
+  )
+  if (picture === undefined) {
     throw new FragmentNotFoundError(input.documentId, input.fragment ?? '', 'markdown')
   }
-  return scene
+  return picture
 }
 
-/** The scene a SPATIAL document renders as, from its canvas. */
-async function canvasScene(
+/** The picture a SPATIAL document renders as, from its canvas. */
+async function canvasPicture(
   deps: ServerDeps,
   input: CanvasRenderSvgInput,
   doc: LoroDoc,
@@ -144,7 +155,7 @@ async function canvasScene(
   measure: MeasureText,
   fontAvailable: ReturnType<typeof fontAvailableOf>,
   onRefused: (refusal: LayoutRefusal) => void,
-): Promise<Scene> {
+): Promise<PicturedScene> {
   const part = input.fragment === undefined ? canvas : selectCanvasFragment(canvas, input.fragment)
   if (part === undefined) {
     throw new FragmentNotFoundError(input.documentId, input.fragment ?? '', 'spatial')
@@ -152,7 +163,7 @@ async function canvasScene(
   const loaded = input.embedReferences
     ? await loadReferenceGraph(deps, input.workspaceId, { canvases: [part] })
     : undefined
-  const scene = composeCanvasScene(part, measure, {
+  const options = {
     references: loaded?.seams,
     ...(await laidOutBy(deps)),
     style: input.style,
@@ -163,9 +174,9 @@ async function canvasScene(
     // With comments asked for, the export draws what the editor draws: a
     // thread about a passage of a node's text is a highlight behind those
     // words, a node set an outline around them.
-    ...(input.comments ? { threads: readAnnotations(doc) } : { commentLayer: false }),
-  })
-  return scene
+    ...(input.comments ? { threads: readAnnotations(doc) } : { commentLayer: false as const }),
+  }
+  return composeCanvasPicture(part, measure, options, SCENE_RENDER_SVG)
 }
 
 /**
@@ -202,17 +213,13 @@ async function renderDocument(
   const onRefused = (said: LayoutRefusal) => {
     refused = said
   }
-  const scene =
+  const { scene, svg } =
     kind === 'markdown'
-      ? await markdownScene(deps, input, doc, measure, fontAvailable, onRefused)
-      : await canvasScene(deps, input, doc, canvas, measure, fontAvailable, onRefused)
+      ? await markdownPicture(deps, input, doc, measure, fontAvailable, onRefused)
+      : await canvasPicture(deps, input, doc, canvas, measure, fontAvailable, onRefused)
 
   const envelope = sceneEnvelope(scene)
-  const output = {
-    svg: renderSceneToSvg(scene, { viewBox: envelope }),
-    width: envelope.w,
-    height: envelope.h,
-  }
+  const output = { svg, width: envelope.w, height: envelope.h }
   return refused === undefined ? output : { ...output, [REFUSAL_NOTE]: refusalNote(refused) }
 }
 

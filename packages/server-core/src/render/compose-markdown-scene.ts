@@ -1,12 +1,17 @@
 import type {
+  CoreSvgAsk,
   LayoutCore,
   LayoutRefusal,
   MeasureText,
+  PicturedScene,
   ReferenceSeams,
   Scene,
   SpatialRenderStyle,
 } from '@kamiazya/whiteboard-canvas-render'
-import { layoutMarkdownDocument } from '@kamiazya/whiteboard-canvas-render'
+import {
+  layoutMarkdownDocument,
+  layoutMarkdownDocumentPicture,
+} from '@kamiazya/whiteboard-canvas-render'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { logRefusal } from './refusal-note.js'
 
@@ -58,11 +63,32 @@ export function composeMarkdownScene(
   measure: MeasureText,
   options: ComposeMarkdownSceneOptions,
 ): Scene | undefined {
-  return layoutMarkdownDocument(body, {
+  return layoutMarkdownDocument(body, noteOptionsOf(measure, options))
+}
+
+/**
+ * `composeMarkdownScene`'s scene with its SVG, from ONE core call: the core
+ * draws the note it laid out in the envelope `svg` names. `undefined` for a
+ * `section` the body holds no heading for.
+ */
+export function composeMarkdownPicture(
+  body: string,
+  measure: MeasureText,
+  options: ComposeMarkdownSceneOptions,
+  svg: CoreSvgAsk,
+): PicturedScene | undefined {
+  return layoutMarkdownDocumentPicture(body, noteOptionsOf(measure, options), svg)
+}
+
+function noteOptionsOf(
+  measure: MeasureText,
+  options: ComposeMarkdownSceneOptions,
+): Parameters<typeof layoutMarkdownDocument>[1] {
+  return {
     measure,
     maxWidth: MARKDOWN_SCENE_WIDTH_PX,
     mode: 'light',
-    onRefused: (refusal) => {
+    onRefused: (refusal: LayoutRefusal) => {
       logRefusal(refusal)
       options.onRefused?.(refusal)
     },
@@ -72,5 +98,5 @@ export function composeMarkdownScene(
     ...(options.tagLibrary !== undefined ? { tagLibrary: options.tagLibrary } : {}),
     ...(options.section !== undefined ? { section: options.section } : {}),
     core: options.core,
-  })
+  }
 }
