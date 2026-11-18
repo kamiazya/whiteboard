@@ -39,7 +39,7 @@ fn points_of(d: &str) -> Vec<ScenePoint> {
         .map(|token| token.parse().unwrap_or(f64::NAN))
         .collect();
     assert!(
-        !numbers.is_empty() && numbers.len() % 2 == 0,
+        !numbers.is_empty() && numbers.len().is_multiple_of(2),
         "a path's coordinates come in pairs, at least one: {d:?}"
     );
     numbers.chunks_exact(2).map(|pair| ScenePoint { x: pair[0], y: pair[1] }).collect()
