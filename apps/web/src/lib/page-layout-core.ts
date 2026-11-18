@@ -14,13 +14,22 @@ import { installLayoutCore, layoutCoreReady } from './spatial/layout-core.js'
  */
 export function startLayoutCore(): Promise<void> {
   installLayoutCore()
-  return layoutCoreReady().then(
-    // Dynamic, so the boot path takes no new module: the install is a few
-    // bytes, and a static import here made the search dispatch a chunk of its own
-    // on the critical path.
-    () => import('./search-core.js').then(({ searchReady }) => searchReady()),
-    (err: unknown) => {
-      getAppLogger('layout-core').error('the Rust core did not load; nothing can be laid out', err)
-    },
-  )
+  return layoutCoreReady().then(installSearch, (err: unknown) => {
+    getAppLogger('layout-core').error('the Rust core did not load; nothing can be laid out', err)
+  })
+}
+
+/**
+ * Search's install rides the core's load, but its failure is its own: the page
+ * renders without search (its callers degrade) rather than stalling boot, which
+ * awaits this before the first render. The import is dynamic so the boot path
+ * takes no new module: a static one made the search dispatch a chunk of its
+ * own on the critical path.
+ */
+async function installSearch(): Promise<void> {
+  try {
+    await import('./search-core.js').then(({ searchReady }) => searchReady())
+  } catch (err) {
+    getAppLogger('layout-core').error('search did not install; searching is unavailable', err)
+  }
 }
