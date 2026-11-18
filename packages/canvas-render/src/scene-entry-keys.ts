@@ -1,6 +1,6 @@
 /**
  * The ONE producer of stable top-level scene-entry keys, shared by the
- * keyed SVG renderer (svg/keyed.ts) and the scene-diff scoreboard.
+ * core's keyed SVG (the keys its groups carry) and the scene-diff scoreboard.
  * Identified entries — chrome shapes, edges — key by their id; the content
  * entries that follow a node's chrome inherit that owner id plus an
  * ordinal, matching the documented emission order (shape, then its

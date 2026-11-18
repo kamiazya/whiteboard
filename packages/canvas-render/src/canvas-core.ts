@@ -38,8 +38,8 @@ export type CoreProposal = Pick<Proposal, 'id'> & { readonly changes: readonly C
 
 /**
  * The SVG a picture asks the core to answer beside the scene: the core's SVG
- * backend over the scene it laid out, drawn with these of `renderSceneToSvg`'s
- * envelope options, so the picture is one call. The view box names no box,
+ * backend over the scene it laid out, drawn with these envelope options, so
+ * the picture is one call. The view box names no box,
  * since the caller has no scene to measure before the layout:
  * `viewBox: 'document'` is the scene's document bounds (`sceneDocumentBounds`,
  * an empty box for a scene with no node: the server's envelope), and
@@ -47,7 +47,7 @@ export type CoreProposal = Pick<Proposal, 'id'> & { readonly changes: readonly C
  * `sceneDocumentBounds(scene, margin)` (`of: 'document'`) grown by `margin`,
  * exactly as those answer, their 1x1 fallback for an empty scene included.
  * `legend: 'omit'` leaves the legend to the host; `form: 'keyed'` answers
- * `renderSceneToKeyedSvg`'s projection instead of the whole SVG.
+ * the keyed projection (`CoreKeyedSvg`) instead of the whole SVG.
  */
 export interface CoreSvgAsk {
   readonly viewBox?: 'document' | CoreSvgBounds
@@ -62,10 +62,19 @@ export interface CoreSvgAsk {
 }
 
 /**
- * The keyed projection the core answers for `form: 'keyed'`, as
- * `renderSceneToKeyedSvg`'s `KeyedSvgRender` holds one (declared here,
- * structurally, as the core is): the whole SVG text, its root's open tag and
- * attributes, and its groups, `annotation` marking the annotation layer's.
+ * The keyed projection the core answers for `form: 'keyed'`: the whole SVG
+ * text (identical bytes to mounting the groups yourself), its root's open tag
+ * and attributes (raw, unescaped, for `setAttribute` when a patch keeps the
+ * mounted root and only its attributes moved), and its groups.
+ *
+ * A group's `svg` is its exact bytes in the whole: `<g data-wb-key="KEY">…</g>`
+ * for a scene entry, the bare element for a pseudo-group. `annotation` marks
+ * a group that draws the ANNOTATION LAYER (a conversation's pin, count, leader
+ * or bubble) rather than the drawing itself. It is out-of-band on purpose: it never
+ * reaches `svg`, so the projection's bytes stay the plain SVG's, which is what
+ * a consumer's `dangerouslySetInnerHTML` safety argument rests on. A patch
+ * layer wants it because that set arrives and leaves together; nothing here
+ * says what to DO about that.
  */
 export interface CoreKeyedSvg {
   readonly svg: string
@@ -77,6 +86,11 @@ export interface CoreKeyedSvg {
     readonly annotation?: true
   }[]
 }
+
+/** The projection a keyed render holds, under the name its consumers use. */
+export type KeyedSvgRender = CoreKeyedSvg
+/** One group of a `KeyedSvgRender`. */
+export type KeyedSvgGroup = CoreKeyedSvg['groups'][number]
 
 /** A view box over the laid-out scene's bounds, grown by `margin` when it is finite and positive. */
 interface CoreSvgBounds {

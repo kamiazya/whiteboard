@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs'
+import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import { decodeLines, type SvgRecord, svgAnswer } from '../test-utils/render-oracle/oracle.js'
+import { decodeLines, type SvgRecord } from '../test-utils/render-oracle/oracle.js'
 
 /**
- * The committed recording of what the SVG backend alone answered for a scene
- * (`renderSceneToSvg` and `renderSceneToKeyedSvg`, over the envelope options a
- * caller may pass). The Rust SVG backend replays it natively and on wasm32
+ * The committed recording of what the TypeScript SVG backend (deleted, ADR-0054
+ * A3.6) answered for a scene, whole and keyed, over the envelope options a
+ * caller may pass. The Rust SVG backend replays it natively and on wasm32
  * (`crates/core/canvas-render/tests/svg_oracle.rs`) and is held to it byte for
  * byte.
  *
@@ -37,16 +38,65 @@ describe('the recorded SVG backend oracle', () => {
       ).toBeGreaterThan(5)
     }
   })
+})
 
-  it('equals what the TypeScript answers today', () => {
-    const lines = text.trimEnd().split('\n')
-    const parted = recorded.findIndex(
-      (r, i) =>
-        JSON.stringify(svgAnswer({ id: r.id, scene: r.scene, options: r.options })) !== lines[i],
-    )
-    expect(
-      recorded[parted]?.id,
-      'the first recorded scene the TypeScript no longer draws as recorded',
-    ).toBeUndefined()
+/**
+ * The pixel goldens' two hard constraints, held on the recorded scenes they
+ * paint: text-free (a glyph would make a baseline a claim about the machine's
+ * fonts) and, for the hand-authored ones, integer-aligned (what keeps every
+ * derived point - arrow wings, jump entry/exit, rounded corners - off a
+ * sub-pixel boundary). Allowlist, not a denylist: 'edge' and 'shape' are the
+ * only kinds that carry no text.
+ */
+const GEOMETRY_ONLY_KINDS: readonly SceneNode['kind'][] = ['edge', 'shape']
+const INTEGER_ALIGNED = ['jump-hop', 'rounded-corners', 'arrowheads', 'rounded-rect']
+// The icon set draws icons and the node outlines are laid out, so neither is held to either.
+const TEXT_FREE = [...INTEGER_ALIGNED, 'sketch-look', 'neon-look']
+
+function coordinatesOf(node: SceneNode): number[] {
+  if (node.kind === 'edge') {
+    return [
+      ...node.path.flatMap((p) => [p.x, p.y]),
+      ...(node.jumps ?? []).flatMap((j) => [j.x, j.y]),
+    ]
+  }
+  if (node.kind === 'shape') {
+    return [
+      node.bbox.x,
+      node.bbox.y,
+      node.bbox.w,
+      node.bbox.h,
+      ...(node.radius === undefined ? [] : [node.radius]),
+    ]
+  }
+  return []
+}
+
+describe('the recorded pixel goldens stay text-free and integer-aligned', () => {
+  const recorded = decodeLines<SvgRecord>(readFileSync(FILE, 'utf8'))
+  const pixel = recorded.filter((r) => /^pixel\/[^#]+#0$/.test(r.id))
+  const textFree = pixel.filter((r) => TEXT_FREE.some((n) => r.id === `pixel/${n}#0`))
+
+  it('records every golden the browser screenshots', () => {
+    expect(pixel.length).toBe(8)
+    expect(textFree.length).toBe(6)
+  })
+
+  it.each(
+    textFree.map((r) => [r.id, r] as const),
+  )('%s contains only geometry-only node kinds', (_id, r) => {
+    // A count, so an empty scene cannot pass this vacuously.
+    expect(r.scene.nodes.length).toBeGreaterThan(0)
+    for (const node of r.scene.nodes) expect(GEOMETRY_ONLY_KINDS).toContain(node.kind)
+  })
+
+  it.each(
+    pixel
+      .filter((r) => INTEGER_ALIGNED.some((n) => r.id === `pixel/${n}#0`))
+      .map((r) => [r.id, r] as const),
+  )('%s uses only integer coordinates', (_id, r) => {
+    for (const node of r.scene.nodes) {
+      for (const value of coordinatesOf(node)) expect(Number.isInteger(value)).toBe(true)
+    }
   })
 })

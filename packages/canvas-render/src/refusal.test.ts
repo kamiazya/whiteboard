@@ -1,12 +1,5 @@
-import type { Scene, ShapeSceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import { constantRatioMeasureText, type MeasureText } from './measure.js'
-import { type LayoutRefusal, refusalCopy, refusalScene } from './refusal.js'
-import { renderSceneToSvg } from './svg/backend.js'
-import { createFakeMeasure } from './test-utils/fake-measure.js'
-import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from './theme/spatial-palette.js'
-
-const measure = createFakeMeasure()
+import { refusalCopy } from './refusal.js'
 
 /** Every class the core refuses a layout with, each owed words of its own. */
 const REFUSAL_REASONS = [
@@ -21,15 +14,6 @@ const REFUSAL_REASONS = [
   'host-measure',
   'core-unavailable',
 ] as const
-
-const runs = (scene: Scene) =>
-  scene.nodes.filter((node): node is TextRunNode => node.kind === 'textRun')
-const frame = (scene: Scene) =>
-  scene.nodes.find((node): node is ShapeSceneNode => node.kind === 'shape')
-const text = (scene: Scene) =>
-  runs(scene)
-    .map((run) => run.text)
-    .join(' ')
 
 describe('refusalCopy', () => {
   it('names what happened and what the reader can do, per reason the core refuses with', () => {
@@ -58,98 +42,5 @@ describe('refusalCopy', () => {
     expect(unknown).toEqual(refusalCopy({ code: 'input-too-large', reason: 'not-a-reason' }))
     const malformed = refusalCopy({ code: 'malformed', reason: 'not-a-reason' })
     expect(malformed.title).not.toBe(unknown.title)
-  })
-})
-
-describe('refusalScene', () => {
-  const tooMany: LayoutRefusal = { code: 'input-too-large', reason: 'too-many-elements' }
-
-  it('draws by the ratio estimate when the measurer throws or answers no finite number', () => {
-    // A host-measure refusal is drawn BECAUSE the measurer failed, so its notice cannot need it.
-    const failed: LayoutRefusal = { code: 'malformed', reason: 'host-measure' }
-    const byRatio = refusalScene(failed, { measure: constantRatioMeasureText, mode: 'light' })
-    const broken: MeasureText[] = [
-      () => {
-        throw new Error('no canvas context')
-      },
-      (line, at) => ({ ...measure(line, at), ascent: Number.NaN }),
-      (line, at) => ({ ...measure(line, at), advanceWidth: Number.POSITIVE_INFINITY }),
-    ]
-    for (const bad of broken) {
-      const scene = refusalScene(failed, { measure: bad, mode: 'light' })
-      expect(scene).toEqual(byRatio)
-      for (const run of runs(scene)) {
-        expect(Number.isFinite(run.baseline), run.text).toBe(true)
-        expect(Number.isFinite(run.bbox.w), run.text).toBe(true)
-      }
-    }
-  })
-
-  it('draws one box holding the title and the detail, wrapped inside it', () => {
-    const scene = refusalScene(tooMany, { measure, mode: 'light' })
-    const box = frame(scene)
-    expect(box?.bbox).toMatchObject({ x: 0, y: 0 })
-    const { title, detail } = refusalCopy(tooMany)
-    expect(text(scene)).toBe(`${title} ${detail}`)
-    expect(runs(scene).length).toBeGreaterThan(2)
-    for (const run of runs(scene)) {
-      expect(run.bbox.x, run.text).toBeGreaterThan(box?.bbox.x ?? 0)
-      expect(run.bbox.x + run.bbox.w, run.text).toBeLessThan(
-        (box?.bbox.x ?? 0) + (box?.bbox.w ?? 0),
-      )
-      expect(run.bbox.y + run.bbox.h, run.text).toBeLessThan(
-        (box?.bbox.y ?? 0) + (box?.bbox.h ?? 0),
-      )
-    }
-    expect(runs(scene)[0]?.strong).toBe(true)
-    // The SVG backend draws it, as every other scene.
-    expect(renderSceneToSvg(scene)).toContain(title)
-  })
-
-  it('fits the width it is given, and keeps to its own when given none or more', () => {
-    const widthOf = (maxWidth?: number) =>
-      frame(
-        refusalScene(tooMany, {
-          measure,
-          mode: 'light',
-          ...(maxWidth === undefined ? {} : { maxWidth }),
-        }),
-      )?.bbox.w
-    expect(widthOf()).toBe(480)
-    expect(widthOf(2000)).toBe(480)
-    expect(widthOf(300)).toBe(300)
-    const narrow = refusalScene(tooMany, { measure, mode: 'light', maxWidth: 300 })
-    expect(runs(narrow).length).toBeGreaterThan(
-      runs(refusalScene(tooMany, { measure, mode: 'light' })).length,
-    )
-  })
-
-  it('is drawn at the point it is given, every run moved with its box', () => {
-    const atOrigin = refusalScene(tooMany, { measure, mode: 'light' })
-    const moved = refusalScene(tooMany, { measure, mode: 'light', at: { x: 5000, y: -40 } })
-    expect(frame(moved)?.bbox).toMatchObject({ x: 5000, y: -40 })
-    const shifted = runs(atOrigin).map((run) => ({
-      ...run.bbox,
-      x: run.bbox.x + 5000,
-      y: run.bbox.y - 40,
-    }))
-    expect(runs(moved).map((run) => run.bbox)).toEqual(shifted)
-  })
-
-  it('carries the refusal it draws, as data a surface can read across a worker', () => {
-    const scene = refusalScene(tooMany, { measure, mode: 'light' })
-    expect(scene.refusal).toEqual(tooMany)
-    expect(structuredClone(scene).refusal).toEqual(tooMany)
-  })
-
-  it('is painted from the palette of the mode it is drawn in', () => {
-    const light = frame(refusalScene(tooMany, { measure, mode: 'light' }))
-    const dark = frame(refusalScene(tooMany, { measure, mode: 'dark' }))
-    expect(light?.appearance?.fill).toBe(SPATIAL_LIGHT_PALETTE.node.file.fill)
-    expect(dark?.appearance?.fill).toBe(SPATIAL_DARK_PALETTE.node.file.fill)
-    const labels = (mode: 'light' | 'dark') =>
-      new Set(runs(refusalScene(tooMany, { measure, mode })).map((run) => run.appearance?.fill))
-    expect(labels('light')).toEqual(new Set([SPATIAL_LIGHT_PALETTE.labelFill]))
-    expect(labels('dark')).toEqual(new Set([SPATIAL_DARK_PALETTE.labelFill]))
   })
 })

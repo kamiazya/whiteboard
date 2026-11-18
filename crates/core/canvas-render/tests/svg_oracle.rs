@@ -1,9 +1,9 @@
 //! The SVG backend against the recorded TypeScript answers.
 //!
 //! `packages/canvas-render/src/oracle/svg.jsonl` holds, per scene, what
-//! `renderSceneToSvg` and `renderSceneToKeyedSvg` answered for it and the
-//! envelope options it was drawn with; its test fails when the file no longer
-//! equals the TypeScript's answer, and this replays it. Every record must be
+//! the TypeScript SVG backend (deleted, ADR-0054 A3.6) answered for it, whole
+//! and keyed, and the envelope options it was drawn with; the file is frozen
+//! and this replays it. Every record must be
 //! reproduced byte for byte: the document, the keyed root and each group. The
 //! scenes are the pixel and determinism goldens, the pixel goldens as the
 //! browser mounts them, and the scenes the composer's recording laid out, so

@@ -6,9 +6,10 @@ import type { CanvasLayoutCore, CanvasLayoutRequest } from '../../canvas-core.js
 import type { FragmentAsk } from '../../fragment-ask.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from '../../layout/layout-options.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
-import { describeMeasure, type MeasureText } from '../../measure.js'
-import { type LayoutRefusal, refusalScene } from '../../refusal.js'
+import { constantRatioMeasureText, describeMeasure, type MeasureText } from '../../measure.js'
+import type { LayoutRefusal } from '../../refusal.js'
 import { fakeLayoutCore } from '../fake-layout-core.js'
+import { noticeSceneOf } from '../notice-scene.js'
 import { answerText } from './answer-text.js'
 import { built, requireWasm, wasmBytes } from './glue.js'
 import { layoutCases } from './layout-cases.js'
@@ -134,8 +135,9 @@ describe.runIf(built)('the whole layout through the real core', () => {
       const rust = lay(first.canvas, hosted)
       const refused = { code: 'malformed', reason: 'host-measure' } as const
       expect(heard).toEqual([refused])
+      // A measurer that answers no finite ascent draws the notice by the ratio estimate.
       const drawn = (['light', 'dark'] as const).map((mode) =>
-        refusalScene(refused, { measure: host, mode }),
+        noticeSceneOf(refused, { measure: constantRatioMeasureText, mode }),
       )
       expect(drawn).toContainEqual(rust.scene)
       // Equal scenes can share one NaN, so the numbers are asked of directly.

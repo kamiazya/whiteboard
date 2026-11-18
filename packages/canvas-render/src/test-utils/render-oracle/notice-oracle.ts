@@ -31,7 +31,7 @@ const WORDED = [
   'core-unavailable',
 ] as const
 
-export const NOTICE_REFUSALS: readonly LayoutRefusal[] = [
+const NOTICE_REFUSALS: readonly LayoutRefusal[] = [
   ...WORDED.map((reason): LayoutRefusal => ({ code: 'malformed', reason })),
   { code: 'input-too-large', reason: 'no-words-of-its-own' },
   { code: 'malformed', reason: 'no-words-of-its-own' },
@@ -41,7 +41,7 @@ export const NOTICE_REFUSALS: readonly LayoutRefusal[] = [
 export type NoticeAsk = Omit<CoreSvgAsk, 'form'>
 
 /** The envelopes every notice is drawn in, by name; the keyed form is drawn in `scene-box`. */
-export const NOTICE_ENVELOPES: readonly (readonly [string, NoticeAsk])[] = [
+const NOTICE_ENVELOPES: readonly (readonly [string, NoticeAsk])[] = [
   ['padding', { padding: 12 }],
   ['scene-box', { viewBox: { of: 'scene' }, legend: 'omit' }],
   ['paper', { viewBox: { of: 'document', margin: 16 }, background: '#ffffff' }],
@@ -50,7 +50,7 @@ export const NOTICE_ENVELOPES: readonly (readonly [string, NoticeAsk])[] = [
 export const KEYED_ENVELOPE = 'scene-box'
 
 /** The measurers a notice is recorded under, by name. */
-export const NOTICE_MEASURES = {
+const NOTICE_MEASURES = {
   fake: createFakeMeasure(),
   ratio: constantRatioMeasureText,
   wide: (text, font) => ({
@@ -61,7 +61,7 @@ export const NOTICE_MEASURES = {
   }),
 } as const satisfies Record<string, MeasureText>
 
-export type NoticeMeasure = keyof typeof NOTICE_MEASURES
+type NoticeMeasure = keyof typeof NOTICE_MEASURES
 
 export interface NoticeInput {
   readonly id: string
@@ -127,9 +127,7 @@ export function noticeInputs(): readonly NoticeInput[] {
 }
 
 /** The envelopes a host-measure notice is drawn in, beside `NOTICE_ENVELOPES`. */
-export const HOST_ENVELOPES: readonly (readonly [string, NoticeAsk])[] = [
-  ['padding-4', { padding: 4 }],
-]
+const HOST_ENVELOPES: readonly (readonly [string, NoticeAsk])[] = [['padding-4', { padding: 4 }]]
 
 /** Every envelope by name. */
 export const ENVELOPE_BY_NAME: ReadonlyMap<string, NoticeAsk> = new Map([

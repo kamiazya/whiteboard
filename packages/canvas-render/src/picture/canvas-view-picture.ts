@@ -36,7 +36,7 @@ const hitBoxSchema = z
 
 export const canvasViewPictureSchema = z
   .object({
-    /** canvas-render's `renderSceneToSvg` output, envelope and paper included. */
+    /** The core's SVG of the scene, envelope and paper included. */
     svg: z.string(),
     /** Every node's stored box, for the comment anchor's target. */
     boxes: z.array(hitBoxSchema),

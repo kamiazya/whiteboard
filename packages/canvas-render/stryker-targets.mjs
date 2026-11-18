@@ -21,12 +21,7 @@ export const MUTATED = [
   // boards and libraries, stated from the declaration rather than the code.
   'src/tags/declared-colours.ts',
   // Serialization: escaping and character legality, byte-identical output.
-  'src/svg/format.ts',
-  // The escaping half of the above, split out so `layout/` and `svg/` both
-  // reach it without either importing the other. Still in the lane: leaving it
-  // out would shrink what the lane sees of serialization.
   'src/xml-escape.ts',
-  'src/svg/hoist.ts',
   // Pure geometry and derivation with properties of their own.
   'src/scene-bounds.ts',
   // How a scene nests, split out so a layout stage below `scene-bounds` reads
@@ -51,7 +46,7 @@ export const MUTATED = [
   // NOT `src/ink/seed.ts`, and the reason is a measurement rather than a
   // judgement about its value. Stryker selects the test files related to a
   // mutated module, and seed.ts is imported by its own test and nothing else:
-  // 7 tests, against the 458 that cover `svg/format.ts`. Its runtime mutants
+  // 7 tests, against the hundreds a widely imported module gets. Its runtime mutants
   // came back SURVIVED even when the same edit applied by hand failed the
   // suite — verified on `/ 4294967296` -> `* 4294967296`, which Stryker called
   // a survivor while `every draw is finite and in [0, 1)` goes red on it in a
@@ -90,9 +85,7 @@ export const MUTATED = [
  */
 export const MINUTES = {
   'src/tags/declared-colours.ts': 1.3,
-  'src/svg/format.ts': 3.8,
   'src/xml-escape.ts': 6.8,
-  'src/svg/hoist.ts': 2,
   'src/scene-bounds.ts': 12.3,
   'src/scene-children.ts': 0.8,
   'src/quality/rect.ts': 7.7,
@@ -247,39 +240,5 @@ export const KNOWN_EQUIVALENT = {
     'ConditionalExpression: left === undefined -> false': 1,
     'ConditionalExpression: tip === undefined || left === undefined -> false': 1,
     'LogicalOperator: tip === undefined || left === undefined -> tip === undefined && left === undefined': 1,
-  },
-  // Belt-and-braces guards whose removal is masked by a guarantee the caller
-  // already makes, plus type tests that a second test repeats. The load-bearing
-  // ones are pinned by examples in `hoist.test.ts`; these are not, because
-  // nothing can distinguish them. Hand-verified one at a time against the full
-  // 1008-test suite. Two neighbours of these are NOT here and were pinned
-  // instead — writing every hoistable name unconditionally erases a container's
-  // own attribute, and the every-child comparison throws on an attr-less child.
-  'src/svg/hoist.ts': {
-    'ConditionalExpression: !isVNode(child) -> false': 1,
-    'ConditionalExpression: attrs === undefined -> false': 1,
-    'ConditionalExpression: children === undefined -> false': 1,
-    'ConditionalExpression: elements.length === 0 -> false': 1,
-    'ConditionalExpression: hoisted.size === 0 -> false': 1,
-    'ConditionalExpression: names.size === 0 -> false': 1,
-    'ConditionalExpression: node.attrs === undefined -> false': 1,
-    'ConditionalExpression: node.attrs === undefined || names.size === 0 -> false': 1,
-    'ConditionalExpression: node.defs === undefined -> false': 1,
-    "ConditionalExpression: typeof child === 'string' -> false": 1,
-    'LogicalOperator: node.attrs === undefined || names.size === 0 -> node.attrs === undefined && names.size === 0': 1,
-    'MethodExpression: children.filter(isVNode) -> children': 1,
-    'ObjectLiteral: { changed: false } -> {}': 1,
-    'OptionalChaining: elements[0]?.attrs -> elements[0].attrs': 1,
-    'StringLiteral: \'string\' -> ""': 1,
-  },
-  // `formatCoord`'s three belt-and-braces guards, each unobservable because of
-  // a property of the other two — the reasoning is on the function itself.
-  // Hand-verified: removing any one of them leaves all 1002 canvas-render
-  // tests green.
-  'src/svg/format.ts': {
-    "ConditionalExpression: stripped === '' -> false": 1,
-    'ConditionalExpression: value === 0 -> false': 1,
-    'StringLiteral: \'\' -> "Stryker was here!"': 1,
-    'StringLiteral: \'.\' -> ""': 1,
   },
 }

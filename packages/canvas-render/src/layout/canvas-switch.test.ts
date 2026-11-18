@@ -11,9 +11,10 @@ import { highlightCode } from '../highlight/lowlight.js'
 import { constantRatioMeasureText, describeMeasure, measureSpecOf } from '../measure.js'
 import { referenceSeams } from '../references/seams.js'
 import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../references/wire.js'
-import { type LayoutRefusal, refusalScene } from '../refusal.js'
+import type { LayoutRefusal } from '../refusal.js'
 import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { noticeSceneOf } from '../test-utils/notice-scene.js'
 import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { askedPicture } from './asked-picture.js'
@@ -121,7 +122,7 @@ describe('the whole layout through the core', () => {
         appearance: createSpatialTheme({ mode }),
         onRefused: (refusal) => heard.push(refusal),
       })
-      expect(laid.scene).toEqual(refusalScene(refused, { measure, mode }))
+      expect(laid.scene).toEqual(noticeSceneOf(refused, { measure, mode }))
       expect(laid.anchors.size).toBe(0)
       expect(events).toEqual([])
     }
@@ -137,7 +138,7 @@ describe('the whole layout through the core', () => {
       { kind: 'host' },
     )
     const { laid } = run(() => ({ refused }), { measure: failing })
-    const drawn = refusalScene(refused, { measure: constantRatioMeasureText, mode: 'light' })
+    const drawn = noticeSceneOf(refused, { measure: constantRatioMeasureText, mode: 'light' })
     expect(laid.scene).toEqual(drawn)
   })
 
@@ -158,7 +159,7 @@ describe('the whole layout through the core', () => {
     })
     const laid = layoutSpatialCanvasWithAnchors(canvas, { ...base, core })
     expect(asked).toEqual([measureSpecOf(measure).kind, 'ratio'])
-    const drawn = refusalScene(refused, { measure: constantRatioMeasureText, mode: 'light' })
+    const drawn = noticeSceneOf(refused, { measure: constantRatioMeasureText, mode: 'light' })
     expect(laid.scene).toEqual(drawn)
   })
 
@@ -176,9 +177,9 @@ describe('the whole layout through the core', () => {
     const { core } = coreOf(() => ({ refused }))
     const laid = layoutSpatialCanvasWithAnchors(away, { ...base, core })
     const at = { x: 700, y: 100 }
-    expect(laid.scene).toEqual(refusalScene(refused, { measure, mode: 'light', at }))
+    expect(laid.scene).toEqual(noticeSceneOf(refused, { measure, mode: 'light', at }))
     const empty = layoutSpatialCanvasWithAnchors({ nodes: [], edges: [] }, { ...base, core })
-    expect(empty.scene).toEqual(refusalScene(refused, { measure, mode: 'light' }))
+    expect(empty.scene).toEqual(noticeSceneOf(refused, { measure, mode: 'light' }))
   })
 
   it('throws for options no request can carry, asking the core nothing', () => {

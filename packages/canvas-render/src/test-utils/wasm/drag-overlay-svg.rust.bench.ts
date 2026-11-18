@@ -1,13 +1,10 @@
 import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { expect, test } from 'vitest'
 import { layoutSpatialEdgesPicture } from '../../core-picture.js'
 import type { EdgeAnchorOverride } from '../../edge-routing.js'
 import { layoutSpatialCanvasWithAnchors, layoutSpatialEdges } from '../../layout/spatial-canvas.js'
-import { sceneBounds } from '../../scene-bounds.js'
-import { renderSceneToSvg } from '../../svg/backend.js'
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { createFakeMeasure } from '../fake-measure.js'
 import { built, requireWasm, wasmBytes } from './glue.js'
@@ -22,10 +19,9 @@ import { built, requireWasm, wasmBytes } from './glue.js'
  * anchors and the carried edges either re-sided or held at their cached sides,
  * as `drag-frame-budget.browser.test.ts`'s overlay case composes one.
  *
- * Rows: the layer alone; the layer drawn by the TypeScript backend, the frame
- * as the overlay pays it today; and the layer with the core's own SVG of it in
- * the same call (`layoutSpatialEdgesPicture`, ADR-0054 A3.1), its decode of
- * the bigger answer included. The SVG's share is a difference of rows.
+ * Rows: the layer alone, and the layer with the core's own SVG of it in the
+ * same call (`layoutSpatialEdgesPicture`, ADR-0054 A3.1), its decode of the
+ * bigger answer included. The SVG's share is a difference of rows.
  *
  * Run with `pnpm bench`, after `pnpm rust:build:wasm:oracle`; without the
  * artifact the case is skipped. `vitest run` never collects a bench file.
@@ -55,15 +51,6 @@ function working(dx: number, moved: string): SpatialCanvas {
 const MOVED = 'w2-2'
 const measure = createFakeMeasure()
 const appearance = createSpatialTheme({ mode: 'light' })
-
-/** The overlay's envelope over its own layer, as `liveEdges` spells it. */
-function overlaySvg(nodes: readonly SceneNode[]): string {
-  const bounds = sceneBounds({ nodes: [...nodes] })
-  return renderSceneToSvg(
-    { nodes: [...nodes] },
-    { width: bounds.w, height: bounds.h, viewBox: bounds },
-  )
-}
 
 test.runIf(built)(
   'the drag overlay frame: its edge layer, and the SVG it is drawn as',
@@ -108,7 +95,7 @@ test.runIf(built)(
       )
 
     // Judged before timed: every frame lays an edge layer out, and the core
-    // draws it as the TypeScript does, byte for byte.
+    // draws it in the same call.
     for (const cached of [false, true]) {
       frame = 7
       const nodes = lay(overridesFor(cached))
@@ -116,7 +103,7 @@ test.runIf(built)(
       frame = 7
       const picture = pictured(overridesFor(cached))
       expect(picture.nodes).toEqual(nodes)
-      expect(picture.svg).toBe(overlaySvg(nodes))
+      expect(picture.svg.startsWith('<svg ')).toBe(true)
     }
 
     for (const cached of [true, false]) {
@@ -124,7 +111,6 @@ test.runIf(built)(
       const mode = cached ? 'cached sides' : 're-siding'
       await bench.compare(
         bench(`${mode}: core edge layer alone`, () => lay(overrides)),
-        bench(`${mode}: core edge layer + TS renderSceneToSvg`, () => overlaySvg(lay(overrides))),
         bench(`${mode}: core edge layer + core SVG`, () => pictured(overrides).svg),
       )
     }

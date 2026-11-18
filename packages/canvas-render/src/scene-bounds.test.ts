@@ -1,34 +1,8 @@
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { MIN_SCENE_EXTENT_PX, sceneBounds, sceneDocumentBounds } from './scene-bounds.js'
-import { renderSceneToSvg } from './svg/backend.js'
 
 describe('sceneBounds', () => {
-  it('contains the halo pill a label run draws around its box', () => {
-    const scene: Scene = {
-      nodes: [
-        {
-          kind: 'textRun',
-          bbox: { x: 0, y: -20, w: 100, h: 16 },
-          text: 'Frame title',
-          appearance: { halo: '#ffffff' },
-        },
-      ],
-    }
-    const bounds = sceneBounds(scene)
-    const svg = renderSceneToSvg(scene, { width: bounds.w, height: bounds.h, viewBox: bounds })
-    const pill =
-      /<rect x="(-?[\d.]+)" y="(-?[\d.]+)" width="([\d.]+)" height="([\d.]+)"[^>]*fill="#ffffff"/.exec(
-        svg,
-      )
-    expect(pill).not.toBeNull()
-    const [x, y, w, h] = pill!.slice(1).map(Number) as [number, number, number, number]
-    expect(bounds.x).toBeLessThanOrEqual(x)
-    expect(bounds.y).toBeLessThanOrEqual(y)
-    expect(bounds.x + bounds.w).toBeGreaterThanOrEqual(x + w)
-    expect(bounds.y + bounds.h).toBeGreaterThanOrEqual(y + h)
-  })
-
   it('returns the documented fallback for an empty scene', () => {
     const scene: Scene = { nodes: [] }
     expect(sceneBounds(scene)).toEqual({ x: 0, y: 0, w: 1, h: 1 })
@@ -442,8 +416,8 @@ describe('sceneBounds', () => {
     expect(bounds.h).toBeGreaterThanOrEqual(510)
   })
 
-  // `renderTableCell` and `renderListItem` are the only two renderers that
-  // emit a transform, translating their subtree by the wrapper's own bbox.x.
+  // The table cell and the list item are the only two wrappers drawn with a
+  // transform, translating their subtree by the wrapper's own bbox.x.
   // Their descendants are therefore stored in wrapper-relative coordinates,
   // and bounds computed without re-applying that offset can place the
   // viewBox short of what actually gets drawn — clipping the overflow.
@@ -536,42 +510,6 @@ describe('sceneBounds', () => {
     // Nested <g transform> elements compose: 40 + 80 + 60 = 180.
     const bounds = sceneBounds(scene)
     expect(bounds.x + bounds.w).toBe(180)
-  })
-
-  // `sceneBounds` mirrors a rule that lives in the SVG backend: which node
-  // kinds translate their subtree. Nothing links the two, so a third
-  // translating renderer would silently make these bounds wrong again — the
-  // containment property walks only top-level nodes and cannot see it. This
-  // tripwire fails the moment that set changes, pointing at subtreeOffsetX.
-  it('is kept in sync with the only two renderers that emit a transform', () => {
-    const backendSource = (
-      import.meta.glob('./svg/backend.ts', {
-        query: '?raw',
-        eager: true,
-        import: 'default',
-      }) as Record<string, string>
-    )['./svg/backend.ts']
-
-    // A renderer emits a transform by writing a `transform:` attribute onto
-    // its VNode; ownership is the nearest preceding renderer declaration
-    // (`function renderX(` or `const renderX = `). Comments discussing
-    // transforms don't match the attribute spelling, so they cannot produce
-    // false positives. The occurrence COUNT is pinned first and separately:
-    // attribution by nearest-preceding-declaration could credit a new
-    // emitter to a renderer already in the expected set (e.g. an arrow
-    // function the declaration regex missed, defined right after one of the
-    // two), and the count catches that case regardless of attribution.
-    const occurrences = [...backendSource.matchAll(/transform: `translate\(/g)]
-    expect(occurrences).toHaveLength(2)
-
-    const declarationStarts = [
-      ...backendSource.matchAll(/(?:function|const)\s+(render\w+)\s*[=(]/g),
-    ].map((m) => ({ name: m[1], index: m.index ?? 0 }))
-    const translating = occurrences.map(
-      (m) => declarationStarts.filter((f) => f.index < (m.index ?? 0)).at(-1)?.name,
-    )
-
-    expect(new Set(translating)).toEqual(new Set(['renderListItem', 'renderTableCell']))
   })
 
   it('includes a top-level shape bbox', () => {
