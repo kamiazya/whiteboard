@@ -214,6 +214,15 @@ describe('the popup under the app theme', () => {
       expect(view.height).toBeCloseTo(side, 3)
       expect(view.x).toBeCloseTo((ux as number) + ((uw as number) - side) / 2, 3)
       expect(view.y).toBeCloseTo((uy as number) + ((uh as number) - side) / 2, 3)
+      // A row the core could not draw for keeps the gutter, so its label
+      // starts where every other row's does.
+      const host = glyph.parentElement as HTMLElement
+      const label = row.querySelector('.cm-completionLabel') as HTMLElement
+      const labelLeft = label.getBoundingClientRect().left
+      host.replaceChildren()
+      const empty = host.getBoundingClientRect()
+      expect([empty.width, empty.height]).toEqual([16, 16])
+      expect(label.getBoundingClientRect().left).toBe(labelLeft)
     } finally {
       themed.destroy()
       host.remove()
