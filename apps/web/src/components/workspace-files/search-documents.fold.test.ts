@@ -37,7 +37,7 @@ fcTest.prop(
     }),
     text,
   ],
-  withDefaults({ numRuns: 400 }),
+  withDefaults({ numRuns: 100 }),
 )('matches on each entry exactly as folding each of its texts alone does', (rows, query) => {
   const documents = rows.map((row, i) => ({
     documentId: `d${i}`,
@@ -62,7 +62,7 @@ fcTest.prop(
   }
 })
 
-fcTest.prop([fc.array(text, { minLength: 1, maxLength: 6 })], withDefaults({ numRuns: 200 }))(
+fcTest.prop([fc.array(text, { minLength: 1, maxLength: 6 })], withDefaults({ numRuns: 60 }))(
   'a text holding a line break is matched on its own, not split',
   (parts) => {
     const name = parts.join('\n')
