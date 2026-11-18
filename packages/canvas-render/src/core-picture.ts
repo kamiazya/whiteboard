@@ -97,7 +97,7 @@ function keyedPictured(laid: Laid, ask: CorePictureAsk): KeyedPicture {
  * The ask as the wire can carry it. A paint is a caller's string, and one
  * the core's wire refuses (a lone surrogate) would refuse the whole layout;
  * the serializer drops those characters from an attribute anyway, so
- * dropping them here first draws the same document.
+ * dropping them here first draws the same picture.
  */
 function wireAsk<A extends CorePictureAsk>(ask: A): A {
   const { background, textFill } = ask

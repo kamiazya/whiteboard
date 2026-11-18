@@ -190,8 +190,9 @@ describe('CanvasViewer fits the box it is given', () => {
     const svgBox = () => container.querySelector('svg')?.getBoundingClientRect()
     await expect.poll(() => svgBox()?.width ?? 0).toBeCloseTo(400, 0)
     // The face's arrival is the one thing that may lay the canvas out again,
-    // so the count is taken once it has landed and its re-render settled.
-    await ensureViewerFontLoaded()
+    // so the count is taken once it has landed and its re-render settled. A
+    // face that timed out could land later still, so it has to have loaded.
+    expect(await ensureViewerFontLoaded()).toBe('loaded')
     let settled = -1
     await expect
       .poll(() => {
