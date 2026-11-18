@@ -30,13 +30,18 @@ const SHAPES: [Option<&str>; 7] = [
 
 /// Every number pair in a path's `d`: end AND control points, which bound a
 /// quadratic. A token that is no number stays `NaN`, so a malformed path fails
-/// a bound instead of vanishing from it.
+/// a bound instead of vanishing from it, and so does a path with no pair or
+/// an odd count, which `chunks_exact` would otherwise drop silently.
 fn points_of(d: &str) -> Vec<ScenePoint> {
     let numbers: Vec<f64> = d
         .split(' ')
         .filter(|token| *token != "M" && *token != "Q")
         .map(|token| token.parse().unwrap_or(f64::NAN))
         .collect();
+    assert!(
+        !numbers.is_empty() && numbers.len() % 2 == 0,
+        "a path's coordinates come in pairs, at least one: {d:?}"
+    );
     numbers.chunks_exact(2).map(|pair| ScenePoint { x: pair[0], y: pair[1] }).collect()
 }
 
