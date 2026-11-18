@@ -1,30 +1,21 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import {
-  decodeLines,
-  encodeLines,
-  type SvgRecord,
-  svgAnswer,
-  svgInputs,
-} from '../test-utils/render-oracle/oracle.js'
+import { decodeLines, type SvgRecord, svgAnswer } from '../test-utils/render-oracle/oracle.js'
 
 /**
- * The committed recording of what the SVG backend alone answers for a scene
+ * The committed recording of what the SVG backend alone answered for a scene
  * (`renderSceneToSvg` and `renderSceneToKeyedSvg`, over the envelope options a
- * caller may pass) equals what the TypeScript answers today. The Rust SVG
- * backend (ADR-0054 slice S2) replays it natively and is held to it byte for
- * byte; the Rust replay test arrives with that slice, not here.
+ * caller may pass). The Rust SVG backend replays it natively and on wasm32
+ * (`crates/core/canvas-render/tests/svg_oracle.rs`) and is held to it byte for
+ * byte.
  *
- * The scenes are the pixel and determinism goldens and the scenes the render
- * recording lays out, held as JSON inputs, so this test draws nothing and
- * reads no corpus. Re-record after a deliberate backend change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node recorded-oracle`.
+ * The scenes are the pixel and determinism goldens, the pixel goldens as the
+ * browser screenshots them (`pixel-mount/`), and the scenes the render
+ * recording laid out when it was taken. It is FROZEN: the laid-out scenes are
+ * recorded inputs now, not what today's layout draws, so nothing re-records
+ * it (ADR-0054 A3.6).
  */
 const FILE = new URL('./svg.jsonl', import.meta.url)
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(FILE, encodeLines(svgInputs().map(svgAnswer)))
-}
 
 describe('the recorded SVG backend oracle', () => {
   const text = readFileSync(FILE, 'utf8')
@@ -35,6 +26,7 @@ describe('the recorded SVG backend oracle', () => {
     expect(under('golden/'), 'determinism goldens').toBeGreaterThan(6)
     expect(under('pixel/'), 'pixel goldens').toBeGreaterThan(30)
     expect(under('layout/'), 'laid-out scenes').toBeGreaterThan(100)
+    expect(under('pixel-mount/'), 'pixel goldens as mounted').toBe(8)
     expect(recorded.filter((r) => r.id.startsWith('golden/every-kind')).length, 'every kind').toBe(
       4,
     )

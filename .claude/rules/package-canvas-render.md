@@ -824,14 +824,15 @@ only producers of an edge's path.
   scoreboards in `canvas-render-rust`; what `canvas-render-node` keeps about
   the layout is the switch: the request each option becomes, and the answer
   read back.
-- `svg/pixel-golden.browser.test.ts` pixel-level regression harness
-  (`toMatchScreenshot`, baselines under `svg/__screenshots__/`) for the
+- `oracle/pixel-golden.browser.test.ts` pixel-level regression harness
+  (`toMatchScreenshot`, baselines under `oracle/__screenshots__/`) for the
   shape classes a byte-level SVG-string golden cannot protect (sweep-flag/
   coordinate-sign geometry: jump hops, rounded-edge corners, arrowheads,
   rect corner radius) — fixtures and the deliberate `--update`-then-eyeball
-  regeneration flow live in `src/test-utils/pixel-golden-scenes.ts`.
+  regeneration flow live in `src/test-utils/pixel-golden-scenes.ts`. It
+  paints the `pixel-mount/` records of `oracle/svg.jsonl`.
   Baselines are linux-only (CI's platform): off linux it skips, and
-  `svg/pixel-golden-baselines.test.ts` holds the set.
+  `oracle/pixel-golden-baselines.test.ts` holds the set.
   Two of its fixtures are THEMED — one canvas drawn under `visual.sketch`
   and under `visual.neon`, each on its own paper — because every other
   golden here is crisp, so a change to sketch's jitter or neon's blur moved

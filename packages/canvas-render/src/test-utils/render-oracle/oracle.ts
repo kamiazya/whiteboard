@@ -195,6 +195,9 @@ const SVG_OPTION_CYCLE: readonly (SvgDocumentOptions | null)[] = [
   { viewBox: { x: -5, y: -5, w: 400, h: 300 }, legend: 'omit', rasterScale: 2 },
 ]
 
+/** The padding the pixel goldens are mounted in. */
+export const PIXEL_MOUNT_PADDING_PX = 8
+
 export function svgInputs(): readonly SvgInput[] {
   const goldens: { id: string; scene: Scene }[] = [
     { id: 'golden/every-kind', scene: buildEveryKindScene() },
@@ -220,7 +223,23 @@ export function svgInputs(): readonly SvgInput[] {
     ...g,
     options: SVG_OPTION_CYCLE[index % SVG_OPTION_CYCLE.length] as SvgDocumentOptions | null,
   }))
-  return [...perGolden, ...perLayout].map(({ id, scene, options }) => ({
+  // The pixel goldens as the browser test mounts them, so the picture it
+  // screenshots is a recorded string the core is held to.
+  const sketch = buildSketchLookScene()
+  const neon = buildNeonLookScene()
+  const pixelMounts = [
+    ...goldens.filter((g) => g.id.startsWith('pixel/') && !g.id.endsWith('-look')),
+    { id: 'pixel/sketch-look', scene: sketch.scene, background: sketch.background },
+    { id: 'pixel/neon-look', scene: neon.scene, background: neon.background },
+  ].map((g) => ({
+    id: `pixel-mount/${g.id.slice('pixel/'.length)}`,
+    scene: g.scene,
+    options: {
+      padding: PIXEL_MOUNT_PADDING_PX,
+      background: 'background' in g ? g.background : '#ffffff',
+    },
+  }))
+  return [...perGolden, ...perLayout, ...pixelMounts].map(({ id, scene, options }) => ({
     id,
     scene: viaJson(scene),
     options: viaJson(options),
