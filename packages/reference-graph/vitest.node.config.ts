@@ -5,8 +5,12 @@ export default defineProject({
     name: 'reference-graph-node',
     environment: 'node',
     // Installs the Rust OKF core, which this realm's parseOkf/serializeOkf answer through
-    // (codec's core-setup); a missing artifact fails the project by name.
-    setupFiles: ['../../packages/codec/src/test-utils/core-setup/node.setup.ts'],
+    // (codec's core-setup), and its search, which extraction and the excerpts answer through
+    // (search's); a missing artifact fails the project by name.
+    setupFiles: [
+      '../../packages/codec/src/test-utils/core-setup/node.setup.ts',
+      '../../packages/search/src/test-utils/core-setup/node.setup.ts',
+    ],
     include: ['src/**/*.test.ts'],
   },
 })

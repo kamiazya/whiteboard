@@ -1,11 +1,7 @@
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import {
-  EXCERPT_TOKENS_MAX,
-  excerpterFor,
-  fullTextSearch,
-  type SearchableDocument,
-} from './full-text.js'
+import { excerpts, fullTextSearch, type SearchableDocument } from './index.js'
+import { EXCERPT_TOKENS_MAX } from './test-utils/core-bounds.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 // A five-word vocabulary keeps the corpus dense: most queries hit several
@@ -84,12 +80,11 @@ describe('fullTextSearch excerpts cut apart from ranking', () => {
     (docs, q) => {
       const inline = fullTextSearch(docs, q, { limit: docs.length })
       const ranked = fullTextSearch(docs, q, { limit: docs.length, excerpts: false })
-      const excerpt = excerpterFor(q)
       const byId = new Map(docs.map((doc) => [doc.documentId, doc]))
       expect(ranked.every((hit) => hit.contexts.length === 0)).toBe(true)
       const split = ranked.map((hit) => {
         const doc = byId.get(hit.documentId)
-        return { ...hit, contexts: doc === undefined ? [] : excerpt(doc) }
+        return { ...hit, contexts: doc === undefined ? [] : (excerpts(q, [doc.texts])[0] ?? []) }
       })
       if (split.some((hit) => hit.contexts.length > 0)) splitTally.excerpted++
       expect(split).toEqual(inline)

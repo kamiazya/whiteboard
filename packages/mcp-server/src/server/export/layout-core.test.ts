@@ -14,10 +14,16 @@ import {
   serializeSpatial,
   spatialCoreInstalled,
 } from '@kamiazya/whiteboard-codec'
+import type { Core } from '@kamiazya/whiteboard-core-wasm'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
-import { facetWriteCoreInstalled, installFacetWriteCore } from '@kamiazya/whiteboard-server-core'
+import {
+  facetWriteCoreInstalled,
+  installFacetWriteCore,
+  installSearchCore,
+  searchCoreInstalled,
+} from '@kamiazya/whiteboard-server-core'
 import { afterEach, describe, expect, it } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import {
@@ -199,7 +205,9 @@ describe('the daemon cores, installed at boot', () => {
   let okfRealm: ReturnType<typeof installOkfCore>
   let spatialRealm: ReturnType<typeof installSpatialCore>
   let facetRealm: ReturnType<typeof installFacetWriteCore>
+  let searchRealm: ReturnType<typeof installSearchCore>
   const removeRealmCores = () => {
+    searchRealm = installSearchCore(undefined)
     okfRealm = installOkfCore(undefined)
     spatialRealm = installSpatialCore(undefined)
     facetRealm = installFacetWriteCore(undefined)
@@ -208,6 +216,7 @@ describe('the daemon cores, installed at boot', () => {
     installOkfCore(okfRealm)
     installSpatialCore(spatialRealm)
     installFacetWriteCore(facetRealm)
+    installSearchCore(searchRealm)
   })
 
   it('keeps cores the realm already installed, loading nothing', async () => {
@@ -215,6 +224,9 @@ describe('the daemon cores, installed at boot', () => {
     expect(okfCoreInstalled()).toBe(true)
     expect(spatialCoreInstalled()).toBe(true)
     expect(facetWriteCoreInstalled()).toBe(true)
+    expect(searchCoreInstalled()).toBe(true)
+    searchRealm = installSearchCore(undefined)
+    installSearchCore(searchRealm)
     okfRealm = installOkfCore(undefined)
     installOkfCore(okfRealm)
     spatialRealm = installSpatialCore(undefined)
@@ -232,6 +244,7 @@ describe('the daemon cores, installed at boot', () => {
     expect(okfCoreInstalled()).toBe(false)
     expect(spatialCoreInstalled()).toBe(false)
     expect(facetWriteCoreInstalled()).toBe(false)
+    expect(searchCoreInstalled()).toBe(false)
     // No fallback answers in the core's place: a call stays a loud failure.
     expect(() => parseOkf('---\ntype: note\n---\nb')).toThrow(/before this realm installed/)
     expect(() => parseSpatial('{}')).toThrow(/before this realm installed/)
@@ -248,6 +261,8 @@ describe('the daemon cores, installed at boot', () => {
       expect(okfCoreInstalled()).toBe(true)
       expect(spatialCoreInstalled()).toBe(true)
       expect(facetWriteCoreInstalled()).toBe(true)
+      expect(searchCoreInstalled()).toBe(true)
+      expect(installSearchCore(undefined)?.foldForSearch('Café')).toBe('cafe')
       const parsed = parseOkf('---\ntype: note\ntags: [a, b]\n---\nbody\n')
       if (!parsed.ok) throw new Error(parsed.error.message)
       expect(serializeOkf(parsed.value)).toContain('tags:')
@@ -266,11 +281,13 @@ describe('the daemon cores, installed at boot', () => {
     const bootOkf = installOkfCore(undefined)
     const bootSpatial = installSpatialCore(undefined)
     const bootFacets = installFacetWriteCore(undefined)
+    const bootSearch = installSearchCore(undefined)
     // One load per directory: the routing core is the instance boot installed for both codecs.
     const layout = await coreLoaders(settings).layoutCore()
     expect(bootOkf).toBeDefined()
     expect(bootSpatial).toBe(bootOkf)
     expect(bootFacets).toBe(bootOkf)
+    expect(bootSearch).toBe((bootOkf as Core).search)
     expect(layout.routing).toBe(bootOkf)
   })
 })

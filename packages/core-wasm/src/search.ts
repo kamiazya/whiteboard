@@ -318,6 +318,8 @@ function expander(alsoIndex: AlsoIndex | undefined): (text: string) => string {
 
 /** Lexical search over an initialised core: what `packages/search` answered. */
 export interface SearchCore {
+  /** The most documents one index holds (`search_op`'s `maxNodes`). */
+  readonly indexCapacity: number
   /** `foldForSearch`: what a text is compared as. */
   foldForSearch(text: string): string
   /** `findFolded`: where `needle` occurs in `text`, as a span of the ORIGINAL text. */
@@ -455,6 +457,49 @@ function labelsOf(channel: Channel, op: string, labels: LinkLabelSet | undefined
   return labels.handle
 }
 
+const tooLarge = (err: unknown): boolean =>
+  err instanceof Error && 'code' in err && err.code === 'input-too-large'
+
+/**
+ * Excerpts for a page of documents in one call. A page can be past the
+ * request cap together when no one of its documents is: then each is asked
+ * on its own, so a page of long hits keeps its excerpts and only a document
+ * past the cap alone has none.
+ */
+function excerptsPaged(
+  channel: Channel,
+  query: string,
+  documents: readonly (readonly string[])[],
+  handle: number | null,
+): string[][] {
+  const ask = (page: readonly (readonly string[])[]): string[][] => {
+    const answered = channel.first(
+      'excerpts',
+      (x): x is string[][] => Array.isArray(x) && x.every(isTexts),
+      toWellFormed(query),
+      handle,
+      page.map((texts) => texts.map(toWellFormed)),
+    )
+    if (answered.length !== page.length) {
+      throw channel.errors.refused('search_op', 'malformed', 'excerpts')
+    }
+    return answered
+  }
+  try {
+    return ask(documents)
+  } catch (err) {
+    if (!tooLarge(err)) throw err
+    return documents.map((texts) => {
+      try {
+        return ask([texts])[0] ?? []
+      } catch (one) {
+        if (tooLarge(one)) return []
+        throw one
+      }
+    })
+  }
+}
+
 function excerptCalls(channel: Channel, collected: Finalizer): ExcerptCalls {
   const release = (handle: number) => quietly(channel, 'labels-release', handle)
   return {
@@ -480,19 +525,8 @@ function excerptCalls(channel: Channel, collected: Finalizer): ExcerptCalls {
         unitOf(channel, 'snippet', length),
         labelsOf(channel, 'snippet', labels),
       ),
-    excerpts(query, documents, labels) {
-      const answered = channel.first(
-        'excerpts',
-        (x): x is string[][] => Array.isArray(x) && x.every(isTexts),
-        toWellFormed(query),
-        labelsOf(channel, 'excerpts', labels),
-        documents.map((texts) => texts.map(toWellFormed)),
-      )
-      if (answered.length !== documents.length) {
-        throw channel.errors.refused('search_op', 'malformed', 'excerpts')
-      }
-      return answered
-    },
+    excerpts: (query, documents, labels) =>
+      excerptsPaged(channel, query, documents, labelsOf(channel, 'excerpts', labels)),
   }
 }
 
@@ -550,6 +584,7 @@ export function searchOver(
     ...textCalls(channel),
     ...contentCalls(channel),
     ...excerpts,
+    indexCapacity: SEARCH_OP_CAPS.maxNodes,
     createIndex,
     fullTextSearch: fullTextSearchOver(createIndex, excerpts.excerpts),
   }

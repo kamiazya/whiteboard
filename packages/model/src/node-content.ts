@@ -21,10 +21,9 @@ import type { SpatialNode } from './spatial.js'
 
 // What these accessors COST, recorded because the ADR does not weigh it.
 //
-// A `switch (node.type)` over the union is exhaustive: `searchable-texts.ts`
-// says so in as many words — "a fifth node kind has to answer this question
-// rather than fall through it" — and `canvas-snapshot.ts`, `loro-bridge.ts`,
-// the two projections and the layout all lean on the same guard. Reading
+// A `switch (node.type)` over the union is exhaustive: a fifth node kind
+// has to answer this question rather than fall through it, and `canvas-snapshot.ts`,
+// `loro-bridge.ts`, the two projections and the layout all lean on the same guard. Reading
 // through an accessor gives that up: four independent questions, each
 // answerable `undefined`, and nothing that fails when a fifth kind of content
 // arrives unanswered.

@@ -161,8 +161,9 @@ paths:
   - The exhaustiveness the union gave is NOT given up. It moves to
     `RESOURCE_KINDS` in `node-resource.ts`: `ResourceKind` is `keyof` it, so a
     table written `satisfies Record<NodeKind, …>` still fails to compile when
-    the set grows. `searchable-texts.ts` and `canvas-snapshot.ts` are the two
-    worked examples of a `switch` that became a table.
+    the set grows. `canvas-snapshot.ts` and the search core's `searchable_texts`
+    (`crates/core/search/src/texts.rs`) are the two worked examples of a
+    `switch` that became a table.
   - **`nodeKind` answers `undefined` for a resource nothing claims**, and that
     is a first-class answer rather than a fallback. The union could not
     express such a node AT ALL — an unknown arm failed to parse and

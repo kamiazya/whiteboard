@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { excerpterFor, fullTextSearch } from './full-text.js'
-import { CONTEXT_RADIUS, linkLabelsFrom, snippetAround } from './snippet.js'
+import { excerpts, fullTextSearch, linkLabels, snippetAround } from './index.js'
+import { CONTEXT_RADIUS } from './test-utils/core-bounds.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 const LINK = '[[folder/deep-learning/transformer]]'
-const labels = new Map([['folder/deep-learning/transformer', 'Transformer']])
-const labelOf = (target: string) => labels.get(target)
+const labelOf = linkLabels([
+  { documentId: '01HTRANSFORMER', path: 'folder/deep-learning/transformer', name: 'Transformer' },
+])
 
 describe('snippetAround over [[links]]', () => {
   it('shows a link as its target’s display name, the match included', () => {
@@ -37,7 +38,7 @@ describe('snippetAround over [[links]]', () => {
   })
 
   it('labels a link by path or by id from a listing', () => {
-    const labelOfListing = linkLabelsFrom([
+    const labelOfListing = linkLabels([
       { documentId: '01HID', path: 'folder/deep-learning/transformer', name: 'Transformer' },
       { documentId: '01HUNNAMED', path: 'notes/plain-note' },
     ])
@@ -77,8 +78,10 @@ describe('snippetAround over [[links]]', () => {
 describe('fullTextSearch excerpts over [[links]]', () => {
   it('quote a link by the label the caller gives it', () => {
     const doc = { documentId: 'a', path: 'a', texts: [`attention in ${LINK} matters`] }
-    const [hit] = fullTextSearch([doc], 'attention', { linkLabel: labelOf })
+    const [hit] = fullTextSearch([doc], 'attention', { linkLabels: labelOf })
     expect(hit?.contexts).toEqual(['attention in Transformer matters'])
-    expect(excerpterFor('attention', labelOf)(doc)).toEqual(['attention in Transformer matters'])
+    expect(excerpts('attention', [doc.texts], labelOf)).toEqual([
+      ['attention in Transformer matters'],
+    ])
   })
 })

@@ -13,7 +13,8 @@
  */
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { CONTEXT_RADIUS, snippetAround } from './snippet.js'
+import { snippetAround } from './index.js'
+import { CONTEXT_RADIUS } from './test-utils/core-bounds.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 /** How many unpaired surrogates a string carries. Zero is the contract. */

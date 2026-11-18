@@ -1,3 +1,6 @@
+// A daemon installs the one core its search answers through, beside the facet write's, so a root
+// that reaches search by this package takes no dependency on the search package itself.
+export { installSearchCore, searchCoreInstalled } from '@kamiazya/whiteboard-search'
 export type { ApiErrorBody } from './api-errors.js'
 export {
   apiErrorBodySchema,

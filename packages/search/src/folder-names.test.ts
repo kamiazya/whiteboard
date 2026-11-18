@@ -1,7 +1,6 @@
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { folderNamesOf } from './folder-names.js'
-import { fullTextSearch, type SearchableDocument } from './full-text.js'
+import { folderNamesOf, fullTextSearch, type SearchableDocument } from './index.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 const names = new Map([

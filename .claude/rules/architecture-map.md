@@ -11,7 +11,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `packages/ports` | store/sync port contracts + Symbol `TOKENS` | model, zod |
 | `packages/facet-engine` | the facet engine (ADR-0013): definePlugin/defineFacet, registry, write validation, compat resolution. Knows no plugin | zod only |
 | `packages/core-wasm` | the Rust core's wasm artifact behind a thin shim: init from bytes or a module a root hands it, an ABI check, one typed call per operation (ADR-0054) | model, scene |
-| `packages/search` | lexical search: dictionary-free tokenizer (latin words, CJK bigrams), BM25 ranking, snippets, and the one definition of a document's searchable text | model |
+| `packages/search` | lexical search as a dispatch to the Rust core a realm installs (`installSearchCore`, declared structurally like codec's): the dictionary-free tokenizer (latin words, CJK bigrams), BM25 ranking, snippets and the one definition of a document's searchable text are the core's | model |
 | `packages/loro-adapter` | LoroDoc<->model bridge, and which uploaded files a workspace still names (`scanFileReferences`, both keepers' file collection) | model, loro-crdt, zod |
 | `packages/reference-graph` | what documents point at: per-document facts, the backlink/mention aggregate, and the digest-validated cache over one keeper port | model, codec, ports, loro-adapter, search, loro-crdt, zod |
 | `packages/workspace-index` | the `DocumentIndex` port over a workspace's Loro tree — one implementation for both roots, since a tree-backed index differs between them in nothing | model, ports, loro-adapter, loro-crdt |

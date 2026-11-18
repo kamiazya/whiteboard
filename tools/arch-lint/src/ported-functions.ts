@@ -84,6 +84,21 @@ const FACET_WRITE_TYPESCRIPT = [
   'packages/server-core/src/tools/facet-write.core.test.ts',
 ] as const
 
+/**
+ * Where lexical search's TypeScript lived, which stage 4 requires gone: the
+ * folding, the tokenizers, BM25 and the term bags, the excerpts and snippets,
+ * what a document contributes and the folder names, and the generators that
+ * re-recorded the frozen recording from them.
+ */
+const SEARCH_TYPESCRIPT = [
+  'packages/search/src/fold.ts',
+  'packages/search/src/folder-names.ts',
+  'packages/search/src/full-text.ts',
+  'packages/search/src/searchable-texts.ts',
+  'packages/search/src/snippet.ts',
+  'packages/search/src/test-utils/search-oracle.ts',
+] as const
+
 /** Where the composer lived (S18h2), which stage 4 requires gone. */
 const COMPOSER_TYPESCRIPT = [
   'packages/canvas-render/src/layout/compose-node.ts',
@@ -377,106 +392,102 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
     },
     realm: { install: 'installFacetWriteCore', deleted: FACET_WRITE_TYPESCRIPT },
   },
-  // Lexical search (step 8, B3 slice 1): the shim answers every one through
-  // `search_op`, and the callers still ask the TypeScript package.
+  // Lexical search (step 8, B3): every function dispatches to the core the realm installed.
   {
     name: 'foldForSearch',
-    stage: 2,
-    ts: { file: 'packages/search/src/fold.ts', export: 'foldForSearch' },
+    stage: 4,
+    ts: { file: 'packages/search/src/core.ts', export: 'foldForSearch' },
     rust: { file: 'crates/core/search/src/fold.rs', fn: 'fold_for_search' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/search.ts',
       member: 'foldForSearch',
     },
+    realm: { install: 'installSearchCore', deleted: SEARCH_TYPESCRIPT },
   },
   {
     name: 'findFolded',
-    stage: 2,
-    ts: { file: 'packages/search/src/fold.ts', export: 'findFolded' },
+    stage: 4,
+    ts: { file: 'packages/search/src/core.ts', export: 'findFolded' },
     rust: { file: 'crates/core/search/src/fold.rs', fn: 'find_folded' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/search.ts',
       member: 'findFolded',
     },
+    realm: { install: 'installSearchCore', deleted: SEARCH_TYPESCRIPT },
   },
   {
     name: 'folderNamesOf',
-    stage: 2,
-    ts: { file: 'packages/search/src/folder-names.ts', export: 'folderNamesOf' },
+    stage: 4,
+    ts: { file: 'packages/search/src/core.ts', export: 'folderNamesOf' },
     rust: { file: 'crates/core/search/src/texts.rs', fn: 'folder_names_of' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/search.ts',
       member: 'folderNamesOf',
     },
+    realm: { install: 'installSearchCore', deleted: SEARCH_TYPESCRIPT },
   },
   {
     name: 'searchableTexts',
-    stage: 2,
-    ts: { file: 'packages/search/src/searchable-texts.ts', export: 'searchableTexts' },
+    stage: 4,
+    ts: { file: 'packages/search/src/core.ts', export: 'searchableTexts' },
     rust: { file: 'crates/core/search/src/texts.rs', fn: 'searchable_texts' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/search.ts',
       member: 'searchableTexts',
     },
+    realm: { install: 'installSearchCore', deleted: SEARCH_TYPESCRIPT },
   },
   {
     name: 'snippetAround',
-    stage: 2,
-    ts: { file: 'packages/search/src/snippet.ts', export: 'snippetAround' },
+    stage: 4,
+    ts: { file: 'packages/search/src/core.ts', export: 'snippetAround' },
     rust: { file: 'crates/core/search/src/snippet.rs', fn: 'snippet_around' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/search.ts',
       member: 'snippetAround',
     },
+    realm: { install: 'installSearchCore', deleted: SEARCH_TYPESCRIPT },
   },
   {
-    name: 'linkLabelsFrom',
-    stage: 2,
-    ts: { file: 'packages/search/src/snippet.ts', export: 'linkLabelsFrom' },
+    name: 'linkLabels',
+    stage: 4,
+    ts: { file: 'packages/search/src/core.ts', export: 'linkLabels' },
     rust: { file: 'crates/core/search/src/snippet.rs', fn: 'from_entries' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/search.ts',
       member: 'linkLabels',
     },
+    realm: { install: 'installSearchCore', deleted: SEARCH_TYPESCRIPT },
   },
   {
-    name: 'documentTerms',
-    stage: 2,
-    ts: { file: 'packages/search/src/full-text.ts', export: 'documentTerms' },
-    rust: { file: 'crates/core/search/src/terms.rs', fn: 'document_terms' },
-    shim: {
-      module: '@kamiazya/whiteboard-core-wasm',
-      file: 'packages/core-wasm/src/search.ts',
-      member: 'documentTerms',
-    },
-  },
-  {
-    name: 'excerpterFor',
-    stage: 2,
-    ts: { file: 'packages/search/src/full-text.ts', export: 'excerpterFor' },
+    name: 'excerpts',
+    stage: 4,
+    ts: { file: 'packages/search/src/core.ts', export: 'excerpts' },
     rust: { file: 'crates/core/search/src/excerpt.rs', fn: 'excerpter_for' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/search.ts',
       member: 'excerpts',
     },
+    realm: { install: 'installSearchCore', deleted: SEARCH_TYPESCRIPT },
   },
   {
     name: 'fullTextSearch',
-    stage: 2,
-    ts: { file: 'packages/search/src/full-text.ts', export: 'fullTextSearch' },
+    stage: 4,
+    ts: { file: 'packages/search/src/core.ts', export: 'fullTextSearch' },
     rust: { file: 'crates/core/search/src/rank.rs', fn: 'full_text_search' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/search.ts',
       member: 'fullTextSearch',
     },
+    realm: { install: 'installSearchCore', deleted: SEARCH_TYPESCRIPT },
   },
 ]
 

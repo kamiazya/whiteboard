@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
+import { installSearchCore } from '@kamiazya/whiteboard-search'
+import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
@@ -342,27 +343,27 @@ describe('semantic fusion', () => {
 })
 
 /**
- * How many texts the excerpt step searched during `run`, counted as
- * `indexOf` calls on a text carrying `marker` — the one step that searches
- * document text for the query, once the corpus is cached.
+ * How many documents the excerpt step was asked to quote during `run`: the
+ * core is handed one list of texts per document, so the count is the work the
+ * page costs, whatever the ranking looked at.
  */
-async function excerptScans(marker: string, run: () => Promise<unknown>): Promise<number> {
-  const original = String.prototype.indexOf
-  let scans = 0
-  const spy = vi.spyOn(String.prototype, 'indexOf').mockImplementation(function (
-    this: string,
-    search: string,
-    position?: number,
-  ) {
-    if (original.call(this, marker) !== -1) scans++
-    return original.call(this, search, position)
+async function excerptedDocuments(run: () => Promise<unknown>): Promise<number> {
+  const real = installSearchCore(undefined)
+  if (real === undefined) throw new Error('the test realm installs a search core')
+  let documents = 0
+  installSearchCore({
+    ...real,
+    excerpts: (query, texts, labels) => {
+      documents += texts.length
+      return real.excerpts(query, texts, labels)
+    },
   })
   try {
     await run()
   } finally {
-    spy.mockRestore()
+    installSearchCore(real)
   }
-  return scans
+  return documents
 }
 
 describe('fused excerpts', () => {
@@ -399,7 +400,7 @@ describe('excerpt cost with an embedder', () => {
     const tool = createDocumentSearchTool({ ...deps, embedder: fakeEmbedder() })
     const query = { workspaceId: WS, query: 'quota', limit: 3 }
     await tool.execute(query)
-    const scans = await excerptScans(MARKER, async () => {
+    const excerpted = await excerptedDocuments(async () => {
       const out = await tool.execute(query)
       expect(out.results).toHaveLength(3)
       // The subject is present: every result is a marked text, so each
@@ -407,7 +408,7 @@ describe('excerpt cost with an embedder', () => {
       expect(out.results.every((r) => r.name?.startsWith('bulk'))).toBe(true)
     })
     // Excerpting all 30 lexical hits before keeping 3 counts 30.
-    expect(scans).toBe(3)
+    expect(excerpted).toBe(3)
   })
 
   it('excerpts the lexical page alone when the embedder fails', async () => {
@@ -420,7 +421,7 @@ describe('excerpt cost with an embedder', () => {
     const tool = createDocumentSearchTool({ ...deps, embedder: broken })
     const query = { workspaceId: WS, query: 'quota', limit: 3 }
     await tool.execute(query)
-    const scans = await excerptScans(MARKER, async () => {
+    const excerpted = await excerptedDocuments(async () => {
       const out = await tool.execute(query)
       expect(out.results).toHaveLength(3)
       // The subject is present: every result is a marked text, so each
@@ -428,6 +429,6 @@ describe('excerpt cost with an embedder', () => {
       expect(out.results.every((r) => r.name?.startsWith('bulk'))).toBe(true)
     })
     // Excerpting all 30 lexical hits before keeping 3 counts 30.
-    expect(scans).toBe(3)
+    expect(excerpted).toBe(3)
   })
 })

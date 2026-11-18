@@ -17,7 +17,7 @@ import { parentOfPath } from '@kamiazya/whiteboard-model'
  * re-run the search with their eyes.
  */
 
-import { findFolded } from '@kamiazya/whiteboard-search'
+import { findFolded, isSearchUnavailable } from '@kamiazya/whiteboard-search'
 import { LayoutGrid, List } from 'lucide-react'
 import { type KeyboardEvent, type ReactNode, useContext, useId, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
@@ -280,6 +280,16 @@ function listProps(
   } as const
 }
 
+/** Where the query sits in `text`; nowhere (nothing marked) when search cannot answer. */
+function foundIn(text: string, query: string) {
+  try {
+    return findFolded(text, query)
+  } catch (err) {
+    if (isSearchUnavailable(err)) return undefined
+    throw err
+  }
+}
+
 /**
  * The text with its first match marked, compared the way search compares
  * (case and Latin accents folded) but marked on the text as written, so
@@ -288,7 +298,7 @@ function listProps(
  * as damage rather than emphasis.
  */
 function Highlighted({ text, query }: { text: string; query: string }) {
-  const found = findFolded(text, query.trim())
+  const found = foundIn(text, query.trim())
   if (found === undefined) return <>{text}</>
   const end = found.index + found.length
   return (

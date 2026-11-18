@@ -1,21 +1,25 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { emojiSearchText } from '@kamiazya/whiteboard-plugin-visual/emoji/searchable'
 import {
   compareDocumentPaths,
   type DocumentEntry,
   hasDocumentFolders,
 } from '@kamiazya/whiteboard-ports'
-import type { ContentFacts } from '@kamiazya/whiteboard-reference-graph'
+import type { ContentFacts, ContentFactsCache } from '@kamiazya/whiteboard-reference-graph'
 import {
-  excerpterFor,
+  excerpts,
   folderNamesOf,
   fullTextSearch,
-  linkLabelsFrom,
+  isSearchRefusal,
+  type LinkLabelSet,
+  linkLabels,
   type SearchableDocument,
+  type SearchHit,
 } from '@kamiazya/whiteboard-search'
-import { type DocumentTermsCache, termsCacheFor } from '../search/document-terms-cache.js'
 import { type DocumentVectorCache, vectorCacheFor } from '../search/document-vector-cache.js'
 import type { Embedder } from '../search/embedder.js'
 import { assertVectorWidth, rankByVector } from '../search/embedder.js'
+import { fitsAnIndex, rankHeld, withHeldBudget } from '../search/held-index.js'
 import { fuseByRank } from '../search/rrf.js'
 import type { ServerDeps } from '../server-deps.js'
 
@@ -50,9 +54,10 @@ export {
  *
  * Corpus served from the stamp-validated ContentFactsCache shared with
  * backlinks/mentions and tags — only documents whose frontier moved are
- * reloaded (ADR-0014's incremental mode, cache form) — and each document's
- * search terms from the DocumentTermsCache over it, so only those are
- * re-indexed either.
+ * reloaded (ADR-0014's incremental mode, cache form). The ranking is the
+ * core's, over the candidates this call admits: BM25 is relative to its
+ * corpus, so a tag or kind filter ranks within what it admits, which a corpus
+ * held between queries could not do.
  *
  * With `deps.embedder` supplied it also searches by MEANING, fusing the two
  * rankings; without one it is lexical search and nothing else.
@@ -123,8 +128,116 @@ async function folderNamesIn(
 
 /** The display names of the named folders above `path`, as an optional field. */
 function foldersOf(path: string, folderNames: ReadonlyMap<string, string>) {
-  const folders = folderNamesOf(path, folderNames)
+  const folders = refusedAs([], () => folderNamesOf(path, folderNames))
   return folders.length === 0 ? {} : { folders }
+}
+
+/**
+ * `answer`, or `degraded` when the core declines the input past one of its
+ * caps. Lexical search is an answer to a query, not a gate on one: what the
+ * core declines is a corpus or a query no keyword search was going to serve,
+ * and it is answered as having found nothing rather than failed.
+ */
+function refusedAs<T>(degraded: T, answer: () => T): T {
+  try {
+    return answer()
+  } catch (err) {
+    if (isSearchRefusal(err)) return degraded
+    throw err
+  }
+}
+
+/**
+ * Link labels from the listing, held by the core until the search ends. A
+ * listing the core declines labels nothing: a link reads as its target's last
+ * segment.
+ */
+function labelsFor(entries: readonly DocumentEntry[]): LinkLabelSet | undefined {
+  return refusedAs(undefined, () => linkLabels(entries))
+}
+
+/** `use` over the listing's link labels, released when it settles. */
+async function withLabels<T>(
+  entries: readonly DocumentEntry[],
+  use: (labels: LinkLabelSet | undefined) => Promise<T>,
+): Promise<T> {
+  const labels = labelsFor(entries)
+  try {
+    return await use(labels)
+  } finally {
+    labels?.release()
+  }
+}
+
+/** The excerpts of the documents named, in order; none for one the core declines. */
+function excerptsOf(
+  query: string,
+  docs: readonly (SearchCandidate | undefined)[],
+  labels: LinkLabelSet | undefined,
+): string[][] {
+  const texts = docs.map((doc) => doc?.texts ?? [])
+  const cut = refusedAs<string[][]>([], () => excerpts(query, texts, labels))
+  return texts.map((_, at) => cut[at] ?? [])
+}
+
+/** A held index's ranking, with the excerpts the options ask for. */
+function withContexts(
+  ranked: readonly { documentId: string; score: number }[],
+  searchable: readonly SearchCandidate[],
+  query: string,
+  options: { excerpts?: boolean; linkLabels?: LinkLabelSet | undefined },
+): SearchHit[] {
+  const byId = new Map(searchable.map((doc) => [doc.documentId, doc]))
+  const quoted =
+    options.excerpts === false || ranked.length === 0
+      ? ranked.map(() => [])
+      : excerptsOf(
+          query,
+          ranked.map((hit) => byId.get(hit.documentId)),
+          options.linkLabels,
+        )
+  return ranked.map((hit, at) => ({ ...hit, contexts: quoted[at] ?? [] }))
+}
+
+/** The lexical ranking; empty when the core declines the corpus or the query. */
+function rank(
+  searchable: readonly SearchCandidate[],
+  query: string,
+  options: {
+    limit: number
+    excerpts?: boolean
+    linkLabels?: LinkLabelSet | undefined
+    /** Where the terms of an UNFILTERED corpus are held between queries. */
+    held?: {
+      facts: ContentFactsCache
+      workspaceId: string
+      content: ReadonlyMap<string, ContentFacts>
+    }
+  },
+): SearchHit[] {
+  const { held } = options
+  if (held !== undefined) {
+    const ranked = rankHeld(
+      held.facts,
+      held.workspaceId,
+      searchable,
+      held.content,
+      query,
+      options.limit,
+    )
+    if (ranked !== undefined) return withContexts(ranked, searchable, query, options)
+  }
+  const stateless = () =>
+    fullTextSearch(searchable, query, {
+      limit: options.limit,
+      alsoIndex: emojiSearchText,
+      ...(options.excerpts === undefined ? {} : { excerpts: options.excerpts }),
+      ...(options.linkLabels === undefined ? {} : { linkLabels: options.linkLabels }),
+    })
+  // Evicting other workspaces frees memory, never room for more documents.
+  return refusedAs([], () =>
+    fitsAnIndex(searchable.length) ? withHeldBudget(stateless) : stateless(),
+  )
 }
 
 /**
@@ -187,7 +300,6 @@ function describeHit(
 export function createDocumentSearchTool(
   deps: ServerDeps,
   vectors: DocumentVectorCache = vectorCacheFor(deps),
-  terms: DocumentTermsCache = termsCacheFor(vectors.facts),
 ) {
   return {
     name: 'wb_document_search' as const,
@@ -205,7 +317,6 @@ export function createDocumentSearchTool(
 
       const folderNames = await folderNamesIn(deps, parsed.workspaceId)
       const searchable = collectSearchable(entries, content, parsed, folderNames)
-      const termsOf = terms.termsOf(parsed.workspaceId, entries, content)
 
       const byId = new Map(searchable.map((doc) => [doc.documentId, doc]))
       const describe = (
@@ -229,97 +340,106 @@ export function createDocumentSearchTool(
         }
       }
       const query = parsed.query
+      // Only a corpus nothing filtered has terms worth holding: BM25 is relative to its corpus.
+      const held =
+        parsed.tags === undefined && parsed.kind === undefined
+          ? { facts: vectors.facts, workspaceId: parsed.workspaceId, content }
+          : undefined
 
       // The optional semantic half. Absent, this returns exactly what it
       // returned before embeddings existed; supplied, its ranking is FUSED
       // with BM25's by rank rather than mixed by score, and any failure
       // inside it degrades to lexical-only rather than failing the search.
       const { embedder } = deps
-      if (embedder === undefined) {
-        // The returned page IS the prefix of the full ranking here, so the
-        // index is the rank.
-        const linkLabel = linkLabelsFrom(entries)
-        const hits = fullTextSearch(searchable, query, { limit: parsed.limit, termsOf, linkLabel })
-        return {
-          results: hits.map((hit, index) =>
-            describe(hit.documentId, hit.score, hit.contexts, { lexical: index + 1 }),
-          ),
-        }
-      }
-
-      // Fusion needs the WHOLE lexical ranking, not the page the caller asked
-      // for: a document the vector half also likes can climb from rank 20.
-      // Excerpts are not part of it, so they are cut for the returned page
-      // alone below, rather than for every document that scored.
-      const lexical = fullTextSearch(searchable, query, {
-        limit: searchable.length,
-        excerpts: false,
-        termsOf,
-      })
-      const excerptsOf = excerpterFor(query, linkLabelsFrom(entries))
-      const excerpt = (documentId: string): string[] => {
-        const doc = byId.get(documentId)
-        return doc === undefined ? [] : excerptsOf(doc)
-      }
-      const semantic = await rankSemantically(
-        vectors,
-        parsed.workspaceId,
-        entries.filter((entry) => byId.has(entry.documentId)),
-        query,
-        embedder,
-      )
-      if (semantic === undefined) {
-        return {
-          results: lexical
-            .slice(0, parsed.limit)
-            .map((hit, index) =>
-              describe(hit.documentId, hit.score, excerpt(hit.documentId), { lexical: index + 1 }),
+      return withLabels(entries, async (labels) => {
+        if (embedder === undefined) {
+          // The returned page IS the prefix of the full ranking here, so the
+          // index is the rank.
+          const hits = rank(searchable, query, { limit: parsed.limit, linkLabels: labels, held })
+          return {
+            results: hits.map((hit, index) =>
+              describe(hit.documentId, hit.score, hit.contexts, { lexical: index + 1 }),
             ),
+          }
         }
-      }
 
-      const fused = fuseByRank([lexical.map((hit) => hit.documentId), semantic])
-      // Ranks come from the COMPLETE rankings, not from the page returned:
-      // "3rd of 45" and "3rd of 5" are different facts, and only the former
-      // survives a change of `limit`.
-      const lexicalRanks = ranksOf(lexical.map((hit) => hit.documentId))
-      const semanticRanks = ranksOf(semantic)
-      /**
-       * Fused ties are the NORM, not an edge case: reciprocal-rank sums
-       * collide by construction, so a document at lexical 1 / semantic 2
-       * scores exactly what one at lexical 2 / semantic 1 does. Of the 400
-       * rank pairs inside the top 20, only 210 distinct scores exist and
-       * 190 are shared.
-       *
-       * Broken on evidence rather than on identity: the document whose
-       * keywords matched better wins, because those are the words the user
-       * actually typed. Ranks within a list are unique, so a tie in the fused
-       * score with equal lexical ranks means two documents the keywords never
-       * matched, whose score is their semantic rank alone and so cannot tie —
-       * no further tier is needed. That keeps it a total order with no appeal
-       * to a document id, which mattered, since an id is
-       * `encodeTime(Date.now()) + encodeRandom()` and ordering by it answered
-       * "which was written first", with chance deciding inside a millisecond.
-       */
-      const FAR = Number.MAX_SAFE_INTEGER
-      const ordered = [...fused.entries()]
-        .sort(
-          (a, b) =>
-            b[1] - a[1] || (lexicalRanks.get(a[0]) ?? FAR) - (lexicalRanks.get(b[0]) ?? FAR),
+        // Fusion needs the WHOLE lexical ranking, not the page the caller asked
+        // for: a document the vector half also likes can climb from rank 20.
+        // Excerpts are not part of it, so they are cut for the returned page
+        // alone below, rather than for every document that scored.
+        const lexical = rank(searchable, query, { limit: searchable.length, excerpts: false, held })
+        const excerpted = (ids: readonly string[]): Map<string, string[]> => {
+          const cut = excerptsOf(
+            query,
+            ids.map((id) => byId.get(id)),
+            labels,
+          )
+          return new Map(ids.map((id, at) => [id, cut[at] ?? []]))
+        }
+        const semantic = await rankSemantically(
+          vectors,
+          parsed.workspaceId,
+          entries.filter((entry) => byId.has(entry.documentId)),
+          query,
+          embedder,
         )
-        .map(([documentId]) => documentId)
-      return {
-        results: ordered
-          .slice(0, parsed.limit)
-          .map((documentId) =>
+        if (semantic === undefined) {
+          const page = lexical.slice(0, parsed.limit)
+          const cut = excerpted(page.map((hit) => hit.documentId))
+          return {
+            results: page.map((hit, index) =>
+              describe(hit.documentId, hit.score, cut.get(hit.documentId) ?? [], {
+                lexical: index + 1,
+              }),
+            ),
+          }
+        }
+
+        const fused = fuseByRank([lexical.map((hit) => hit.documentId), semantic])
+        // Ranks come from the COMPLETE rankings, not from the page returned:
+        // "3rd of 45" and "3rd of 5" are different facts, and only the former
+        // survives a change of `limit`.
+        const lexicalRanks = ranksOf(lexical.map((hit) => hit.documentId))
+        const semanticRanks = ranksOf(semantic)
+        /**
+         * Fused ties are the NORM, not an edge case: reciprocal-rank sums
+         * collide by construction, so a document at lexical 1 / semantic 2
+         * scores exactly what one at lexical 2 / semantic 1 does. Of the 400
+         * rank pairs inside the top 20, only 210 distinct scores exist and
+         * 190 are shared.
+         *
+         * Broken on evidence rather than on identity: the document whose
+         * keywords matched better wins, because those are the words the user
+         * actually typed. Ranks within a list are unique, so a tie in the fused
+         * score with equal lexical ranks means two documents the keywords never
+         * matched, whose score is their semantic rank alone and so cannot tie —
+         * no further tier is needed. That keeps it a total order with no appeal
+         * to a document id, which mattered, since an id is
+         * `encodeTime(Date.now()) + encodeRandom()` and ordering by it answered
+         * "which was written first", with chance deciding inside a millisecond.
+         */
+        const FAR = Number.MAX_SAFE_INTEGER
+        const ordered = [...fused.entries()]
+          .sort(
+            (a, b) =>
+              b[1] - a[1] || (lexicalRanks.get(a[0]) ?? FAR) - (lexicalRanks.get(b[0]) ?? FAR),
+          )
+          .map(([documentId]) => documentId)
+        const page = ordered.slice(0, parsed.limit)
+        const cut = excerpted(page.filter((documentId) => lexicalRanks.has(documentId)))
+        return {
+          results: page.map((documentId) =>
             describe(
               documentId,
               fused.get(documentId) ?? 0,
-              lexicalRanks.has(documentId) ? excerpt(documentId) : openingOf(byId.get(documentId)),
+              lexicalRanks.has(documentId)
+                ? (cut.get(documentId) ?? [])
+                : openingOf(byId.get(documentId)),
               { lexical: lexicalRanks.get(documentId), semantic: semanticRanks.get(documentId) },
             ),
           ),
-      }
+        }
+      })
     },
   }
 }

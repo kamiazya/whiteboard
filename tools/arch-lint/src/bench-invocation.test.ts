@@ -90,7 +90,7 @@ describe('benchmark invocations print their numbers and reach their files', () =
     expect(benchProjects.has('canvas-render-node (bench)')).toBe(true)
     expect(benchProjects.size).toBeGreaterThanOrEqual(2)
     // Three since the TypeScript router's bench went with it (S18h3b).
-    expect(benchFiles.length).toBeGreaterThanOrEqual(3)
+    expect(benchFiles.length).toBeGreaterThanOrEqual(2)
   })
 
   it('reads a filter and a reporter in each spelling a script uses', () => {
@@ -126,18 +126,18 @@ describe('benchmark invocations print their numbers and reach their files', () =
   })
 
   it('refuses a "Run with" command that reaches its file but prints no table', () => {
-    const file = 'packages/search/src/planted.bench.ts'
+    const file = 'packages/canvas-render/src/planted.bench.ts'
     expect(runWithProblems(file, 'pnpm bench')).toEqual([])
     expect(
       runWithProblems(
         file,
-        'pnpm exec vitest bench --reporter=default --project "search-node (bench)"',
+        'pnpm exec vitest bench --reporter=default --project "canvas-render-node (bench)"',
       ),
     ).toEqual([])
-    expect(runWithProblems(file, 'pnpm exec vitest bench --project "search-node (bench)"')).toEqual(
-      [
-        `${file}: \`pnpm exec vitest bench --project "search-node (bench)"\` names no reporter that renders the table`,
-      ],
-    )
+    expect(
+      runWithProblems(file, 'pnpm exec vitest bench --project "canvas-render-node (bench)"'),
+    ).toEqual([
+      `${file}: \`pnpm exec vitest bench --project "canvas-render-node (bench)"\` names no reporter that renders the table`,
+    ])
   })
 })

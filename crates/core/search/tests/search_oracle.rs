@@ -1,7 +1,7 @@
 //! The folding and tokenizing against the recorded answers of the TypeScript.
 //!
-//! `packages/search/src/oracle/search-recorded-oracle.test.ts` writes
-//! `search.jsonl`. This replays what this crate ports: `foldForSearch`,
+//! `packages/search/src/oracle/search.jsonl` is that recording, frozen: the
+//! TypeScript that wrote it is deleted. This replays what this crate ports: `foldForSearch`,
 //! `findFolded` and the two tokenizers, text by text, and the three tables
 //! over every code point those are built from. The TypeScript's Unicode
 //! tables are its runtime's (17.0); the crates' are their own, so a code point

@@ -986,6 +986,9 @@ importers:
         specifier: workspace:*
         version: link:../model
     devDependencies:
+      '@kamiazya/whiteboard-core-wasm':
+        specifier: workspace:*
+        version: link:../core-wasm
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

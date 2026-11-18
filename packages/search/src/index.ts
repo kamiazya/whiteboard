@@ -1,12 +1,21 @@
-export { findFolded, foldForSearch } from './fold.js'
-export { folderNamesOf } from './folder-names.js'
 export {
-  type AlsoIndex,
-  type DocumentTerms,
-  documentTerms,
-  excerpterFor,
+  createIndex,
+  excerpts,
+  findFolded,
+  folderNamesOf,
+  foldForSearch,
   fullTextSearch,
+  installSearchCore,
+  isSearchRefusal,
+  isSearchUnavailable,
+  type LinkLabelSet,
+  linkLabels,
   type SearchableDocument,
-} from './full-text.js'
-export { searchableTexts } from './searchable-texts.js'
-export { type LinkLabel, linkLabelsFrom, snippetAround } from './snippet.js'
+  type SearchCore,
+  type SearchHit,
+  type SearchIndex,
+  searchableTexts,
+  searchCoreInstalled,
+  searchIndexCapacity,
+  snippetAround,
+} from './core.js'

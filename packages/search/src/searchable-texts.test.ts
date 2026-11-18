@@ -1,8 +1,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { fullTextSearch } from './full-text.js'
-import { searchableTexts } from './searchable-texts.js'
+import { fullTextSearch, searchableTexts } from './index.js'
 
 describe('searchableTexts', () => {
   it('gives a markdown document its body', () => {

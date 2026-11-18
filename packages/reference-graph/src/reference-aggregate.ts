@@ -1,7 +1,12 @@
 import { createUniqueNameResolver, findNextReference } from '@kamiazya/whiteboard-codec'
 import { compareCodeUnit, documentKindSchema, documentPathSchema } from '@kamiazya/whiteboard-model'
 import { compareDocumentPaths, type DocumentEntry } from '@kamiazya/whiteboard-ports'
-import { type LinkLabel, linkLabelsFrom, snippetAround } from '@kamiazya/whiteboard-search'
+import {
+  isSearchRefusal,
+  type LinkLabelSet,
+  linkLabels,
+  snippetAround,
+} from '@kamiazya/whiteboard-search'
 import { z } from 'zod'
 
 /**
@@ -77,21 +82,49 @@ export type RawReference = z.infer<typeof rawReferenceSchema>
  * listing, rather than at extraction: a rename moves the name without
  * touching the source, so a label cut into the facts would go stale.
  */
-function referenceContext(ref: RawReference, labelOf: LinkLabel): string {
+function referenceContext(ref: RawReference, labels: LinkLabelSet | undefined): string {
   return ref.via === 'wikilink'
-    ? snippetAround(ref.text, ref.index, ref.length, labelOf)
+    ? excerptAround(ref.text, ref.index, ref.length, labels)
     : ref.context
 }
 
-/** Link labels from the documents the aggregate holds, by path and by id. */
-function labelsOf(alive: ReadonlyMap<string, DocumentReferenceFacts>): LinkLabel {
-  return linkLabelsFrom(
-    [...alive].map(([documentId, facts]) => ({
-      documentId,
-      path: facts.path,
-      ...(facts.name === undefined ? {} : { name: facts.name }),
-    })),
-  )
+/**
+ * The excerpt around a span, as the core cuts it. A text the core declines
+ * (past its cap) is quoted as the matched span alone, so a backlink still
+ * names where it points.
+ */
+function excerptAround(
+  text: string,
+  index: number,
+  length: number,
+  labels: LinkLabelSet | undefined,
+): string {
+  try {
+    return snippetAround(text, index, length, labels)
+  } catch (err) {
+    if (isSearchRefusal(err)) return text.slice(index, index + length)
+    throw err
+  }
+}
+
+/**
+ * Link labels from the documents the aggregate holds, by path and by id, held
+ * by the core until `release`d. A listing the core declines labels nothing: a
+ * link then reads as its target's last segment.
+ */
+function labelsOf(alive: ReadonlyMap<string, DocumentReferenceFacts>): LinkLabelSet | undefined {
+  try {
+    return linkLabels(
+      [...alive].map(([documentId, facts]) => ({
+        documentId,
+        path: facts.path,
+        ...(facts.name === undefined ? {} : { name: facts.name }),
+      })),
+    )
+  } catch (err) {
+    if (isSearchRefusal(err)) return undefined
+    throw err
+  }
 }
 
 const documentReferenceFactsSchema = z
@@ -155,15 +188,19 @@ export class ReferenceAggregate {
     // each reference is then a string comparison.
     const byPath = resolve(target.path) === documentId ? target.path : undefined
 
-    const labelOf = labelsOf(alive)
+    const labels = labelsOf(alive)
     const backlinks: BacklinkEntry[] = []
-    for (const [sourceId, facts] of alive) {
-      if (sourceId === documentId) continue
-      const contexts = firstContexts(
-        resolving(facts.refs, documentId, target.path, byPath),
-        (ref) => referenceContext(ref, labelOf),
-      )
-      if (contexts.length > 0) backlinks.push(sourceEntry(sourceId, facts, contexts))
+    try {
+      for (const [sourceId, facts] of alive) {
+        if (sourceId === documentId) continue
+        const contexts = firstContexts(
+          resolving(facts.refs, documentId, target.path, byPath),
+          (ref) => referenceContext(ref, labels),
+        )
+        if (contexts.length > 0) backlinks.push(sourceEntry(sourceId, facts, contexts))
+      }
+    } finally {
+      labels?.release()
     }
     // The listing order the DocumentIndex contract fixes (segment-wise path
     // compare), NOT map insertion order — the convergence property caught
@@ -219,11 +256,11 @@ function* unlinkedNameSpansIn(
 function* unlinkedContexts(
   texts: readonly string[],
   name: string,
-  labelOf: LinkLabel,
+  labels: LinkLabelSet | undefined,
 ): Iterable<string> {
   for (const text of texts) {
     for (const span of unlinkedNameSpansIn(text, name)) {
-      yield snippetAround(text, span.index, span.length, labelOf)
+      yield excerptAround(text, span.index, span.length, labels)
     }
   }
 }
@@ -240,12 +277,16 @@ function mentionsOfIn(
   target: { readonly documentId: string; readonly name: string },
   sources: ReadonlyMap<string, DocumentReferenceFacts>,
 ): BacklinkEntry[] {
-  const labelOf = labelsOf(sources)
+  const labels = labelsOf(sources)
   const mentions: BacklinkEntry[] = []
-  for (const [sourceId, facts] of sources) {
-    if (sourceId === target.documentId) continue
-    const contexts = firstContexts(unlinkedContexts(facts.texts, target.name, labelOf), (c) => c)
-    if (contexts.length > 0) mentions.push(sourceEntry(sourceId, facts, contexts))
+  try {
+    for (const [sourceId, facts] of sources) {
+      if (sourceId === target.documentId) continue
+      const contexts = firstContexts(unlinkedContexts(facts.texts, target.name, labels), (c) => c)
+      if (contexts.length > 0) mentions.push(sourceEntry(sourceId, facts, contexts))
+    }
+  } finally {
+    labels?.release()
   }
   return mentions.sort(
     (a, b) => compareDocumentPaths(a.path, b.path) || compareCodeUnit(a.documentId, b.documentId),
