@@ -17,7 +17,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 
 vi.mock('../../lib/spatial/scene-render.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../lib/spatial/scene-render.js')>()
-  return { ...actual, renderCanvasToSvg: vi.fn(actual.renderCanvasToSvg) }
+  return { ...actual, renderCanvasKeyed: vi.fn(actual.renderCanvasKeyed) }
 })
 
 afterEach(cleanup)
@@ -39,7 +39,7 @@ const svgText = (container: HTMLElement) =>
 
 describe('the wire the canvas lays out against', () => {
   it('does not re-lay out for rows the canvas cannot read, and does for one it can', async () => {
-    const renders = vi.mocked(sceneRender.renderCanvasToSvg)
+    const renders = vi.mocked(sceneRender.renderCanvasKeyed)
     const base = wireWith([[NOTE, { body: 'THE NOTE' }]])
     const { container, rerender } = render(
       <SpatialEditor theme="light" canvas={canvas} onChange={() => {}} references={base} />,

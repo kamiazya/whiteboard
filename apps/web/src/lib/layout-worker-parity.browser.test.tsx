@@ -29,7 +29,7 @@ import type {
   MarkdownRenderResponse,
 } from './layout-worker-protocol.js'
 import { renderMarkdownPreview } from './render-preview.js'
-import { renderCanvasToSvg } from './spatial/scene-render.js'
+import { renderCanvasKeyed, renderCanvasToSvg } from './spatial/scene-render.js'
 
 // Text that wraps, punctuation that kerns, and a mix of scripts: measurement
 // differences show up in wrapped-line counts, not in a single short word.
@@ -109,6 +109,29 @@ it('the worker scene is deeply equal to the main-thread scene', async () => {
   // bystander edges to it, so a worker that dropped or reordered entries
   // would silently re-fraction shared anchor groups mid-drag.
   expect([...fromWorker.anchors.entries()]).toEqual([...onMain.anchors.entries()])
+}, 60_000)
+
+it('answers the editor its keyed projection, the one the main thread would draw', async () => {
+  expect(await ensureViewerFontLoaded()).toBe('loaded')
+
+  const onMain = renderCanvasKeyed(canvas, { measure: createBrowserMeasureText(), theme: 'light' })
+  const fromWorker = await layoutInWorker({
+    type: 'layout',
+    id: 1,
+    canvas,
+    theme: 'light',
+    form: 'keyed',
+  })
+
+  expect(fromWorker.type).toBe('laid-out-keyed')
+  if (fromWorker.type !== 'laid-out-keyed') return
+  expect(fromWorker.keyed.svg).toBe(onMain.keyed.svg)
+  expect(fromWorker.keyed).toEqual(onMain.keyed)
+  expect(fromWorker.bounds).toEqual(onMain.bounds)
+  expect(fromWorker.scene).toEqual(onMain.scene)
+  // The keyed projection is the plain picture's groups wrapped by key: the
+  // same layout, so the same groups of marks in the same order.
+  expect(onMain.keyed.groups.length).toBeGreaterThan(canvas.nodes.length)
 }, 60_000)
 
 it('carries file labels and dangling marks across the wire as extras', async () => {
