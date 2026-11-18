@@ -1,8 +1,8 @@
 // `wb_scene_render`'s opt-in reference resolution: a file node pointing at a
 // markdown document in the same workspace renders that document's body.
 //
-// Opt-in, not default, because `composeCanvasScene` also backs
-// `wb_canvas_snapshot({ layout: true })`. Resolving by default would make a
+// Opt-in, not default, because the same layout options
+// (`compose-canvas-scene.ts`) also back `wb_canvas_snapshot({ layout: true })`. Resolving by default would make a
 // canvas's layout analysis move
 // whenever a DIFFERENT document was edited, which is the property that makes
 // that analysis usable as a change signal at all.

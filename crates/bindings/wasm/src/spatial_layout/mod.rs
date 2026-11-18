@@ -19,7 +19,11 @@
 //!   request carrying `fragments` (rendered math blocks and fences by key), a
 //!   fifth element: the sources the table did not hold, each drawn as its
 //!   fallback, as `FragmentAsk`s once each in the order asked, which the host
-//!   renders and lays out again with;
+//!   renders and lays out again with; and for a request carrying `svg` (the
+//!   envelope a server render draws with, [`request`]'s `SvgAsk`), a last
+//!   element: the scene as `whiteboard-canvas-render`'s backend draws it, so a
+//!   server picture is one call (refused `input-too-large` / `svg` past
+//!   [`MAX_SVG_BYTES`], never cut short);
 //! - `["refused", code, class]`: an input past this entry's caps (`code`
 //!   `input-too-large`, `class` naming the cap), or one that is not a request;
 //!   `["refused", "malformed", "non-finite"]` a layout holding a number the
@@ -53,6 +57,7 @@ mod markdown;
 mod measure;
 mod query;
 mod request;
+mod svg;
 
 pub use cache::{MAX_CACHED_BODIES, MAX_CACHED_BYTES, release_layout_cache};
 pub use fonts::{
@@ -61,6 +66,7 @@ pub use fonts::{
 pub use fragments::{MAX_FRAGMENTS, MAX_PLACED_BYTES};
 pub use host_measure::{Host, HostMeasurer, font_key};
 pub use query::{MAX_RUNS, layout_query, query_with_host};
+pub use svg::MAX_SVG_BYTES;
 
 use std::sync::OnceLock;
 
@@ -89,7 +95,7 @@ use answer::{laid_out, needs, refused};
 use cache::Surface;
 use fragments::FragmentTable;
 use measure::{Unmeasured, with_measurer};
-use request::{Asked, Comments, MeasureSpec, Request, Style, asked_of};
+use request::{Asked, Comments, MeasureSpec, Request, Style, SvgAsk, asked_of};
 
 /// The most canvas elements (nodes, edges and lines) a request's own canvas
 /// may hold: this entry's `maxNodes`, which bounds the routing a layout runs
@@ -300,7 +306,7 @@ fn lay_out(
 ) -> String {
     with_options(request, measure, surface, plugin, &mut |options, host, fragments| {
         let laid = compose_canvas::layout_spatial_canvas(&request.canvas, options);
-        outcome(&laid, host, fragments)
+        outcome(&laid, host, fragments, request.svg.as_ref())
     })
 }
 
@@ -352,9 +358,14 @@ fn with_options(
     then(&options, &host, fragments.as_ref())
 }
 
-/// What a layout through `host` and `fragments` answers.
-fn outcome(laid: &LaidOut, host: &WireHost<'_>, fragments: Option<&FragmentTable<'_>>) -> String {
-    let ok = || laid_out(laid, &host.degradations(), fragments.map(FragmentTable::asked));
+/// What a layout through `host` and `fragments` answers, its SVG drawn when `svg` asks for one.
+fn outcome(
+    laid: &LaidOut,
+    host: &WireHost<'_>,
+    fragments: Option<&FragmentTable<'_>>,
+    svg: Option<&SvgAsk>,
+) -> String {
+    let ok = || laid_out(laid, &host.degradations(), fragments.map(FragmentTable::asked), svg);
     settled(host, ok)
 }
 
@@ -493,5 +504,7 @@ mod markdown_tests;
 mod proposal_tests;
 #[cfg(test)]
 mod query_tests;
+#[cfg(test)]
+mod svg_tests;
 #[cfg(test)]
 mod tests;

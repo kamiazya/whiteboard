@@ -73,6 +73,7 @@ const marked: MarkdownLayoutCore['layoutMarkdown'] = () => ({
     ],
   } as never,
   degradations: [],
+  svg: '<svg>from the core</svg>',
 })
 
 async function render(
@@ -118,8 +119,10 @@ describe('wb_scene_render of a note and the markdown core', () => {
   test('lays the note out through the core ServerDeps hands it', async () => {
     const { core, requests } = markingCore(marked)
     const { svg } = await render(core)
-    expect(svg).toContain('from the core')
-    expect(requests).toMatchObject([{ kind: 'markdown', body: BODY, maxWidth: 720 }])
+    expect(svg).toBe('<svg>from the core</svg>')
+    expect(requests).toMatchObject([
+      { kind: 'markdown', body: BODY, maxWidth: 720, svg: { viewBox: 'document' } },
+    ])
     expect(requests[0]).not.toHaveProperty('references')
   })
 

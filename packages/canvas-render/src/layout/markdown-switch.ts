@@ -1,5 +1,6 @@
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { Scene } from '@kamiazya/whiteboard-scene'
+import type { CoreSvgAsk } from '../canvas-core.js'
 import { COMMENT_TEXT_MAX_WIDTH_PX } from '../comment-geometry.js'
 import type { FragmentAsk, FragmentEntry } from '../fragment-ask.js'
 import { highlightCode } from '../highlight/lowlight.js'
@@ -10,7 +11,7 @@ import type { ReferenceSeams } from '../references/seams.js'
 import { wireOfSeams } from '../references/wire.js'
 import { type LayoutRefusal, refusalScene } from '../refusal.js'
 import type { SpatialThemeMode } from '../theme/spatial-theme.js'
-import { CoreUnaskable, hasData, styleOptions } from './canvas-switch.js'
+import { askedSvg, CoreUnaskable, hasData, styleOptions } from './canvas-switch.js'
 import type { SpatialRenderStyle } from './layout-options.js'
 
 // A markdown body through the Rust core's markdown entry (ADR-0054 step 7,
@@ -100,8 +101,22 @@ export function layoutMarkdownDocument(
   body: string,
   options: MarkdownDocumentOptions,
 ): Scene | undefined {
+  return noteThroughCore(body, options, undefined)?.scene
+}
+
+/**
+ * A note through the core, with the SVG it drew in the envelope `svg` names
+ * when it asks for one; none for a refusal, whose scene this side built.
+ * `undefined` for a `section` the note holds no heading for.
+ */
+export function noteThroughCore(
+  body: string,
+  options: MarkdownDocumentOptions,
+  svg: CoreSvgAsk | undefined,
+): { readonly scene: Scene; readonly svg?: string } | undefined {
+  const request = markdownLayoutRequest(body, options)
   const answer = options.core.markdown.layoutMarkdown(
-    markdownLayoutRequest(body, options),
+    svg === undefined ? request : { ...request, svg },
     highlightCode,
     options.measure,
   )
@@ -109,14 +124,15 @@ export function layoutMarkdownDocument(
     const refusal = answer.refused
     options.onRefused?.(refusal)
     const mode = options.mode ?? 'light'
-    return refusalScene(refusal, { measure: options.measure, mode, maxWidth: options.maxWidth })
+    const measure = options.measure
+    return { scene: refusalScene(refusal, { measure, mode, maxWidth: options.maxWidth }) }
   }
   if ('missing' in answer) return undefined
   const { scene, fragmentsAsked } = answer
   if (fragmentsAsked !== undefined && fragmentsAsked.length > 0) {
     options.onFragmentsAsked?.(fragmentsAsked)
   }
-  return scene
+  return svg === undefined ? { scene } : { scene, svg: askedSvg(answer.svg) }
 }
 
 /**

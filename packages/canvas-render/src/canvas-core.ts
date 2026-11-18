@@ -37,6 +37,22 @@ export type CoreChange =
 export type CoreProposal = Pick<Proposal, 'id'> & { readonly changes: readonly CoreChange[] }
 
 /**
+ * The SVG a server render asks the core to answer beside the scene: the core's
+ * SVG backend over the scene it laid out, drawn with these of
+ * `renderSceneToSvg`'s envelope options, so the picture is one call.
+ * `viewBox: 'document'` is the scene's document bounds (`sceneDocumentBounds`,
+ * an empty box for a scene with no node), since the caller has no scene to
+ * measure before the layout.
+ */
+export interface CoreSvgAsk {
+  readonly viewBox?: 'document'
+  readonly padding?: number
+  readonly background?: string
+  readonly textFill?: string
+  readonly rasterScale?: number
+}
+
+/**
  * One layout asked of the Rust core (ADR-0054 step 7), every option as data:
  * the measurer and the appearance by name, the references as the tables
  * their seams were rebuilt from, and the caller's expansion policy settled
@@ -75,6 +91,8 @@ export interface CanvasLayoutRequest {
    */
   readonly fragments?: readonly FragmentEntry[]
   readonly proposals?: readonly CoreProposal[]
+  /** Present, the answer carries the scene's SVG as `svg`. */
+  readonly svg?: CoreSvgAsk
 }
 
 /** The degradations a layout reports, as the core can report them: no thrown value rides along. */
@@ -101,6 +119,8 @@ type CanvasLayoutAnswer =
       readonly degradations: readonly CoreDegradation[]
       /** For a request carrying `fragments`: the sources it could not answer, once each in the order asked. */
       readonly fragmentsAsked?: readonly FragmentAsk[]
+      /** For a request carrying `svg`: the scene as the core's SVG backend draws it. */
+      readonly svg?: string
     }
   | { readonly refused: LayoutRefusal }
 

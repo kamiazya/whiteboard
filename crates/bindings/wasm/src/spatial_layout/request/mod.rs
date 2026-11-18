@@ -13,6 +13,7 @@ mod options;
 mod proposals;
 mod query;
 mod references;
+mod svg;
 
 use whiteboard_canvas_render::references::{Expansion, FenceTokens, ReferenceWire};
 use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
@@ -37,6 +38,8 @@ use options::{dark_of, expansion_of, geometry_of, override_of, style_of, tag_key
 use proposals::proposals_of;
 pub(crate) use query::{NodeSize, Query, Run, query_of};
 use references::references_of;
+use svg::svg_of;
+pub(crate) use svg::{SvgAsk, ViewBox};
 
 /// A layout request.
 #[derive(Debug, Clone, PartialEq)]
@@ -65,6 +68,8 @@ pub(crate) struct Request {
     /// The surface whose content cache the layout reads and keeps bodies in
     /// ([`super::cache`]); `None` keeps nothing across layouts.
     pub(crate) cache: Option<u32>,
+    /// The SVG the answer carries beside its scene; `None` answers the scene alone.
+    pub(crate) svg: Option<SvgAsk>,
 }
 
 fn flag_of(value: &Value) -> Option<bool> {
@@ -111,10 +116,13 @@ fn table_of<T>(value: &Value, read: impl Fn(&Value) -> Option<T>) -> Option<Vec<
 pub(crate) fn request_of(value: &Value) -> Option<Request> {
     let mut f = Fields::of(value)?;
     let request = request_from(&mut f)?;
-    f.all_named().then_some(request)
+    // A whole layout's alone: a query answers no picture.
+    let svg = f.field("svg", svg_of)?;
+    f.all_named().then_some(Request { svg, ..request })
 }
 
-/// A canvas request's fields read from `f`, which may hold others its caller reads.
+/// A canvas request's fields read from `f`, which may hold others its caller
+/// reads; its `svg` is left to the whole layout's reader.
 pub(crate) fn request_from(f: &mut Fields<'_>) -> Option<Request> {
     Some(Request {
         canvas: f.field("canvas", canvas_of)??,
@@ -139,6 +147,7 @@ pub(crate) fn request_from(f: &mut Fields<'_>) -> Option<Request> {
         comments: comments_of(f)?,
         fragments: f.field("fragments", fragments_of)?,
         cache: f.field("cache", surface_of)?,
+        svg: None,
     })
 }
 

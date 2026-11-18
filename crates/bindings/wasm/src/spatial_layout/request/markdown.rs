@@ -15,6 +15,7 @@ use super::fragments::fragments_of;
 use super::measure::{measure_of, surface_of};
 use super::options::{dark_of, style_of, tag_key_of};
 use super::references::references_of;
+use super::svg::{SvgAsk, svg_of};
 use super::{MeasureSpec, Style, entries_of, strings_of};
 use crate::json_canvas_wire::{Fields, number_of, string_of};
 
@@ -33,6 +34,8 @@ pub(crate) struct Note {
     /// The heading whose section alone is laid out (`#Heading`).
     pub(crate) section: Option<String>,
     pub(crate) cache: Option<u32>,
+    /// The SVG the answer carries beside its scene; `None` answers the scene alone.
+    pub(crate) svg: Option<SvgAsk>,
 }
 
 /// Which body a markdown request lays out.
@@ -70,6 +73,7 @@ fn note_of(f: &mut Fields<'_>) -> Option<Note> {
         fragments: f.field("fragments", fragments_of)?,
         section: f.field("section", string_of)?,
         cache: f.field("cache", surface_of)?,
+        svg: f.field("svg", svg_of)?,
     })
 }
 

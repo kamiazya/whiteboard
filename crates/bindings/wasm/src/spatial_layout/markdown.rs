@@ -59,7 +59,7 @@ pub(super) fn layout_markdown(request: &MarkdownRequest, host: Option<&dyn Host>
                     .unwrap_or_else(|_| literal_root(&request.body));
                 let scene =
                     layout_comment_text(&root, request.max_width, *density, measure, &seams);
-                laid_out(&LaidOut { scene, anchors: Vec::new() }, &[], None)
+                laid_out(&LaidOut { scene, anchors: Vec::new() }, &[], None, None)
             })
         }
     }
@@ -149,5 +149,5 @@ fn lay_out_note(
         embed_path: &[],
     };
     let scene = layout_markdown_document(&root, request.max_width, &options);
-    outcome(&LaidOut { scene, anchors: Vec::new() }, &host, fragments.as_ref())
+    outcome(&LaidOut { scene, anchors: Vec::new() }, &host, fragments.as_ref(), note.svg.as_ref())
 }

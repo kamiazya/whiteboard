@@ -42,8 +42,14 @@ export type {
   CanvasLayoutCore,
   CanvasLayoutRequest,
   CoreDegradation,
+  CoreSvgAsk,
 } from './canvas-core.js'
 export { selectCanvasFragment } from './canvas-fragment.js'
+export {
+  layoutMarkdownDocumentPicture,
+  layoutSpatialCanvasPicture,
+  type PicturedScene,
+} from './core-picture.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
 export { flattenDrawnEdgePath } from './edge-path/edge-flatten.js'
 export { flattenRoundedEdgePath } from './edge-path/edge-rounding.js'

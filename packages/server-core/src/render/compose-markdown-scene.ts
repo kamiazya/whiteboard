@@ -1,12 +1,13 @@
 import type {
+  CoreSvgAsk,
   LayoutCore,
   LayoutRefusal,
   MeasureText,
+  PicturedScene,
   ReferenceSeams,
-  Scene,
   SpatialRenderStyle,
 } from '@kamiazya/whiteboard-canvas-render'
-import { layoutMarkdownDocument } from '@kamiazya/whiteboard-canvas-render'
+import { layoutMarkdownDocumentPicture } from '@kamiazya/whiteboard-canvas-render'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { logRefusal } from './refusal-note.js'
 
@@ -47,22 +48,31 @@ export interface ComposeMarkdownSceneOptions {
 }
 
 /**
- * Composes a document scene from a markdown body — canvas-render's
- * `layoutMarkdownDocument`, the same note layout the web preview takes,
- * answered by the Rust core's markdown entry, with an
- * embedded canvas painted in the pinned light appearance every MCP render
- * uses. `undefined` for a `section` the body holds no heading for.
+ * A document's picture from its markdown body — canvas-render's
+ * `layoutMarkdownDocumentPicture`, the same note layout the web preview takes,
+ * answered by the Rust core's markdown entry with the SVG it draws of the
+ * scene in the envelope `svg` names, in ONE call, with an embedded canvas
+ * painted in the pinned light appearance every MCP render uses. `undefined`
+ * for a `section` the body holds no heading for.
  */
-export function composeMarkdownScene(
+export function composeMarkdownPicture(
   body: string,
   measure: MeasureText,
   options: ComposeMarkdownSceneOptions,
-): Scene | undefined {
-  return layoutMarkdownDocument(body, {
+  svg: CoreSvgAsk,
+): PicturedScene | undefined {
+  return layoutMarkdownDocumentPicture(body, noteOptionsOf(measure, options), svg)
+}
+
+function noteOptionsOf(
+  measure: MeasureText,
+  options: ComposeMarkdownSceneOptions,
+): Parameters<typeof layoutMarkdownDocumentPicture>[1] {
+  return {
     measure,
     maxWidth: MARKDOWN_SCENE_WIDTH_PX,
     mode: 'light',
-    onRefused: (refusal) => {
+    onRefused: (refusal: LayoutRefusal) => {
       logRefusal(refusal)
       options.onRefused?.(refusal)
     },
@@ -72,5 +82,5 @@ export function composeMarkdownScene(
     ...(options.tagLibrary !== undefined ? { tagLibrary: options.tagLibrary } : {}),
     ...(options.section !== undefined ? { section: options.section } : {}),
     core: options.core,
-  })
+  }
 }

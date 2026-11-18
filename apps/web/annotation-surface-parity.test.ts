@@ -261,7 +261,7 @@ const PARITY = {
     'markdown-preview': {
       pinnedBy:
         'apps/web/src/components/markdown-editor/preview-comment-markers.browser.test.tsx#marks each conversation beside its block in Read mode, lower passages lower',
-      gap: 'a marker beside the block, not a wash over the words: the preview SVG is laid out by canvas-render from the body alone, and drawing a note’s passages there means composeMarkdownScene taking threads — the same step the canvas took, undecided for a note (ADR-0026 1b says an export carries content)',
+      gap: 'a marker beside the block, not a wash over the words: the preview SVG is laid out by canvas-render from the body alone, and drawing a note’s passages there means composeMarkdownPicture taking threads — the same step the canvas took, undecided for a note (ADR-0026 1b says an export carries content)',
     },
     'static-scene': {
       pinnedBy:

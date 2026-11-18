@@ -1,6 +1,6 @@
 // Tier-2 conformance test for this surface (package-canvas-render.md
 // decision #8 / the theme-layer slice): export must not diverge from
-// canvas-render's own default geometry. Uses `buildSpatialScene` (the
+// canvas-render's own default geometry. Uses `buildSpatialPicture` (the
 // exported seam in headless-renderer.ts) with an injected fake measurer, so
 // this stays a fast unit test with no real opentype.js font load — the
 // mutation-check target for the geometry seam.
@@ -12,7 +12,7 @@ import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/no
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { buildSpatialScene } from './headless-renderer.js'
+import { buildSpatialPicture } from './headless-renderer.js'
 
 function fixture(): SpatialCanvas {
   return {
@@ -40,7 +40,7 @@ describe('mcp-server export geometry conformance', () => {
     const measure = createFakeMeasure(0.6)
     const canvas = fixture()
 
-    const exportScene = buildSpatialScene(canvas, testLayoutCore(), measure)
+    const exportScene = buildSpatialPicture(canvas, testLayoutCore(), measure, {}).scene
     const defaultScene = layoutSpatialCanvas(canvas, {
       core: testLayoutCore(),
       measure,

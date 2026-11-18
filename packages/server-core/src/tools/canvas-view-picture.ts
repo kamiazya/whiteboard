@@ -4,11 +4,10 @@ import {
   loadedReferenceFromWire,
   referenceSeamsFromWire,
   referenceWire,
-  renderSceneToSvg,
   resolveCanvasPalette,
 } from '@kamiazya/whiteboard-canvas-render'
 import { fromJsonCanvas } from '@kamiazya/whiteboard-codec'
-import { composeCanvasScene } from '../render/compose-canvas-scene.js'
+import { composeCanvasPicture } from '../render/compose-canvas-scene.js'
 import { fontAvailableOf, resolveTextMeasurer } from '../render/text-measurer.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { CanvasViewOutput } from './canvas-view.js'
@@ -43,23 +42,21 @@ export async function canvasViewPicture(
       loadedReferenceFromWire(wire),
     ]),
   )
-  const scene = composeCanvasScene(canvas, measurer.measure, {
+  const options = {
     // Through the wire, so the core is handed what the file nodes name as data.
     ...(graph.size === 0 ? {} : { references: referenceSeamsFromWire(referenceWire(graph)) }),
     threads: result.threads,
     style,
     fontAvailable: fontAvailableOf(measurer),
     core,
-  })
-  return {
+  }
+  const { svg } = composeCanvasPicture(canvas, measurer.measure, options, {
     // `padding: 0` asks for the derived envelope: the scene's own bounds,
     // the legend's band included, so nothing drawn falls outside the frame.
-    svg: renderSceneToSvg(scene, {
-      padding: 0,
-      // A theme's paper, which no node carries. Light, the mode this picture
-      // is laid out in (`MCP_SCENE_APPEARANCE`).
-      background: resolveCanvasPalette(canvas, 'light', { style }).surface,
-    }),
-    boxes: hitBoxesOf(canvas.nodes),
-  }
+    padding: 0,
+    // A theme's paper, which no node carries. Light, the mode this picture
+    // is laid out in (`MCP_SCENE_APPEARANCE`).
+    background: resolveCanvasPalette(canvas, 'light', { style }).surface,
+  })
+  return { svg, boxes: hitBoxesOf(canvas.nodes) }
 }

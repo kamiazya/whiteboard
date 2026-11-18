@@ -3,6 +3,7 @@ import {
   createRoutingBudget,
   createSpatialTheme,
   layoutSpatialCanvas,
+  type MeasureText,
   routeLayout,
 } from '@kamiazya/whiteboard-canvas-render'
 import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
@@ -11,7 +12,14 @@ import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-mo
 import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { afterEach, describe, expect, test } from 'vitest'
 import { setLogSink } from '../log.js'
-import { composeCanvasScene } from './compose-canvas-scene.js'
+import { type ComposeCanvasSceneOptions, composeCanvasPicture } from './compose-canvas-scene.js'
+
+/** The scene `composeCanvasPicture` lays out, without the SVG drawn beside it. */
+const composeCanvasScene = (
+  canvas: SpatialCanvas,
+  measure: MeasureText,
+  options: ComposeCanvasSceneOptions,
+) => composeCanvasPicture(canvas, measure, options, {}).scene
 
 afterEach(() => {
   // `sink` is module-level state in log.ts, shared across every test file

@@ -12,6 +12,7 @@ import type {
   CoreChange,
   CoreDegradation,
   CoreProposal,
+  CoreSvgAsk,
   CoreThread,
 } from '../canvas-core.js'
 import type { EdgeAnchorPair } from '../edge-routing.js'
@@ -61,6 +62,12 @@ function expansion(
 const usesFragmentTable = (
   options: Pick<SpatialLayoutOptions, 'fragments' | 'onFragmentsAsked'>,
 ): boolean => options.fragments !== undefined || options.onFragmentsAsked !== undefined
+
+/** The core's SVG for a request that asked one; an answer without it is a defect in the core. */
+export function askedSvg(svg: string | undefined): string {
+  if (svg === undefined) throw new Error('the core answered no SVG for a layout that asked one')
+  return svg
+}
 
 export const hasData = (extra: ReferenceExtra): boolean =>
   extra.canvas === undefined && extra.markdown === undefined
@@ -193,10 +200,23 @@ export function layoutThroughCore(
   stored: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): LaidOutCanvas {
+  const { scene, anchors } = canvasThroughCore(stored, options, undefined)
+  return { scene, anchors }
+}
+
+/**
+ * A layout through the core, with the SVG it drew in the envelope `svg` names
+ * when it asks for one; none for a refusal, whose scene this side built.
+ */
+export function canvasThroughCore(
+  stored: SpatialCanvas,
+  options: SpatialLayoutOptions,
+  svg: CoreSvgAsk | undefined,
+): LaidOutCanvas & { readonly svg?: string } {
   const core = options.core
   const request = canvasLayoutRequest(stored, options)
   const answer = core.layout.layoutSpatialCanvas(
-    request,
+    svg === undefined ? request : { ...request, svg },
     highlightCode,
     options.measure,
     options.contentCache,
@@ -204,7 +224,8 @@ export function layoutThroughCore(
   if ('refused' in answer) return drawnRefusal(answer.refused, stored, request.mode, options)
   for (const event of answer.degradations) options.onDegrade?.(hostEvent(event))
   if (answer.fragmentsAsked?.length) options.onFragmentsAsked?.(answer.fragmentsAsked)
-  return { scene: answer.scene, anchors: answer.anchors }
+  const laid = { scene: answer.scene, anchors: answer.anchors }
+  return svg === undefined ? laid : { ...laid, svg: askedSvg(answer.svg) }
 }
 
 /** A refusal told to `onRefused`, and drawn where the board's boxes are. */

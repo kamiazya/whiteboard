@@ -3,12 +3,23 @@
 // routed around one, which the router now does deliberately — fell outside
 // the reported size, and a consumer sizing a viewport by it clipped the
 // drawing.
-import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
+import { constantRatioMeasureText, type MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { composeCanvasScene, sceneEnvelope } from './compose-canvas-scene.js'
+import {
+  type ComposeCanvasSceneOptions,
+  composeCanvasPicture,
+  sceneEnvelope,
+} from './compose-canvas-scene.js'
+
+/** The scene `composeCanvasPicture` lays out, without the SVG drawn beside it. */
+const composeCanvasScene = (
+  canvas: SpatialCanvas,
+  measure: MeasureText,
+  options: ComposeCanvasSceneOptions,
+) => composeCanvasPicture(canvas, measure, options, {}).scene
 
 const canvas = (nodes: unknown[], edges: unknown[] = []): SpatialCanvas =>
   ({ nodes, edges }) as unknown as SpatialCanvas

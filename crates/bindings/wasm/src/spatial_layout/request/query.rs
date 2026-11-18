@@ -189,6 +189,7 @@ fn node_size_of(f: &mut Fields<'_>, fitted: bool) -> Option<NodeSize> {
         comments: Comments::default(),
         fragments,
         cache: None,
+        svg: None,
     };
     Some(NodeSize { node, ratio_floor, layout })
 }

@@ -1,20 +1,18 @@
 // Render a `SpatialCanvas` to PNG/SVG without an attached browser client.
 //
 // Pipeline:
-//   1. canvas-render's `layoutSpatialCanvas` turns the persisted canvas
-//      into a canvas-render `Scene`, using the vendored opentype.js
-//      measurer (measure-text.ts) as the injected text-measurement seam,
-//      codec's `parseMarkdownBody` as the injected body parser, and
-//      canvas-render's shared `createSpatialTheme` for the requested mode as
-//      the injected appearance resolver. That mode is an explicit per-request
-//      argument and defaults to light (package-canvas-render.md decision #8),
-//      so a user's ambient UI theme can never change exported bytes.
-//   2. `renderSceneToSvg` (canvas-render) serializes the scene to an SVG
-//      string, with document options (padding/background) so the root
-//      carries a real `width`/`height`/`viewBox` envelope — canvas-render
-//      emits the bare, undimensioned root when no document option is set,
-//      which would hand resvg a degenerate raster.
-//   3. `@resvg/resvg-js` rasterises that SVG to PNG, with the vendored
+//   1. canvas-render's `layoutSpatialCanvasPicture` asks the Rust core to lay
+//      the persisted canvas out as a `Scene` AND serialize it to an SVG
+//      string in one call, using the vendored opentype.js measurer
+//      (measure-text.ts) as the text-measurement seam and canvas-render's
+//      shared `createSpatialTheme` for the requested mode as the appearance.
+//      That mode is an explicit per-request argument and defaults to light
+//      (package-canvas-render.md decision #8), so a user's ambient UI theme
+//      can never change exported bytes. The SVG carries document options
+//      (padding/background) so the root has a real `width`/`height`/`viewBox`
+//      envelope — the bare, undimensioned root a scene gets with no document
+//      option would hand resvg a degenerate raster.
+//   2. `@resvg/resvg-js` rasterises that SVG to PNG, with the vendored
 //      Roboto TTF registered directly and system-font loading disabled, so
 //      the same canvas rasterises identically on any machine.
 //
@@ -25,8 +23,10 @@
 // one gets an exporter of its own.
 
 import type {
+  CoreSvgAsk,
   LayoutCore,
   MeasureText,
+  PicturedScene,
   Scene,
   SpatialLayoutDegradation,
   SpatialLayoutOptions,
@@ -35,8 +35,7 @@ import type {
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   createSpatialTheme,
-  layoutSpatialCanvas,
-  renderSceneToSvg as renderSceneToSvgString,
+  layoutSpatialCanvasPicture,
   resolveCanvasPalette,
   type SpatialPalette,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -205,26 +204,25 @@ function onDegrade(event: SpatialLayoutDegradation): void {
 }
 
 /**
- * Composes the export `Scene` from a `SpatialCanvas`, using canvas-render's
- * shared theme and geometry with no override. Exported (not `_forTests`)
- * specifically so a conformance test can lay out a fixture through this
- * exact call site with an injected fake measurer, instead of a real
- * opentype.js font load — see
+ * Composes the export `Scene` from a `SpatialCanvas` and draws it as the SVG
+ * `svg` describes, both in ONE core call, using canvas-render's shared theme
+ * and geometry with no override. Exported (not `_forTests`) specifically so a
+ * conformance test can lay out a fixture through this exact call site with an
+ * injected fake measurer, instead of a real opentype.js font load — see
  * `headless-renderer-geometry-conformance.test.ts`.
  */
-export function buildSpatialScene(
+export function buildSpatialPicture(
   canvas: SpatialCanvas,
   core: LayoutCore,
   measure: MeasureText,
+  svg: CoreSvgAsk,
   mode: ExportThemeMode = 'light',
   style?: SpatialRenderStyle,
   fontAvailable?: (family: string) => boolean,
   tagLibrary?: TagLibrary,
-): Scene {
-  return layoutSpatialCanvas(canvas, {
-    ...exportLayoutOptions(measure, mode, style, fontAvailable, tagLibrary),
-    core,
-  })
+): PicturedScene {
+  const layout = exportLayoutOptions(measure, mode, style, fontAvailable, tagLibrary)
+  return layoutSpatialCanvasPicture(canvas, { ...layout, core }, svg)
 }
 
 /** What the file export hands the layout, short of the core. */
@@ -263,26 +261,27 @@ function buildSvg(
   const mode = exportMode(options)
   const palette = exportPalette(canvas, options)
   const background = palette.surface
-  const scene = buildSpatialScene(
+  // The scene and its SVG from one core call: the core draws what it laid out.
+  const { scene, svg } = buildSpatialPicture(
     canvas,
     options.core,
     measure,
+    {
+      padding: options.padding ?? DEFAULT_PADDING_PX,
+      background,
+      // resvg blurs filter regions at device resolution, so the backend's
+      // filter budget has to know the zoom the PNG is drawn at.
+      rasterScale,
+      // Dark node chrome uses transparent fills, so body runs sit directly on
+      // the dark background — the root-level inheritable fill is what keeps
+      // them legible. Light stays byte-identical (no root fill).
+      ...(mode === 'dark' ? { textFill: palette.labelFill } : {}),
+    },
     mode,
     options.style,
     fontAvailable,
     options.tagLibrary,
   )
-  const svg = renderSceneToSvgString(scene, {
-    padding: options.padding ?? DEFAULT_PADDING_PX,
-    background,
-    // resvg blurs filter regions at device resolution, so the backend's
-    // filter budget has to know the zoom the PNG is drawn at.
-    rasterScale,
-    // Dark node chrome uses transparent fills, so body runs sit directly on
-    // the dark background — the root-level inheritable fill is what keeps
-    // them legible. Light stays byte-identical (no root fill).
-    ...(mode === 'dark' ? { textFill: palette.labelFill } : {}),
-  })
   return { svg, scene, background }
 }
 

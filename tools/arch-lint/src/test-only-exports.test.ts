@@ -120,7 +120,7 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/mcp-server/src/server/canvas-client-notifier.ts#createCanvasClientNotifier',
   'packages/mcp-server/src/server/config-file.ts#applyConfigFileToEnv',
   'packages/mcp-server/src/server/export/headless-export.ts#HeadlessCanvasExportOptions',
-  'packages/mcp-server/src/server/export/headless-renderer.ts#buildSpatialScene',
+  'packages/mcp-server/src/server/export/headless-renderer.ts#buildSpatialPicture',
   'packages/mcp-server/src/server/export/installed-fonts.ts#FONT_EXTENSIONS',
   'packages/mcp-server/src/server/http-server.ts#StartHttpServerOptions',
   'packages/mcp-server/src/server/index.ts#parseArg',

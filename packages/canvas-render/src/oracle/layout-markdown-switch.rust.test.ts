@@ -2,12 +2,7 @@ import { readFileSync } from 'node:fs'
 import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { beforeAll, describe, expect, it } from 'vitest'
-import {
-  layoutCommentDocument,
-  layoutMarkdownDocument,
-  type MarkdownDocumentOptions,
-} from '../layout/markdown-switch.js'
-import { referenceSeamsFromWire } from '../references/wire.js'
+import { layoutCommentDocument, layoutMarkdownDocument } from '../layout/markdown-switch.js'
 import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import {
@@ -17,6 +12,7 @@ import {
   PAST_THE_PARSER,
   sortedSceneDigest,
 } from '../test-utils/markdown-document-oracle/oracle.js'
+import { noteOptionsOf, recordedSurface } from '../test-utils/markdown-document-oracle/replay.js'
 import { built, requireWasm, wasmBytes } from '../test-utils/wasm/glue.js'
 
 /**
@@ -38,35 +34,6 @@ const digests = new Map(
     .map(({ id, n, h }) => [id, { n, h }] as const),
 )
 
-function surface(name: string): { meta: MarkdownMeta; records: MarkdownRecord[] } {
-  const [head = '', ...lines] = readFileSync(new URL(`layout-markdown.${name}.jsonl`, DIR), 'utf8')
-    .trimEnd()
-    .split('\n')
-  return { meta: JSON.parse(head) as MarkdownMeta, records: lines.map((l) => JSON.parse(l)) }
-}
-
-/** The options a root hands the switch for `record`, rebuilt from the record and its file's meta line. */
-function optionsOf(
-  record: MarkdownRecord,
-  meta: MarkdownMeta,
-): Omit<MarkdownDocumentOptions, 'core'> {
-  const fonts = new Set(record.fonts ?? [])
-  const style = record.surface === 'daemon' ? record.style : 'document'
-  return {
-    measure: createFakeMeasure(),
-    maxWidth: record.maxWidth,
-    mode: record.mode ?? 'light',
-    ...(style === undefined ? {} : { style: style as MarkdownDocumentOptions['style'] }),
-    ...(record.fonts === undefined ? {} : { fontAvailable: (family: string) => fonts.has(family) }),
-    ...(record.references === true ? { references: referenceSeamsFromWire(meta.references) } : {}),
-    ...(record.library === true ? { tagLibrary: meta.library } : {}),
-    ...(record.fragments === undefined
-      ? {}
-      : { fragments: record.fragments === 'full' ? meta.fragments : [] }),
-    ...(record.section === undefined ? {} : { section: record.section }),
-  }
-}
-
 describe.runIf(built)('the recorded notes through the core', () => {
   // Made in `beforeAll`, not in this factory: vitest runs a skipped suite's
   // factory to collect it, so a core made here fails the file where there is
@@ -87,7 +54,7 @@ describe.runIf(built)('the recorded notes through the core', () => {
       } as const
       return layoutCommentDocument(record.body, { ...options, core })
     }
-    return layoutMarkdownDocument(record.body, { ...optionsOf(record, meta), core })
+    return layoutMarkdownDocument(record.body, { ...noteOptionsOf(record, meta), core })
   }
 
   /** The recorded scene's sorted digest; undefined for a section it missed, or a record held only as a digest. */
@@ -98,7 +65,7 @@ describe.runIf(built)('the recorded notes through the core', () => {
 
   for (const name of SURFACES) {
     it(`answers every ${name} note as the TypeScript recorded it`, { timeout: 120_000 }, () => {
-      const { meta, records } = surface(name)
+      const { meta, records } = recordedSurface(name)
       // Every branch asserts: a record that fell through would read as
       // replayed. A long scene is held by its digest alone.
       for (const record of records) {

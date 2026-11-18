@@ -86,8 +86,24 @@ export type LayoutAnswer =
       readonly degradations: readonly LayoutEvent[]
       /** For a request carrying `fragments`: what the table did not hold. */
       readonly fragmentsAsked?: readonly FragmentAsk[]
+      /** For a request carrying `svg`: the scene as the core's SVG backend draws it. */
+      readonly svg?: string
     }
   | { readonly refused: LayoutRefusal }
+
+/**
+ * The SVG a request asks to be answered with beside its scene: the core's
+ * backend over the laid-out scene, with `renderSceneToSvg`'s envelope options.
+ * `viewBox: 'document'` is the scene's document bounds (an empty box for a
+ * scene with no node), since the caller has no scene to measure beforehand.
+ */
+interface SvgAsk {
+  readonly viewBox?: 'document'
+  readonly padding?: number
+  readonly background?: string
+  readonly textFill?: string
+  readonly rasterScale?: number
+}
 
 /** The glue calls this module makes. */
 export interface LayoutGlue extends FontsGlue, CachesGlue {
@@ -274,9 +290,14 @@ function layoutOnce<A>(
 
 /** The answer one call gave, read. */
 function answerOf(parsed: unknown[], errors: LayoutErrors): LayoutAnswer {
-  const [kind, a, b, c, d] = parsed
+  const [kind, a, b, c, ...rest] = parsed
   const refused = drawnRefusal(parsed)
   if (refused !== undefined) return { refused }
+  // After the degradations: the fragment sources, when the request carried a
+  // table, then the SVG, when it asked for one; each at most once, in that order.
+  const d = Array.isArray(rest[0]) ? rest[0] : undefined
+  const svg = rest[d === undefined ? 0 : 1]
+  const tail = rest.length === (d === undefined ? 0 : 1) + (svg === undefined ? 0 : 1)
   const asked = d === undefined || isAsks(d)
   if (
     kind === 'ok' &&
@@ -284,13 +305,16 @@ function answerOf(parsed: unknown[], errors: LayoutErrors): LayoutAnswer {
     Array.isArray(a.nodes) &&
     isAnchors(b) &&
     Array.isArray(c) &&
-    asked
+    asked &&
+    (svg === undefined || typeof svg === 'string') &&
+    tail
   ) {
     return {
       scene: a as unknown as Scene,
       anchors: new Map(b),
       degradations: c as LayoutEvent[],
       ...(d === undefined ? {} : { fragmentsAsked: d }),
+      ...(svg === undefined ? {} : { svg }),
     }
   }
   const detail = kind === 'refused' && typeof b === 'string' ? b : 'answer'
@@ -350,6 +374,7 @@ export type MarkdownLayoutRequest = LayoutRequest &
         readonly references?: object
         readonly fragments?: readonly (readonly [string, object])[]
         readonly section?: string
+        readonly svg?: SvgAsk
       }
     | {
         readonly kind: 'comment'
@@ -366,6 +391,8 @@ export type MarkdownLayoutAnswer =
       readonly degradations: readonly LayoutEvent[]
       /** For a request carrying `fragments`: what the table did not hold. */
       readonly fragmentsAsked?: readonly FragmentAsk[]
+      /** For a note's request carrying `svg`: the scene as the core's SVG backend draws it. */
+      readonly svg?: string
     }
   | { readonly refused: LayoutRefusal }
   | { readonly missing: 'section' }
@@ -406,6 +433,11 @@ function markdownAnswerOf(parsed: unknown[], errors: LayoutErrors): MarkdownLayo
   const laid = answerOf(parsed, errors)
   if ('refused' in laid) return laid
   if (laid.anchors.size > 0) throw errors.refused(OPERATION, 'malformed', 'answer')
-  const { scene, degradations, fragmentsAsked } = laid
-  return { scene, degradations, ...(fragmentsAsked === undefined ? {} : { fragmentsAsked }) }
+  const { scene, degradations, fragmentsAsked, svg } = laid
+  return {
+    scene,
+    degradations,
+    ...(fragmentsAsked === undefined ? {} : { fragmentsAsked }),
+    ...(svg === undefined ? {} : { svg }),
+  }
 }
