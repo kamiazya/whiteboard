@@ -6,8 +6,11 @@ use whiteboard_canvas_render::scene_wire::{Tree, scene_tree};
 use whiteboard_edge_routing::edge_geometry::Side;
 use whiteboard_edge_routing::edge_sides::EdgeAnchorPair;
 use whiteboard_edge_routing::geometry::Point;
+use whiteboard_scene::Scene;
 
 use super::fragments::Ask;
+use super::request::SvgAsk;
+use super::svg::{MAX_SVG_BYTES, Unrendered, render};
 
 fn text(value: &str) -> Tree {
     Tree::Text(value.to_owned())
@@ -109,14 +112,26 @@ fn ask(ask: &Ask) -> Tree {
     })
 }
 
-/// The layout as the `ok` answer, the fragment sources it asked for last when
-/// the request carried a table, or refused when it holds a number JSON cannot
-/// spell, which no canvas the model admits holds (its coordinates are safe
-/// integers).
+/// The SVG `ask` describes as the answer's last element, or the refusal that
+/// answers instead: a scene holding a number the document cannot spell, or a
+/// document past `max` bytes.
+pub(super) fn svg_item(scene: &Scene, ask: &SvgAsk, max: usize) -> Result<Tree, String> {
+    match render(scene, ask, max) {
+        Ok(svg) => Ok(Tree::Text(svg)),
+        Err(Unrendered::NonFinite) => Err(refused("malformed", "non-finite")),
+        Err(Unrendered::TooLarge) => Err(refused("input-too-large", "svg")),
+    }
+}
+
+/// The layout as the `ok` answer, the fragment sources it asked for next when
+/// the request carried a table and the SVG it asked for last, or refused when
+/// it holds a number JSON cannot spell, which no canvas the model admits holds
+/// (its coordinates are safe integers), or an SVG past [`MAX_SVG_BYTES`].
 pub(super) fn laid_out(
     laid: &LaidOut,
     degradations: &[Degradation],
     asked: Option<Vec<Ask>>,
+    svg: Option<&SvgAsk>,
 ) -> String {
     let anchors = laid.anchors.iter().map(|(id, pair)| Tree::List(vec![text(id), anchor(pair)]));
     let mut items = vec![
@@ -126,6 +141,12 @@ pub(super) fn laid_out(
         events(degradations),
     ];
     items.extend(asked.map(|asked| Tree::List(asked.iter().map(ask).collect())));
+    if let Some(svg) = svg {
+        match svg_item(&laid.scene, svg, MAX_SVG_BYTES) {
+            Ok(item) => items.push(item),
+            Err(refusal) => return refusal,
+        }
+    }
     let answer = Tree::List(items);
     answer.to_json().unwrap_or_else(|_| refused("malformed", "non-finite"))
 }

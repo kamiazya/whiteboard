@@ -95,6 +95,16 @@ describe('a markdown body over the artifact', () => {
     expect(lay(plain, comment)).toEqual({ scene, degradations: [] })
   })
 
+  it('reads the SVG a note asked for, after the sources asked', () => {
+    const scene = { nodes: [] }
+    const asks = [{ kind: 'math', value: 'x' }]
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"></svg>'
+    const asking = { ...note, svg: { viewBox: 'document' } } as MarkdownLayoutRequest
+    const { glue, sent } = glueOf(JSON.stringify(['ok', scene, [], [], asks, svg]))
+    expect(lay(glue, asking)).toEqual({ scene, degradations: [], fragmentsAsked: asks, svg })
+    expect(JSON.stringify(sent[0])).toContain('"svg",["m","viewBox","document"]')
+  })
+
   it('reads a missing section and a cap as the root answers them, and a decline as no answer', () => {
     expect(lay(glueOf('["missing","section"]').glue, note)).toEqual({ missing: 'section' })
     // Nothing declines since D7a: a decline is an answer the shim does not know.

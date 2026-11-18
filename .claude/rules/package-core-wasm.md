@@ -58,6 +58,13 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   (`oracle/facet-write.jsonl`) by `crates/bindings/wasm/tests/facet_write_oracle.rs`,
   the shim over the artifact by `facet-write.rust.test.ts`, and what the daemon's
   writer does with the answer by server-core's `facet-write.dispatch.test.ts`.
+- A layout or note request may carry `svg` (the envelope a server picture is
+  drawn in: `viewBox: 'document'`, `padding`, `background`, `textFill`,
+  `rasterScale`); the answer then carries the core's SVG of the scene last,
+  after any fragment sources (`layout.ts`'s `answerOf`). canvas-render's
+  `layoutSpatialCanvasPicture` / `layoutMarkdownDocumentPicture` ask for it,
+  and server-core's `wb_scene_render`, the `canvas_view` picture and
+  mcp-server's file export take their SVG from it (ADR-0054 A2).
 - `core.search` (`search.ts`): lexical search over the one `search_op` export.
   Text calls are stateless; a `SearchIndex` (a corpus's token bags, upserted per
   changed document, queried by string) and a set of link labels live in the

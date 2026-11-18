@@ -37,3 +37,5 @@ workspace = true
 [dev-dependencies]
 serde_json = { workspace = true, features = ["float_roundtrip"] }
 whiteboard-proptest = { path = "../../testing/proptest" }
+# An answered SVG is checked against the scene the same answer carries, read back.
+whiteboard-scene = { path = "../../core/scene", features = ["oracle"] }
