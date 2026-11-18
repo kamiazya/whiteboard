@@ -14,7 +14,6 @@ import {
   type BoundingBox,
   createSpatialTheme,
   layoutSceneDigest,
-  layoutSpatialCanvas,
   layoutSpatialCanvasPicture,
   sceneDocumentBounds,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -96,8 +95,10 @@ export interface ComposeCanvasSceneOptions {
 }
 
 /**
- * Composes a full-canvas scene from a `SpatialCanvas`. Delegates to
- * canvas-render's `layoutSpatialCanvas` — the single SpatialCanvas -> Scene
+ * Composes a full-canvas scene from a `SpatialCanvas` with its SVG, drawn by
+ * the core in the envelope `svg` names in the same call, so a server picture
+ * never serializes the scene here. Delegates to canvas-render's
+ * `layoutSpatialCanvasPicture`, over `layoutSpatialCanvas` — the single SpatialCanvas -> Scene
  * builder shared by every consumer (package-canvas-render.md decision #7).
  *
  * With no `references`, no file seam is passed at all, which keeps the scene
@@ -111,19 +112,6 @@ export interface ComposeCanvasSceneOptions {
  * rather than a dependency read in here. Resolution is the caller's, also
  * because it is asynchronous while the seams are synchronous by contract.
  */
-export function composeCanvasScene(
-  canvas: SpatialCanvas,
-  measure: MeasureText,
-  options: ComposeCanvasSceneOptions,
-): Scene {
-  return layoutSpatialCanvas(canvas, layoutOptionsOf(measure, options))
-}
-
-/**
- * `composeCanvasScene`'s scene with its SVG, from ONE core call: the core draws
- * the scene it laid out in the envelope `svg` names, so a server picture never
- * serializes the scene here.
- */
 export function composeCanvasPicture(
   canvas: SpatialCanvas,
   measure: MeasureText,
@@ -134,7 +122,7 @@ export function composeCanvasPicture(
 }
 
 /**
- * The spatial digest of the scene `composeCanvasScene` would compose, read by
+ * The spatial digest of the scene `composeCanvasPicture` would compose, read by
  * the core where it lays the canvas out, so the scene is never built on this
  * side. The same options, so a digest never describes a different layout than
  * the picture beside it.

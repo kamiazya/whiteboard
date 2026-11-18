@@ -23,8 +23,10 @@
 // one gets an exporter of its own.
 
 import type {
+  CoreSvgAsk,
   LayoutCore,
   MeasureText,
+  PicturedScene,
   Scene,
   SpatialLayoutDegradation,
   SpatialLayoutOptions,
@@ -33,7 +35,6 @@ import type {
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   createSpatialTheme,
-  layoutSpatialCanvas,
   layoutSpatialCanvasPicture,
   resolveCanvasPalette,
   type SpatialPalette,
@@ -203,26 +204,25 @@ function onDegrade(event: SpatialLayoutDegradation): void {
 }
 
 /**
- * Composes the export `Scene` from a `SpatialCanvas`, using canvas-render's
- * shared theme and geometry with no override. Exported (not `_forTests`)
- * specifically so a conformance test can lay out a fixture through this
- * exact call site with an injected fake measurer, instead of a real
- * opentype.js font load — see
+ * Composes the export `Scene` from a `SpatialCanvas` and draws it as the SVG
+ * `svg` describes, both in ONE core call, using canvas-render's shared theme
+ * and geometry with no override. Exported (not `_forTests`) specifically so a
+ * conformance test can lay out a fixture through this exact call site with an
+ * injected fake measurer, instead of a real opentype.js font load — see
  * `headless-renderer-geometry-conformance.test.ts`.
  */
-export function buildSpatialScene(
+export function buildSpatialPicture(
   canvas: SpatialCanvas,
   core: LayoutCore,
   measure: MeasureText,
+  svg: CoreSvgAsk,
   mode: ExportThemeMode = 'light',
   style?: SpatialRenderStyle,
   fontAvailable?: (family: string) => boolean,
   tagLibrary?: TagLibrary,
-): Scene {
-  return layoutSpatialCanvas(canvas, {
-    ...exportLayoutOptions(measure, mode, style, fontAvailable, tagLibrary),
-    core,
-  })
+): PicturedScene {
+  const layout = exportLayoutOptions(measure, mode, style, fontAvailable, tagLibrary)
+  return layoutSpatialCanvasPicture(canvas, { ...layout, core }, svg)
 }
 
 /** What the file export hands the layout, short of the core. */
@@ -261,17 +261,11 @@ function buildSvg(
   const mode = exportMode(options)
   const palette = exportPalette(canvas, options)
   const background = palette.surface
-  const layout = exportLayoutOptions(
-    measure,
-    mode,
-    options.style,
-    fontAvailable,
-    options.tagLibrary,
-  )
   // The scene and its SVG from one core call: the core draws what it laid out.
-  const { scene, svg } = layoutSpatialCanvasPicture(
+  const { scene, svg } = buildSpatialPicture(
     canvas,
-    { ...layout, core: options.core },
+    options.core,
+    measure,
     {
       padding: options.padding ?? DEFAULT_PADDING_PX,
       background,
@@ -283,6 +277,10 @@ function buildSvg(
       // them legible. Light stays byte-identical (no root fill).
       ...(mode === 'dark' ? { textFill: palette.labelFill } : {}),
     },
+    mode,
+    options.style,
+    fontAvailable,
+    options.tagLibrary,
   )
   return { svg, scene, background }
 }

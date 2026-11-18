@@ -683,7 +683,9 @@ pub fn layout_query_wasm(data: &[u8]) {
 }
 
 fn assert_layout_answer(answer: &str) {
-    let laid = answer.starts_with("[\"ok\",{\"nodes\":[") && answer.ends_with("]]");
+    // The last element of a laid-out answer is a list, or the SVG a request asked for.
+    let drawn = answer.contains(",\"<svg ") && answer.ends_with("</svg>\"]");
+    let laid = answer.starts_with("[\"ok\",{\"nodes\":[") && (answer.ends_with("]]") || drawn);
     let refused = answer.starts_with("[\"refused\",\"") && answer.ends_with("\"]");
     let needs = answer.starts_with("[\"needs\",{\"code\":[") && answer.ends_with("]}]");
     let missing = answer == "[\"missing\",\"section\"]";

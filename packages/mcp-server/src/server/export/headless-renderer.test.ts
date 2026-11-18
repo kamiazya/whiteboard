@@ -54,9 +54,9 @@ async function importRenderer() {
   }
 }
 
-import { renderSceneToSvg, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
-import { buildSpatialScene } from './headless-renderer.js'
+import { buildSpatialPicture } from './headless-renderer.js'
 import { loadExportFonts } from './measure-text.js'
 import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
 import { opentypeMeasureText } from './test-utils/opentype-measure.js'
@@ -79,7 +79,7 @@ describe('emphasis survives the whole export pipeline', () => {
 
   it('markdown source with strong/emphasis reaches the SVG as weight/style attributes', async () => {
     const measure = await opentypeMeasureText()
-    const scene = buildSpatialScene(
+    const { svg } = buildSpatialPicture(
       {
         nodes: [
           textNode({
@@ -95,8 +95,8 @@ describe('emphasis survives the whole export pipeline', () => {
       },
       testLayoutCore(),
       measure,
+      {},
     )
-    const svg = renderSceneToSvg(scene)
     expect(svg).toContain('font-weight="700"')
     expect(svg).toContain('font-style="italic"')
     expect(svg).toContain('text-decoration="line-through"')

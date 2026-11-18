@@ -2,7 +2,7 @@ import { resolveThemeTable, type SpatialRenderStyle } from '@kamiazya/whiteboard
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 
 // The ids a layout can draw, read from the table the layout itself resolves
-// (`composeCanvasScene` passes no contributions, so it falls back to the same
+// (`composeCanvasPicture` passes no contributions, so it falls back to the same
 // one) — so a style is refused exactly when drawing it would have degraded.
 const DRAWABLE_THEME_IDS: readonly string[] = Object.keys(
   resolveThemeTable([visualRenderContribution]),

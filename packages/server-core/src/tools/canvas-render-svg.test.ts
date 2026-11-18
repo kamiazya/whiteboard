@@ -623,27 +623,32 @@ describe('wb_scene_render and the core', () => {
         edges: [],
       })
     })
-    // A scene no TypeScript layout of this board would draw: the SVG carries
-    // it only if the layout asked the core.
+    // An SVG no layout of this board would draw: the output carries it only
+    // if the core answered it, in the one call that laid the board out.
     const marked = {
       kind: 'textRun',
-      text: 'from the core',
+      text: 'marked',
       bbox: { x: 0, y: 0, w: 100, h: 20 },
       baseline: 16,
       font: { family: 'Roboto', weight: 400, style: 'normal', sizePx: 16 },
     } as const
     let asked = 0
+    const svgAsks: unknown[] = []
     const deps = {
       ...(await makeDeps(store)),
       layoutCore: async () => {
         asked += 1
         return fakeLayoutCore({
           layout: {
-            layoutSpatialCanvas: () => ({
-              scene: { nodes: [marked] },
-              anchors: new Map(),
-              degradations: [],
-            }),
+            layoutSpatialCanvas: (request) => {
+              svgAsks.push(request.svg)
+              return {
+                scene: { nodes: [marked] },
+                anchors: new Map(),
+                degradations: [],
+                svg: '<svg>from the core</svg>',
+              }
+            },
           },
         })
       },
@@ -656,7 +661,10 @@ describe('wb_scene_render and the core', () => {
       style: 'clean',
     })
     expect(asked).toBe(1)
-    expect(result.svg).toContain('from the core')
+    expect(result.svg).toBe('<svg>from the core</svg>')
+    // Drawn in the scene's own envelope, which the output's size reports.
+    expect(svgAsks).toEqual([{ viewBox: 'document' }])
+    expect([result.width, result.height]).toEqual([100, 20])
   })
 })
 

@@ -5,13 +5,9 @@ import type {
   MeasureText,
   PicturedScene,
   ReferenceSeams,
-  Scene,
   SpatialRenderStyle,
 } from '@kamiazya/whiteboard-canvas-render'
-import {
-  layoutMarkdownDocument,
-  layoutMarkdownDocumentPicture,
-} from '@kamiazya/whiteboard-canvas-render'
+import { layoutMarkdownDocumentPicture } from '@kamiazya/whiteboard-canvas-render'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { logRefusal } from './refusal-note.js'
 
@@ -52,24 +48,12 @@ export interface ComposeMarkdownSceneOptions {
 }
 
 /**
- * Composes a document scene from a markdown body — canvas-render's
- * `layoutMarkdownDocument`, the same note layout the web preview takes,
- * answered by the Rust core's markdown entry, with an
- * embedded canvas painted in the pinned light appearance every MCP render
- * uses. `undefined` for a `section` the body holds no heading for.
- */
-export function composeMarkdownScene(
-  body: string,
-  measure: MeasureText,
-  options: ComposeMarkdownSceneOptions,
-): Scene | undefined {
-  return layoutMarkdownDocument(body, noteOptionsOf(measure, options))
-}
-
-/**
- * `composeMarkdownScene`'s scene with its SVG, from ONE core call: the core
- * draws the note it laid out in the envelope `svg` names. `undefined` for a
- * `section` the body holds no heading for.
+ * A document's picture from its markdown body — canvas-render's
+ * `layoutMarkdownDocumentPicture`, the same note layout the web preview takes,
+ * answered by the Rust core's markdown entry with the SVG it draws of the
+ * scene in the envelope `svg` names, in ONE call, with an embedded canvas
+ * painted in the pinned light appearance every MCP render uses. `undefined`
+ * for a `section` the body holds no heading for.
  */
 export function composeMarkdownPicture(
   body: string,
@@ -83,7 +67,7 @@ export function composeMarkdownPicture(
 function noteOptionsOf(
   measure: MeasureText,
   options: ComposeMarkdownSceneOptions,
-): Parameters<typeof layoutMarkdownDocument>[1] {
+): Parameters<typeof layoutMarkdownDocumentPicture>[1] {
   return {
     measure,
     maxWidth: MARKDOWN_SCENE_WIDTH_PX,
