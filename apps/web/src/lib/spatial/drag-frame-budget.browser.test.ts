@@ -63,9 +63,10 @@ import type { WebCore } from './web-core.js'
  * The committed layout's split — the layout alone, against the layout with the
  * editor surface's keyed projection drawn by the core in the same call, against
  * the layout with the TypeScript backend's keyed projection (what the main
- * thread derived from a worker's scene until ADR-0054 A3.3) — and what handing
- * the keyed answer or the scene across `postMessage` costs, run under the same
- * switch. Run from the repository root:
+ * thread derived from a worker's scene until ADR-0054 A3.3) — and what a
+ * `structuredClone` of the keyed answer or of the scene costs in this realm,
+ * the clone `postMessage` makes of a reply (not its delivery), run under the
+ * same switch. Run from the repository root:
  *   VITE_MEASURE_DRAG_SVG=1 pnpm vitest run --project web-browser apps/web/src/lib/spatial/drag-frame-budget
  */
 const SPLIT = import.meta.env.VITE_MEASURE_DRAG_SVG === '1'
@@ -442,14 +443,22 @@ describe('a drag frame laid out by the core', () => {
       if ('failure' in real) return
       await ensureViewerFontLoaded()
       const browser = createBrowserMeasureText()
-      const core: LayoutCore = {
-        routing: real.core,
-        layout: real.core,
-        markdown: real.core,
-        query: real.core,
+      // Every lane laid out by the core: a refused layout is drawn as its
+      // notice in TypeScript, which would time two identical refusals.
+      const tally = { answered: 0, keyed: 0 }
+      const layout: CanvasLayoutCore = {
+        layoutSpatialCanvas(request, highlight, measure, cache) {
+          const answer = real.core.layoutSpatialCanvas(request, highlight, measure, cache)
+          if (!('refused' in answer)) tally.answered += 1
+          if ('keyed' in answer && answer.keyed !== undefined) tally.keyed += 1
+          return answer
+        },
       }
+      const core: LayoutCore = { routing: real.core, layout, markdown: real.core, query: real.core }
       const reading: Record<string, string | number> = {}
       for (const board of [mostEdges(), largest()]) {
+        tally.answered = 0
+        tally.keyed = 0
         const plain = committedOptions(board, browser, core)
         const withCore = committedOptions(board, browser, core)
         const withTs = committedOptions(board, browser, core)
@@ -468,9 +477,13 @@ describe('a drag frame laid out by the core', () => {
               layoutSpatialCanvasWithAnchors(frameOf(board, (at % 40) * 4), withTs).scene,
             ),
           'TS keyed alone': () => editorKeyedTs(scene),
-          'clone keyed': () => structuredClone(keyed),
-          'clone scene': () => structuredClone(scene),
+          'local structuredClone of keyed': () => structuredClone(keyed),
+          'local structuredClone of scene': () => structuredClone(scene),
         })
+        // Three lanes lay out every frame, plus the two equality layouts above;
+        // the keyed lane and its equality layout answered keyed.
+        expect(tally.answered).toBe(3 * FRAMES_LAID + 2)
+        expect(tally.keyed).toBe(FRAMES_LAID + 1)
         reading[`${board.name}: nodes`] = board.canvas.nodes.length
         reading[`${board.name}: keyed chars`] = keyed.svg.length
         for (const [row, values] of Object.entries(medians)) {

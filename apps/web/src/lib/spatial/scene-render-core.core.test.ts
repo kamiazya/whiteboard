@@ -31,7 +31,11 @@ const canvas = {
 /** The picture a fake core answers a request asking one, in the form it asked. */
 function pictureFor(request: CanvasLayoutRequest) {
   if (request.svg === undefined) return {}
-  const svg = '<svg></svg>'
+  // Each envelope answers its own sentinel, so a result taken from another ask reads wrong.
+  const svg =
+    request.svg.viewBox === 'document' || request.svg.viewBox?.of === 'document'
+      ? '<svg>doc</svg>'
+      : '<svg></svg>'
   return request.svg.form === 'keyed'
     ? { keyed: { svg, rootOpen: '<svg>', rootAttrs: {}, groups: [] } }
     : { svg }
@@ -83,7 +87,7 @@ describe('the editor layout base', () => {
     const surface = { viewBox: { of: 'scene' }, legend: 'omit' }
     expect(renderCanvasToSvgWith(canvas, { measure }).svg).toBe('<svg></svg>')
     expect(renderCanvasKeyedWith(canvas, { measure }).keyed.svg).toBe('<svg></svg>')
-    renderCanvasForExportWith(canvas, { measure }, '#fff')
+    expect(renderCanvasForExportWith(canvas, { measure }, '#fff').svg).toBe('<svg>doc</svg>')
     expect(asked.map((request) => request.svg)).toEqual([
       surface,
       { ...surface, form: 'keyed' },

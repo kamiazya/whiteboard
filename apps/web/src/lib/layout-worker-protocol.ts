@@ -76,86 +76,100 @@ type LayoutSubject =
   | { readonly canvas: SpatialCanvas; readonly snapshot?: undefined }
   | { readonly snapshot: Uint8Array; readonly canvas?: undefined }
 
-export type LayoutRequest = LayoutSubject & {
-  readonly type: 'layout'
-  /** Echoed back so a late reply for a superseded canvas can be dropped. */
-  readonly id: number
-  readonly theme: ResolvedTheme
-  /**
-   * What the canvas points at, as data: the loaded graph and the alias,
-   * title and extras tables evaluated over it — a file node's readable label
-   * and its dangling mark among the extras. The worker rebuilds the
-   * reference bundle from this, so a text node's `![[note]]` and a file
-   * node's content draw here exactly as on the main thread.
-   */
-  readonly references?: ReferenceWire
-  /**
-   * A token for `references`, sent with it by a caller that already knows
-   * when its wire changes: two requests with the same revision carry the same
-   * wire. The worker keys its content cache on it instead of on the wire's
-   * bytes, which would read every embedded body again per request. Absent,
-   * the bytes are the key.
-   */
-  readonly referencesRevision?: number
-  /**
-   * File nodes the editor's LOD gate expanded THIS render — the gate reads
-   * the viewport, which the worker does not have, so its decision crosses as
-   * ids and the worker's `expandFileNode` is a lookup.
-   */
-  readonly expandedFileIds?: readonly string[]
-  /**
-   * Expand every file node `references` can draw — a surface with no
-   * viewport, a list row, has no gate to decide by, and its miniature is the
-   * board with its embeds drawn.
-   */
-  readonly expandAllFileNodes?: true
-  /**
-   * The math blocks and diagram fences the asking thread has rendered, by
-   * key — plain SVG strings, since the engines that make them stay on the
-   * thread that loaded them. A body asking for one not here keeps its
-   * fallback and is reported back as `fragmentsAsked`.
-   */
-  readonly fragments?: readonly FragmentEntry[]
-  /** Node ids whose body an editor overlay owns — plain data, like the refs. */
-  readonly suppressedBodyNodeIds?: readonly string[]
-  /** Node ids that wear a padlock — plain data, like the above. */
-  readonly lockedNodeIds?: readonly string[]
-  /** The workspace's tag library (ADR-0040 decision 5) — plain data, so it crosses as it is. */
-  readonly tagLibrary?: TagLibrary
-  /** Draw resolved comments too (the editor's per-user toggle). */
-  readonly showResolved?: boolean
-  /**
-   * canvas-render's `commentLayer`: `false` draws the board without its
-   * comments, as a list thumbnail does. Absent draws them, as the editor needs.
-   */
-  readonly commentLayer?: boolean
-  /** The document's conversations, for passage highlights inside text nodes. */
-  readonly threads?: readonly CommentThread[]
-  /**
-   * This document's open proposals (ADR-0029), drawn on the live canvas.
-   * Plain data, like the threads beside it, so it crosses to the worker.
-   */
-  readonly proposals?: readonly Proposal[]
-  /**
-   * Where this answer may be REMEMBERED, as the render key's own path — the
-   * worker's persistent tier (ADR-0027 decision 5) reads it before working
-   * and writes it after, so the cache lives beside the bytes rather than on
-   * the thread that asked.
-   *
-   * Absent means "do not remember this". A key that cannot notice its
-   * document changing is exactly that case, and the caller decides it with
-   * `isMemoisableKey` — the same gate the in-memory map uses, so the two
-   * tiers cannot disagree about which entries are safe.
-   */
-  readonly cacheKey?: string
-  /**
-   * `'keyed'` answers the picture as the keyed projection the editor surface
-   * patches in (`laid-out-keyed`), drawn by the core in the layout's own
-   * call. Absent answers the plain SVG a list row draws (`laid-out`). The
-   * editor asks keyed so the main thread never serializes the scene itself.
-   */
-  readonly form?: 'keyed'
-}
+/**
+ * Which picture a layout answers, and whether it may be remembered. A keyed
+ * answer is the editor's live surface and is never stored: the store holds
+ * plain replies, so a keyed request carrying a key could be served one.
+ */
+type LayoutPicture =
+  | {
+      /**
+       * Where this answer may be REMEMBERED, as the render key's own path — the
+       * worker's persistent tier (ADR-0027 decision 5) reads it before working
+       * and writes it after, so the cache lives beside the bytes rather than on
+       * the thread that asked.
+       *
+       * Absent means "do not remember this". A key that cannot notice its
+       * document changing is exactly that case, and the caller decides it with
+       * `isMemoisableKey` — the same gate the in-memory map uses, so the two
+       * tiers cannot disagree about which entries are safe.
+       */
+      readonly cacheKey?: string
+      readonly form?: undefined
+    }
+  | {
+      /**
+       * `'keyed'` answers the picture as the keyed projection the editor surface
+       * patches in (`laid-out-keyed`), drawn by the core in the layout's own
+       * call. Absent answers the plain SVG a list row draws (`laid-out`). The
+       * editor asks keyed so the main thread never serializes the scene itself.
+       */
+      readonly form: 'keyed'
+      readonly cacheKey?: undefined
+    }
+
+export type LayoutRequest = LayoutSubject &
+  LayoutPicture & {
+    readonly type: 'layout'
+    /** Echoed back so a late reply for a superseded canvas can be dropped. */
+    readonly id: number
+    readonly theme: ResolvedTheme
+    /**
+     * What the canvas points at, as data: the loaded graph and the alias,
+     * title and extras tables evaluated over it — a file node's readable label
+     * and its dangling mark among the extras. The worker rebuilds the
+     * reference bundle from this, so a text node's `![[note]]` and a file
+     * node's content draw here exactly as on the main thread.
+     */
+    readonly references?: ReferenceWire
+    /**
+     * A token for `references`, sent with it by a caller that already knows
+     * when its wire changes: two requests with the same revision carry the same
+     * wire. The worker keys its content cache on it instead of on the wire's
+     * bytes, which would read every embedded body again per request. Absent,
+     * the bytes are the key.
+     */
+    readonly referencesRevision?: number
+    /**
+     * File nodes the editor's LOD gate expanded THIS render — the gate reads
+     * the viewport, which the worker does not have, so its decision crosses as
+     * ids and the worker's `expandFileNode` is a lookup.
+     */
+    readonly expandedFileIds?: readonly string[]
+    /**
+     * Expand every file node `references` can draw — a surface with no
+     * viewport, a list row, has no gate to decide by, and its miniature is the
+     * board with its embeds drawn.
+     */
+    readonly expandAllFileNodes?: true
+    /**
+     * The math blocks and diagram fences the asking thread has rendered, by
+     * key — plain SVG strings, since the engines that make them stay on the
+     * thread that loaded them. A body asking for one not here keeps its
+     * fallback and is reported back as `fragmentsAsked`.
+     */
+    readonly fragments?: readonly FragmentEntry[]
+    /** Node ids whose body an editor overlay owns — plain data, like the refs. */
+    readonly suppressedBodyNodeIds?: readonly string[]
+    /** Node ids that wear a padlock — plain data, like the above. */
+    readonly lockedNodeIds?: readonly string[]
+    /** The workspace's tag library (ADR-0040 decision 5) — plain data, so it crosses as it is. */
+    readonly tagLibrary?: TagLibrary
+    /** Draw resolved comments too (the editor's per-user toggle). */
+    readonly showResolved?: boolean
+    /**
+     * canvas-render's `commentLayer`: `false` draws the board without its
+     * comments, as a list thumbnail does. Absent draws them, as the editor needs.
+     */
+    readonly commentLayer?: boolean
+    /** The document's conversations, for passage highlights inside text nodes. */
+    readonly threads?: readonly CommentThread[]
+    /**
+     * This document's open proposals (ADR-0029), drawn on the live canvas.
+     * Plain data, like the threads beside it, so it crosses to the worker.
+     */
+    readonly proposals?: readonly Proposal[]
+  }
 
 /**
  * Lay a markdown BODY out, for the editor's rail.

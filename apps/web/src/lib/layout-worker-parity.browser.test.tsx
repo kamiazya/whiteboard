@@ -71,7 +71,10 @@ const canvas: SpatialCanvas = {
 const layoutInWorker = (request: LayoutRequest) =>
   new Promise<LayoutResponse>((resolve, reject) => {
     const worker = new Worker(new URL('./layout-worker.ts', import.meta.url), { type: 'module' })
-    const timer = setTimeout(() => reject(new Error('layout worker timed out')), 30_000)
+    const timer = setTimeout(() => {
+      worker.terminate()
+      reject(new Error('layout worker timed out'))
+    }, 30_000)
     worker.onmessage = (e: MessageEvent<LayoutResponse>) => {
       clearTimeout(timer)
       worker.terminate()

@@ -51,4 +51,12 @@ describe('LayoutRequest', () => {
     // An empty canvas is a card for a file node, with the surface's label.
     expect(seams.resolveReference('doc-1')).toEqual({ label: 'Doc one' })
   })
+
+  it('never names a stored reply on a keyed request, which the store could answer only in the plain form', () => {
+    const plain: LayoutRequest = { type: 'layout', id: 1, canvas, theme: 'light', cacheKey: 'k' }
+    const keyed: LayoutRequest = { type: 'layout', id: 2, canvas, theme: 'light', form: 'keyed' }
+    // @ts-expect-error a keyed request may not carry a cache key
+    const both: LayoutRequest = { ...keyed, cacheKey: 'k' }
+    expect([plain.cacheKey, keyed.cacheKey, both.form]).toEqual(['k', undefined, 'keyed'])
+  })
 })
