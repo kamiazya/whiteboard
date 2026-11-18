@@ -1,7 +1,7 @@
 import { mdastRootSchema } from '@kamiazya/whiteboard-model/mdast'
 import { parseMarkdownBody } from '../../markdown/pipeline.js'
 import { toWellFormed } from '../frontmatter-oracle/oracle.js'
-import { generated, type Input, PAST_BOUND_PREFIX, RANDOM_COUNT, SEED } from './corpus.js'
+import { type Input, PAST_BOUND_PREFIX, RANDOM_COUNT, SEED } from './corpus.js'
 
 /**
  * The answers recorded from `parseMarkdownBody` that the Rust parser is held
@@ -61,12 +61,3 @@ export const meta = (): Meta => ({
 
 /** Recorded inputs that are data rather than generated: repository text and the spec examples. */
 export const isFrozen = (id: string): boolean => /^(md:|okf|cv|cm#|gfm#)/.test(id)
-
-export function record(frozen: Input[]): (Meta | Case)[] {
-  const answered = (input: Input): Case => {
-    const t = toWellFormed(input.t)
-    const { h, tree } = answer(t)
-    return withTree(input.i) ? { i: input.i, t, h, m: tree } : { i: input.i, t, h }
-  }
-  return [meta(), ...frozen.map(answered), ...generated().map(answered)]
-}
