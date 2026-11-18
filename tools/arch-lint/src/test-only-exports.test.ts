@@ -203,12 +203,18 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/canvas-render/src/refusal.ts#refusalScene':
+    "the TypeScript notice drawing, which no surface asks since the refusal is the core's notice (`refusalThroughCore`, ADR-0054 A3.5): kept as the oracle core-notice.rust.test.ts, canvas-switch.test.ts and markdown-switch.test.ts hold the core to, until A3.6 freezes its outputs into a recording and deletes it",
+  'packages/canvas-render/src/svg/backend.ts#renderSceneToSvg':
+    "the TypeScript SVG backend, which no surface asks since every picture is the core's (ADR-0054 A3): kept as the oracle core-picture.rust.test.ts, core-picture-web.rust.test.ts and core-notice.rust.test.ts hold the core's SVG to, until A3.6 freezes svg.jsonl and deletes it",
+  'packages/canvas-render/src/svg/keyed.ts#renderSceneToKeyedSvg':
+    "the keyed form of `renderSceneToSvg`, no surface asking it since the editor's keyed picture is the core's: the oracle core-picture-web.rust.test.ts and core-notice.rust.test.ts hold the keyed projection to, until A3.6 deletes the backend",
   'packages/canvas-render/src/layout/spatial-canvas.ts#layoutSpatialCanvasWithAnchors':
     "a canvas's layout with no picture: every web surface now asks the core for its picture in the same call (`layoutSpatialCanvasPicture` / `layoutSpatialCanvasKeyedPicture`, ADR-0054 A3.3), and the web's browser tests read the scene and anchors alone through it — drag-frame-budget's layout-alone rows and the host-measure benches",
   'packages/canvas-render/src/layout/spatial-canvas.ts#layoutSpatialEdges':
     "the drag overlay's edge layer alone, with no picture: the overlay itself draws through `layoutSpatialEdgesPicture` (ADR-0054 A3.2), whose layer core-picture-web.rust.test.ts holds equal to this one, and live-drag-parity.rust.test.ts holds this layer to the committed layout's edges; the reference both judgements are stated against, and drag-frame-budget's layer-alone row",
   'packages/canvas-render/src/core-picture.ts#layoutNoticePicture':
-    "a refusal's notice drawn by the core, asked through the query entry: its production caller is the surface switch that follows the TypeScript notice's deletion, and until then core-notice.rust.test.ts holds it to `refusalScene` and the TypeScript backend",
+    "a refusal's notice drawn by the core, asked through the query entry: no surface asks the notice alone (a refusal reaches every surface through the layout's own call, `refusalThroughCore`), and core-notice.rust.test.ts holds it to `refusalScene` and the TypeScript backend",
   'packages/canvas-render/src/core-picture.ts#layoutNoticeKeyedPicture':
     'the keyed form of `layoutNoticePicture`, for the editor surface that draws a refusal as keyed groups; held to `renderSceneToKeyedSvg` by core-notice.rust.test.ts until that surface asks it',
   'packages/canvas-render/src/layout/markdown-switch.ts#layoutCommentDocument':

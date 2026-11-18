@@ -19,7 +19,7 @@ import {
   isFrame,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import { queried } from './layout/query-switch.js'
+import { queried } from './layout/core-query.js'
 import type { LayoutCore } from './layout-core.js'
 import type { LayoutRefusal } from './refusal.js'
 

@@ -11,7 +11,6 @@ import type {
   CanvasLayoutRequest,
   CoreChange,
   CoreDegradation,
-  CoreKeyedSvg,
   CoreProposal,
   CoreSvgAsk,
   CoreThread,
@@ -20,11 +19,13 @@ import type { EdgeAnchorPair } from '../edge-routing.js'
 import { highlightCode } from '../highlight/lowlight.js'
 import { measureSpecOf } from '../measure.js'
 import { type ReferenceExtra, wireOfSeams } from '../references/wire.js'
-import { type LayoutRefusal, refusalScene } from '../refusal.js'
+import type { LayoutRefusal } from '../refusal.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { bundledThemeModeOf, type SpatialThemeMode } from '../theme/spatial-theme.js'
+import { askedPicture, type MaybePictured } from './asked-picture.js'
 import { resolveThemeTable } from './canvas-theme.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout-options.js'
+import { refusalThroughCore } from './notice-switch.js'
 
 // The whole layout through the Rust core (ADR-0054 step 7): the request a
 // layout's options make, and what a surface is answered with. The core is the
@@ -63,26 +64,6 @@ function expansion(
 const usesFragmentTable = (
   options: Pick<SpatialLayoutOptions, 'fragments' | 'onFragmentsAsked'>,
 ): boolean => options.fragments !== undefined || options.onFragmentsAsked !== undefined
-
-/** What the core drew for a request asking `ask`: the document's text, or its keyed projection. */
-type AskedPicture = { readonly svg: string } | { readonly keyed: CoreKeyedSvg }
-
-/** What a layout through the core may carry beside its scene: the picture it asked for, in either form. */
-export type MaybePictured = { readonly svg?: string; readonly keyed?: CoreKeyedSvg }
-
-/**
- * The core's picture for a request that asked one, in the form it asked for;
- * an answer without it is a defect in the core.
- */
-export function askedPicture(
-  ask: CoreSvgAsk,
-  answer: { readonly svg?: string; readonly keyed?: CoreKeyedSvg },
-): AskedPicture {
-  const { svg, keyed } = answer
-  if (ask.form === 'keyed' && keyed !== undefined) return { keyed }
-  if (ask.form !== 'keyed' && svg !== undefined) return { svg }
-  throw new Error('the core answered no SVG in the form a layout asked for')
-}
 
 export const hasData = (extra: ReferenceExtra): boolean =>
   extra.canvas === undefined && extra.markdown === undefined
@@ -207,7 +188,7 @@ export function hostEvent(event: CoreDegradation): SpatialLayoutDegradation {
 /**
  * A canvas laid out by `options.core`. The core's degradations reach `onDegrade` and the
  * fragment sources it asked for `onFragmentsAsked`; what it refused (owner
- * decision q81, D7) is drawn as the refusal (`refusalScene`) and told to
+ * decision q81, D7) is drawn as its notice by the core (`refusalThroughCore`) and told to
  * `onRefused`. A core that throws throws to the caller: there is
  * nothing to answer in its place.
  */
@@ -236,28 +217,29 @@ export function canvasThroughCore(
     options.measure,
     options.contentCache,
   )
-  if ('refused' in answer) return drawnRefusal(answer.refused, stored, request.mode, options)
+  if ('refused' in answer) return drawnRefusal(answer.refused, stored, request.mode, options, svg)
   for (const event of answer.degradations) options.onDegrade?.(hostEvent(event))
   if (answer.fragmentsAsked?.length) options.onFragmentsAsked?.(answer.fragmentsAsked)
   const laid = { scene: answer.scene, anchors: answer.anchors }
   return svg === undefined ? laid : { ...laid, ...askedPicture(svg, answer) }
 }
 
-/** A refusal told to `onRefused`, and drawn where the board's boxes are. */
+/**
+ * A refusal told to `onRefused`, and drawn by the core as its notice where the
+ * board's boxes are, in the envelope and form `svg` names.
+ */
 function drawnRefusal(
   refused: LayoutRefusal,
   stored: SpatialCanvas,
   mode: SpatialThemeMode,
   options: SpatialLayoutOptions,
-): LaidOutCanvas {
+  svg: CoreSvgAsk | undefined,
+): LaidOutCanvas & MaybePictured {
   options.onRefused?.(refused)
   const at = topLeftOf(stored)
-  const scene = refusalScene(refused, {
-    measure: options.measure,
-    mode,
-    ...(at === undefined ? {} : { at }),
-  })
-  return { scene, anchors: new Map() }
+  const { measure, core } = options
+  const notice = { measure, mode, ...(at === undefined ? {} : { at }) }
+  return { ...refusalThroughCore(core, refused, notice, svg), anchors: new Map() }
 }
 
 /**

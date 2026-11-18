@@ -3,7 +3,8 @@ import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
 import type { Point } from '../generated/geometry.zod.js'
 import type { LayoutCore } from '../layout-core.js'
 import type { QueryBox, QueryNumbers } from '../query-core.js'
-import { numbersOf, queried, tupleOf } from './query-switch.js'
+import { queried } from './core-query.js'
+import { numbersOf, tupleOf } from './query-switch.js'
 
 // The geometry an editor asks of the layout on its own (ADR-0054 step 7,
 // S18d), each answered by `core`'s query entry: where an edge's label goes and

@@ -1,8 +1,9 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { BoundingBox, Scene, SceneNode } from '@kamiazya/whiteboard-scene'
+import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import type { CoreKeyedSvg, CoreSvgAsk } from './canvas-core.js'
 import type { EdgeAnchorPair } from './edge-routing.js'
-import { canvasThroughCore, type MaybePictured } from './layout/canvas-switch.js'
+import type { MaybePictured } from './layout/asked-picture.js'
+import { canvasThroughCore } from './layout/canvas-switch.js'
 import type { SpatialLayoutOptions } from './layout/layout-options.js'
 import {
   type CommentDocumentOptions,
@@ -10,23 +11,16 @@ import {
   type MarkdownDocumentOptions,
   noteThroughCore,
 } from './layout/markdown-switch.js'
-import {
-  edgeLayerThroughCore,
-  type NoticeOptions,
-  type NoticeWords,
-  noticeThroughCore,
-} from './layout/query-switch.js'
+import { type NoticeOptions, type NoticeWords, noticeThroughCore } from './layout/notice-switch.js'
+import { edgeLayerThroughCore } from './layout/query-switch.js'
 import type { LayoutCore } from './layout-core.js'
-import { sceneBounds, sceneDocumentBounds } from './scene-bounds.js'
-import { renderSceneToSvg, type SvgDocumentOptions } from './svg/backend.js'
-import { renderSceneToKeyedSvg } from './svg/keyed.js'
 import { stripXmlInvalidChars } from './xml-escape.js'
 
 // A picture in one core call (ADR-0054 A2, A3): the layout's request carries
 // the envelope its SVG is drawn in, and the core answers the SVG (or its keyed
-// projection) beside the scene, drawn by its own backend. What the core does
-// not draw is a refusal, whose scene this side builds (`refusalScene`), so
-// this side draws that one, in the same envelope and form.
+// projection) beside the scene, drawn by its own backend. A refused layout is
+// the core's notice, drawn the same way; only a realm with no core to answer
+// even that is left without a picture, and answers an empty picture.
 
 /** A laid-out scene and its SVG. */
 export interface PicturedScene {
@@ -43,60 +37,36 @@ export interface KeyedPicture {
 /** The envelope a picture is asked in; its form is the function's to name. */
 type CorePictureAsk = Omit<CoreSvgAsk, 'form'>
 
-const EMPTY: BoundingBox = { x: 0, y: 0, w: 0, h: 0 }
-
-/** The view box `ask` names, resolved against `scene` as the core resolves it. */
-function viewBoxOf(viewBox: NonNullable<CoreSvgAsk['viewBox']>, scene: Scene): BoundingBox {
-  if (viewBox === 'document') return scene.nodes.length === 0 ? EMPTY : sceneDocumentBounds(scene)
-  if (viewBox.of === 'document') return sceneDocumentBounds(scene, viewBox.margin)
-  const bounds = sceneBounds(scene)
-  const margin = viewBox.margin ?? 0
-  if (!Number.isFinite(margin) || margin <= 0) return bounds
-  return {
-    x: bounds.x - margin,
-    y: bounds.y - margin,
-    w: bounds.w + margin * 2,
-    h: bounds.h + margin * 2,
-  }
-}
-
 /**
- * `ask` as `renderSceneToSvg`'s options over `scene`: the envelope the core
- * draws the same scene in, its view box resolved against the scene.
+ * The picture drawn where no core drew one: nothing, sized to nothing so it
+ * takes no room where it lands. A realm with no core answers it for a refusal,
+ * and the core answers no picture for an edge layer it refused.
  */
-function svgDocumentOptionsOf(ask: CoreSvgAsk, scene: Scene): SvgDocumentOptions {
-  const { viewBox, width, height, padding, background, textFill, rasterScale, legend } = ask
-  return {
-    ...(viewBox === undefined ? {} : { viewBox: viewBoxOf(viewBox, scene) }),
-    ...(width === undefined ? {} : { width }),
-    ...(height === undefined ? {} : { height }),
-    ...(padding === undefined ? {} : { padding }),
-    ...(background === undefined ? {} : { background }),
-    ...(textFill === undefined ? {} : { textFill }),
-    ...(rasterScale === undefined ? {} : { rasterScale }),
-    ...(legend === undefined ? {} : { legend }),
-  }
+const NOTHING_OPEN = '<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0">'
+const NOTHING_SVG = `${NOTHING_OPEN}</svg>`
+const NOTHING_KEYED: CoreKeyedSvg = {
+  svg: NOTHING_SVG,
+  rootOpen: NOTHING_OPEN,
+  rootAttrs: { xmlns: 'http://www.w3.org/2000/svg', width: '0', height: '0' },
+  groups: [],
 }
 
 /** What a layout through the core answered: its scene, and the picture the core drew of it, if any. */
 type Laid = { readonly scene: Scene } & MaybePictured
 
 /**
- * The SVG the core drew, or a refusal's drawn here in the same envelope. Only
- * a refusal carries no picture; one in the other form is a defect in the asking.
+ * The SVG the core drew; `NOTHING_SVG` where it drew none. A picture in the
+ * other form is a defect in the asking.
  */
-function pictured(laid: Laid, ask: CorePictureAsk): PicturedScene {
+function pictured(laid: Laid): PicturedScene {
   if (laid.keyed !== undefined) throw new Error('the core answered a keyed projection, not an SVG')
-  const svg = laid.svg ?? renderSceneToSvg(laid.scene, svgDocumentOptionsOf(ask, laid.scene))
-  return { scene: laid.scene, svg }
+  return { scene: laid.scene, svg: laid.svg ?? NOTHING_SVG }
 }
 
-/** The keyed projection the core drew, or a refusal's drawn here; as `pictured`. */
-function keyedPictured(laid: Laid, ask: CorePictureAsk): KeyedPicture {
+/** The keyed projection the core drew; as `pictured`. */
+function keyedPictured(laid: Laid): KeyedPicture {
   if (laid.svg !== undefined) throw new Error('the core answered an SVG, not a keyed projection')
-  const keyed =
-    laid.keyed ?? renderSceneToKeyedSvg(laid.scene, svgDocumentOptionsOf(ask, laid.scene))
-  return { scene: laid.scene, keyed }
+  return { scene: laid.scene, keyed: laid.keyed ?? NOTHING_KEYED }
 }
 
 /**
@@ -127,7 +97,7 @@ export function layoutSpatialCanvasPicture(
   svg: CorePictureAsk,
 ): PicturedScene & { readonly anchors: ReadonlyMap<string, EdgeAnchorPair> } {
   const laid = canvasThroughCore(canvas, options, wireAsk(svg))
-  return { ...pictured(laid, svg), anchors: laid.anchors }
+  return { ...pictured(laid), anchors: laid.anchors }
 }
 
 /**
@@ -140,7 +110,7 @@ export function layoutSpatialCanvasKeyedPicture(
   svg: CorePictureAsk,
 ): KeyedPicture & { readonly anchors: ReadonlyMap<string, EdgeAnchorPair> } {
   const laid = canvasThroughCore(canvas, options, keyedAsk(svg))
-  return { ...keyedPictured(laid, svg), anchors: laid.anchors }
+  return { ...keyedPictured(laid), anchors: laid.anchors }
 }
 
 /**
@@ -153,7 +123,7 @@ export function layoutMarkdownDocumentPicture(
   svg: CorePictureAsk,
 ): PicturedScene | undefined {
   const laid = noteThroughCore(body, options, wireAsk(svg))
-  return laid === undefined ? undefined : pictured(laid, svg)
+  return laid === undefined ? undefined : pictured(laid)
 }
 
 /** `layoutMarkdownDocumentPicture` answered as the keyed projection. */
@@ -163,7 +133,7 @@ export function layoutMarkdownDocumentKeyedPicture(
   svg: CorePictureAsk,
 ): KeyedPicture | undefined {
   const laid = noteThroughCore(body, options, keyedAsk(svg))
-  return laid === undefined ? undefined : keyedPictured(laid, svg)
+  return laid === undefined ? undefined : keyedPictured(laid)
 }
 
 /** `layoutCommentDocument`'s scene with its keyed projection, both from ONE core call. */
@@ -172,13 +142,13 @@ export function layoutCommentDocumentKeyedPicture(
   options: CommentDocumentOptions,
   svg: CorePictureAsk,
 ): KeyedPicture {
-  return keyedPictured(commentThroughCore(body, options, keyedAsk(svg)), svg)
+  return keyedPictured(commentThroughCore(body, options, keyedAsk(svg)))
 }
 
 /**
  * `layoutSpatialEdges`'s edge layer with its SVG, both from ONE core call: the
  * layer drawn as a scene of its own (no legend) in the envelope `svg` names.
- * A layer the core refused is no edges, drawn here in the same envelope.
+ * A layer the core refused is no edges, and no picture.
  */
 export function layoutSpatialEdgesPicture(
   canvas: SpatialCanvas,
@@ -186,13 +156,13 @@ export function layoutSpatialEdgesPicture(
   svg: CorePictureAsk,
 ): { readonly nodes: SceneNode[]; readonly svg: string } {
   const { nodes, ...picture } = edgeLayerThroughCore(canvas, options, wireAsk(svg))
-  const { svg: drawn } = pictured({ scene: { nodes }, ...picture }, svg)
+  const { svg: drawn } = pictured({ scene: { nodes }, ...picture })
   return { nodes, svg: drawn }
 }
 
 /**
  * A refusal's notice, words and all, drawn by the core: one box and its text
- * runs (`refusalScene`'s drawing, which the core repeats), with its SVG, both
+ * runs, with its SVG, both
  * from ONE core call. The words stay `refusalCopy`'s, so every surface that
  * words a refusal says the same thing.
  */
@@ -203,7 +173,7 @@ export function layoutNoticePicture(
   svg: CorePictureAsk,
 ): PicturedScene {
   const { nodes, ...picture } = noticeThroughCore(core, words, options, wireAsk(svg))
-  return pictured({ scene: { nodes }, ...picture }, svg)
+  return pictured({ scene: { nodes }, ...picture })
 }
 
 /** `layoutNoticePicture` answered as the keyed projection. */
@@ -214,5 +184,5 @@ export function layoutNoticeKeyedPicture(
   svg: CorePictureAsk,
 ): KeyedPicture {
   const { nodes, ...picture } = noticeThroughCore(core, words, options, keyedAsk(svg))
-  return keyedPictured({ scene: { nodes }, ...picture }, svg)
+  return keyedPictured({ scene: { nodes }, ...picture })
 }

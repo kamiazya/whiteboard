@@ -129,7 +129,7 @@ export interface SpatialLayoutOptions {
    * Told when the core REFUSED the layout (owner decision q81, D7): a request
    * past one of its caps, a number its answer cannot spell, or a host
    * measurer that did not answer. The scene answered is then the
-   * refusal (`refusalScene`), so a caller that also says why in words (the
+   * refusal's notice (`refusalThroughCore`), so a caller that also says why in words (the
    * daemon's log, `wb_scene_render`'s text) learns it here. Omitted, the
    * scene is the same.
    */

@@ -11,7 +11,8 @@ import { measureSpecOf } from '../measure.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { bundledThemeModeOf, createSpatialTheme } from '../theme/spatial-theme.js'
 import { CoreUnaskable } from './canvas-switch.js'
-import { numbersOf, queried, tupleOf } from './query-switch.js'
+import { queried } from './core-query.js'
+import { numbersOf, tupleOf } from './query-switch.js'
 
 /** Metrics do not vary by UI mode, so the light theme stands for both. */
 const DEFAULT_APPEARANCE = createSpatialTheme({ mode: 'light' })

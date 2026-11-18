@@ -59,7 +59,7 @@ describe.runIf(built)('the whole layout through the real core', () => {
   const lay = (canvas: SpatialCanvas, options: Omit<SpatialLayoutOptions, 'core'>) =>
     layoutSpatialCanvasWithAnchors(canvas, {
       ...options,
-      core: fakeLayoutCore({ routing: real, layout: counting }),
+      core: fakeLayoutCore({ routing: real, layout: counting, query: real }),
     })
 
   const cases = layoutCases(8)
