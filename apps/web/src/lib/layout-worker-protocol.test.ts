@@ -1,13 +1,21 @@
 // @vitest-environment node
 /**
  * The wire's whole claim is that everything on it is structured-cloneable
- * and that the seams rebuilt from it answer as the seams it was made from.
+ * and that the layout drawn over the seams rebuilt from it is the one the
+ * original wire draws.
  * A field that is a function would throw in `structuredClone` — which is
  * exactly the failure a real `postMessage` would raise, and the one this
  * file exists to catch before a worker does.
  */
 
-import { referenceSeamsFromWire, referenceWire } from '@kamiazya/whiteboard-canvas-render'
+import {
+  constantRatioMeasureText,
+  createSpatialTheme,
+  layoutSpatialCanvas,
+  referenceSeamsFromWire,
+  referenceWire,
+} from '@kamiazya/whiteboard-canvas-render'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -46,10 +54,28 @@ describe('LayoutRequest', () => {
     expect(crossed).toEqual(request)
 
     const seams = referenceSeamsFromWire(crossed.references as typeof wire)
-    expect(seams.resolveEmbed(NOTE_ID)?.title).toBe('Note')
     expect(seams.resolveTitle(NOTE_ID)).toBe('Note')
+    // Roomy nodes, so the note's prose is not cut to a few characters.
+    const roomy: SpatialCanvas = {
+      ...canvas,
+      nodes: canvas.nodes.map((node) => ({ ...node, width: 400, height: 300 })),
+    }
+    const draw = (references: typeof seams) =>
+      JSON.stringify(
+        layoutSpatialCanvas(roomy, {
+          core: testLayoutCore(),
+          measure: constantRatioMeasureText,
+          appearance: createSpatialTheme({ mode: 'light' }),
+          expandFileNode: () => true,
+          references,
+        }),
+      )
+    const drawn = draw(seams)
+    expect(drawn).toBe(draw(referenceSeamsFromWire(wire)))
+    // The embed mixed into prose stays a link run, labelled with the title.
+    expect(drawn).toContain('"text":"Note"')
     // An empty canvas is a card for a file node, with the surface's label.
-    expect(seams.resolveReference('doc-1')).toEqual({ label: 'Doc one' })
+    expect(drawn).toContain('Doc one')
   })
 
   it('never names a stored reply on a keyed request, which the store could answer only in the plain form', () => {

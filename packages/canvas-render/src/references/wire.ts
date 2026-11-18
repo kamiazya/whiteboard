@@ -13,7 +13,7 @@ import { imageTargets, type ReferenceSeeds, referenceTargets, writtenTargets } f
  */
 export type ReferenceExtra = Partial<ResolvedReference> & {
   /**
-   * The caller is still loading this reference (`isLoading`): an embed of it
+   * The caller is still loading this reference: an embed of it
    * draws the placeholder that says so. A wire cannot carry a function, so
    * "loading" travels as this mark.
    */
@@ -148,19 +148,9 @@ const WIRES = new WeakMap<ReferenceSeams, ReferenceWire>()
 export function referenceSeamsFromWire(wire: ReferenceWire): ReferenceSeams {
   const aliases = new Map(wire.aliases)
   const titles = new Map(wire.titles)
-  const pending = new Set<string>()
-  const extras = new Map<string, ReferenceExtra>()
-  for (const [ref, { pending: loading, ...extra }] of wire.extras) {
-    if (loading === true) pending.add(ref)
-    // The last of a key wins, an empty extra included; a mark that only says
-    // a target is loading carries no extra of its own.
-    if (loading !== true || Object.keys(extra).length > 0) extras.set(ref, extra)
-  }
   const seams = referenceSeams(new Map(wire.entries), {
     resolveAlias: (alias) => aliases.get(alias) ?? null,
     resolveTitle: (documentId) => titles.get(documentId),
-    extra: (ref) => extras.get(ref),
-    pending,
   })
   WIRES.set(seams, wire)
   return seams

@@ -606,17 +606,13 @@ backend's x-transform-boundary convention (decision #5).
 14. **`references/` is the one producer of the reference seams.**
     `LoadedReference` is the record a keeper answers for one referenced
     document — name, raw body, canvas, each optional and independent, none
-    of them saying which KIND it is. `referenceSeams(graph, options)` reads
-    the graph of those records (keyed by the reference as written, `null`
-    for "looked up, nothing there") and builds `resolveAlias`,
-    `resolveTitle`, `resolveEmbed` and `resolveReference` together, so the
-    one rule that decides what a record is — a body means markdown, whatever
-    else it carries; only a bodiless record offers its canvas; a file node
-    draws an empty canvas as the card while an embed keeps its frame — is
-    applied identically to a file node and to a `![[embed]]`. A surface adds
-    what only it knows through `options.extra` (an image asset's URL, a
-    facet card) and hands the builder its own alias table and names, which
-    answer ahead of any load. `referenceTargets` is what to load (no
+    of them saying which KIND it is. `referenceSeams(graph, options)` builds
+    `resolveAlias` and `resolveTitle` over that graph (keyed by the reference
+    as written, `null` for "looked up, nothing there"); the bundle is read by
+    the Rust core through `wireOfSeams`, which parses the bodies itself, so
+    this package parses no markdown. A surface hands the builder its own
+    alias table and names, which answer ahead of any load, and its extras
+    (an image asset's URL, a facet card) ride the wire. `referenceTargets` is what to load (no
     pictures), `walkReferences` its loop; `overlayReferences`
     layers chrome (labels, dangling marks) for the layout worker and the main thread
     alike. Both layouts accept the bundle as `references`. `ReferenceWire` is the bundle as DATA — the graph

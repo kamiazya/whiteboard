@@ -10,11 +10,12 @@ import { describeThrown } from '@kamiazya/whiteboard-model'
  * committed change (add a node, drop a drag, edit text). Moving it here does
  * not make it faster; it stops it freezing the UI.
  *
- * Markdown is parsed HERE, with the same `parseMarkdownBody` the main thread
- * uses, so the whole per-commit block — parse plus layout — leaves the main
- * thread. This is only possible because vite.config.ts pins
- * decode-named-character-reference to its DOM-free entry; without the alias
- * this chunk throws `document is not defined` before handling a message.
+ * Markdown is parsed HERE too, by the layout core the worker runs, so the
+ * whole per-commit block — parse plus layout — leaves the main thread. The
+ * worker still reaches codec through its other imports, which is why
+ * vite.config.ts pins decode-named-character-reference to its DOM-free entry;
+ * without the alias this chunk throws `document is not defined` before
+ * handling a message.
  *
  * The one thing that would make this WRONG is a scene that differs from what
  * the main thread would have produced. Text measurement is where that would

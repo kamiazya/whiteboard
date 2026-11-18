@@ -1,62 +1,33 @@
-import {
-  CoreUnaskable,
-  constantRatioMeasureText,
-  layoutMarkdownDocument,
-  type MarkdownNoteRequest,
-  type ReferenceSeams,
-} from '@kamiazya/whiteboard-canvas-render'
-import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { RETIRED_PICTURE, RETIRED_PICTURE_LABEL } from '../lib/document-file-contract.js'
+import { askCore, rowOf, wireSeenByCore } from '../test-utils/core-wire.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { type ReferenceLoader, useReferenceSeams } from './use-reference-seams.js'
 
 const B = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 const C = '01BX5ZZKBKACTAV9WEVGEMMVS0'
 
-/** What `layoutMarkdownDocument` hands a core for `body` over `references`, or why it could not. */
-function askCore(body: string, references: ReferenceSeams) {
-  const asked: MarkdownNoteRequest[] = []
-  const core = fakeLayoutCore({
-    markdown: {
-      layoutMarkdown: (request) => {
-        // A note's layout only: a comment never reaches these surfaces.
-        if (request.kind === 'markdown') asked.push(request)
-        return { refused: { code: 'malformed', reason: 'recording' } }
-      },
-    },
-    // The refusal's notice is not what this records.
-    query: { layoutQuery: () => ({ refused: { code: 'malformed', reason: 'recording' } }) },
-  })
-  try {
-    layoutMarkdownDocument(body, {
-      measure: constantRatioMeasureText,
-      maxWidth: 400,
-      references,
-      core,
-    })
-  } catch (err) {
-    if (err instanceof CoreUnaskable) return { asked, unaskable: err.reason }
-    throw err
-  }
-  return { asked, unaskable: undefined }
-}
+/** What the core is handed for one reference: the loaded record and the surface's extra. */
+const seenOf = (seams: Parameters<typeof wireSeenByCore>[0], ref: string) =>
+  rowOf(wireSeenByCore(seams), ref)
 
 describe('useReferenceSeams', () => {
-  it('loads a directly embedded note and answers it through every seam', async () => {
+  it('loads a directly embedded note, which the core is handed raw with its name', async () => {
     const load = vi.fn<ReferenceLoader>(async (_target, id) =>
       id === B ? { documentId: B, body: 'embedded body', name: 'Note B' } : undefined,
     )
     const { result } = renderHook(() => useReferenceSeams({ body: `before\n\n![[${B}]]\n`, load }))
     await waitFor(() => {
-      expect(result.current.resolveEmbed(B)).toBeDefined()
+      expect(seenOf(result.current, B).record).toBeDefined()
     })
-    const embedded = result.current.resolveEmbed(B)
-    expect(embedded?.title).toBe('Note B')
-    expect(JSON.stringify(embedded)).toContain('embedded body')
+    expect(seenOf(result.current, B).record).toEqual({
+      documentId: B,
+      body: 'embedded body',
+      name: 'Note B',
+    })
     expect(result.current.resolveTitle(B)).toBe('Note B')
     expect(load).toHaveBeenCalledTimes(1)
   })
@@ -71,18 +42,18 @@ describe('useReferenceSeams', () => {
       return { documentId: B, body: 'embedded body', name: 'Note B' }
     })
     const { result } = renderHook(() => useReferenceSeams({ body: `![[${B}]]`, load }))
-    expect(result.current.isLoading?.(B)).toBe(true)
+    expect(seenOf(result.current, B).extra).toEqual({ pending: true })
     release?.()
-    await waitFor(() => expect(result.current.resolveEmbed(B)).toBeDefined())
-    expect(result.current.isLoading?.(B) ?? false).toBe(false)
+    await waitFor(() => expect(seenOf(result.current, B).record).toBeDefined())
+    expect(seenOf(result.current, B).extra?.pending).toBeUndefined()
   })
 
   it('does not report a target pending once it answered that nothing is there', async () => {
     const { result } = renderHook(() =>
       useReferenceSeams({ body: `![[${B}]]`, load: async () => undefined }),
     )
-    await waitFor(() => expect(result.current.isLoading?.(B) ?? false).toBe(false))
-    expect(result.current.resolveEmbed(B)).toBeUndefined()
+    await waitFor(() => expect(seenOf(result.current, B).extra?.pending).toBeUndefined())
+    expect(seenOf(result.current, B).record ?? null).toBeNull()
   })
 
   it('asks a rejected load again, so one failed store read does not blank an embed for good', async () => {
@@ -99,14 +70,14 @@ describe('useReferenceSeams', () => {
     })
     const { result } = renderHook(() => useReferenceSeams({ body: `![[${B}]]`, load }))
     await waitFor(() => {
-      expect(JSON.stringify(result.current.resolveEmbed(B))).toContain('embedded body')
+      expect(seenOf(result.current, B).record?.body).toBe('embedded body')
     })
     expect(asked).toBe(2)
     await expectLoggedFailure('reference load failed')
   })
 
-  it("answers an inline image's picture, which is the whole point of the seam", async () => {
-    // The preview draws `![](asset:…)` through `resolveReference`. Without a
+  it("hands the core an inline image's picture, which is the whole point of the seam", async () => {
+    // The preview draws `![](asset:…)` from the extra the wire carries. Without a
     // picture on this side the layout keeps the written path, so a workspace
     // attachment rendered as a broken image while the same asset drew fine
     // on a board.
@@ -119,7 +90,7 @@ describe('useReferenceSeams', () => {
       }),
     )
     await waitFor(() =>
-      expect(result.current.resolveReference('asset:pic')).toEqual({
+      expect(seenOf(result.current, 'asset:pic').extra).toEqual({
         image: { href: 'blob:asset:pic' },
       }),
     )
@@ -136,7 +107,7 @@ describe('useReferenceSeams', () => {
       }),
     )
     await waitFor(() =>
-      expect(result.current.resolveReference('asset:old')).toEqual({
+      expect(seenOf(result.current, 'asset:old').extra).toEqual({
         label: RETIRED_PICTURE_LABEL,
       }),
     )
@@ -150,7 +121,7 @@ describe('useReferenceSeams', () => {
     )
     const { result } = renderHook(() => useReferenceSeams({ body: `![[${B}]]`, load, loadImage }))
     await waitFor(() =>
-      expect(result.current.resolveReference('asset:deep')?.image).toEqual({
+      expect(seenOf(result.current, 'asset:deep').extra?.image).toEqual({
         href: 'blob:asset:deep',
       }),
     )
@@ -160,7 +131,8 @@ describe('useReferenceSeams', () => {
     const { result } = renderHook(() =>
       useReferenceSeams({ body: '![](asset:pic)', load: async () => undefined }),
     )
-    await waitFor(() => expect(result.current.resolveReference('asset:pic')).toBeUndefined())
+    await waitFor(() => expect(result.current.resolveAlias('asset:pic')).toBeNull())
+    expect(seenOf(result.current, 'asset:pic').extra).toBeUndefined()
   })
 
   it('a canvas target is answered as a canvas, unparsed', async () => {
@@ -173,9 +145,9 @@ describe('useReferenceSeams', () => {
     )
     const { result } = renderHook(() => useReferenceSeams({ body: `![[${B}]]\n`, load }))
     await waitFor(() => {
-      expect(result.current.resolveEmbed(B)).toBeDefined()
+      expect(seenOf(result.current, B).record).toBeDefined()
     })
-    expect(result.current.resolveEmbed(B)).toEqual({ title: 'Board', canvas })
+    expect(seenOf(result.current, B).record).toEqual({ documentId: B, canvas, name: 'Board' })
   })
 
   it('follows transitive references so nested bodies resolve too', async () => {
@@ -188,9 +160,9 @@ describe('useReferenceSeams', () => {
     )
     const { result } = renderHook(() => useReferenceSeams({ body: `![[${B}]]\n`, load }))
     await waitFor(() => {
-      expect(result.current.resolveEmbed(C)).toBeDefined()
+      expect(seenOf(result.current, C).record).toBeDefined()
     })
-    expect(JSON.stringify(result.current.resolveEmbed(C))).toContain('leaf body')
+    expect(seenOf(result.current, C).record?.body).toBe('leaf body')
   })
 
   it('resolves a path through the page table, loads by the id it names, and still answers the alias', async () => {
@@ -205,7 +177,7 @@ describe('useReferenceSeams', () => {
       }),
     )
     await waitFor(() => {
-      expect(result.current.resolveEmbed(B)).toBeDefined()
+      expect(seenOf(result.current, 'notes/named').record).toBeDefined()
     })
     expect(result.current.resolveAlias('notes/named')).toBe(B)
     expect(load).toHaveBeenCalledWith('notes/named', B)
@@ -225,9 +197,9 @@ describe('useReferenceSeams', () => {
       }),
     )
     await waitFor(() => {
-      expect(result.current.resolveEmbed(B)).toBeDefined()
+      expect(seenOf(result.current, B).record).toBeDefined()
     })
-    expect(result.current.resolveEmbed(B)?.title).toBe('Note B')
+    expect(wireSeenByCore(result.current)?.titles).toContainEqual([B, 'Note B'])
     expect(result.current.resolveTitle(B)).toBe('Note B')
   })
 
@@ -255,7 +227,7 @@ describe('useReferenceSeams', () => {
     await waitFor(() => {
       expect(result.current).not.toBe(before)
     })
-    expect(result.current.resolveEmbed(B)).toBeUndefined()
+    expect(seenOf(result.current, B).record ?? null).toBeNull()
     expect(load).toHaveBeenCalledTimes(1)
   })
 
@@ -277,7 +249,7 @@ describe('useReferenceSeams', () => {
     rerender({ body: `![[${B}]]\n\nmore typing` })
     release({ documentId: B, body: 'late but wanted' })
     await waitFor(() => {
-      expect(JSON.stringify(result.current.resolveEmbed(B))).toContain('late but wanted')
+      expect(seenOf(result.current, B).record?.body).toBe('late but wanted')
     })
     expect(load).toHaveBeenCalledTimes(1)
   })
@@ -298,8 +270,8 @@ describe('useReferenceSeams', () => {
         }),
       )
       await waitFor(() => {
-        expect(result.current.resolveEmbed(B)).toBeDefined()
-        expect(result.current.resolveReference('asset:pic')).toBeDefined()
+        expect(seenOf(result.current, B).record).toBeDefined()
+        expect(seenOf(result.current, 'asset:pic').extra).toBeDefined()
       })
       const { asked, unaskable } = askCore(body, result.current)
       expect(unaskable).toBeUndefined()
@@ -335,7 +307,11 @@ describe('useReferenceSeams', () => {
           load,
         }),
       )
-      await waitFor(() => expect(result.current.isLoading).toBeUndefined())
+      await waitFor(() =>
+        expect(wireSeenByCore(result.current)?.extras.some(([, extra]) => extra.pending)).toBe(
+          false,
+        ),
+      )
       expect(load).toHaveBeenCalledTimes(256)
       const wire = askCore(body, result.current).asked[0]?.references as {
         aliases: readonly (readonly [string, string])[]
@@ -350,7 +326,7 @@ describe('useReferenceSeams', () => {
     it('is a wire while a load is in flight, the target still loading marked pending', () => {
       const load = vi.fn<ReferenceLoader>(() => new Promise(() => undefined))
       const { result } = renderHook(() => useReferenceSeams({ body: `![[${B}]]`, load }))
-      expect(result.current.isLoading?.(B)).toBe(true)
+      expect(seenOf(result.current, B).extra).toEqual({ pending: true })
       const { asked, unaskable } = askCore(`![[${B}]]`, result.current)
       expect(unaskable).toBeUndefined()
       expect(asked).toHaveLength(1)
