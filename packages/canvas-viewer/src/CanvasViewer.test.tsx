@@ -145,7 +145,7 @@ describe('CanvasViewer', () => {
 /**
  * A standalone viewer must FRAME what it draws.
  *
- * `renderSceneToSvg` only emits the `width`/`height`/`viewBox` envelope when
+ * The core's SVG only emits the `width`/`height`/`viewBox` envelope when
  * asked for one — right for a scene composed into a larger document, and
  * wrong for every use of this component, which is a whole SVG in a browser.
  * Without it the root carries `xmlns` alone, the children keep raw scene

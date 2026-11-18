@@ -1,7 +1,7 @@
 /**
  * Makes a rendered document's SVG size itself from the box it is put in.
  *
- * `renderSceneToSvg` writes the document's OWN extent into `width`/`height`,
+ * The core's SVG writes the document's OWN extent into `width`/`height`,
  * which is right for an export and wrong for a thumbnail: a 2000px-wide
  * canvas dropped into a 24px row would draw 2000px wide and push the row off
  * the screen. Stripping the two attributes leaves the `viewBox`, so the

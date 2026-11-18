@@ -12,16 +12,16 @@ interface SceneSvgProps
 /**
  * The one place a scene's SVG string becomes DOM.
  *
- * Injecting it as markup is sound BECAUSE the string has exactly two
- * producers, both serializers this repo owns: the core's
- * (crates/core/canvas-render/src/svg/serialize.rs, over `xml_escape.rs`),
- * and canvas-render's TypeScript backend, which still draws a refused
- * layout's notice. Both escape `&`/`<`/`>` in text content plus `"`/`'` in
- * attribute values, so document text and attributes have no untrusted-HTML
- * path; this is not a sink that needs a sanitizer, and none must be added.
+ * Injecting it as markup is sound BECAUSE the string has one producer, a
+ * serializer this repo owns: the core's
+ * (crates/core/canvas-render/src/svg/serialize.rs, over `xml_escape.rs`), which
+ * draws every picture, a refused layout's notice included. It escapes
+ * `&`/`<`/`>` in text content plus `"`/`'` in attribute values, so document
+ * text and attributes have no untrusted-HTML path; this is not a sink that
+ * needs a sanitizer, and none must be added.
  *
  * One part is NOT escaped: an `svgFragment` (a formula or a diagram) is
- * emitted verbatim by both serializers, after a well-formedness check. That
+ * emitted verbatim by the serializer, after a well-formedness check. That
  * check is not what makes it safe — it is trusted because the HOST's own
  * renderer (MathJax, mermaid) produced it from the source, never because a
  * document supplied SVG. A host that fed a fragment table from anywhere else

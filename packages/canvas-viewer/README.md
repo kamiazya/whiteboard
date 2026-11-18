@@ -9,7 +9,7 @@ widget, HTML export). Private workspace package — never published to npm.
 - `<CanvasViewer>` — renders a `SpatialCanvas` (JSON Canvas 1.0 +
   `x-whiteboard`) to an inline SVG via canvas-render's
   `layoutSpatialCanvas` (the shared SpatialCanvas -> `Scene` builder, also
-  used by mcp-server's Node export) followed by `renderSceneToSvg`. It
+  used by mcp-server's Node export) whose picture the core draws in the same call. It
   draws in one of canvas-render's shared `createSpatialTheme` palettes,
   picked by the `theme` prop (`'light' | 'dark'`, default `'light'`): the
   viewer has no theme switch of its own, so its host says which mode it is

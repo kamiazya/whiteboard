@@ -1,6 +1,6 @@
 /**
  * A read-write editor for a `SpatialCanvas`, built on canvas-render's
- * `layoutSpatialCanvas` + `renderSceneToSvg` (the same scene builder
+ * `layoutSpatialCanvas` and the core's SVG of it (the same scene builder
  * canvas-viewer's read-only `CanvasViewer` uses — this is NOT a fourth
  * scene builder).
  *

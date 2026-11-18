@@ -16,29 +16,22 @@
  * Real browser: a `getAnimations()` entry is the claim, and jsdom cannot
  * make it.
  */
-import { renderSceneToKeyedSvg, type SceneNode } from '@kamiazya/whiteboard-canvas-render'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { type FixtureEntry, keyedFixture } from '../test-utils/keyed-render-fixture'
 import { mountKeyedSvg } from './keyed-svg-patcher'
 
-const node = (id: string, fill = '#fff'): SceneNode => ({
-  kind: 'shape',
-  id,
-  bbox: { x: 0, y: 0, w: 100, h: 60 },
-  appearance: { fill, stroke: '#333' },
-})
+const node = (id: string, fill = '#fff'): FixtureEntry => ({ key: id, x: 0, fill })
 
 /** A comment pin: the producer marks it, and this layer never guesses. */
-const pin = (id: string, fill = '#d97706', x = 200): SceneNode => ({
-  kind: 'shape',
-  id: `${id}/pin`,
-  commentChrome: true,
-  bbox: { x, y: 0, w: 20, h: 20 },
-  radius: 10,
-  appearance: { fill },
+const pin = (id: string, fill = '#d97706', x = 200): FixtureEntry => ({
+  key: `${id}/pin`,
+  x,
+  fill,
+  annotation: true,
 })
 
-const keyedOf = (nodes: SceneNode[]) =>
-  renderSceneToKeyedSvg({ nodes }, { padding: 4, viewBox: { x: 0, y: 0, w: 600, h: 400 } })
+const keyedOf = (entries: FixtureEntry[]) =>
+  keyedFixture(entries, { padding: 4, viewBox: { x: 0, y: 0, w: 600, h: 400 } })
 
 let mounted: HTMLElement | null = null
 afterEach(() => {
@@ -46,7 +39,7 @@ afterEach(() => {
   mounted = null
 })
 
-function mount(nodes: SceneNode[]) {
+function mount(nodes: FixtureEntry[]) {
   const container = document.createElement('div')
   document.body.appendChild(container)
   mounted = container

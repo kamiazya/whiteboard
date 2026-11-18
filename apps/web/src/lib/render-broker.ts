@@ -9,8 +9,8 @@
  * of a second path through the app.
  *
  * Why a producer per call is sound rather than sloppy: the key fully
- * determines the bytes. `renderSceneToSvg` is pinned byte-for-byte against the
- * same committed golden string in the node and browser projects, so two
+ * determines the bytes. The core's SVG is pinned byte-for-byte against the
+ * same recording natively and on wasm32, so two
  * producers for one key are interchangeable by construction. The same fact is
  * what will make two tabs racing to fill one persistent entry harmless.
  */

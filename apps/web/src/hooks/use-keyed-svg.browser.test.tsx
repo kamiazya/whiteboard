@@ -1,24 +1,15 @@
-import {
-  type KeyedSvgRender,
-  renderSceneToKeyedSvg,
-  type SceneNode,
-} from '@kamiazya/whiteboard-canvas-render'
+import type { KeyedSvgRender } from '@kamiazya/whiteboard-canvas-render'
 import { act, cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
+import { type FixtureEntry, keyedFixture } from '../test-utils/keyed-render-fixture'
 import { useKeyedSvg } from './use-keyed-svg'
 
 afterEach(cleanup)
 
-const shape = (id: string, x: number): SceneNode => ({
-  kind: 'shape',
-  id,
-  bbox: { x, y: 0, w: 100, h: 60 },
-  appearance: { fill: '#fff', stroke: '#333' },
-})
+const shape = (id: string, x: number): FixtureEntry => ({ key: id, x })
 
-const keyedOf = (nodes: SceneNode[]): KeyedSvgRender =>
-  renderSceneToKeyedSvg({ nodes }, { padding: 4 })
+const keyedOf = (entries: FixtureEntry[]): KeyedSvgRender => keyedFixture(entries, { padding: 4 })
 
 let setKeyed: (next: KeyedSvgRender) => void = () => {}
 let bumpUnrelated: () => void = () => {}
@@ -62,13 +53,11 @@ it('a parent re-render without a keyed change leaves the patched DOM untouched',
  * would otherwise fade out at the anchor the pointer just left, under the
  * preview holding it, for the length of the gesture.
  */
-const pin = (id: string): SceneNode => ({
-  kind: 'shape',
-  id: `${id}/pin`,
-  commentChrome: true,
-  bbox: { x: 300, y: 0, w: 20, h: 20 },
-  radius: 10,
-  appearance: { fill: '#d97706' },
+const pin = (id: string): FixtureEntry => ({
+  key: `${id}/pin`,
+  x: 300,
+  fill: '#d97706',
+  annotation: true,
 })
 
 let setSource: (next: string) => void = () => {}

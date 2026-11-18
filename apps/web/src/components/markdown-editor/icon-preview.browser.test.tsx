@@ -37,7 +37,7 @@ describe('an icon shortcode typed in a note', () => {
 
   /**
    * Asserted on the `<use>`'s closest painted ancestor, not on the element:
-   * the backend puts `stroke` on the reference and `hoist.ts` then lifts it
+   * the core puts `stroke` on the reference and then lifts it
    * onto a wrapping `<g>`, so reading the attribute off the `<use>` answers
    * null on output that is completely correct.
    */

@@ -457,8 +457,6 @@ function getHeadlessExporter(fontsDir: string): Promise<HeadlessExporter> {
   return exporter
 }
 
-// Named `renderSpatialCanvasTo*` (not `renderSceneTo*`) so a call site never
-// reads as, or shadows, canvas-render's own `renderSceneToSvg` export.
 export async function renderSpatialCanvasToPng(
   canvas: SpatialCanvas,
   fontsDir: string,

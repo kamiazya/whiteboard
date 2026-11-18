@@ -1,16 +1,16 @@
-import { renderSceneToKeyedSvg, type SceneNode } from '@kamiazya/whiteboard-canvas-render'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { type FixtureEntry, keyedFixture } from '../test-utils/keyed-render-fixture'
 import { mountKeyedSvg } from './keyed-svg-patcher'
 
-const shape = (id: string, x: number, fill = '#fff', y = 0): SceneNode => ({
-  kind: 'shape',
-  id,
-  bbox: { x, y, w: 100, h: 60 },
-  appearance: { fill, stroke: '#333' },
+const shape = (id: string, x: number, fill = '#fff', y = 0): FixtureEntry => ({
+  key: id,
+  x,
+  y,
+  fill,
 })
 
-const keyedOf = (nodes: SceneNode[]) =>
-  renderSceneToKeyedSvg({ nodes }, { padding: 4, viewBox: { x: 0, y: 0, w: 600, h: 400 } })
+const keyedOf = (entries: FixtureEntry[]) =>
+  keyedFixture(entries, { padding: 4, viewBox: { x: 0, y: 0, w: 600, h: 400 } })
 
 let mounted: HTMLElement | null = null
 afterEach(() => {
@@ -20,7 +20,7 @@ afterEach(() => {
 })
 
 /** FLIP needs real layout, so the container must be in the document. */
-function mount(nodes: SceneNode[]) {
+function mount(nodes: FixtureEntry[]) {
   const container = document.createElement('div')
   document.body.appendChild(container)
   mounted = container
