@@ -198,7 +198,31 @@ describe('the popup under the app theme', () => {
       expect(glyph).not.toBeNull()
       // Inside the row, before the label — the emoji rows' character column.
       expect(row.firstElementChild?.nextElementSibling?.contains(glyph)).toBe(true)
-      expect(glyph.getAttribute('stroke')).toBe('currentColor')
+      // The core's own picture of a one-icon note, framed on the icon: the
+      // body strokes it in currentColor, so it follows the row's colour.
+      expect(glyph.querySelector('use')?.getAttribute('href')).toBe('#wb-icon-star')
+      expect(glyph.querySelector('[stroke="currentColor"]')).not.toBeNull()
+      const box = glyph.getBoundingClientRect()
+      expect([box.width, box.height]).toEqual([16, 16])
+      // Framed on the icon's own square: the symbol fits the <use> box by
+      // meet, so the icon is that box's shorter side, centred in it.
+      const use = glyph.querySelector('use') as SVGUseElement
+      const [ux, uy, uw, uh] = ['x', 'y', 'width', 'height'].map((a) => Number(use.getAttribute(a)))
+      const side = Math.min(uw as number, uh as number)
+      const view = glyph.viewBox.baseVal
+      expect(view.width).toBeCloseTo(side, 3)
+      expect(view.height).toBeCloseTo(side, 3)
+      expect(view.x).toBeCloseTo((ux as number) + ((uw as number) - side) / 2, 3)
+      expect(view.y).toBeCloseTo((uy as number) + ((uh as number) - side) / 2, 3)
+      // A row the core could not draw for keeps the gutter, so its label
+      // starts where every other row's does.
+      const host = glyph.parentElement as HTMLElement
+      const label = row.querySelector('.cm-completionLabel') as HTMLElement
+      const labelLeft = label.getBoundingClientRect().left
+      host.replaceChildren()
+      const empty = host.getBoundingClientRect()
+      expect([empty.width, empty.height]).toEqual([16, 16])
+      expect(label.getBoundingClientRect().left).toBe(labelLeft)
     } finally {
       themed.destroy()
       host.remove()
