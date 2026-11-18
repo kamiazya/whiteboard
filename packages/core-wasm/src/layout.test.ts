@@ -108,6 +108,53 @@ describe('the whole layout over the artifact', () => {
     expect(layoutSpatialCanvas(both, errors, asking)).toMatchObject({ fragmentsAsked: asks, svg })
   })
 
+  it('reads a keyed SVG as the projection its groups make, after any fragment sources', () => {
+    const keyed = [
+      '<svg a="1">',
+      [
+        ['xmlns', 'x'],
+        ['width', '10'],
+      ],
+      [
+        ['#defs', '<defs/>'],
+        ['n', '<g data-wb-key="n"/>'],
+        ['c', '<g data-wb-key="c"/>', true],
+      ],
+    ]
+    const asking = { ...fake, svg: { viewBox: { of: 'scene' }, form: 'keyed' } } as LayoutRequest
+    const { glue, calls } = glueOf(JSON.stringify(['ok', { nodes: [] }, [], [], keyed]))
+    expect(layoutSpatialCanvas(glue, errors, asking)).toEqual({
+      scene: { nodes: [] },
+      anchors: new Map(),
+      degradations: [],
+      keyed: {
+        svg: '<svg a="1"><defs/><g data-wb-key="n"/><g data-wb-key="c"/></svg>',
+        rootOpen: '<svg a="1">',
+        rootAttrs: { xmlns: 'x', width: '10' },
+        groups: [
+          { key: '#defs', svg: '<defs/>' },
+          { key: 'n', svg: '<g data-wb-key="n"/>' },
+          { key: 'c', svg: '<g data-wb-key="c"/>', annotation: true },
+        ],
+      },
+    })
+    expect(calls[0]?.request).toEqual(
+      expect.arrayContaining(['svg', ['m', 'viewBox', ['m', 'of', 'scene'], 'form', 'keyed']]),
+    )
+    const asks = [{ kind: 'math', value: 'x' }]
+    const both = glueOf(JSON.stringify(['ok', { nodes: [] }, [], [], asks, keyed])).glue
+    expect(layoutSpatialCanvas(both, errors, asking)).toMatchObject({
+      fragmentsAsked: asks,
+      keyed: { rootOpen: '<svg a="1">' },
+    })
+    // An empty projection (no group) is one too, after an empty table's sources.
+    const bare = glueOf(JSON.stringify(['ok', { nodes: [] }, [], [], [], ['<svg>', [], []]])).glue
+    expect(layoutSpatialCanvas(bare, errors, asking)).toMatchObject({
+      fragmentsAsked: [],
+      keyed: { svg: '<svg></svg>', rootAttrs: {}, groups: [] },
+    })
+  })
+
   it('reads a decline as no answer: nothing declines since D7a', () => {
     expect(() => layoutSpatialCanvas(glueOf('["declined","body"]').glue, errors, fake)).toThrow(
       'layout_spatial_canvas malformed answer',
@@ -159,6 +206,19 @@ describe('the whole layout over the artifact', () => {
       ['["ok",{"nodes":[]},[],[],[],1]', 'answer'],
       ['["ok",{"nodes":[]},[],[],"<svg/>",[]]', 'answer'],
       ['["ok",{"nodes":[]},[],[],[],"<svg/>","<svg/>"]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],["<svg>",[],[]],"<svg/>"]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],["<svg>",[]]]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],["<svg>",[],[],[]]]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],[1,[],[]]]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],["<svg>",{},[]]]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],["<svg>",[["a"]],[]]]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],["<svg>",[["a",1]],[]]]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],["<svg>",[],{}]]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],["<svg>",[],[["k"]]]]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],["<svg>",[],[[1,"s"]]]]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],["<svg>",[],[["k",1]]]]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],["<svg>",[],[["k","s",false]]]]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],["<svg>",[],[["k","s",true,1]]]]', 'answer'],
       ['["declined",1]', 'answer'],
       ['{}', 'answer'],
     ] as const

@@ -95,6 +95,25 @@ describe('a markdown body over the artifact', () => {
     expect(lay(plain, comment)).toEqual({ scene, degradations: [] })
   })
 
+  it('reads the keyed SVG a comment asked for', () => {
+    const scene = { nodes: [] }
+    const comment = {
+      kind: 'comment',
+      body: 'hi',
+      maxWidth: 200,
+      measure: { kind: 'ratio' },
+      density: 'compact',
+      svg: { padding: 1, form: 'keyed' },
+    } as MarkdownLayoutRequest
+    const { glue, sent } = glueOf(JSON.stringify(['ok', scene, [], [], ['<svg>', [], []]]))
+    expect(lay(glue, comment)).toEqual({
+      scene,
+      degradations: [],
+      keyed: { svg: '<svg></svg>', rootOpen: '<svg>', rootAttrs: {}, groups: [] },
+    })
+    expect(JSON.stringify(sent[0])).toContain('"svg",["m","padding",1,"form","keyed"]')
+  })
+
   it('reads the SVG a note asked for, after the sources asked', () => {
     const scene = { nodes: [] }
     const asks = [{ kind: 'math', value: 'x' }]

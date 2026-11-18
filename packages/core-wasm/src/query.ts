@@ -5,13 +5,16 @@ import { LAYOUT_QUERY_CAPS } from './generated/input-caps.js'
 import type { HostMeasure } from './host-measure.js'
 import {
   drawnRefusal,
+  type KeyedSvg,
   type LayoutErrors,
   type LayoutEvent,
   type LayoutGlue,
   type LayoutRefusal,
   type LayoutRequest,
   layoutWith,
+  pictureOf,
   type Read,
+  type SvgAsk,
 } from './layout.js'
 import { wireOf } from './value-wire.js'
 
@@ -26,13 +29,16 @@ type Pair = readonly [number, number]
 
 /**
  * A query the core measures: the edge layer of a canvas request (`edges`,
- * every field a canvas request carries), the spatial digest of the scene it
- * lays out (`scene-digest`), a node's fitted height (`node-size`) or its
- * content's natural size (`node-content`).
+ * every field a canvas request carries, and an `svg` the layer is drawn in as
+ * a scene of its own), the spatial digest of the scene it lays out
+ * (`scene-digest`), a node's fitted height (`node-size`) or its content's
+ * natural size (`node-content`).
  */
-type MeasuredQuery = LayoutRequest & {
-  readonly query: 'edges' | 'scene-digest' | 'node-size' | 'node-content'
-}
+type MeasuredQuery = LayoutRequest &
+  (
+    | { readonly query: 'edges'; readonly svg?: SvgAsk }
+    | { readonly query: 'scene-digest' | 'node-size' | 'node-content' }
+  )
 
 /** A query that measures nothing: placement geometry over boxes and points. */
 type GeometryQuery =
@@ -82,7 +88,14 @@ type QueryNumbers = number | readonly QueryNumbers[]
  * answers as the query says, having no scene to draw a refusal in.
  */
 export type LayoutQueryAnswer =
-  | { readonly nodes: readonly SceneNode[]; readonly degradations: readonly LayoutEvent[] }
+  | {
+      readonly nodes: readonly SceneNode[]
+      readonly degradations: readonly LayoutEvent[]
+      /** For an `edges` query carrying `svg`: the layer as the core's SVG backend draws it. */
+      readonly svg?: string
+      /** For an `edges` query carrying `svg` with `form: 'keyed'`: its keyed projection. */
+      readonly keyed?: KeyedSvg
+    }
   | { readonly digest: string; readonly degradations: readonly LayoutEvent[] }
   | { readonly moves: readonly TidyWireMove[] }
   | { readonly numbers: readonly QueryNumbers[] }
@@ -121,9 +134,16 @@ function refusedDetail([kind, , b]: unknown[]): string {
 const readEdges: Read<LayoutQueryAnswer> = (parsed, errors) => {
   const refused = unanswered(parsed)
   if (refused !== undefined) return refused
-  const [kind, nodes, events] = parsed
-  if (kind === 'ok' && Array.isArray(nodes) && Array.isArray(events) && parsed.length === 3) {
-    return { nodes: nodes as SceneNode[], degradations: events as LayoutEvent[] }
+  const [kind, nodes, events, item, ...rest] = parsed
+  const picture = item === undefined ? {} : pictureOf(item)
+  if (
+    kind === 'ok' &&
+    Array.isArray(nodes) &&
+    Array.isArray(events) &&
+    picture !== undefined &&
+    rest.length === 0
+  ) {
+    return { nodes: nodes as SceneNode[], degradations: events as LayoutEvent[], ...picture }
   }
   throw errors.refused(OPERATION, 'malformed', refusedDetail(parsed))
 }

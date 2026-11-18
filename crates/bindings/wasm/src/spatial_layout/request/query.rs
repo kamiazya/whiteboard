@@ -35,6 +35,7 @@ use super::code::code_tokens_of;
 use super::fragments::fragments_of;
 use super::measure::measure_of;
 use super::options::{dark_of, style_of};
+use super::svg::svg_of;
 use super::{Comments, Request, Style, flag_of, request_from, strings_of};
 use crate::json_canvas_wire::{Fields, items_of, node_of, number_of, string_of};
 
@@ -196,7 +197,10 @@ fn node_size_of(f: &mut Fields<'_>, fitted: bool) -> Option<NodeSize> {
 
 fn query_from(f: &mut Fields<'_>, query: &str) -> Option<Query> {
     Some(match query {
-        "edges" => Query::Edges(Box::new(request_from(f)?)),
+        "edges" => {
+            let request = request_from(f)?;
+            Query::Edges(Box::new(Request { svg: f.field("svg", svg_of)?, ..request }))
+        }
         "scene-digest" => Query::SceneDigest(Box::new(request_from(f)?)),
         "node-size" => Query::NodeSize(Box::new(node_size_of(f, true)?)),
         "node-content" => Query::NodeSize(Box::new(node_size_of(f, false)?)),

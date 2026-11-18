@@ -8,8 +8,11 @@
 //! Out: one JSON text whose first element names the outcome, as the whole
 //! layout's does (`refused`, `needs`), and when answered:
 //!
-//! - `edges`: `["ok", nodes, degradations]`, the edge layer as `scene_wire`
-//!   writes scene nodes, and what the layout reported instead of failing;
+//! - `edges`: `["ok", nodes, degradations, svg?]`, the edge layer as
+//!   `scene_wire` writes scene nodes, what the layout reported instead of
+//!   failing, and, for a request carrying `svg`, the layer drawn as a scene of
+//!   its own in the envelope it names (the drag overlay's picture in the same
+//!   call), refused `input-too-large`/`svg` past `MAX_SVG_BYTES`;
 //! - `scene-digest`: `["ok", digest, degradations]`, the digest as the text
 //!   `SceneDigest::to_json` writes and the degradations as `edges` carries them;
 //! - every other query: `["ok", ...]`, each double the sixteen hex digits of
@@ -39,14 +42,14 @@ use whiteboard_canvas_render::tidy::{TidyMove, TidyNode, TidyOptions, tidy_nodes
 use whiteboard_det::math::js_max;
 use whiteboard_model::node_content::is_frame;
 use whiteboard_model::spatial::SpatialNode;
-use whiteboard_scene::{BoundingBox, SceneNode};
+use whiteboard_scene::{BoundingBox, Scene, SceneNode};
 
-use super::answer::{events, refused};
+use super::answer::{events, refused, svg_item};
 use super::host_measure::{Host, HostMeasurer};
-use super::request::{NodeSize, Query, Request, Run, query_of};
+use super::request::{NodeSize, Query, Request, Run, SvgAsk, query_of};
 use super::{
-    MAX_BODY_BYTES, MAX_ELEMENTS, MAX_FRAGMENTS, measured, past_canvas_caps, plugin, settled,
-    with_options,
+    MAX_BODY_BYTES, MAX_ELEMENTS, MAX_FRAGMENTS, MAX_SVG_BYTES, measured, past_canvas_caps, plugin,
+    settled, with_options,
 };
 use crate::input_caps::LAYOUT_QUERY;
 use crate::json_canvas_wire::json_value;
@@ -174,7 +177,7 @@ fn edges(request: &Request, host: Option<&dyn Host>) -> String {
     measured(&request.measure, host, None, |measure, _| {
         with_options(request, measure, None, plugin, &mut |options, wire, _| {
             let nodes = layout_spatial_edges(&request.canvas, options);
-            settled(wire, || edge_layer(&nodes, wire))
+            settled(wire, || edge_layer(nodes, wire, request.svg.as_ref()))
         })
     })
 }
@@ -215,16 +218,22 @@ fn finite_boxes(digest: &whiteboard_canvas_render::scene_digest::SceneDigest) ->
     digest.nodes.iter().all(|node| finite(&node.bbox)) && digest.free_regions.iter().all(finite)
 }
 
+/// The edge layer, what the layout reported, and, when `svg` asks for one,
+/// the layer drawn as a scene of its own (no legend) last.
 fn edge_layer(
-    nodes: &[SceneNode],
+    nodes: Vec<SceneNode>,
     wire: &whiteboard_canvas_render::references::WireHost<'_>,
+    svg: Option<&SvgAsk>,
 ) -> String {
-    let answer = Tree::List(vec![
-        Tree::Text("ok".to_owned()),
-        nodes_tree(nodes),
-        events(&wire.degradations()),
-    ]);
-    answer.to_json().unwrap_or_else(|_| refused("malformed", "non-finite"))
+    let mut items =
+        vec![Tree::Text("ok".to_owned()), nodes_tree(&nodes), events(&wire.degradations())];
+    if let Some(svg) = svg {
+        match svg_item(&Scene { nodes, legend: None }, svg, MAX_SVG_BYTES) {
+            Ok(item) => items.push(item),
+            Err(refusal) => return refusal,
+        }
+    }
+    Tree::List(items).to_json().unwrap_or_else(|_| refused("malformed", "non-finite"))
 }
 
 /// A node's size, or why it is not answered: refused past the bodies' or the

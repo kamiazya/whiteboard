@@ -46,7 +46,7 @@ use super::{
 pub(super) fn layout_markdown(request: &MarkdownRequest, host: Option<&dyn Host>) -> String {
     match &request.prose {
         Prose::Note(note) => layout_note(request, note, host),
-        Prose::Comment(density) => {
+        Prose::Comment(density, svg) => {
             if request.body.len() > MAX_BODY_BYTES {
                 return refused("input-too-large", "bodies");
             }
@@ -59,7 +59,7 @@ pub(super) fn layout_markdown(request: &MarkdownRequest, host: Option<&dyn Host>
                     .unwrap_or_else(|_| literal_root(&request.body));
                 let scene =
                     layout_comment_text(&root, request.max_width, *density, measure, &seams);
-                laid_out(&LaidOut { scene, anchors: Vec::new() }, &[], None, None)
+                laid_out(&LaidOut { scene, anchors: Vec::new() }, &[], None, svg.as_ref())
             })
         }
     }

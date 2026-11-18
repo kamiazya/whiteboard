@@ -88,21 +88,91 @@ export type LayoutAnswer =
       readonly fragmentsAsked?: readonly FragmentAsk[]
       /** For a request carrying `svg`: the scene as the core's SVG backend draws it. */
       readonly svg?: string
+      /** For a request carrying `svg` with `form: 'keyed'`: its keyed projection. */
+      readonly keyed?: KeyedSvg
     }
   | { readonly refused: LayoutRefusal }
 
 /**
  * The SVG a request asks to be answered with beside its scene: the core's
  * backend over the laid-out scene, with `renderSceneToSvg`'s envelope options.
- * `viewBox: 'document'` is the scene's document bounds (an empty box for a
- * scene with no node), since the caller has no scene to measure beforehand.
+ * The view box names no box, since the caller has no scene to measure
+ * beforehand: `'document'` is the scene's document bounds (an empty box for a
+ * scene with no node, the server's envelope), and `{of, margin?}` is
+ * `sceneBounds` (`of: 'scene'`) or `sceneDocumentBounds(scene, margin)`
+ * (`of: 'document'`) grown by `margin`, their 1x1 fallback included.
+ * `form: 'keyed'` answers the keyed projection instead of the document.
  */
-interface SvgAsk {
-  readonly viewBox?: 'document'
+export interface SvgAsk {
+  readonly viewBox?: 'document' | { readonly of: 'scene' | 'document'; readonly margin?: number }
+  readonly width?: number
+  readonly height?: number
   readonly padding?: number
   readonly background?: string
   readonly textFill?: string
   readonly rasterScale?: number
+  readonly legend?: 'omit'
+  readonly form?: 'keyed'
+}
+
+/** One group of a keyed projection; `annotation` marks the annotation layer's. */
+interface KeyedGroup {
+  readonly key: string
+  readonly svg: string
+  readonly annotation?: true
+}
+
+/**
+ * A keyed projection, as canvas-render's `KeyedSvgRender` holds one: the
+ * document (rebuilt here as the root, the groups and the close, which is what
+ * it is), the root's open tag and attributes, and the groups.
+ */
+export interface KeyedSvg {
+  readonly svg: string
+  readonly rootOpen: string
+  readonly rootAttrs: Readonly<Record<string, string>>
+  readonly groups: readonly KeyedGroup[]
+}
+
+const isPair = (v: unknown): v is [string, string] =>
+  Array.isArray(v) && v.length === 2 && typeof v[0] === 'string' && typeof v[1] === 'string'
+
+function groupOf(row: unknown): KeyedGroup | undefined {
+  if (!Array.isArray(row) || typeof row[0] !== 'string' || typeof row[1] !== 'string') {
+    return undefined
+  }
+  if (row.length === 2) return { key: row[0], svg: row[1] }
+  return row.length === 3 && row[2] === true
+    ? { key: row[0], svg: row[1], annotation: true }
+    : undefined
+}
+
+/** The keyed projection the core answered as `[rootOpen, attrs, groups]`, or undefined when it is not one. */
+function keyedOf(item: unknown): KeyedSvg | undefined {
+  if (!Array.isArray(item) || item.length !== 3) return undefined
+  const [rootOpen, attrs, rows] = item as unknown[]
+  if (typeof rootOpen !== 'string' || !Array.isArray(attrs) || !attrs.every(isPair)) {
+    return undefined
+  }
+  if (!Array.isArray(rows)) return undefined
+  const groups = rows.map(groupOf)
+  if (groups.includes(undefined)) return undefined
+  const read = groups as KeyedGroup[]
+  return {
+    svg: `${rootOpen}${read.map((group) => group.svg).join('')}</svg>`,
+    rootOpen,
+    rootAttrs: Object.fromEntries(attrs),
+    groups: read,
+  }
+}
+
+/** An answer's trailing SVG item: the document's text, or a keyed projection. */
+export function pictureOf(
+  item: unknown,
+): { readonly svg: string } | { readonly keyed: KeyedSvg } | undefined {
+  if (typeof item === 'string') return { svg: item }
+  const keyed = keyedOf(item)
+  return keyed === undefined ? undefined : { keyed }
 }
 
 /** The glue calls this module makes. */
@@ -294,19 +364,20 @@ function answerOf(parsed: unknown[], errors: LayoutErrors): LayoutAnswer {
   const refused = drawnRefusal(parsed)
   if (refused !== undefined) return { refused }
   // After the degradations: the fragment sources, when the request carried a
-  // table, then the SVG, when it asked for one; each at most once, in that order.
-  const d = Array.isArray(rest[0]) ? rest[0] : undefined
-  const svg = rest[d === undefined ? 0 : 1]
-  const tail = rest.length === (d === undefined ? 0 : 1) + (svg === undefined ? 0 : 1)
-  const asked = d === undefined || isAsks(d)
+  // table, then the SVG, when it asked for one; each at most once, in that
+  // order. A keyed SVG is a list too, but never a list of fragment asks: its
+  // first item is the root's text.
+  const d = Array.isArray(rest[0]) && isAsks(rest[0]) ? rest[0] : undefined
+  const item = rest[d === undefined ? 0 : 1]
+  const picture = item === undefined ? {} : pictureOf(item)
+  const tail = rest.length === (d === undefined ? 0 : 1) + (item === undefined ? 0 : 1)
   if (
     kind === 'ok' &&
     isRecord(a) &&
     Array.isArray(a.nodes) &&
     isAnchors(b) &&
     Array.isArray(c) &&
-    asked &&
-    (svg === undefined || typeof svg === 'string') &&
+    picture !== undefined &&
     tail
   ) {
     return {
@@ -314,7 +385,7 @@ function answerOf(parsed: unknown[], errors: LayoutErrors): LayoutAnswer {
       anchors: new Map(b),
       degradations: c as LayoutEvent[],
       ...(d === undefined ? {} : { fragmentsAsked: d }),
-      ...(svg === undefined ? {} : { svg }),
+      ...picture,
     }
   }
   const detail = kind === 'refused' && typeof b === 'string' ? b : 'answer'
@@ -381,6 +452,7 @@ export type MarkdownLayoutRequest = LayoutRequest &
         readonly body: string
         readonly maxWidth: number
         readonly density: 'comfortable' | 'compact'
+        readonly svg?: SvgAsk
       }
   )
 
@@ -391,8 +463,10 @@ export type MarkdownLayoutAnswer =
       readonly degradations: readonly LayoutEvent[]
       /** For a request carrying `fragments`: what the table did not hold. */
       readonly fragmentsAsked?: readonly FragmentAsk[]
-      /** For a note's request carrying `svg`: the scene as the core's SVG backend draws it. */
+      /** For a request carrying `svg`: the scene as the core's SVG backend draws it. */
       readonly svg?: string
+      /** For a request carrying `svg` with `form: 'keyed'`: its keyed projection. */
+      readonly keyed?: KeyedSvg
     }
   | { readonly refused: LayoutRefusal }
   | { readonly missing: 'section' }
@@ -433,11 +507,12 @@ function markdownAnswerOf(parsed: unknown[], errors: LayoutErrors): MarkdownLayo
   const laid = answerOf(parsed, errors)
   if ('refused' in laid) return laid
   if (laid.anchors.size > 0) throw errors.refused(OPERATION, 'malformed', 'answer')
-  const { scene, degradations, fragmentsAsked, svg } = laid
+  const { scene, degradations, fragmentsAsked, svg, keyed } = laid
   return {
     scene,
     degradations,
     ...(fragmentsAsked === undefined ? {} : { fragmentsAsked }),
     ...(svg === undefined ? {} : { svg }),
+    ...(keyed === undefined ? {} : { keyed }),
   }
 }

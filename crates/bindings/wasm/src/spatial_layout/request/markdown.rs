@@ -42,7 +42,8 @@ pub(crate) struct Note {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Prose {
     Note(Box<Note>),
-    Comment(CommentDensity),
+    /// A comment's prose at its density, and the SVG its answer carries.
+    Comment(CommentDensity, Option<SvgAsk>),
 }
 
 /// A markdown request.
@@ -87,7 +88,7 @@ pub(crate) fn markdown_request_of(value: &Value) -> Option<MarkdownRequest> {
     let measure = f.field("measure", measure_of)??;
     let prose = match kind.as_str() {
         "markdown" => Prose::Note(Box::new(note_of(&mut f)?)),
-        "comment" => Prose::Comment(f.field("density", density_of)??),
+        "comment" => Prose::Comment(f.field("density", density_of)??, f.field("svg", svg_of)?),
         _ => return None,
     };
     f.all_named().then_some(MarkdownRequest { body, max_width, measure, prose })

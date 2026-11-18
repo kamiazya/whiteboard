@@ -73,6 +73,39 @@ describe('a query over the artifact', () => {
     )
   })
 
+  it('reads the SVG an edges query asked for last, as the document or its keyed projection', () => {
+    const nodes = [{ kind: 'edge', id: 'e', path: [] }]
+    const request = {
+      query: 'edges',
+      measure: { kind: 'ratio' },
+      svg: { viewBox: { of: 'scene' } },
+    } as const
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"></svg>'
+    const { glue, sent } = glueOf(JSON.stringify(['ok', nodes, [], svg]))
+    expect(ask(glue, request)).toEqual({ nodes, degradations: [], svg })
+    expect(sent[0]).toEqual(expect.arrayContaining(['svg', ['m', 'viewBox', ['m', 'of', 'scene']]]))
+    const keyed = JSON.stringify(['ok', nodes, [], ['<svg>', [], [['e', '<g/>']]]])
+    expect(ask(glueOf(keyed).glue, request)).toEqual({
+      nodes,
+      degradations: [],
+      keyed: {
+        svg: '<svg><g/></svg>',
+        rootOpen: '<svg>',
+        rootAttrs: {},
+        groups: [{ key: 'e', svg: '<g/>' }],
+      },
+    })
+    for (const garbled of [
+      ['ok', nodes, [], 1],
+      ['ok', nodes, [], svg, svg],
+      ['ok', nodes, [], ['<svg>', []]],
+    ]) {
+      expect(() => ask(glueOf(JSON.stringify(garbled)).glue, request)).toThrow(
+        'layout_query malformed answer',
+      )
+    }
+  })
+
   it('reads a scene digest as the text the core wrote, and refuses another shape', () => {
     const digest = JSON.stringify({ nodes: [], overlaps: [] })
     const request = { query: 'scene-digest', measure: { kind: 'ratio' } } as const
