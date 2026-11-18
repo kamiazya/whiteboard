@@ -8,7 +8,10 @@ import {
   type MeasureText,
   measureSpecOf,
   type QueryLayoutCore,
+  renderSceneToSvg,
+  type SceneNode,
   type SpatialContentCache,
+  sceneBounds,
   type TextMetrics,
 } from '@kamiazya/whiteboard-canvas-render'
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
@@ -46,7 +49,15 @@ import type { WebCore } from './web-core.js'
  *
  * Every browser run needs the artifact: a missing one FAILS this file's first
  * test, and the timed cases skip, saying so (as layout-core.browser.test.ts does).
+ *
+ * The overlay frame's SPLIT — the edge layer alone against the layer drawn as
+ * the SVG `use-drag-layers.ts` draws it — is a measurement, not a guard: it
+ * asserts only that it measured something, and runs when
+ * `VITE_MEASURE_DRAG_SVG=1` (a timing loop has no place in every CI run).
+ * Run from the repository root:
+ *   VITE_MEASURE_DRAG_SVG=1 pnpm vitest run --project web-browser apps/web/src/lib/spatial/drag-frame-budget
  */
+const SPLIT = import.meta.env.VITE_MEASURE_DRAG_SVG === '1'
 
 const FRAME_BUDGET_MS = 1000 / 60
 /** Frames in one batch, whose median is one reading. */
@@ -128,17 +139,17 @@ function busiest(board: WebLayoutBoard): string {
 }
 
 /**
- * The batch medians of overlay frames of `board` with its busiest node carried
- * `dx` further each frame, as `use-drag-layers.ts` lays one out: the edge layer
- * alone, every bystander pinned at its committed anchors and, `cached`, the
- * carried edges at their committed sides too, which skips the side search.
+ * Overlay frames of `board` with its busiest node carried 4 px further each
+ * frame, as `use-drag-layers.ts` lays one out: `lay(at)` lays frame `at`'s edge
+ * layer alone, every bystander pinned at its committed anchors and, `cached`,
+ * the carried edges at their committed sides too, which skips the side search.
  */
-function timedOverlay(
+function overlayFrames(
   board: WebLayoutBoard,
   page: MeasureText,
   cached: boolean,
   core: LayoutCore,
-): number[] {
+): (at: number) => SceneNode[] {
   const measure = gestureMeasure(page)
   const base = editorLayoutBase({ measure })
   const { scene, anchors } = layoutSpatialCanvasWithAnchors(board.canvas, { ...base, core })
@@ -156,7 +167,7 @@ function timedOverlay(
     }
     overrides.set(node.id, { ...sides, ...anchors.get(node.id) })
   }
-  const lay = (at: number) =>
+  return (at: number) =>
     layoutSpatialEdges(
       {
         ...board.canvas,
@@ -166,7 +177,22 @@ function timedOverlay(
       },
       { ...base, core, edgeSideOverrides: overrides },
     )
-  return batchMedians(lay)
+}
+
+/** The batch medians of `board`'s overlay frames; see `overlayFrames`. */
+function timedOverlay(
+  board: WebLayoutBoard,
+  page: MeasureText,
+  cached: boolean,
+  core: LayoutCore,
+): number[] {
+  return batchMedians(overlayFrames(board, page, cached, core))
+}
+
+/** An edge layer drawn in the overlay's envelope: its own bounds, as `liveEdges` spells it. */
+function overlaySvg(nodes: SceneNode[]): string {
+  const bounds = sceneBounds({ nodes })
+  return renderSceneToSvg({ nodes }, { width: bounds.w, height: bounds.h, viewBox: bounds })
 }
 
 /** `board` with its first node moved `dx` to the right: one drag frame. */
@@ -195,6 +221,31 @@ function batchMedians(lay: (at: number) => unknown): number[] {
       times.push(performance.now() - start)
     }
     medians.push(median(times))
+  }
+  return medians
+}
+
+/**
+ * `batchMedians` over several rows at once, interleaved round by round so a
+ * slow stretch of the run charges every row alike: each row's batch medians.
+ */
+function interleavedMedians(
+  rows: Readonly<Record<string, (at: number) => unknown>>,
+): Record<string, number[]> {
+  const names = Object.keys(rows)
+  for (let at = 0; at < WARM; at += 1) for (const name of names) rows[name]?.(at)
+  const medians: Record<string, number[]> = Object.fromEntries(names.map((n) => [n, []]))
+  let at = WARM
+  for (let batch = 0; batch < BATCHES; batch += 1) {
+    const times: Record<string, number[]> = Object.fromEntries(names.map((n) => [n, []]))
+    for (let round = 0; round < ROUNDS; round += 1, at += 1) {
+      for (const name of names) {
+        const start = performance.now()
+        rows[name]?.(at)
+        times[name]?.push(performance.now() - start)
+      }
+    }
+    for (const name of names) medians[name]?.push(median(times[name] ?? []))
   }
   return medians
 }
@@ -287,6 +338,40 @@ describe('a drag frame laid out by the core', () => {
       expect(tally.answered).toBe(2 * FRAMES_LAID)
       await commands.printReading(JSON.stringify(reading))
       for (const ms of best) expect(ms).toBeLessThan(FRAME_BUDGET_MS)
+    },
+  )
+
+  it.runIf(SPLIT && !ABSENT)(
+    'splits the overlay frame into its edge layer and its SVG',
+    { timeout: 120_000 },
+    async () => {
+      if ('failure' in real) return
+      await ensureViewerFontLoaded()
+      const board = mostEdges()
+      const browser = createBrowserMeasureText()
+      const core: LayoutCore = {
+        routing: real.core,
+        layout: real.core,
+        markdown: real.core,
+        query: real.core,
+      }
+      const reading: Record<string, string | number> = {
+        board: board.name,
+        edges: board.canvas.edges.length,
+      }
+      for (const cached of [false, true]) {
+        const mode = cached ? 'cached sides' : 're-siding'
+        const lay = overlayFrames(board, browser, cached, core)
+        const medians = interleavedMedians({
+          layer: lay,
+          'layer + TS svg': (at) => overlaySvg(lay(at)),
+        })
+        for (const [row, values] of Object.entries(medians)) {
+          expect(values).toHaveLength(BATCHES)
+          reading[`${mode}: ${row} p50 ms per batch`] = readings(values)
+        }
+      }
+      await commands.printReading(JSON.stringify(reading))
     },
   )
 })
