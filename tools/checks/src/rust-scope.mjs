@@ -76,8 +76,7 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/edge-path',
     'packages/canvas-render/src/ink',
     'packages/canvas-render/src/legend',
-    // The TypeScript SVG backend the core's SVG is held to, and the outlines it draws.
-    'packages/canvas-render/src/svg',
+    // The outlines the scoreboards and the core's sketch ink read.
     'packages/canvas-render/src/outline',
     'packages/canvas-render/src/test-utils/wasm',
     // The layout scoreboards judge the core in canvas-render-rust (S18h): the

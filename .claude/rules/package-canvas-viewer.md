@@ -94,11 +94,10 @@ paths:
 - `SceneSvg`'s markup sink is deliberate, not an unguarded one, and it is
   the only one: `tools/arch-lint`'s `html-sink-ledger.test.ts` fails any
   other `dangerouslySetInnerHTML` or `innerHTML =` in shipped source until it
-  is ledgered with a reason. The injected string has exactly two producers,
-  both serializers this repo owns: the Rust core's
-  (`crates/core/canvas-render/src/svg/serialize.rs` over `xml_escape.rs`) and
-  canvas-render's TypeScript backend, which still draws a refused layout's
-  notice. Both escape `&`/`<`/`>` in text and `"`/`'` in attribute values.
+  is ledgered with a reason. The injected string has one producer, a
+  serializer this repo owns: the Rust core's
+  (`crates/core/canvas-render/src/svg/serialize.rs` over `xml_escape.rs`),
+  which draws a refused layout's notice too. It escapes `&`/`<`/`>` in text and `"`/`'` in attribute values.
   The one unescaped part is an `svgFragment` (a formula or diagram), emitted
   verbatim after a well-formedness check; it is trusted because the host's own
   renderer (MathJax, mermaid) produced it, not because the check makes it

@@ -203,20 +203,34 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
-  'packages/canvas-render/src/refusal.ts#refusalScene':
-    "the TypeScript notice drawing, which no surface asks since the refusal is the core's notice (`refusalThroughCore`, ADR-0054 A3.5): kept as the oracle core-notice.rust.test.ts, canvas-switch.test.ts and markdown-switch.test.ts hold the core to, until A3.6 freezes its outputs into a recording and deletes it",
-  'packages/canvas-render/src/svg/backend.ts#renderSceneToSvg':
-    "the TypeScript SVG backend, which no surface asks since every picture is the core's (ADR-0054 A3): kept as the oracle core-picture.rust.test.ts, core-picture-web.rust.test.ts and core-notice.rust.test.ts hold the core's SVG to, until A3.6 freezes svg.jsonl and deletes it",
-  'packages/canvas-render/src/svg/keyed.ts#renderSceneToKeyedSvg':
-    "the keyed form of `renderSceneToSvg`, no surface asking it since the editor's keyed picture is the core's: the oracle core-picture-web.rust.test.ts and core-notice.rust.test.ts hold the keyed projection to, until A3.6 deletes the backend",
+  'packages/canvas-render/src/edge-arrows.ts#edgeArrowEnds':
+    "which ends of an edge carry an arrowhead, the TypeScript statement of the rule the core's routing mirrors: its sole consumers left with the TypeScript SVG backend (ADR-0054 A3.6), and edge-arrows.test.ts and edge-touching-boxes.rust.test.ts still state the rule through it",
+  'packages/canvas-render/src/ink/sketch.ts#sketchShape':
+    "the TypeScript sketch ink of a box, which the core's own sketch ink mirrors: its sole consumer was the TypeScript SVG backend (deleted, ADR-0054 A3.6), and sketch.test.ts and sketch-replay.test.ts hold the reach, determinism and per-outline properties the Rust port is checked against",
+  'packages/canvas-render/src/ink/sketch.ts#sketchEdge':
+    'the TypeScript sketch ink of an edge, kept for the reason `sketchShape` is: sketch.test.ts and sketch-replay.test.ts state its properties and the mutation lane still covers the file',
+  'packages/canvas-render/src/measure.ts#clampAdvance':
+    'the finite, non-negative clamp every measured advance passed through in the TypeScript layout and notice drawing, both deleted (ADR-0054 A3.6): measure.test.ts holds its table, and the ratio estimate it belongs beside stays the measurer a root hands the core',
+  'packages/canvas-render/src/outline/node-outline.ts#nodeOutline':
+    "a node's silhouette as outline data, which only the sketch-ink tests ask since the TypeScript SVG backend (its shipped consumer) was deleted (ADR-0054 A3.6); the bundled shape table it reads is held by node-outline.test.ts and the recorded node-outline oracle",
+  'packages/canvas-render/src/scene-entry-keys.ts#sceneEntries':
+    "the one producer of stable scene-entry keys, whose shipped consumer was the TypeScript keyed SVG (deleted, ADR-0054 A3.6); scene-diff-quality.rust.test.ts keys a scene's entries through it to score how much of a frame an edit leaves byte-identical",
+  'packages/canvas-render/src/xml-escape.ts#escapeXmlText':
+    "XML text escaping and character legality, whose shipped consumers were the TypeScript SVG backend and layout (deleted, ADR-0054 A3.6): xml-escape.test.ts holds it, the mutation lane covers the file, and the core's own escape is held to the same table",
+  'packages/canvas-render/src/xml-escape.ts#escapeXmlAttr':
+    'the attribute half of `escapeXmlText`, kept for the same reason and held by the same test',
+  'packages/scene/src/scene-graph.ts#ShapeSceneNode':
+    "a scene node's vocabulary type, re-exported by the package entry for the tests and tools that read a laid-out scene; its shipped consumer was the TypeScript SVG backend (deleted, ADR-0054 A3.6)",
+  'packages/scene/src/scene-graph.ts#CodeBlockNode':
+    "a scene node's vocabulary type, re-exported by the package entry for the tests and tools that read a laid-out scene; its shipped consumer was the TypeScript SVG backend (deleted, ADR-0054 A3.6)",
   'packages/canvas-render/src/layout/spatial-canvas.ts#layoutSpatialCanvasWithAnchors':
     "a canvas's layout with no picture: every web surface now asks the core for its picture in the same call (`layoutSpatialCanvasPicture` / `layoutSpatialCanvasKeyedPicture`, ADR-0054 A3.3), and the web's browser tests read the scene and anchors alone through it — drag-frame-budget's layout-alone rows and the host-measure benches",
   'packages/canvas-render/src/layout/spatial-canvas.ts#layoutSpatialEdges':
     "the drag overlay's edge layer alone, with no picture: the overlay itself draws through `layoutSpatialEdgesPicture` (ADR-0054 A3.2), whose layer core-picture-web.rust.test.ts holds equal to this one, and live-drag-parity.rust.test.ts holds this layer to the committed layout's edges; the reference both judgements are stated against, and drag-frame-budget's layer-alone row",
   'packages/canvas-render/src/core-picture.ts#layoutNoticePicture':
-    "a refusal's notice drawn by the core, asked through the query entry: no surface asks the notice alone (a refusal reaches every surface through the layout's own call, `refusalThroughCore`), and core-notice.rust.test.ts holds it to `refusalScene` and the TypeScript backend",
+    "a refusal's notice drawn by the core, asked through the query entry: no surface asks the notice alone (a refusal reaches every surface through the layout's own call, `refusalThroughCore`), and core-notice.rust.test.ts holds it to the recorded notice (`notice.jsonl`)",
   'packages/canvas-render/src/core-picture.ts#layoutNoticeKeyedPicture':
-    'the keyed form of `layoutNoticePicture`, for the editor surface that draws a refusal as keyed groups; held to `renderSceneToKeyedSvg` by core-notice.rust.test.ts until that surface asks it',
+    'the keyed form of `layoutNoticePicture`, for the editor surface that draws a refusal as keyed groups; held to the recorded notice (`notice.jsonl`) by core-notice.rust.test.ts until that surface asks it',
   'packages/canvas-render/src/layout/markdown-switch.ts#layoutCommentDocument':
     "a comment body's layout with no picture: its one surface, `CommentBody`, asks the core for the keyed picture in the same call (`layoutCommentDocumentKeyedPicture`, ADR-0054 A3.4), and the layout alone stays the reference markdown-switch.test.ts, the recorded comment oracle and core-picture-web.rust.test.ts judge the switch and the picture against",
   'packages/canvas-render/src/layout/markdown-switch.ts#markdownLayoutRequest':

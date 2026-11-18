@@ -95,7 +95,7 @@ let the cycle guard rot.
 
 #### Option sanitization
 
-Option sanitization keeps `renderSceneToSvg` total per this
+Option sanitization keeps the core's SVG total per this
 package's never-throw rule: non-finite/negative `padding` -> `0`;
 non-finite or negative `width`/`height` -> the derived fallback; a
 `viewBox` with any non-finite field, or a negative `w`/`h` (SVG forbids
@@ -1110,8 +1110,9 @@ The layout's recordings are FROZEN now: the TypeScript that answered them is
 deleted, so a re-recording would be the core recording itself. `render.jsonl`
 and every recording of the composer, typesetter, router, queries and their
 primitives are kept as the evidence the core is held to and replayed, never
-re-recorded. The recordings over TypeScript that remains — `svg.jsonl`,
-`svg-edge-cases.jsonl`, `scene-digest.jsonl`, `theme.jsonl`,
+re-recorded. `svg.jsonl` and `svg-edge-cases.jsonl` are frozen too (A3.6): the TypeScript
+backend that drew them is deleted and the core is held to them as recorded.
+The recordings over TypeScript that remains — `scene-digest.jsonl`, `theme.jsonl`,
 `canvas-fragment.jsonl`, `layout-markdown-fences.jsonl` (the host's fence
 tokens) and `fake-measure.jsonl` — still recompute every line, fail naming the
 first that moved, and re-record after a deliberate change:

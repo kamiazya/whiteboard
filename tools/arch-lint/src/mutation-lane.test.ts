@@ -319,8 +319,8 @@ describe('the canvas-render lane skips the tests that measure cost', () => {
     const files = testFiles(join(RENDER, 'src'))
       .map((file) => relative(RENDER, file).split(sep).join('/'))
       .filter((file) => /(cost|budget)[^/]*\.test\.ts$/.test(file))
-    // Eight since tidy's cost suite went with its TypeScript (ADR-0054 phase A4b).
-    expect(files.length).toBeGreaterThan(7)
+    // Six since the SVG backend's budget suites went with its TypeScript (ADR-0054 A3.6).
+    expect(files.length).toBeGreaterThan(5)
     const exclude = await exclusions()
     expect(files.filter((file) => !exclude.some((glob) => matchesGlob(file, glob)))).toEqual([])
   })

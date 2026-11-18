@@ -206,12 +206,13 @@ steps and cache paths to the scripts.
   `packages/canvas-render/src/oracle/svg.jsonl` (the goldens and the laid-out
   scenes, 179 records) and `svg-edge-cases.jsonl` (small scenes aimed at one
   rule each: an unusable option, a link's address, the filter budget) are what
-  the TypeScript's `renderSceneToSvg` and `renderSceneToKeyedSvg` answered, and
+  the TypeScript SVG backend answered before it was deleted (ADR-0054 A3.6), and
   `crates/core/canvas-render/tests/svg_oracle.rs` and `svg_edge_cases.rs` replay
   both natively and on wasm32: every document, keyed root and keyed group byte
-  for byte. A deliberate change to the backend's output re-records them and
-  changes the Rust in the same increment. The caller-supplied `icons` and
-  `shapes` tables of `SvgDocumentOptions` are not ported (the bundled visual
+  for byte. They are frozen: nothing re-records them, so a deliberate change to
+  the backend's output edits the recording and the Rust in the same
+  increment. The caller-supplied `icons` and `shapes` tables of the deleted
+  backend are not ported (the bundled visual
   plugin's are the Rust tables), and a non-finite coordinate is `NonFinite`
   where the TypeScript throws `RangeError`.
 - **Line breaking is held to a recording and a table generated once**:

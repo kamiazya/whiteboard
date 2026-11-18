@@ -84,7 +84,6 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: Wh
     count: 1,
     why: 'ordinary English',
   },
-  'packages/canvas-render/src/svg/vnode.ts': { count: 1, why: 'ordinary English' },
   'packages/daemon-client/src/sync-frames.ts': { count: 1, why: 'ordinary English' },
   'packages/loro-adapter/src/workspace-tree.convergence.property.test.ts': {
     count: 1,

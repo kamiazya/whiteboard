@@ -70,9 +70,10 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   `KeyedSvgRender`'s shape (`layout.ts`'s `pictureOf`). canvas-render's
   `core-picture.ts` asks for it (`layoutSpatialCanvasPicture`, its keyed
   sibling, the note's and the comment's, `layoutSpatialEdgesPicture`), held
-  byte for byte to the TypeScript backend by `core-picture.rust.test.ts` (the
-  server's envelopes) and `core-picture-web.rust.test.ts` (each web caller's
-  exact option set). server-core's `wb_scene_render`, the `canvas_view`
+  to the scene the plain layout answers and to the envelope each caller asks
+  by `core-picture.rust.test.ts` (the server's envelopes) and
+  `core-picture-web.rust.test.ts` (each web caller's exact option set); the
+  SVG's bytes are the crate's (`svg_oracle.rs`). server-core's `wb_scene_render`, the `canvas_view`
   picture and mcp-server's file export take their SVG from it (ADR-0054 A2);
   in the web, the drag overlay's edge layer does (`use-drag-layers.ts`'s
   `liveEdges`, A3.2), held by `drag-overlay-core.browser.test.tsx`, and so
@@ -80,14 +81,15 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   (`scene-render-core.ts`, A3.3): the editor asks its layout worker for the
   keyed form (`form: 'keyed'`, answered `laid-out-keyed`), held by
   `editor-surface-core.browser.test.tsx` and the worker parity test. The
-  preview pane, a comment's body and `CanvasViewer` do too (A3.4); only the
-  shortcode icon and a refused layout's notice still draw in TypeScript (A3.5).
+  preview pane, a comment's body and `CanvasViewer` do too (A3.4); the
+  shortcode icon and a refused layout's notice draw through it too (A3.5), and
+  the TypeScript backend is gone (A3.6).
 - The `notice` query (ABI 43) draws a refused layout's box: it is handed the
   title and the detail (`refusalCopy`'s words stay TypeScript's), lays them out
-  as `refusalScene` does and answers as `edges` does, nodes and the `svg` it
+  as one box and its wrapped words and answers as `edges` does, nodes and the `svg` it
   asks; a host measurer that fails or answers no finite advance or ascent draws
   the whole notice by the ratio estimate, never a refusal. Held to
-  `refusalScene` and the TypeScript backend by canvas-render's
+  the recorded `notice.jsonl` by canvas-render's
   `core-notice.rust.test.ts`; canvas-render's `layoutNoticePicture` asks it.
 - `core.search` (`search.ts`): lexical search over the one `search_op` export.
   Text calls are stateless; a `SearchIndex` (a corpus's token bags, upserted per

@@ -31,8 +31,8 @@ D10's decision, and the thin TypeScript a root asks the core through:
   each turn a caller's options into the request the core takes
   (`canvasLayoutRequest`, `markdownLayoutRequest`; `CoreUnaskable` for an
   option no request carries), ask `options.core` (required), and read the
-  answer back: a refusal drawn as `refusalScene` (`refusal.ts`, its words
-  `refusalCopy`), degradations to `onDegrade`, fragment asks to
+  answer back: a refusal drawn as the core's notice (`refusal.ts` holds its
+  words, `refusalCopy`), degradations to `onDegrade`, fragment asks to
   `onFragmentsAsked`. `SpatialLayoutOptions` (`layout/layout-options.ts`) is
   the vocabulary a caller asks in. `routeLayout` is one call into the core
   its caller hands it; `edge-routing.ts` is the sides, anchors and budget a
@@ -50,15 +50,11 @@ D10's decision, and the thin TypeScript a root asks the core through:
   Highlighting is budgeted: highlight.js is quadratic in a long word run, so
   a fence past 4096² summed squared runs, or a layout past 4× that, renders
   plain.
-- **The SVG backend** (`svg/`): scene -> SVG string, one implementation
-  shared by Node, the browser and Workers. `svg/backend.ts` +
-  `svg/format.ts` serialise, `svg/shapes.ts` draws a node's silhouette and an
-  edge's line (crisp or pencilled, with the glow either takes) from
-  `outline/node-outline.ts` and `ink/`, `svg/paint.ts` holds the
-  presence-only paint helpers, `svg/keyed.ts` is the editor's keyed form, and
-  `svg/legend.ts` draws the legend the core lays out. The edge path
-  flatteners (`edge-path/`) and `edgeArrowPolygons` are the backend's and the
-  hit test's one curve.
+- **The SVG backend is the core's** (`crates/core/canvas-render/src/svg/`):
+  scene -> SVG string, whole and keyed, one implementation for Node, the
+  browser and Workers, held byte for byte to the frozen `oracle/svg.jsonl`.
+  Its inputs here are `outline/node-outline.ts`, `ink/`, the edge path
+  flatteners (`edge-path/`) and `edgeArrowPolygons`, the hit test's one curve.
 - **The scene digest** is the Rust core's (`scene_digest`): `layoutSceneDigest`
   asks the `scene-digest` query (no scene crosses back) and
   `sceneDigestSchema` holds the text; a refused layout answers a `partial`
@@ -134,7 +130,7 @@ implements it in `crates/core/plugin-visual`. What is left of the TypeScript
 backend and `themes`/`readTheme` for palette resolution.
 
 **An icon contribution carries its coordinate space and paint**, not geometry
-alone (`IconContribution`, `svg/backend.ts`). Geometry means nothing without
+alone (an icon contribution, in the core's SVG backend). Geometry means nothing without
 the box it is drawn in and the convention it is authored for; holding both as
 constants here made a contributed icon in any other space render wrong-sized
 and a fill-authored one render invisible. The bundled set declares its own, so
@@ -196,10 +192,10 @@ backend's x-transform-boundary convention (decision #5).
    boundary — only the SVG string and the scene digest JSON leave this
    package — so per YAGNI + zod-schema-discipline it needs no runtime
    schema. `sceneDigestSchema` is the sole Zod surface here.
-2. **Canonical SVG serialization** (`svg/format.ts`): fixed per-element
+2. **Canonical SVG serialization** (the core's `svg/format.rs`): fixed per-element
    attribute declaration order, `&`/`<`/`>` escaped in text, plus `"`/`'`
    escaped in attribute values, a single root `xmlns`, and one number
-   formatter (`formatCoord`: fixed decimal precision, `-0` normalized to
+   formatter (`format_coord`: fixed decimal precision, `-0` normalized to
    `0`, non-finite rejected — a layout bug, not a serializer concern).
    This is what makes the same scene produce byte-identical SVG on Node
    and in a real browser.
@@ -240,11 +236,11 @@ backend's x-transform-boundary convention (decision #5).
    its properties are on the decisions page.
 
 5. **Document envelope** (`sceneBounds` in `scene-bounds.ts`,
-   `SvgDocumentOptions` in `svg/backend.ts`): `renderSceneToSvg(scene)`
-   with no options, or an options object with every field `undefined`,
+   the core's SVG envelope): an SVG asked with no options, or every
+   field `undefined`,
    emits the legacy bodyless-root form (`<svg xmlns="...">...</svg>`)
    byte-for-byte — this is the frozen default path guarded by
-   `DETERMINISM_GOLDEN_SVG`. Setting ANY of `width`/`height`/`viewBox`/
+   the recorded `golden/determinism#0`. Setting ANY of `width`/`height`/`viewBox`/
    `padding`/`background` activates the full envelope (never a partial
    one): root attributes in the fixed order `xmlns width height viewBox`,
    derived as `viewBox = options.viewBox ?? expand(sceneBounds(scene),
@@ -264,14 +260,15 @@ backend's x-transform-boundary convention (decision #5).
    stack-overflow path on deep embed chains), including edge polyline
    points; a bbox/point with any non-finite field is skipped rather than
    clamped. **The walk carries an accumulated x-offset**, because the scene
-   graph is NOT uniformly absolute: `renderListItem` and `renderTableCell`
+   graph is NOT uniformly absolute: the list item and the table cell
    are the only renderers that emit a `transform`, each translating its
    subtree by its own `bbox.x` on the x axis, so a list item's children and
    a table cell's runs are stored wrapper-RELATIVE and nested wrappers
    compose. Bounds taken without re-applying those offsets sit short of what
    is actually drawn and the derived `viewBox` clips the overflow. A third
    translating renderer must therefore teach `subtreeOffsetX` about itself;
-   a tripwire test in `scene-bounds.test.ts` fails if that set ever changes.
+   the core's `shifted` wrapper is the one place that emits it, and
+   `scene_bounds.rs` holds the bounds to it.
    Note the top-level-only containment property cannot see this class of bug.
 6. **The `shape` node and optional resolved `Appearance`** (`scene-graph.ts`):
    `ShapeSceneNode` (`kind: 'shape'`, `bbox`, optional `radius`) is the box
@@ -290,11 +287,11 @@ backend's x-transform-boundary convention (decision #5).
    font-size`, appended after geometry; an absent or unusable field is
    OMITTED, never defaulted, which is what keeps a scene built without
    appearance byte-identical to the pre-existing output (the additivity
-   guarantee both `DETERMINISM_GOLDEN_SVG` and `DETERMINISM_GOLDEN_DOCUMENT_SVG`
+   guarantee the recorded determinism goldens
    depend on — a new, separate golden covers shape/appearance instead of
    regenerating those two).
    `shape` emits no `transform`, so it needs no entry in
-   `subtreeOffsetX` and the two-renderer tripwire above is unaffected.
+   `subtreeOffsetX` and the two-wrapper rule above is unaffected.
 
 7. **`layoutSpatialCanvas` is the single SpatialCanvas -> Scene entry**
    (`layout/spatial-canvas.ts`) — HISTORY for the builder it named: the
@@ -339,7 +336,7 @@ backend's x-transform-boundary convention (decision #5).
    the mode as an explicit argument defaulting to light, so ambient UI theme
    never changes exported bytes. `headless-renderer`'s
    `theme: 'dark'` builds the scene with `createSpatialTheme({ mode:
-   'dark' })` and sets `SvgDocumentOptions.textFill` (an inheritable root
+   'dark' })` and sets the SVG envelope's `textFill` (an inheritable root
    `fill` — the document-level analogue of the editor host's inherited CSS
    fill) so body runs stay legible on the dark background.
    `theme/font-family.ts`'s
@@ -587,7 +584,7 @@ backend's x-transform-boundary convention (decision #5).
     taken is on the decisions page. What stays TypeScript is the cut's two
     readers here:
     - **The fade is ONE `<mask>` in `<defs>`** with
-      `maskContentUnits="objectBoundingBox"`, so it scales to every referencing
+      a bounding-box mask content unit, so it scales to every referencing
       element instead of needing a definition per run, and it is emitted only
       when something is truncated — presence-only, exactly like an absent
       appearance attribute, which is what keeps every existing golden
@@ -727,10 +724,10 @@ backend's x-transform-boundary convention (decision #5).
     merges the blur twice under the element itself, so the halo is the
     element's OWN paint and no flood colour is invented. The filter's
     region is `userSpaceOnUse` over the element's own extent plus its
-    reach, the id derived from (radius, region) — an `objectBoundingBox`
+    reach, the id derived from (radius, region) — a bounding-box
     region drops an AXIS-ALIGNED STRAIGHT EDGE, whose box has zero area
     (resvg 2.6.2 and the spec). resvg blurs a layer the region's size per
-    element, so the SUM is budgeted too: `svg/filter-budget.ts` adds every
+    element, so the SUM is budgeted too: the core's filter budget adds every
     glow and drop-shadow region (a shadow pixel twice) clipped to the drawn
     box at the PNG's scale, and past 8M px strips the largest first.
     `glowReachPx` (three deviations) is what `sceneBounds` adds and what pads
@@ -752,7 +749,7 @@ honour a point somebody placed; this is what happens INSTEAD of choosing one,
 whenever `edge.bends` says where the line goes. It declines — and a route is
 computed — for an edge with no bends, and for a point this package cannot
 serialize, since `layoutSpatialCanvas` accepts an unparsed canvas and
-`formatCoord` throws on a non-finite number.
+the core's coordinate formatter refuses a non-finite number.
 
 It lived in `plugin-visual` as a contributed router until
 [ADR-0037](../../docs/contributing/adr/0037-model-and-format.md) slice 4,
@@ -786,11 +783,11 @@ only producers of an edge's path.
   A future a11y parallel-DOM projection reads these fields directly.
 - What this package runs is pure: no ambient platform API, only its
   arguments plus the injected `measure` and the core a caller hands it.
-- `sceneDigest`, `renderSceneToSvg` and tidy never throw on
+- `sceneDigest` and tidy never throw on
   malformed/degenerate input (missing endpoints, cycles, zero-sized nodes) —
   they degrade to a documented fallback instead, so one bad reference never
   aborts the rest of the canvas. The core holds the same rule for layout; a
-  layout it cannot draw comes back as a refusal, which `refusalScene` draws.
+  layout it cannot draw comes back as a refusal, which the core's notice draws.
 - **One producer per geometry, or a parity test.** Any geometry consumed
   by more than one surface — painted by the SVG backend AND hit-tested,
   bounded, translated, or exported — has exactly one producing function;
@@ -806,12 +803,9 @@ only producers of an edge's path.
 - Vitest projects: `canvas-render-node` (`vitest.node.config.ts`) and
   `canvas-render-browser` (`vitest.browser.config.ts`, registered in the
   root `test:browser` / `test:browser:trace` scripts).
-- `src/test-utils/golden-scene.ts` holds the committed byte-identical SVG
-  golden asserted equal in both the node and browser projects
-  (`svg/determinism.test.ts` / `svg/determinism.browser.test.ts`) — this is
-  the package's headline cross-platform determinism guarantee. Regenerate
-  the golden only as a deliberate serializer-format change, reviewed as
-  such.
+- The determinism goldens are `golden/*` rows of the frozen `oracle/svg.jsonl`,
+  which the core's SVG is held to natively and on wasm32 (`svg_oracle.rs`) —
+  the package's headline cross-platform determinism guarantee.
 - `src/test-utils/fake-measure.ts` is the shared deterministic measurer for
   layout tests (`./test-utils`) — never a real font/platform text API.
 - `test-utils/measure-text-conformance.ts` is what the Node and browser
@@ -829,7 +823,7 @@ only producers of an edge's path.
   shape classes a byte-level SVG-string golden cannot protect (sweep-flag/
   coordinate-sign geometry: jump hops, rounded-edge corners, arrowheads,
   rect corner radius) — fixtures and the deliberate `--update`-then-eyeball
-  regeneration flow live in `src/test-utils/pixel-golden-scenes.ts`. It
+  regeneration flow is the test's header. It
   paints the `pixel-mount/` records of `oracle/svg.jsonl`.
   Baselines are linux-only (CI's platform): off linux it skips, and
   `oracle/pixel-golden-baselines.test.ts` holds the set.
@@ -909,7 +903,7 @@ only producers of an edge's path.
   **Verify a survivor by hand before acting on it.** The tool can report one
   falsely: measured, `src/ink/seed.ts` is imported by its own test and
   nothing else, so Stryker's related-test selection runs 7 tests against it
-  (`svg/format.ts` gets 458), and in that narrow selection its runtime
+  (a widely imported module gets hundreds), and in that narrow selection its runtime
   mutants come back SURVIVED even where the same edit applied by hand fails
   the suite. That file is excluded from `mutate` for exactly that reason, and
   the general habit is the one `diagnosis-evidence` already asks for — apply
@@ -1439,9 +1433,9 @@ one `uncarried` flag per population for colour spent with no key. A frame, a
 kind or a stencil that carries the colour is NOT listed: it has no values a
 legend can name. The core attaches it to the top-level scene as
 `scene.legend` (never to a miniature), the SVG backend draws it in the
-top-left corner of an ENVELOPED document (`svg/legend.ts`, sized by a glyph
+top-left corner of an ENVELOPED document (the core's legend, sized by a glyph
 estimate since the backend has no measurer) and leaves a fragment alone, and
-`renderSceneToKeyedSvg` omits it because the editor draws the same data as
+the keyed form omits it because the editor draws the same data as
 its own overlay. The legend covers no content: `sceneDocumentBounds`
 (`scene-bounds.ts`) is the scene's bounds plus a band on the left sized by
 `legend/legend-geometry.ts`, a DERIVED envelope reserves it itself, and a

@@ -42,12 +42,13 @@ file serves both runs:
 // packages/canvas-render/src/layout/__render.test.ts  (delete when done)
 import { writeFileSync } from 'node:fs'
 import { it } from 'vitest'
-import { renderSceneToSvg } from '../svg/backend.js'
+import { layoutSpatialCanvasPicture } from '../core-picture.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import { layoutSpatialCanvas } from './spatial-canvas.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 
 it('render', () => {
-  const scene = layoutSpatialCanvas(canvas, {
+  const { svg } = layoutSpatialCanvasPicture(canvas, {
+    core: testLayoutCore(),
     measure: createFakeMeasure(),
     parseBody: (text) => ({ type: 'root', children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }] }),
     appearance: {
@@ -56,15 +57,15 @@ it('render', () => {
       resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
     },
     geometry: { paddingPx: 8, labelFontSizePx: 12, minContentWidthPx: 1 },
-  })
-  writeFileSync(process.env.OUT as string, renderSceneToSvg(scene))
+  }, {})
+  writeFileSync(process.env.OUT as string, svg)
 })
 ```
 
 ```bash
 mkdir -p tmp/screenshots
 OUT=$PWD/tmp/screenshots/after.svg  pnpm vitest run --project canvas-render-node __render
-git stash push -q packages/canvas-render/src/svg/shapes.ts   # tracked files only
+git stash push -q <the tracked file your change edits>   # tracked files only
 OUT=$PWD/tmp/screenshots/before.svg pnpm vitest run --project canvas-render-node __render
 git stash pop -q
 ```

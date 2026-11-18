@@ -12,7 +12,7 @@ import { legsOf, scopeToDiff } from './mutation-scope.mjs'
 const REPO_ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 const PREFIX = 'packages/canvas-render/'
-const CURATED = ['src/svg/format.ts', 'src/tidy.ts']
+const CURATED = ['src/xml-escape.ts', 'src/tidy.ts']
 
 test('keeps a changed file the lane curates', () => {
   assert.deepEqual(scopeToDiff(CURATED, [`${PREFIX}src/tidy.ts`], PREFIX), ['src/tidy.ts'])

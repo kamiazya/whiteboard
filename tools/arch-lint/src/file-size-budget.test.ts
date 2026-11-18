@@ -373,7 +373,6 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The curved-line layout case: the seam the
   // freehand pen rides, from facet through style to a rounded scene node.
   'packages/canvas-render/src/quality/drawing-score.test.ts': 844, // +1: the layout core it lays out through (S18h2)
-  'packages/canvas-render/src/svg/backend.test.ts': 1185,
   // +1: the import of `afterAllFloor`, which keeps the reach floor from failing
   // a run that filtered the property feeding it away.
   'packages/canvas-render/src/tidy.test.ts': 1177,
