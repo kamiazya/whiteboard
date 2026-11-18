@@ -2,7 +2,7 @@ import { createElement, type HTMLAttributes, type Ref } from 'react'
 
 interface SceneSvgProps
   extends Omit<HTMLAttributes<HTMLElement>, 'children' | 'dangerouslySetInnerHTML'> {
-  /** The core's SVG (or a root-size derivation of it, below) — never any other string. */
+  /** A trusted serializer's SVG (the core's, or canvas-render's for a refused layout's notice), or a root-size derivation of it, below — never any other string. */
   readonly svg: string
   /** The host element; `figure` for a region that names its content, `span` inside a line. */
   readonly as?: 'div' | 'figure' | 'span'

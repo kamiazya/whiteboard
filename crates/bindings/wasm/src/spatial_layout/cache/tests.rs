@@ -325,7 +325,10 @@ fn geometry(padding: &str) -> Json {
 
 #[test]
 fn a_body_fitted_under_one_geometry_is_never_served_under_another() {
-    let surface = 0x5150_0006;
+    // Its own ids, as every test here: the store is one resident, shared by
+    // tests running in parallel, so a test that keeps bodies on a surface
+    // another asserts holds nothing fails that one at random.
+    let surface = 0x5150_0008;
     let body = "# Heading\n\nA paragraph long enough to wrap at either padding.";
     let (eight, forty) = (geometry("4020000000000000"), geometry("4044000000000000"));
     lay(surface, body, &[("geometry", eight)]);
