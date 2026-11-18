@@ -73,7 +73,7 @@ it('falls back to a synchronous layout when the worker module fails to evaluate'
     ({ canvas }: { canvas: SpatialCanvas }) => useWorkerScene(canvas, base, seams, undefined),
     { initialProps: { canvas: canvasWith('first-scene') } },
   )
-  expect(result.current.svg).toContain('first-scene')
+  expect(result.current.keyed.svg).toContain('first-scene')
 
   // The edit whose layout the (dead) worker is asked for.
   await act(async () => {
@@ -87,5 +87,5 @@ it('falls back to a synchronous layout when the worker module fails to evaluate'
     worker?.fire('error', new Event('error'))
   })
 
-  expect(result.current.svg).toContain('second-scene')
+  expect(result.current.keyed.svg).toContain('second-scene')
 })

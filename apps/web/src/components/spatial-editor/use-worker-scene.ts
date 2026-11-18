@@ -33,8 +33,11 @@ import type { CommentThread, Proposal, SpatialCanvas } from '@kamiazya/whiteboar
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FONT_DEGRADED, type LayoutRequest } from '../../lib/layout-worker-protocol.js'
-import { type RenderCanvasOptions, renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
-import type { RenderedCanvas } from '../../lib/spatial/scene-render-core.js'
+import {
+  type KeyedRenderedCanvas,
+  type RenderCanvasOptions,
+  renderCanvasKeyed,
+} from '../../lib/spatial/scene-render.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { attachThemeFaces } from '../../lib/theme-fonts.js'
 import { createLayoutChannel } from './layout-channel.js'
@@ -136,7 +139,9 @@ type SceneInputs = Pick<
 
 function layoutRequestFor(id: number, sent: SceneInputs): LayoutRequest {
   const { fontsGeneration: _notSent, coreGeneration: _neither, ...request } = sent
-  return { type: 'layout', id, ...request }
+  // Keyed: the editor patches its surface in by key, so the worker answers the
+  // projection the core drew rather than a plain picture this side never reads.
+  return { type: 'layout', id, ...request, form: 'keyed' }
 }
 
 /**
@@ -183,7 +188,7 @@ export function useWorkerScene(
   // would draw differently from a small one.
   fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme' | 'commentObstacles'>,
   wire?: WorkerSceneWire,
-): RenderedCanvas & { readonly sceneCurrent: boolean } {
+): KeyedRenderedCanvas & { readonly sceneCurrent: boolean } {
   const references = wire?.references
   const referencesRevision = wire?.referencesRevision
   const expandedFileIds = wire?.expandedFileIds
@@ -207,14 +212,14 @@ export function useWorkerScene(
   const offloadable = worthOffloading(canvas)
   // Synchronous layout of the CURRENT inputs, computed only when it is needed:
   // the first render, and any render the worker cannot serve.
-  const renderNow = () => renderCanvasToSvg(canvas, options)
+  const renderNow = () => renderCanvasKeyed(canvas, options)
 
   // A canvas the worker cannot serve keeps TODAY'S behaviour exactly — laid
   // out during render, not in an effect. Routing it through the async path
   // would hand every caller a frame of staleness in exchange for nothing,
   // since nothing was moved off the thread.
   const synchronous = useMemo(
-    () => (offloadable ? undefined : renderCanvasToSvg(canvas, options)),
+    () => (offloadable ? undefined : renderCanvasKeyed(canvas, options)),
     [offloadable, canvas, options],
   )
 
@@ -224,7 +229,7 @@ export function useWorkerScene(
   /** Latched on a worker `error` event: module evaluation that failed once
    * fails identically on every reconstruction, so the session stays sync. */
   const workerDead = useRef(false)
-  const [rendered, setRendered] = useState<RenderedCanvas>(renderNow)
+  const [rendered, setRendered] = useState<KeyedRenderedCanvas>(renderNow)
   // The inputs the currently-displayed scene was built from, so a scene that
   // is merely stale is distinguishable from one that is current.
   const shownFor = useRef<unknown>(offloadable ? null : NOT_LAID_OUT)
@@ -289,7 +294,7 @@ export function useWorkerScene(
           // and under a steady stream of edits no reply would ever be the
           // newest. `sceneCurrent` says which it is.
           shownFor.current = sent
-          if (response.type === 'laid-out') {
+          if (response.type === 'laid-out-keyed') {
             latest.current.onFragmentsAsked?.(response.fragmentsAsked ?? [])
             setRendered(response)
           }

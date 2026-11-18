@@ -1,4 +1,9 @@
-import { type LayoutRefusal, refusalCopy, type Scene } from '@kamiazya/whiteboard-canvas-render'
+import {
+  type KeyedSvgRender,
+  type LayoutRefusal,
+  refusalCopy,
+  type Scene,
+} from '@kamiazya/whiteboard-canvas-render'
 
 /**
  * A board the layout refused (ADR-0054 step 7, owner decision q81), said in
@@ -33,4 +38,14 @@ const NOTHING_DRAWN: Scene = { nodes: [] }
 /** The scene the editor draws in canvas space: none for a refused layout, whose notice is said above it. */
 export function drawnScene(laidOut: Scene): Scene {
   return laidOut.refusal === undefined ? laidOut : NOTHING_DRAWN
+}
+
+/**
+ * The keyed surface that goes with `drawnScene`: for a refused layout, the
+ * same envelope with no group in it, since the projection the layout answered
+ * pictures the scene's own notice.
+ */
+export function drawnKeyed(laidOut: Scene, keyed: KeyedSvgRender): KeyedSvgRender {
+  if (laidOut.refusal === undefined || keyed.groups.length === 0) return keyed
+  return { ...keyed, groups: [], svg: `${keyed.rootOpen}</svg>` }
 }

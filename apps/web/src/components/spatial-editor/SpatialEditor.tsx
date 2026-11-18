@@ -127,7 +127,7 @@ import { activeDescendantId, CanvasA11yTree } from './CanvasA11yTree.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CanvasEmptyHint, canvasIsEmpty, emptyHintRef } from './CanvasEmptyHint.js'
 import { CanvasNotice } from './CanvasNotice.js'
-import { CanvasRefusalNotice, drawnScene } from './CanvasRefusalNotice.js'
+import { CanvasRefusalNotice, drawnKeyed, drawnScene } from './CanvasRefusalNotice.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentRevealPulse } from './CommentRevealPulse.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
@@ -577,6 +577,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const {
       bounds,
       scene: laidOut,
+      keyed: laidOutKeyed,
       anchors,
       sceneCurrent,
     } = useWorkerScene(
@@ -598,8 +599,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
     // A refused layout is said in screen space (`CanvasRefusalNotice`), clear of the chrome.
     const scene = drawnScene(laidOut)
+    const keyed = drawnKeyed(laidOut, laidOutKeyed)
     const {
-      keyed,
       palette,
       edgePaths,
       commentChromeBoxes,
@@ -609,7 +610,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       minimap,
     } = useSceneProjection({
       scene,
-      bounds,
       boxes,
       canvas,
       theme,

@@ -36,6 +36,7 @@ import type {
   EdgeAnchorPair,
   FragmentAsk,
   FragmentEntry,
+  KeyedSvgRender,
   ReferenceWire,
   Scene,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -147,6 +148,13 @@ export type LayoutRequest = LayoutSubject & {
    * tiers cannot disagree about which entries are safe.
    */
   readonly cacheKey?: string
+  /**
+   * `'keyed'` answers the picture as the keyed projection the editor surface
+   * patches in (`laid-out-keyed`), drawn by the core in the layout's own
+   * call. Absent answers the plain SVG a list row draws (`laid-out`). The
+   * editor asks keyed so the main thread never serializes the scene itself.
+   */
+  readonly form?: 'keyed'
 }
 
 /**
@@ -331,44 +339,46 @@ export type RegisterFaceRequest = {
   readonly bytes: ArrayBuffer
 }
 
+/** What a laid-out canvas answers in either picture form. */
+type LaidOutReply = {
+  readonly id: number
+  readonly bounds: BoundingBox
+  readonly scene: Scene
+  /** The layout's own anchor pass, carried out with the scene: Maps
+   * survive structuredClone, and the drag overlay pins bystander edges
+   * to exactly these without re-running the pass on the main thread. */
+  readonly anchors: ReadonlyMap<string, EdgeAnchorPair>
+  /**
+   * Families this layout WANTED and could not measure — a theme's
+   * family for which this realm holds no face, so the scene declares
+   * the bundled one instead.
+   *
+   * The worker is the first realm to know: a list surface hands over
+   * stored bytes and never decodes the canvas, so it cannot read the
+   * theme the board names. Absent means nothing was missing. The
+   * asking thread is the one that can fetch a face and register it in
+   * every realm at once (`lib/theme-fonts.ts`), which is why this
+   * travels back rather than being acted on here.
+   */
+  readonly fontsMissing?: readonly string[]
+  /**
+   * Sources this layout asked a fragment seam for and `fragments` could
+   * not answer — reported for the reason `fontsMissing` is: only the
+   * asking thread can load the engines. Absent means nothing was missing.
+   */
+  readonly fragmentsAsked?: readonly FragmentAsk[]
+  /**
+   * Laid out without `references` while the canvas names another
+   * document or a stored picture. Only this realm decodes a list row's board, so it is the
+   * one that can tell the asking thread there is more to read; absent
+   * means the picture is the whole one.
+   */
+  readonly referencesOmitted?: true
+}
+
 export type LayoutResponse =
-  | {
-      readonly type: 'laid-out'
-      readonly id: number
-      readonly svg: string
-      readonly bounds: BoundingBox
-      readonly scene: Scene
-      /** The layout's own anchor pass, carried out with the scene: Maps
-       * survive structuredClone, and the drag overlay pins bystander edges
-       * to exactly these without re-running the pass on the main thread. */
-      readonly anchors: ReadonlyMap<string, EdgeAnchorPair>
-      /**
-       * Families this layout WANTED and could not measure — a theme's
-       * family for which this realm holds no face, so the scene declares
-       * the bundled one instead.
-       *
-       * The worker is the first realm to know: a list surface hands over
-       * stored bytes and never decodes the canvas, so it cannot read the
-       * theme the board names. Absent means nothing was missing. The
-       * asking thread is the one that can fetch a face and register it in
-       * every realm at once (`lib/theme-fonts.ts`), which is why this
-       * travels back rather than being acted on here.
-       */
-      readonly fontsMissing?: readonly string[]
-      /**
-       * Sources this layout asked a fragment seam for and `fragments` could
-       * not answer — reported for the reason `fontsMissing` is: only the
-       * asking thread can load the engines. Absent means nothing was missing.
-       */
-      readonly fragmentsAsked?: readonly FragmentAsk[]
-      /**
-       * Laid out without `references` while the canvas names another
-       * document or a stored picture. Only this realm decodes a list row's board, so it is the
-       * one that can tell the asking thread there is more to read; absent
-       * means the picture is the whole one.
-       */
-      readonly referencesOmitted?: true
-    }
+  | (LaidOutReply & { readonly type: 'laid-out'; readonly svg: string })
+  | (LaidOutReply & { readonly type: 'laid-out-keyed'; readonly keyed: KeyedSvgRender })
   | WorkerFailure
 
 /** Every request that asks for WORK, as opposed to changing what a later one measures with. */

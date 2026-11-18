@@ -32,7 +32,6 @@ function projection(canvas: SpatialCanvas) {
   return renderHook(() =>
     useSceneProjection({
       scene: { nodes: [] },
-      bounds: { x: 0, y: 0, w: 120, h: 60 },
       boxes: indexNodeBoxes(canvas),
       canvas,
       theme: 'light',
