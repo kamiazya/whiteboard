@@ -20,6 +20,9 @@ pub fn format_coord(value: f64) -> Result<String, NonFinite> {
     if !value.is_finite() {
         return Err(NonFinite(value));
     }
+    if let Some(integer) = exact_integer(value) {
+        return Ok(integer.to_string());
+    }
     let fixed = js_to_fixed(value, COORD_PRECISION);
     let stripped = if fixed.contains('.') {
         fixed.trim_end_matches('0').trim_end_matches('.').to_string()
@@ -29,6 +32,23 @@ pub fn format_coord(value: f64) -> Result<String, NonFinite> {
     // A small negative rounds to `-0.000` and strips to `-0`, which would
     // reach the document as a coordinate differing from `0` byte for byte.
     Ok(if stripped.is_empty() || stripped == "-0" { "0".to_string() } else { stripped })
+}
+
+/// `value` as an integer when it is one a double holds exactly (`|value| <
+/// 2^53`), `-0` as `0`: such a value's `toFixed` is its digits and a run of
+/// zeros the canonical form strips, so it is written without the exact
+/// decimal expansion `toFixed` costs. Most coordinates a layout produces are
+/// whole pixels, and that expansion was the serializer's largest single cost.
+fn exact_integer(value: f64) -> Option<i64> {
+    const EXACT: f64 = 9_007_199_254_740_992.0;
+    if value.trunc().to_bits() != value.to_bits() {
+        return None;
+    }
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "an integral double below 2^53 in magnitude converts exactly"
+    )]
+    (value.abs() < EXACT).then_some(value as i64)
 }
 
 /// URL schemes a rendered `<a href>` may navigate to. Markdown link URLs are

@@ -20,7 +20,16 @@ fn is_xml_attr_name(name: &str) -> bool {
 
 /// The opening tag of `node`, self-closed when asked.
 pub(super) fn open_tag(node: &VNode, self_close: bool) -> Result<String, NonFinite> {
-    let mut out = format!("<{}", node.tag);
+    let mut out = String::new();
+    write_open_tag(&mut out, node, self_close)?;
+    Ok(out)
+}
+
+/// [`open_tag`] written onto `out`, so a document is one growing string rather
+/// than a string per tag.
+fn write_open_tag(out: &mut String, node: &VNode, self_close: bool) -> Result<(), NonFinite> {
+    out.push('<');
+    out.push_str(node.tag);
     for (name, value) in node.attrs.iter().filter(|(name, _)| is_xml_attr_name(name)) {
         let text = match value {
             AttrValue::Num(n) => format_coord(*n)?,
@@ -31,7 +40,7 @@ pub(super) fn open_tag(node: &VNode, self_close: bool) -> Result<String, NonFini
         }
     }
     out.push_str(if self_close { "/>" } else { ">" });
-    Ok(out)
+    Ok(())
 }
 
 fn write_child(out: &mut String, child: &Child) -> Result<(), NonFinite> {
@@ -50,10 +59,9 @@ fn write_child(out: &mut String, child: &Child) -> Result<(), NonFinite> {
 
 fn write_node(out: &mut String, node: &VNode) -> Result<(), NonFinite> {
     let Some(children) = &node.children else {
-        out.push_str(&open_tag(node, true)?);
-        return Ok(());
+        return write_open_tag(out, node, true);
     };
-    out.push_str(&open_tag(node, false)?);
+    write_open_tag(out, node, false)?;
     for child in children {
         write_child(out, child)?;
     }

@@ -4,6 +4,9 @@
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_canvas_render::svg::{NonFinite, format_coord, sanitize_href};
+use whiteboard_det::format::js_to_fixed;
+use whiteboard_proptest::proptest::prelude::{Strategy, prop, prop_assert_eq, prop_oneof};
+use whiteboard_proptest::{Floor, check};
 
 #[test]
 fn a_coordinate_has_three_places_trailing_zeros_stripped_and_no_negative_zero() {
@@ -71,4 +74,58 @@ fn an_href_is_returned_without_the_characters_xml_cannot_carry() {
     assert_eq!(sanitize_href("a\u{1}b"), "ab");
     assert_eq!(sanitize_href("/\u{8}/host"), "#");
     assert_eq!(sanitize_href("\u{1F}\u{20}javascript:x"), "#");
+}
+
+/// The canonical form restated over `js_to_fixed`, the exact `toFixed`: what
+/// every coordinate is written as, whichever path writes it.
+fn canonical(value: f64) -> String {
+    let fixed = js_to_fixed(value, 3);
+    let stripped = if fixed.contains('.') {
+        fixed.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        fixed
+    };
+    if stripped == "-0" { "0".to_string() } else { stripped }
+}
+
+/// 2^53: past it a double holds only every other integer.
+const TWO_53: f64 = 9_007_199_254_740_992.0;
+
+/// `2^p`, exactly.
+fn power_of_two(p: u32) -> f64 {
+    (0..p).fold(1.0, |value, _| value * 2.0)
+}
+
+/// Doubles dense in whole numbers of every magnitude up to past 1e21 (where
+/// `toFixed` turns exponential), their negations and neighbours, and
+/// arbitrary finite values.
+fn coordinate() -> impl Strategy<Value = f64> {
+    prop_oneof![
+        (-100_000_i32..100_000).prop_map(f64::from),
+        (0_u32..80, prop::bool::ANY).prop_map(|(p, neg)| {
+            let v = power_of_two(p);
+            if neg { -v } else { v }
+        }),
+        (0_u32..80, -2_i32..=2).prop_map(|(p, d)| power_of_two(p) + f64::from(d)),
+        (-1e6_f64..1e6).prop_map(|v| (v * 8.0).round() / 8.0),
+        prop::num::f64::NORMAL | prop::num::f64::SUBNORMAL | prop::num::f64::ZERO,
+    ]
+}
+
+#[test]
+fn a_coordinate_is_written_as_its_exact_to_fixed_whatever_path_writes_it() {
+    let whole = Floor::new("a whole number below 2^53");
+    let beyond = Floor::new("a whole number at or past 2^53");
+    let fraction = Floor::new("a number with a fraction");
+    check(coordinate(), Some(1000), |value| {
+        let integral = value.trunc().to_bits() == value.to_bits();
+        whole.draw(integral && value.abs() < TWO_53);
+        beyond.draw(integral && value.abs() >= TWO_53);
+        fraction.draw(!integral);
+        prop_assert_eq!(format_coord(value), Ok(canonical(value)), "{}", value);
+        Ok(())
+    });
+    whole.assert(300);
+    beyond.assert(50);
+    fraction.assert(100);
 }
