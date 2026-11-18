@@ -15,54 +15,23 @@
  * answers is a different one from the question layout answers, and reusing
  * the wrong producer for it would be wrong quietly, in a summary nobody
  * reads closely.
+ *
+ * The walk is the Rust core's (`markdown_excerpt`, through search's
+ * `markdownPlainText`), so the rail answers from the same parse the card
+ * draws. Without a core — a realm that never installed one, or a boot whose
+ * load failed — the row shows the source rather than waiting: the page awaits
+ * the core before its first render, so this is the degraded path and not the
+ * usual one, and the source still identifies the conversation.
  */
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
-
-interface MdastNodeish {
-  readonly type?: string
-  readonly value?: unknown
-  readonly alt?: unknown
-  readonly children?: readonly unknown[]
-}
-
-/**
- * One space per BLOCK boundary, none inside a block: the excerpt is one
- * line, so a paragraph break has to become something a reader can see, and
- * inline nodes must not gain spaces markdown never had (`a**b**c` is one
- * word).
- */
-const BLOCK_TYPES = new Set([
-  'paragraph',
-  'heading',
-  'listItem',
-  'blockquote',
-  'code',
-  'table',
-  'tableRow',
-  'thematicBreak',
-])
-
-function walk(node: unknown, out: string[]): void {
-  if (node === null || typeof node !== 'object') return
-  const { type, value, alt, children } = node as MdastNodeish
-  // `alt` for an image: the text an author wrote is the only thing an image
-  // contributes to a one-line summary.
-  if (typeof value === 'string') out.push(value)
-  else if (type === 'image' && typeof alt === 'string' && alt !== '') out.push(alt)
-  if (Array.isArray(children)) for (const child of children) walk(child, out)
-  if (type !== undefined && BLOCK_TYPES.has(type)) out.push(' ')
-}
+import { isSearchUnavailable, markdownPlainText } from '@kamiazya/whiteboard-search'
 
 export function commentExcerpt(body: string): string {
-  let root: unknown
   try {
-    root = parseMarkdownBody(body)
-  } catch {
-    // A body mid-edit, or one another writer sent. The source is a worse
-    // summary than the rendering and a better one than nothing.
-    return body.trim()
+    return markdownPlainText(body)
+  } catch (err) {
+    // No core in this realm, or a body past what it reads: the source is a
+    // worse summary than the rendering and a better one than nothing.
+    if (isSearchUnavailable(err)) return body.trim()
+    throw err
   }
-  const parts: string[] = []
-  walk(root, parts)
-  return parts.join('').replace(/\s+/g, ' ').trim()
 }

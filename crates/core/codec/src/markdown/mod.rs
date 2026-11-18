@@ -54,3 +54,7 @@ pub fn parse_markdown_body_with_lines(text: &str) -> Result<(Root, Vec<usize>), 
 pub fn parse_markdown_block_lines(text: &str) -> Vec<usize> {
     parse_markdown_body_with_lines(text).map_or_else(|_| vec![1], |(_, lines)| lines)
 }
+
+mod excerpt;
+
+pub use excerpt::markdown_excerpt;

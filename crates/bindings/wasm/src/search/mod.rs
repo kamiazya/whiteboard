@@ -8,7 +8,7 @@
 //! and a score crosses as the 16 hex digits of its IEEE bits.
 //!
 //! The ops are stateless for text (`fold`, `find`, `tokens`, `snippet`,
-//! `folders`, `texts`, `terms`, `excerpts`) and stateful for a corpus. A
+//! `folders`, `texts`, `terms`, `excerpts`, `plain`) and stateful for a corpus. A
 //! corpus is an INDEX the instance holds under a handle (`index-new`,
 //! `index-upsert`, `index-remove`, `index-query`, `index-release`), so a query
 //! sends its string and not the corpus; link labels are held the same way
@@ -27,6 +27,7 @@ use serde_json::{Value as Json, json};
 use std::collections::BTreeMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use wasm_bindgen::prelude::wasm_bindgen;
+use whiteboard_codec::markdown::markdown_excerpt;
 use whiteboard_model::spatial::{CanvasEdge, NodeResource, SpatialCanvas, SpatialNode};
 use whiteboard_search::{
     LinkEntry, LinkLabels, SearchIndex, SearchableContent, document_cost, document_terms,
@@ -241,6 +242,16 @@ fn texts_of_content(args: &[Json]) -> Result<Json, Refusal> {
     Ok(ok(vec![json!(listed)]))
 }
 
+/// `["plain", body]`: the body's one line of plain text
+/// (`whiteboard_codec::markdown::markdown_excerpt`), which reads the parsed
+/// tree. A search op because it answers text for a surface that lists
+/// documents, beside `texts`, and takes the caps and the fuzz target of the
+/// one text export.
+fn plain_text(args: &[Json]) -> Result<Json, Refusal> {
+    let [body] = exactly(args, 1)? else { return Err(MALFORMED) };
+    Ok(ok(vec![json!(markdown_excerpt(text(body)?))]))
+}
+
 fn entries_of(wire: &Json) -> Result<(Vec<LinkEntry>, usize), Refusal> {
     let mut cost = 0_usize;
     let mut entries = Vec::new();
@@ -406,6 +417,7 @@ fn dispatch(op: &str, args: &[Json], held: &mut Held) -> Result<Json, Refusal> {
         }
         "folders" => folders(args),
         "texts" => texts_of_content(args),
+        "plain" => plain_text(args),
         "terms" => terms(args),
         "snippet" => snippet(args, held),
         "excerpts" => excerpts(args, held),

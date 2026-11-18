@@ -390,6 +390,17 @@ describe('a corpus held in the instance', () => {
   })
 })
 
+describe('a markdown body as plain text, through the built artifact', () => {
+  it("answers the rail row's one line, without an invented space inside a word", () => {
+    expect(search.markdownPlainText('# Ship **it**\n\nafter a**b**c')).toBe('Ship it after abc')
+    expect(search.markdownPlainText('')).toBe('')
+  })
+
+  it('sends a lone surrogate as the replacement character', () => {
+    expect(search.markdownPlainText('a\uD800b')).toBe('a�b')
+  })
+})
+
 describe('what the shim does with a string the core cannot hold', () => {
   it('answers a lone surrogate as the replacement character, every offset unchanged', () => {
     const lone = 'caf\uD800e'

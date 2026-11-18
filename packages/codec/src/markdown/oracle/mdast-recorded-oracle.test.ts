@@ -64,6 +64,7 @@ describe('the recorded mdast oracle', () => {
       return (
         now.h !== c.h ||
         JSON.stringify(now.l) !== JSON.stringify(c.l) ||
+        now.x !== c.x ||
         (withTree(c.i) && JSON.stringify(now.tree) !== JSON.stringify(c.m))
       )
     })
@@ -71,6 +72,12 @@ describe('the recorded mdast oracle', () => {
       parted?.i,
       'the first recorded case the TypeScript no longer answers as recorded',
     ).toBeUndefined()
+  })
+
+  it("records a rail excerpt for every input, one line, and not merely the body's source", () => {
+    expect(cases.every((c) => typeof c.x === 'string' && !/\s{2}|^\s|\s$/.test(c.x))).toBe(true)
+    expect(cases.filter((c) => c.x !== '').length).toBeGreaterThan(5_000)
+    expect(cases.filter((c) => c.x !== c.t.trim()).length).toBeGreaterThan(1_000)
   })
 
   it('keeps the trees of the sets read by a person', () => {

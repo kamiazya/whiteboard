@@ -104,6 +104,7 @@ export interface SearchCore {
   tokenizeForIndex(text: string): string[]
   folderNamesOf(path: string, names: ReadonlyMap<string, string>): string[]
   searchableTexts(content: SearchableContent): string[]
+  markdownPlainText(body: string): string
   linkLabels(entries: Iterable<LinkEntry>): LinkLabelSet
   snippetAround(text: string, index: number, length: number, labels?: LinkLabelSet): string
   excerpts(
@@ -195,6 +196,14 @@ export const folderNamesOf = (path: string, names: ReadonlyMap<string, string>):
 /** The one definition of what text a document contributes to search. */
 export const searchableTexts = (content: SearchableContent): string[] =>
   searchCore('searchableTexts').searchableTexts(content)
+
+/**
+ * A markdown body as one line of plain text: what it says, without the syntax
+ * that says how to draw it. A body past the parser's bounds answers its
+ * trimmed source.
+ */
+export const markdownPlainText = (body: string): string =>
+  searchCore('markdownPlainText').markdownPlainText(body)
 
 /** A listing's link labels. The caller releases them when the listing goes. */
 export const linkLabels = (entries: Iterable<LinkEntry>): LinkLabelSet =>
