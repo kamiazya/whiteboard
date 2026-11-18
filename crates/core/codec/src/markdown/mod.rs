@@ -1,12 +1,11 @@
-//! A markdown body read into the model tree a layout reads
-//! (`packages/codec/src/markdown/pipeline.ts`'s `parseMarkdownBody`):
+//! A markdown body read into the model tree a layout reads:
 //! `whiteboard-markdown`'s `CommonMark`, GFM and math parse, then the
-//! conversion to `whiteboard_model::mdast` (`from-remark.ts`'s
-//! `fromRemarkRoot`).
+//! conversion to `whiteboard_model::mdast`. It is the only implementation: the
+//! TypeScript parser it was ported from is gone, and its recorded answers
+//! (`packages/codec/src/markdown/oracle`) are what this is held to.
 //!
-//! The `[[…]]`/`![[…]]` syntax is not parsed here, as it is not in the
-//! TypeScript: it stays in the text nodes, and [`crate::references`] reads it
-//! from them in a separate pass.
+//! The `[[…]]`/`![[…]]` syntax is not parsed here: it stays in the text nodes,
+//! and [`crate::references`] reads it from them in a separate pass.
 
 mod convert;
 
@@ -25,7 +24,7 @@ pub fn parse_markdown_body(text: &str) -> Result<Root, Refusal> {
 }
 
 /// [`parse_markdown_body`]'s tree with the 1-based start line of each of its
-/// top-level blocks, from the ONE parse (`parseMarkdownBlockLines`): index-aligned
+/// top-level blocks, from the ONE parse: index-aligned
 /// with the root's children. Source positions never enter the model; this is the
 /// one place they surface, for a consumer that correlates source lines with
 /// laid-out blocks (the preview's scroll sync). A block the parser gave no

@@ -105,8 +105,6 @@ export const RUST_SCOPE = {
     // the Rust markdown and codec crates and by codec-node.
     'packages/codec/src/markdown/oracle',
     'packages/codec/src/references/oracle',
-    'packages/codec/src/test-utils/mdast-oracle',
-    'packages/codec/src/test-utils/parse-body-oracle',
     'packages/codec/src/test-utils/scan-oracle',
     // The bundled plugin's asset tables, which the Rust crate embeds, and the
     // facet-write recording it replays.

@@ -12,6 +12,9 @@ import { type MdastRoot, mdastRootSchema } from '@kamiazya/whiteboard-model/mdas
  */
 type MarkdownModel = (text: string, aliases: string) => string
 
+/** What the wasm string crossing makes of a lone surrogate: a Rust `&str` cannot hold one. */
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g
+
 let installed: MarkdownModel | undefined
 
 export function installMarkdownModel(answer: MarkdownModel): void {
@@ -30,7 +33,7 @@ export function parseMarkdownModel(text: string, resolver?: AliasResolver): Mdas
   if (installed === undefined) {
     throw new Error('no markdown model installed; this test belongs to the web-rust project')
   }
-  const body = text.toWellFormed()
+  const body = text.replace(LONE_SURROGATE, '\ufffd')
   const answer: unknown = JSON.parse(installed(body, aliasTable(body, resolver)))
   if (!Array.isArray(answer) || answer[0] !== 'ok') {
     throw new Error(`the core refused the markdown body: ${JSON.stringify(answer)}`)

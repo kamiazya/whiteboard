@@ -1,5 +1,3 @@
-import { stream } from '../mdast-oracle/corpus.js'
-
 /**
  * The inputs of the reference-scanner oracle: what `scanReferences` and
  * `findNextReference` answer, which the Rust port (`whiteboard-codec`'s
@@ -9,6 +7,19 @@ import { stream } from '../mdast-oracle/corpus.js'
  * are the shapes the scan's linear bound is argued from. All pure, so the
  * recording can be checked against what these produce today.
  */
+
+/** xorshift32: the stream a recording is regenerated from, so it never moves with the engine. */
+function stream(seed: number): () => number {
+  let s = seed
+  return () => {
+    s ^= s << 13
+    s >>>= 0
+    s ^= s >>> 17
+    s ^= s << 5
+    s >>>= 0
+    return s / 2 ** 32
+  }
+}
 
 export const SEED = 0x2c1b3c6d
 export const RANDOM_COUNT = 1500

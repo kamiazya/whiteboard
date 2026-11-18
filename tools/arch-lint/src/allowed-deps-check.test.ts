@@ -53,7 +53,7 @@ describe('checkAllowedDependencies', () => {
   it('allows catalog: version specifiers', () => {
     const violations = checkAllowedDependencies({
       name: '@kamiazya/whiteboard-codec',
-      dependencies: { zod: 'catalog:', unified: 'catalog:' },
+      dependencies: { zod: 'catalog:', yaml: 'catalog:' },
     })
     expect(violations).toHaveLength(0)
   })

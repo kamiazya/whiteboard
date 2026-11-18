@@ -222,9 +222,6 @@ export const markdownCanvasArbitrary = arbitraryForSchema(markdownDocumentSchema
 const referenceFragmentTextArbitrary = fc
   .string({ minLength: 1, maxLength: 10 })
   .filter((s) => !/[\]|#]/.test(s) && s.trim().length > 0)
-export const referenceFragmentArbitrary = fc.option(referenceFragmentTextArbitrary, {
-  nil: undefined,
-})
 
 /**
  * Text as markdown meets it: words with spaces (so a layout wraps), the

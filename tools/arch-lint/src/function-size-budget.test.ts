@@ -451,8 +451,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-viewer/src/font-loading.ts#loadViewerFont': 61,
   'packages/canvas-viewer/src/widget-entry.ts#mountFromHost': 172,
   'packages/canvas-viewer/src/widget/comment-control.ts#createCommentControl': 76,
-  'packages/codec/src/markdown/from-remark.ts#toFlow': 57,
-  'packages/codec/src/markdown/from-remark.ts#toPhrasing': 59,
   'packages/codec/src/spatial/loss-table.ts#jsonCanvasLossTable': 57, // +5: the table says no export carries a conversation, and that a file carrying the retired comments key is refused
   'packages/codec/src/spatial/projection.ts#liftNode': 55,
   'packages/codec/src/test-utils/fully-populated-canvas.ts#fullyPopulatedCanvas': 92,
@@ -602,7 +600,6 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#browserHarness': 72,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#daemonHarness': 83,
   'packages/canvas-render/src/routing/grid-route.optimality.properties.rust.test.ts#referenceCost': 106,
-  'packages/codec/src/markdown/round-trip.property.test.ts#hasNoExcludedDescendant': 88,
   // The fake daemon can refuse a credential, and the harness hands that on.
   'packages/daemon-client/src/sse-stream-hub.contract.test.ts#createHarness': 90,
   // A fake daemon whose stream, update and refusal routes are one closure over one call log.

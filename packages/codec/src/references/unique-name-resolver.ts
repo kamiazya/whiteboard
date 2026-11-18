@@ -10,7 +10,7 @@
  * INDEX must resolve identically: a name the preview leaves as literal text
  * must never count as a backlink.
  */
-import type { AliasResolver } from './resolve.js'
+import type { AliasResolver } from './alias-resolver.js'
 
 export interface UniqueNameEntry {
   readonly id: string

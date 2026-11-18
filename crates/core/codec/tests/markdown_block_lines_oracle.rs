@@ -1,5 +1,5 @@
-//! `parse_markdown_block_lines` against the recorded `parseMarkdownBlockLines`
-//! answers (the `l` field of `mdast.jsonl`'s cases).
+//! `parse_markdown_block_lines` against the block lines the TypeScript
+//! recorded (the `l` field of `mdast.jsonl`'s cases).
 //!
 //! Three kinds of difference are expected, and nothing else:
 //!

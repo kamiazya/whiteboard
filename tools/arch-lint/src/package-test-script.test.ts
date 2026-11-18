@@ -57,9 +57,10 @@ const LEDGER: Record<string, { wrapper: string; omits: Omission }> = {
       configs: [
         'apps/web/vitest.browser.config.ts',
         'apps/web/vitest.browser-window-state.config.ts',
+        'apps/web/vitest.rust.config.ts',
       ],
       reason:
-        'the wrapper is CI test-jsdom (jsdom + web-node); browser halves run via test:browser',
+        'the wrapper is CI test-jsdom (jsdom + web-node); browser halves run via test:browser, and web-rust needs the oracle wasm artifact, so it runs in the rust job',
     },
   },
 }
