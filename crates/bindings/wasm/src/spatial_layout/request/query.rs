@@ -19,7 +19,10 @@
 //! - `tidy`: the board's boxes as `[id, frame, x, y, w, h]` rows, the ids that
 //!   may not move (`locked`), the unit roots that may (`scope`, absent for the
 //!   whole board) and the edges as `[from, to]` rows, each end an id or null
-//!   (`tidyNodes`).
+//!   (`tidyNodes`);
+//! - `notice`: a title and a detail, the mode, the measurer, the width there
+//!   is, where the box sits and the `svg` it is drawn in (`refusalScene`'s
+//!   drawing; the words are the caller's).
 //!
 //! A point is `[x, y]`, a size `[w, h]` and a box `[x, y, w, h]`.
 
@@ -33,9 +36,9 @@ use whiteboard_scene::{BoundingBox, ScenePoint};
 
 use super::code::code_tokens_of;
 use super::fragments::fragments_of;
-use super::measure::measure_of;
+use super::measure::{MeasureSpec, measure_of};
 use super::options::{dark_of, style_of};
-use super::svg::svg_of;
+use super::svg::{SvgAsk, svg_of};
 use super::{Comments, Request, Style, flag_of, request_from, strings_of};
 use crate::json_canvas_wire::{Fields, items_of, node_of, number_of, string_of};
 
@@ -59,9 +62,22 @@ pub(crate) struct Run {
     pub(crate) bbox: BoundingBox,
 }
 
+/// A notice asked: what it says, and how it is drawn.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct NoticeAsk {
+    pub(crate) title: String,
+    pub(crate) detail: String,
+    pub(crate) dark: bool,
+    pub(crate) measure: MeasureSpec,
+    pub(crate) max_width: Option<f64>,
+    pub(crate) at: Option<ScenePoint>,
+    pub(crate) svg: Option<SvgAsk>,
+}
+
 /// A query.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Query {
+    Notice(Box<NoticeAsk>),
     Edges(Box<Request>),
     SceneDigest(Box<Request>),
     NodeSize(Box<NodeSize>),
@@ -224,6 +240,15 @@ fn query_from(f: &mut Fields<'_>, query: &str) -> Option<Query> {
             bbox: f.field("box", box_of)??,
         },
         "tidy" => tidy_of(f)?,
+        "notice" => Query::Notice(Box::new(NoticeAsk {
+            title: f.field("title", string_of)??,
+            detail: f.field("detail", string_of)??,
+            dark: f.field("mode", dark_of)??,
+            measure: f.field("measure", measure_of)??,
+            max_width: f.field("maxWidth", number_of)?,
+            at: f.field("at", point_of)?,
+            svg: f.field("svg", svg_of)?,
+        })),
         _ => return None,
     })
 }

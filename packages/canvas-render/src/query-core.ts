@@ -1,6 +1,11 @@
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
-import type { CanvasLayoutRequest, CoreDegradation, CoreKeyedSvg } from './canvas-core.js'
+import type {
+  CanvasLayoutRequest,
+  CoreDegradation,
+  CoreKeyedSvg,
+  CoreSvgAsk,
+} from './canvas-core.js'
 import type { FragmentEntry } from './fragment-ask.js'
 import type { CodeTokenLines } from './highlight/code-token.js'
 import type { MeasureSpec, MeasureText } from './measure.js'
@@ -27,7 +32,11 @@ type QueryPair = readonly [number, number]
  *   annotate an element;
  * - `comment-bubble`: `placeCommentBubble`;
  * - `outline-content-box`: `outlineContentBox` over the bundled silhouettes;
- * - `tidy`: `tidyNodes` over the board's boxes, as the moves it makes.
+ * - `tidy`: `tidyNodes` over the board's boxes, as the moves it makes;
+ * - `notice`: the box a refused layout is drawn as, over the words the caller
+ *   hands (it words nothing), answered as an edge layer is, the `svg` the
+ *   envelope the notice is drawn in. A measurer that does not answer draws it
+ *   by the ratio estimate, so it is never refused for one.
  */
 export type QueryRequest =
   | (CanvasLayoutRequest & { readonly query: 'edges' })
@@ -67,6 +76,18 @@ export type QueryRequest =
       readonly obstacles: readonly QueryBox[]
     }
   | { readonly query: 'outline-content-box'; readonly shape?: string; readonly box: QueryBox }
+  | {
+      readonly query: 'notice'
+      readonly title: string
+      readonly detail: string
+      readonly mode: SpatialThemeMode
+      readonly measure: MeasureSpec
+      /** The width there is; the notice is never wider than 480. */
+      readonly maxWidth?: number
+      /** Where the box's top-left corner sits; the origin when absent. */
+      readonly at?: QueryPair
+      readonly svg?: CoreSvgAsk
+    }
   | {
       readonly query: 'tidy'
       /** Each box: its id, whether it is a frame, and `x, y, w, h`. */

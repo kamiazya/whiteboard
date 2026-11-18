@@ -8,7 +8,7 @@ import type { QueryAnswer, QueryNumbers, QueryRequest } from '../query-core.js'
 import type { LayoutRefusal } from '../refusal.js'
 import { type SceneDigest, sceneDigestSchema } from '../scene-digest-schema.js'
 import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
-import { bundledThemeModeOf } from '../theme/spatial-theme.js'
+import { bundledThemeModeOf, type SpatialThemeMode } from '../theme/spatial-theme.js'
 import {
   askedPicture,
   CoreUnaskable,
@@ -106,6 +106,54 @@ export function edgeLayerThroughCore(
       return svg === undefined ? { nodes } : { nodes, ...askedPicture(svg, answer) }
     },
     measure: options.measure,
+  })
+  return { ...layer, nodes: [...layer.nodes] }
+}
+
+/** What a notice says; the words are the caller's. */
+export interface NoticeWords {
+  readonly title: string
+  readonly detail: string
+}
+
+/** How a notice is drawn: see `refusalScene`'s options, whose drawing the core repeats. */
+export interface NoticeOptions {
+  readonly measure: MeasureText
+  readonly mode: SpatialThemeMode
+  readonly maxWidth?: number
+  readonly at?: { readonly x: number; readonly y: number }
+}
+
+/**
+ * The notice `words` say, drawn by `core` as one box and its text runs, with
+ * the picture the core drew of it in the envelope and form `svg` names. The
+ * core answers every notice (a measurer that fails draws it by the ratio
+ * estimate), so a refusal here is a defect in the asking, not an input.
+ */
+export function noticeThroughCore(
+  core: LayoutCore,
+  words: NoticeWords,
+  options: NoticeOptions,
+  svg: CoreSvgAsk,
+): { readonly nodes: SceneNode[] } & MaybePictured {
+  const { measure, mode, maxWidth, at } = options
+  const layer = queried<{ readonly nodes: readonly SceneNode[] } & MaybePictured>(core, {
+    request: () => ({
+      query: 'notice',
+      title: words.title,
+      detail: words.detail,
+      mode,
+      measure: measureSpecOf(measure),
+      ...(maxWidth === undefined ? {} : { maxWidth }),
+      ...(at === undefined ? {} : { at: [at.x, at.y] as const }),
+      svg,
+    }),
+    unanswered: (refused) => {
+      throw new Error(`the core refused a notice: ${refused.code} ${refused.reason}`)
+    },
+    read: (answer) =>
+      !('nodes' in answer) ? undefined : { nodes: answer.nodes, ...askedPicture(svg, answer) },
+    measure,
   })
   return { ...layer, nodes: [...layer.nodes] }
 }

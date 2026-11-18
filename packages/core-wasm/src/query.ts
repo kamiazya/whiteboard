@@ -32,12 +32,23 @@ type Pair = readonly [number, number]
  * every field a canvas request carries, and an `svg` the layer is drawn in as
  * a scene of its own), the spatial digest of the scene it lays out
  * (`scene-digest`), a node's fitted height (`node-size`) or its content's
- * natural size (`node-content`).
+ * natural size (`node-content`), or the box a refused layout is drawn as
+ * (`notice`: the words it is handed, the mode, the width there is, where its
+ * corner sits and the `svg` it is drawn in; answered as an edge layer is).
  */
 type MeasuredQuery = LayoutRequest &
   (
     | { readonly query: 'edges'; readonly svg?: SvgAsk }
     | { readonly query: 'scene-digest' | 'node-size' | 'node-content' }
+    | {
+        readonly query: 'notice'
+        readonly title: string
+        readonly detail: string
+        readonly mode: 'light' | 'dark'
+        readonly maxWidth?: number
+        readonly at?: Pair
+        readonly svg?: SvgAsk
+      }
   )
 
 /** A query that measures nothing: placement geometry over boxes and points. */
@@ -209,7 +220,7 @@ export function layoutQuery(
   const { glue, errors } = calls
   if ('measure' in request) {
     const read =
-      request.query === 'edges'
+      request.query === 'edges' || request.query === 'notice'
         ? readEdges
         : request.query === 'scene-digest'
           ? readDigest

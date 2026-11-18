@@ -36,7 +36,7 @@ use measure::{measure_of, surface_of};
 pub(crate) use options::Style;
 use options::{dark_of, expansion_of, geometry_of, override_of, style_of, tag_key_of};
 use proposals::proposals_of;
-pub(crate) use query::{NodeSize, Query, Run, query_of};
+pub(crate) use query::{NodeSize, NoticeAsk, Query, Run, query_of};
 use references::references_of;
 use svg::svg_of;
 pub(crate) use svg::{SvgAsk, ViewBox};

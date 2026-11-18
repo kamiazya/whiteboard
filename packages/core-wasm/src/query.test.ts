@@ -73,6 +73,34 @@ describe('a query over the artifact', () => {
     )
   })
 
+  it('sends a notice as a measured query and reads its nodes and picture as an edge layer', () => {
+    const nodes = [{ kind: 'shape', bbox: { x: 0, y: 0, w: 480, h: 80 } }]
+    const { glue, sent } = glueOf(JSON.stringify(['ok', nodes, [], '<svg xmlns="x"></svg>']))
+    const got = ask(glue, {
+      query: 'notice',
+      title: 'Too much to draw here',
+      detail: 'Split it.',
+      mode: 'dark',
+      measure: { kind: 'ratio' },
+      maxWidth: 300,
+      at: [10, 20],
+      svg: { padding: 4 },
+    })
+    expect(got).toEqual({ nodes, degradations: [], svg: '<svg xmlns="x"></svg>' })
+    expect(sent[0]).toEqual(
+      expect.arrayContaining([
+        'query',
+        'notice',
+        'title',
+        'Too much to draw here',
+        'mode',
+        'dark',
+        'at',
+        ['s', 10, 20],
+      ]),
+    )
+  })
+
   it('reads the SVG an edges query asked for last, as the document or its keyed projection', () => {
     const nodes = [{ kind: 'edge', id: 'e', path: [] }]
     const request = {

@@ -49,6 +49,8 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/core-picture.rust.test.ts',
     // The web's envelopes and the keyed projection, held the same way (A3.1).
     'packages/canvas-render/src/core-picture-web.rust.test.ts',
+    // The refusal notice the core draws, held to the TypeScript notice and backend.
+    'packages/canvas-render/src/core-notice.rust.test.ts',
     'packages/canvas-render/src/xml-escape.ts',
     // The bundled plugin's manifest, which the Rust crate embeds and loads.
     'packages/plugin-visual/src/visual.manifest.json',
