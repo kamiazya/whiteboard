@@ -56,7 +56,8 @@ const MEASURED_BYTES_BUDGET: usize = 4 * 1024 * 1024;
 struct Trusted<'a> {
     inner: &'a dyn Measure,
     doubted: Cell<bool>,
-    spent: Cell<usize>,
+    /// What is left of [`MEASURED_BYTES_BUDGET`].
+    left: Cell<usize>,
 }
 
 impl Measure for Trusted<'_> {
@@ -70,13 +71,12 @@ impl Measure for Trusted<'_> {
     }
 
     fn measure(&self, text: &str, font: &FontDescriptor) -> TextMetrics {
-        let spent = self.spent.get().saturating_add(text.len());
-        self.spent.set(spent);
-        if spent > MEASURED_BYTES_BUDGET {
+        let Some(left) = self.left.get().checked_sub(text.len()) else {
             // Nothing more reaches the host: the notice is drawn again by ratio.
             self.doubted.set(true);
             return ConstantRatioMeasure.measure(text, font);
-        }
+        };
+        self.left.set(left);
         let metrics = self.inner.measure(text, font);
         if !metrics.advance_width.is_finite() || !metrics.ascent.is_finite() {
             self.doubted.set(true);
@@ -192,7 +192,11 @@ pub fn notice_scene(
     options: &NoticeOptions,
     measure: &dyn Measure,
 ) -> Scene {
-    let trusted = Trusted { inner: measure, doubted: Cell::new(false), spent: Cell::new(0) };
+    let trusted = Trusted {
+        inner: measure,
+        doubted: Cell::new(false),
+        left: Cell::new(MEASURED_BYTES_BUDGET),
+    };
     let scene = drawn(title, detail, options, &trusted);
     if trusted.doubted.get() { drawn(title, detail, options, &ConstantRatioMeasure) } else { scene }
 }
@@ -377,11 +381,40 @@ mod tests {
 
     #[test]
     fn a_measurer_that_never_fills_a_line_is_asked_about_a_bounded_amount_of_text() {
-        let detail = "a ".repeat(32 * 1024);
+        // 4096 one-letter words on one unbreaking line: some 32 MiB of prefixes.
+        let detail = "a ".repeat(4096);
         let weightless = Weightless(Cell::new(0));
         let got = notice_scene("Title", &detail, &options(None), &weightless);
         assert!(weightless.0.get() <= MEASURED_BYTES_BUDGET, "{}", weightless.0.get());
         assert_eq!(got, notice_scene("Title", &detail, &options(None), &ConstantRatioMeasure));
+    }
+
+    /// `FakeMeasure` at 0.05 em a character, counting what it is asked.
+    struct Narrow(Cell<usize>);
+
+    impl Measure for Narrow {
+        fn advance_width(&self, text: &str, font: &FontDescriptor) -> f64 {
+            self.0.set(self.0.get() + text.len());
+            FakeMeasure::new(0.05).advance_width(text, font)
+        }
+        fn vertical_metrics(&self, font: &FontDescriptor) -> VerticalMetrics {
+            FakeMeasure::default().vertical_metrics(font)
+        }
+    }
+
+    #[test]
+    fn a_notice_measuring_megabytes_within_the_budget_keeps_its_measurer() {
+        // 640 characters a line, 16 lines: some 1.6 MB of prefixes, past a
+        // one-megabyte budget and under the real one, in few enough lines
+        // that redrawing it unbroken stays cheap.
+        let detail = "a ".repeat(5000);
+        let narrow = Narrow(Cell::new(0));
+        let got = notice_scene("Title", &detail, &options(None), &narrow);
+        let spent = narrow.0.get();
+        assert!((1_200_000..MEASURED_BYTES_BUDGET).contains(&spent), "{spent}");
+        let again = notice_scene("Title", &detail, &options(None), &FakeMeasure::new(0.05));
+        assert_eq!(got, again);
+        assert_ne!(got, notice_scene("Title", &detail, &options(None), &ConstantRatioMeasure));
     }
 
     #[test]
@@ -396,7 +429,11 @@ mod tests {
     #[test]
     fn the_trusted_measurer_answers_what_it_is_handed() {
         let fake = FakeMeasure::default();
-        let trusted = Trusted { inner: &fake, doubted: Cell::new(false), spent: Cell::new(0) };
+        let trusted = Trusted {
+            inner: &fake,
+            doubted: Cell::new(false),
+            left: Cell::new(MEASURED_BYTES_BUDGET),
+        };
         let at = font(14.0, 400.0);
         assert_eq!(
             trusted.advance_width("abc", &at).to_bits(),
