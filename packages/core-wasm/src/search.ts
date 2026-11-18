@@ -455,6 +455,49 @@ function labelsOf(channel: Channel, op: string, labels: LinkLabelSet | undefined
   return labels.handle
 }
 
+const tooLarge = (err: unknown): boolean =>
+  err instanceof Error && 'code' in err && err.code === 'input-too-large'
+
+/**
+ * Excerpts for a page of documents in one call. A page can be past the
+ * request cap together when no one of its documents is: then each is asked
+ * on its own, so a page of long hits keeps its excerpts and only a document
+ * past the cap alone has none.
+ */
+function excerptsPaged(
+  channel: Channel,
+  query: string,
+  documents: readonly (readonly string[])[],
+  handle: number | null,
+): string[][] {
+  const ask = (page: readonly (readonly string[])[]): string[][] => {
+    const answered = channel.first(
+      'excerpts',
+      (x): x is string[][] => Array.isArray(x) && x.every(isTexts),
+      toWellFormed(query),
+      handle,
+      page.map((texts) => texts.map(toWellFormed)),
+    )
+    if (answered.length !== page.length) {
+      throw channel.errors.refused('search_op', 'malformed', 'excerpts')
+    }
+    return answered
+  }
+  try {
+    return ask(documents)
+  } catch (err) {
+    if (!tooLarge(err)) throw err
+    return documents.map((texts) => {
+      try {
+        return ask([texts])[0] ?? []
+      } catch (one) {
+        if (tooLarge(one)) return []
+        throw one
+      }
+    })
+  }
+}
+
 function excerptCalls(channel: Channel, collected: Finalizer): ExcerptCalls {
   const release = (handle: number) => quietly(channel, 'labels-release', handle)
   return {
@@ -480,38 +523,8 @@ function excerptCalls(channel: Channel, collected: Finalizer): ExcerptCalls {
         unitOf(channel, 'snippet', length),
         labelsOf(channel, 'snippet', labels),
       ),
-    excerpts(query, documents, labels) {
-      const handle = labelsOf(channel, 'excerpts', labels)
-      const ask = (page: readonly (readonly string[])[]): string[][] => {
-        const answered = channel.first(
-          'excerpts',
-          (x): x is string[][] => Array.isArray(x) && x.every(isTexts),
-          toWellFormed(query),
-          handle,
-          page.map((texts) => texts.map(toWellFormed)),
-        )
-        if (answered.length !== page.length) {
-          throw channel.errors.refused('search_op', 'malformed', 'excerpts')
-        }
-        return answered
-      }
-      try {
-        return ask(documents)
-      } catch (err) {
-        // A page of documents can be past the request cap together when no
-        // one of them is: ask for each on its own, so a page of long hits
-        // keeps its excerpts and only a document past the cap alone has none.
-        if (!(err instanceof Error && 'code' in err && err.code === 'input-too-large')) throw err
-        return documents.map((texts) => {
-          try {
-            return ask([texts])[0] ?? []
-          } catch (one) {
-            if (one instanceof Error && 'code' in one && one.code === 'input-too-large') return []
-            throw one
-          }
-        })
-      }
-    },
+    excerpts: (query, documents, labels) =>
+      excerptsPaged(channel, query, documents, labelsOf(channel, 'excerpts', labels)),
   }
 }
 
