@@ -34,7 +34,10 @@ const ENCODE_CHUNK = 0x2000
 function bytesToBinary(bytes: Uint8Array): string {
   let binary = ''
   for (let i = 0; i < bytes.length; i += ENCODE_CHUNK) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + ENCODE_CHUNK) as unknown as number[])
+    binary += String.fromCharCode.apply(
+      null,
+      bytes.subarray(i, i + ENCODE_CHUNK) as unknown as number[],
+    )
   }
   return binary
 }
