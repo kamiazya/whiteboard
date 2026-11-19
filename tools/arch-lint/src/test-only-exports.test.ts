@@ -255,6 +255,10 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "production reaches it through contentDigestOf, which hashes its output; exported so a property can hold its stack form to the recursive form it replaced, which a digest's equality cannot show",
   'packages/loro-adapter/src/engine/journal.ts#journaledEngine':
     'the host-side journal over any CRDT engine, which rebuilds a handle the wasm core lost; the web host that wraps its engine in it is a later migration, so only the conformance suite reaches it',
+  'packages/loro-adapter/src/engine/lease.ts#withLease':
+    "the scoped form of a lease, which releases whatever the work does; the host that borrows a document for one call adopts it with the daemon's record cache, and only lease.test.ts reaches it until then",
+  'packages/loro-adapter/src/engine/lease.ts#WriteRefusedError':
+    "the typed refusal the kit's write throws for a refused batch; the first host to write through a lease catches it, and only lease.test.ts reaches it until then",
   'packages/loro-adapter/src/engine/readers.ts#READERS':
     "the engine's reader table, which the engine reads through readQuery; exported so the recorded read oracle's recorder and replay ask the same table the engine answers from",
   'packages/loro-adapter/src/engine/readers.ts#CONTENT_QUERIES':

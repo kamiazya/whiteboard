@@ -666,13 +666,15 @@ pub struct ImportSubtreeRequest {
     pub parent_path: Option<String>,
 }
 
-/// Open a document: from bytes an engine exported, or empty.
+/// Open a document: from exported bytes and updates after them, or empty.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct OpenRequest {
     /// The peer id this replica writes as.
     pub peer: PeerId,
     /// The document to open; empty when absent.
     pub bytes: Option<Bytes>,
+    /// Updates an engine exported, applied together after the bytes as the document the handle starts from: they are no local edit, and an engine keeps them in the restore base of the document rather than its log, so opening a long log folds nothing.
+    pub updates: Option<Vec<Bytes>>,
     /// Consecutive local edits within this many milliseconds are one undo step; absent takes the engine default, zero makes every commit a step.
     pub undo_merge_interval_ms: Option<u64>,
 }
@@ -720,6 +722,13 @@ pub struct TextSpliceRequest {
     pub text: String,
     /// The runs, applied in order as one commit; each counts against the text as the runs before it left it.
     pub runs: Vec<TextRun>,
+}
+
+/// Free what an idle open document holds only to judge its next write.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct TrimRequest {
+    /// The document.
+    pub handle: Handle,
 }
 
 /// Forget the undo and redo history of an open document.

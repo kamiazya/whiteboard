@@ -10,9 +10,9 @@ use whiteboard_model::crdt::{
     ExportResponse, ExportShallowSnapshotRequest, ExportSnapshotRequest, ExportUpdateRequest,
     ForkRequest, ImportJudge, ImportRequest, ImportSubtreeRequest, MutationApplied,
     MutationRefused, MutationResult, OpenRequest, OpenResponse, PlacedRoot, Query, QueryName,
-    ReadRequest, ReadResponse, RedoRequest, TextRun, TextSpliceRequest, UndoClearRequest,
-    UndoRequest, UndoStateRequest, UndoStateResponse, VersionEntry, VersionRequest,
-    VersionResponse, Write, WriteRequest, WriterName,
+    ReadRequest, ReadResponse, RedoRequest, TextRun, TextSpliceRequest, TrimRequest,
+    UndoClearRequest, UndoRequest, UndoStateRequest, UndoStateResponse, VersionEntry,
+    VersionRequest, VersionResponse, Write, WriteRequest, WriterName,
 };
 use whiteboard_model::json::parse;
 
@@ -146,6 +146,15 @@ fn results_requests_and_opening_messages_carry_their_fields() {
 
     assert_eq!(OpenRequest::default().bytes, None);
     assert_eq!(OpenRequest::default().undo_merge_interval_ms, None);
+    assert_eq!(OpenRequest::default().updates, None);
+    let opened = OpenRequest {
+        peer: "1".into(),
+        bytes: None,
+        updates: Some(vec!["AA==".into()]),
+        undo_merge_interval_ms: None,
+    };
+    assert_ne!(opened.clone(), OpenRequest::default());
+    assert_eq!(TrimRequest::default(), TrimRequest { handle: 0 });
     assert_eq!(OpenResponse::default().handle, 0);
     assert_eq!(CloseRequest::default(), CloseRequest { handle: 0 });
     assert_eq!(UndoRequest::default(), UndoRequest { handle: 0 });

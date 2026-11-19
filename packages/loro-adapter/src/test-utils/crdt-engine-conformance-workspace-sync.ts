@@ -243,6 +243,9 @@ function describeUpdate({ hold, send, refusedAs }: Judging) {
         })
         const body = documentContainers(client, '01BRWAAAAAAAAAAAAAAAAAAAE0').getText('body')
         body.insert(0, 'y'.repeat(2_000_000))
+        // A second, independent refusal: judged the other way round, this
+        // update would answer `invalid-path`.
+        documentNode(client, NOTE).data.set('segment', 'not a segment')
       })
       expect(result).toMatchObject({ outcome: 'refused', breach: { shape: 'run' } })
     },

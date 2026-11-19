@@ -44,6 +44,7 @@ export interface JournaledEngine {
   export(request: wire.ExportRequest): wire.ExportResponse
   write(request: wire.WriteRequest): JournaledMutation
   read(request: wire.ReadRequest): Promise<wire.ReadResponse>
+  readNow(request: wire.ReadRequest): wire.ReadResponse
   undo(request: wire.UndoRequest): JournaledMutation
   redo(request: wire.RedoRequest): JournaledMutation
   textSplice(request: wire.TextSpliceRequest): JournaledMutation
@@ -53,6 +54,7 @@ export interface JournaledEngine {
   decode(request: wire.DecodeRequest): wire.DecodeResponse
   undoState(request: wire.UndoStateRequest): wire.UndoStateResponse
   undoClear(request: wire.UndoClearRequest): void
+  trim(request: wire.TrimRequest): void
   journal(handle: wire.Handle): Journal
   /** The keeper holds every local update up to and including `upTo`. */
   acknowledge(handle: wire.Handle, upTo: number): void
@@ -90,13 +92,39 @@ function journalLocal(
 
 function acknowledgeUpTo(held: Records, engine: CrdtEngine, handle: number, upTo: number) {
   const record = recordOf(held, handle)
-  const kept = record.pending.filter(({ seq }) => seq !== undefined && seq > upTo)
-  if (kept.length === record.pending.length) return
+  const waiting = record.pending.filter(({ seq }) => seq !== undefined && seq > upTo)
+  const acknowledged = record.pending.filter(({ seq }) => seq !== undefined && seq <= upTo)
+  if (acknowledged.length === 0) return
   // The new base is the state NOW, which already holds the local updates still
   // waiting on the keeper; importing one of them again on rebuild is a no-op,
   // and they stay listed so the host knows what to resend.
-  record.base = engine.export({ handle, mode: 'snapshot' }).bytes
-  record.pending = kept
+  const base = engine.export({ handle, mode: 'snapshot' }).bytes
+  // A snapshot leaves a parked update out, so one the base lacks stays listed
+  // and rebuild re-parks it where the update it builds on can still arrive.
+  const parked = stillParked(engine, record.peer, base, record.pending)
+  record.base = base
+  record.pending = record.pending.filter((entry) => waiting.includes(entry) || parked.has(entry))
+}
+
+/** The peer-sent entries `base` does not hold: each is imported into a copy, and a parked one never applies. */
+function stillParked(
+  engine: CrdtEngine,
+  peer: string,
+  base: string,
+  pending: Held['pending'],
+): Set<Held['pending'][number]> {
+  const lacking = new Set<Held['pending'][number]>()
+  const probe = engine.open({ peer, bytes: base })
+  try {
+    for (const entry of pending) {
+      if (entry.seq !== undefined) continue
+      const result = engine.import({ handle: probe.handle, bytes: entry.update, judge: 'none' })
+      if (result.outcome === 'applied' && result.pending === true) lacking.add(entry)
+    }
+  } finally {
+    engine.close({ handle: probe.handle })
+  }
+  return lacking
 }
 
 function rebuild(held: Records, engine: CrdtEngine, journal: Journal): wire.OpenResponse {
@@ -113,15 +141,49 @@ function rebuild(held: Records, engine: CrdtEngine, journal: Journal): wire.Open
   return opened
 }
 
+function emptyBase(engine: CrdtEngine, peer: string): string {
+  const { handle } = engine.open({ peer })
+  try {
+    return engine.export({ handle, mode: 'snapshot' }).bytes
+  } finally {
+    engine.close({ handle })
+  }
+}
+
+function openJournaled(held: Records, engine: CrdtEngine, request: wire.OpenRequest) {
+  const opened = engine.open(request)
+  // The base is what the document was opened from and the updates opened after
+  // it stay pending: a snapshot of the opened document would leave out one that
+  // arrived before the update it builds on.
+  const base = request.bytes ?? emptyBase(engine, request.peer)
+  const pending = (request.updates ?? []).map((update) => ({ update }))
+  held.set(opened.handle, { peer: request.peer, base, pending, nextSeq: 1 })
+  return opened
+}
+
+/**
+ * A view at a version has nothing to rebuild from, so only a copy of the head
+ * is journalled.
+ *
+ * The copy takes its source's own record, not a snapshot of itself: a snapshot
+ * leaves out an update still parked, which the copy carries. To the copy every
+ * update is one somebody else made, so none keeps a seq. A view has no record
+ * and parks nothing, so a copy of one starts from a snapshot.
+ */
+function forkJournaled(held: Records, engine: CrdtEngine, request: wire.ForkRequest) {
+  const opened = engine.fork(request)
+  if (request.at !== undefined) return opened
+  const source = held.get(request.handle)
+  const base = source?.base ?? engine.export({ handle: opened.handle, mode: 'snapshot' }).bytes
+  const pending = (source?.pending ?? []).map(({ update }) => ({ update }))
+  held.set(opened.handle, { peer: request.peer, base, pending, nextSeq: 1 })
+  return opened
+}
+
 export function journaledEngine(engine: CrdtEngine): JournaledEngine {
   const held: Records = new Map()
   return {
-    open(request) {
-      const opened = engine.open(request)
-      const base = request.bytes ?? engine.export({ handle: opened.handle, mode: 'snapshot' }).bytes
-      held.set(opened.handle, { peer: request.peer, base, pending: [], nextSeq: 1 })
-      return opened
-    },
+    open: (request) => openJournaled(held, engine, request),
     close(request) {
       engine.close(request)
       held.delete(request.handle)
@@ -137,23 +199,17 @@ export function journaledEngine(engine: CrdtEngine): JournaledEngine {
     export: (request) => engine.export(request),
     write: (request) => journalLocal(held, request.handle, engine.write(request)),
     read: (request) => engine.read(request),
+    readNow: (request) => engine.readNow(request),
     undo: (request) => journalLocal(held, request.handle, engine.undo(request)),
     redo: (request) => journalLocal(held, request.handle, engine.redo(request)),
     textSplice: (request) => journalLocal(held, request.handle, engine.textSplice(request)),
     importSubtree: (request) => journalLocal(held, request.handle, engine.importSubtree(request)),
-    // A view at a version has nothing to rebuild from, so only a copy of the head is journalled.
-    fork(request) {
-      const opened = engine.fork(request)
-      if (request.at === undefined) {
-        const base = engine.export({ handle: opened.handle, mode: 'snapshot' }).bytes
-        held.set(opened.handle, { peer: request.peer, base, pending: [], nextSeq: 1 })
-      }
-      return opened
-    },
+    fork: (request) => forkJournaled(held, engine, request),
     version: (request) => engine.version(request),
     decode: (request) => engine.decode(request),
     undoState: (request) => engine.undoState(request),
     undoClear: (request) => engine.undoClear(request),
+    trim: (request) => engine.trim(request),
     journal(handle) {
       const { peer, base, pending } = recordOf(held, handle)
       return journalSchema.parse({ peer, base, pending })

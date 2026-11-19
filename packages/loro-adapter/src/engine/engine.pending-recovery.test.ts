@@ -88,4 +88,35 @@ describe('recovering a document that holds a parked update', () => {
     engine.import({ handle: fork.handle, bytes: first, judge: 'none' })
     expect(await bodyOf(engine, fork.handle)).toBe('ab')
   })
+
+  it('keeps a parked update through a trim and a refused write', async () => {
+    const author = createCrdtEngine()
+    const authored = author.open({ peer: '1' })
+    const first = updateOf(writeBody(author, authored.handle, 'a'))
+    const second = updateOf(writeBody(author, authored.handle, 'ab'))
+
+    const engine = createCrdtEngine()
+    const { handle } = engine.open({ peer: '2' })
+    engine.import({ handle, bytes: second, judge: 'none' })
+    engine.trim({ handle })
+    expect(writeBody(engine, handle, 'y'.repeat(MARKDOWN_MAX_CHARS + 1)).outcome).toBe('refused')
+
+    engine.import({ handle, bytes: first, judge: 'none' })
+    expect(await bodyOf(engine, handle)).toBe('ab')
+  })
+
+  it('keeps the updates an open held parked through a compaction and a refused write', async () => {
+    const author = createCrdtEngine()
+    const authored = author.open({ peer: '1' })
+    const first = updateOf(writeBody(author, authored.handle, 'a'))
+    const second = updateOf(writeBody(author, authored.handle, 'ab'))
+
+    const engine = createCrdtEngine()
+    const { handle } = engine.open({ peer: '2', updates: [second] })
+    // Past the recovery floor, so the log folds into a snapshot that cannot hold the parked update.
+    engine.import({ handle, bytes: bulkUpdate(), judge: 'none' })
+    expect(writeBody(engine, handle, 'y'.repeat(MARKDOWN_MAX_CHARS + 1)).outcome).toBe('refused')
+    engine.import({ handle, bytes: first, judge: 'none' })
+    expect(await bodyOf(engine, handle)).toBe('ab')
+  })
 })

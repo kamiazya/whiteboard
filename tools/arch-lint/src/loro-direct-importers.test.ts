@@ -63,7 +63,6 @@ const LORO_DIRECT: Readonly<Record<string, string>> = {
   'apps/web/src/lib/replica-push.ts': 'M4: replica',
   'apps/web/src/lib/replica-record.ts': 'M4: replica',
   'apps/web/src/lib/session-body-binding.ts': 'M6: editor session',
-  'apps/web/src/lib/sse-shared-worker.ts': 'M4: sse shared worker',
   'apps/web/src/lib/unreadable-snapshot.ts': 'M5: browser keeper',
   'apps/web/src/lib/workspace-content.ts': 'M5: browser keeper',
   'apps/web/src/lib/workspace-record-ids.ts': 'M5: browser keeper',

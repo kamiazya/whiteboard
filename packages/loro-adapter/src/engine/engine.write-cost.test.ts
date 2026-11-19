@@ -1,5 +1,5 @@
 import { MARKDOWN_MAX_CHARS, documentEngine as wire } from '@kamiazya/whiteboard-model'
-import { LoroDoc } from 'loro-crdt'
+import { LoroDoc, UndoManager } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createCrdtEngine } from './engine.js'
 
@@ -82,5 +82,78 @@ describe('what a write costs the engine', () => {
     expect(await bodyOf(engine, handle)).toBe('then written')
     writeBody(engine, handle, 'and after')
     expect(await bodyOf(engine, handle)).toBe('and after')
+  })
+
+  it('opens a snapshot with a long log of updates without exporting a snapshot of it', async () => {
+    const origin = createCrdtEngine()
+    const from = origin.open({ peer: '1' })
+    const snapshot = origin.export({ handle: from.handle, mode: 'snapshot' }).bytes
+    // Together past the point where keeping each update would fold the log into a snapshot.
+    const updates = Array.from({ length: 12 }, (_, i) => {
+      const result = writeBody(origin, from.handle, `${i}`.repeat(10_000))
+      return (result as { localUpdate: string }).localUpdate
+    })
+    const exported = vi.spyOn(LoroDoc.prototype, 'export')
+    const engine = createCrdtEngine()
+    const { handle } = engine.open({ peer: '2', bytes: snapshot, updates })
+    expect(exported).not.toHaveBeenCalled()
+    expect(await bodyOf(engine, handle)).toBe('11'.repeat(10_000))
+  })
+})
+
+describe('what a handle holds while it is open', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('frees the document, the copy its writes are judged on and the undo history on close', () => {
+    const engine = createCrdtEngine()
+    const { handle } = engine.open({ peer: '1' })
+    writeBody(engine, handle, 'judged on a copy')
+    const docs = vi.spyOn(LoroDoc.prototype, 'free')
+    const undos = vi.spyOn(UndoManager.prototype, 'free')
+    engine.close({ handle })
+    expect(docs).toHaveBeenCalledTimes(2)
+    // Two documents, not one freed twice.
+    expect(new Set(docs.mock.contexts).size).toBe(2)
+    expect(undos).toHaveBeenCalledTimes(1)
+  })
+
+  it('folds the recovery log into one snapshot on trim, and exports nothing when there is none', () => {
+    const engine = createCrdtEngine()
+    const { handle } = engine.open({ peer: '1' })
+    const exported = vi.spyOn(LoroDoc.prototype, 'export')
+    engine.trim({ handle })
+    expect(exported).not.toHaveBeenCalled()
+    writeBody(engine, handle, 'one')
+    exported.mockClear()
+    engine.trim({ handle })
+    expect(exported).toHaveBeenCalledTimes(1)
+    expect(exported).toHaveBeenCalledWith({ mode: 'snapshot' })
+    engine.trim({ handle })
+    expect(exported).toHaveBeenCalledTimes(1)
+  })
+
+  it('frees the copy on trim, and judges the next write on a new one', async () => {
+    const engine = createCrdtEngine()
+    const { handle } = engine.open({ peer: '1' })
+    writeBody(engine, handle, 'judged on a copy')
+    const docs = vi.spyOn(LoroDoc.prototype, 'free')
+    engine.trim({ handle })
+    expect(docs).toHaveBeenCalledTimes(1)
+    writeBody(engine, handle, 'and on a new one')
+    expect(await bodyOf(engine, handle)).toBe('and on a new one')
+  })
+
+  it('frees the document a refused write rebuilt, not only the one a close ends', () => {
+    const engine = createCrdtEngine()
+    const { handle } = engine.open({ peer: '1' })
+    writeBody(engine, handle, 'kept')
+    const docs = vi.spyOn(LoroDoc.prototype, 'free')
+    const refused = writeBody(engine, handle, 'y'.repeat(MARKDOWN_MAX_CHARS + 1))
+    expect(refused.outcome).toBe('refused')
+    // The document before the rebuild and the copy the judge spent.
+    expect(docs).toHaveBeenCalledTimes(2)
+    expect(new Set(docs.mock.contexts).size).toBe(2)
   })
 })

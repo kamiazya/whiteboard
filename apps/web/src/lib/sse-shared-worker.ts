@@ -14,12 +14,14 @@ import type { SyncWriteRefusal } from '@kamiazya/whiteboard-daemon-client/api-co
 import { routingTransitions, SseStreamHub } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { workspaceIdOfSyncKey } from '@kamiazya/whiteboard-daemon-client/sync-key'
 import { retryDelayMs, WriteChain } from '@kamiazya/whiteboard-daemon-client/write-chain'
+import { compareVersions } from '@kamiazya/whiteboard-history'
+import type { CrdtEngine, LeaseVersion, RecordLease } from '@kamiazya/whiteboard-loro-adapter'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { createDaemonFetch } from './daemon-fetch.js'
 import { postWorkerEvent, sseWorkerRequestSchema } from './sse-shared-worker-protocol.js'
 
 /**
- * Loro is imported DYNAMICALLY, and that is load-bearing rather than a style
+ * The CRDT engine is imported DYNAMICALLY, and that is load-bearing rather than a style
  * choice. It is a WASM module, so a static import makes this whole module's
  * evaluation asynchronous — and a shared worker's `onconnect` must be
  * installed synchronously, or a tab that connects while the WASM is still
@@ -41,12 +43,23 @@ import { postWorkerEvent, sseWorkerRequestSchema } from './sse-shared-worker-pro
  * first showed up: 2094 tests passing and the run failing anyway on four
  * rejections raised after teardown.
  */
-type LoroModule = typeof import('loro-crdt')
-let loro: LoroModule | undefined
-const loroReady: Promise<LoroModule | undefined> = import('loro-crdt').then(
-  (module) => {
-    loro = module
-    return module
+interface LoadedEngine {
+  readonly engine: CrdtEngine
+  readonly randomPeerId: () => string
+  /** The host kit over a lease, held here because the adapter is only imported dynamically. */
+  readonly kit: typeof import('@kamiazya/whiteboard-loro-adapter').lease
+}
+let loaded: LoadedEngine | undefined
+const loroReady: Promise<LoadedEngine | undefined> = import(
+  '@kamiazya/whiteboard-loro-adapter'
+).then(
+  async (adapter) => {
+    loaded = {
+      engine: await adapter.loadCrdtEngine(),
+      randomPeerId: adapter.randomPeerId,
+      kit: adapter.lease,
+    }
+    return loaded
   },
   () => undefined,
 )
@@ -96,15 +109,63 @@ const replicaKey = (baseUrl: string, doc: string) => `${baseUrl}\n${doc}`
  * and answers with opaque update bytes, which is why this file needs no
  * workspace and stays as light as the stream multiplexer it grew from.
  */
-const replicas = new Map<string, InstanceType<LoroModule['LoroDoc']>>()
-type ReplicaVersion = ReturnType<InstanceType<LoroModule['LoroDoc']>['version']>
+const replicas = new Map<string, Replica>()
+type ReplicaVersion = LeaseVersion
 
-function replicaFor(baseUrl: string, doc: string): InstanceType<LoroModule['LoroDoc']> | undefined {
-  if (loro === undefined) return undefined
+/** An engine handle, and the engine it belongs to. */
+type Replica = RecordLease
+
+/** What a replica that was never opened holds: nothing is exported from it, so no encoding is needed. */
+const NO_VERSION: ReplicaVersion = { encoded: new Uint8Array(), entries: [], frontiers: [] }
+
+function openReplica(bytes?: Uint8Array): Replica | undefined {
+  if (loaded === undefined) return undefined
+  const { engine, randomPeerId, kit } = loaded
+  const { handle } = engine.open({
+    peer: randomPeerId(),
+    ...(bytes === undefined ? {} : { bytes: bytesToBase64(bytes) }),
+  })
+  return kit.ownedLease(engine, handle)
+}
+
+function versionOf(replica: Replica): ReplicaVersion {
+  return loaded?.kit.versionOf(replica) ?? NO_VERSION
+}
+
+/**
+ * How `a` stands to `b`. Peers with no entry have seen nothing, so a version
+ * list and the same list with zero counters order alike.
+ */
+function orderOf(a: ReplicaVersion, b: ReplicaVersion) {
+  const asMap = (version: ReplicaVersion) =>
+    new Map(version.entries.map(({ peer, counter }) => [peer, counter]))
+  return compareVersions(asMap(a), asMap(b))
+}
+
+/** Merges bytes unjudged: the daemon's own frames and a tab's push are not the replica's to refuse. */
+function importInto(replica: Replica, bytes: Uint8Array): void {
+  loaded?.kit.importBytes(replica, bytes, 'none')
+}
+
+function exportSince(replica: Replica, from: ReplicaVersion): Uint8Array {
+  return (loaded as LoadedEngine).kit.exportUpdateSince(replica, from.encoded)
+}
+
+function exportSnapshot(replica: Replica): Uint8Array {
+  return (loaded as LoadedEngine).kit.exportSnapshot(replica)
+}
+
+function closeReplica(replica: Replica): void {
+  replica.release()
+}
+
+function replicaFor(baseUrl: string, doc: string): Replica | undefined {
+  if (loaded === undefined) return undefined
   const key = replicaKey(baseUrl, doc)
   const existing = replicas.get(key)
   if (existing !== undefined) return existing
-  const created = new loro.LoroDoc()
+  const created = openReplica()
+  if (created === undefined) return undefined
   replicas.set(key, created)
   // Its own empty version, not `undefined`. A `from`-less update export is not
   // empty even for an untouched document, so treating "nothing acknowledged"
@@ -113,7 +174,7 @@ function replicaFor(baseUrl: string, doc: string): InstanceType<LoroModule['Loro
   // nothing — and stays conservative once the replica has real state, since
   // the first write after that carries the whole document rather than
   // assuming the daemon already has what it happens to have sent us.
-  ackedVersions.set(key, created.version())
+  ackedVersions.set(key, versionOf(created))
   return created
 }
 
@@ -175,13 +236,13 @@ function ensureSeeded(baseUrl: string, doc: string): void {
       // will fetch their own snapshot anyway. It also must not advance
       // ackedVersions here — the acked baseline moves only on a successful
       // write, and the seed is not a write.
-      const before = replica.version()
-      replica.import(bytes)
+      const before = versionOf(replica)
+      importInto(replica, bytes)
       // The daemon HAS this state by definition, so acknowledge it: without
       // this, the first tab push would re-send the entire seeded document.
       const acked = ackedVersions.get(key)
-      if (acked !== undefined && acked.compare(before) === 0) {
-        ackedVersions.set(key, replica.version())
+      if (acked !== undefined && orderOf(acked, before) === 'equal') {
+        ackedVersions.set(key, versionOf(replica))
       }
     } catch {
       seededDocs.delete(key)
@@ -210,9 +271,9 @@ function catchUp(baseUrl: string, doc: string): void {
     }
     const replica = replicas.get(key)
     if (bytes === null || bytes.byteLength === 0 || replica === undefined) return
-    const before = replica.version()
+    const before = versionOf(replica)
     try {
-      replica.import(bytes)
+      importInto(replica, bytes)
     } catch {
       return
     }
@@ -223,15 +284,13 @@ function catchUp(baseUrl: string, doc: string): void {
     // Acknowledged on the same terms as the seed: only when the replica held
     // nothing unacknowledged, since the daemon's state says nothing of a
     // tab's edit still on its way.
-    if (ackedVersions.get(key)?.compare(before) === 0) ackedVersions.set(key, replica.version())
+    const acked = ackedVersions.get(key)
+    if (acked !== undefined && orderOf(acked, before) === 'equal') {
+      ackedVersions.set(key, versionOf(replica))
+    }
     // By version: an update export carries a header even when it holds no ops.
-    if (replica.version().compare(before) === 0) return
-    fanOutUpdate(
-      baseUrl,
-      doc,
-      bytesToBase64(replica.export({ mode: 'update', from: before })),
-      null,
-    )
+    if (orderOf(versionOf(replica), before) === 'equal') return
+    fanOutUpdate(baseUrl, doc, bytesToBase64(exportSince(replica, before)), null)
   })
 }
 
@@ -299,13 +358,19 @@ function releaseReplicaFeed(baseUrl: string, doc: string): void {
  * made. On the replica queue, so a push or rebuild already queued is
  * accounted for before the decision.
  */
+function dropReplica(key: string): void {
+  const held = replicas.get(key)
+  if (held !== undefined) closeReplica(held)
+  replicas.delete(key)
+}
+
 function releaseIfUnused(baseUrl: string, doc: string): void {
   const key = replicaKey(baseUrl, doc)
   queueReplicaWork(() => {
     if (replicaFeeds.has(key) || snapshotRetries.has(key) || holdsUnsavedTabEdits(key)) return
     writers.get(key)?.close()
     writers.delete(key)
-    replicas.delete(key)
+    dropReplica(key)
     ackedVersions.delete(key)
     unsavedTabEdits.delete(key)
     seededDocs.delete(key)
@@ -352,8 +417,10 @@ const unsavedTabEdits = new Map<string, ReplicaVersion>()
 function holdsUnsavedTabEdits(key: string): boolean {
   const through = unsavedTabEdits.get(key)
   if (through === undefined) return false
-  const order = ackedVersions.get(key)?.compare(through)
-  return order !== 0 && order !== 1
+  const acked = ackedVersions.get(key)
+  if (acked === undefined) return true
+  const order = orderOf(acked, through)
+  return order !== 'equal' && order !== 'after'
 }
 
 /**
@@ -383,9 +450,9 @@ function writerFor(baseUrl: string, doc: string): WriteChain<ReplicaVersion> {
       // POST an empty body on every reconnect. `0` is "the same state";
       // anything else, including the `undefined` Loro returns for versions it
       // cannot order, means send.
-      const at = replica.version()
-      if (at.compare(acked) === 0) return null
-      return { mark: at, bytes: replica.export({ mode: 'update', from: acked }) }
+      const at = versionOf(replica)
+      if (orderOf(at, acked) === 'equal') return null
+      return { mark: at, bytes: exportSince(replica, acked) }
     },
     acknowledge: (at) => {
       ackedVersions.set(key, at)
@@ -427,6 +494,19 @@ function writeRefused(
   replaceReplica(baseUrl, doc, refusal, 0)
 }
 
+/** The replica made from the daemon's snapshot in place of the one holding refused edits. */
+function adoptSnapshot(key: string, bytes: Uint8Array | null): boolean {
+  const replica = openReplica(bytes !== null && bytes.byteLength > 0 ? bytes : undefined)
+  if (replica === undefined) return false
+  dropReplica(key)
+  replicas.set(key, replica)
+  ackedVersions.set(key, versionOf(replica))
+  // The refused edits went with the replica that held them.
+  unsavedTabEdits.delete(key)
+  seededDocs.add(key)
+  return true
+}
+
 /**
  * The replica, rebuilt from the daemon's snapshot. On the replica queue, so a
  * frame or push that arrives meanwhile lands on the replacement. A snapshot
@@ -462,14 +542,7 @@ function replaceReplica(
       )
       return
     }
-    if (loro === undefined) return
-    const replica = new loro.LoroDoc()
-    if (bytes !== null && bytes.byteLength > 0) replica.import(bytes)
-    replicas.set(key, replica)
-    ackedVersions.set(key, replica.version())
-    // The refused edits went with the replica that held them.
-    unsavedTabEdits.delete(key)
-    seededDocs.add(key)
+    if (!adoptSnapshot(key, bytes)) return
     writers.get(key)?.resume()
     for (const [target, state] of ports) {
       if (state.baseUrl !== baseUrl || !state.subscriptions.has(doc)) continue
@@ -513,13 +586,13 @@ function ingest(baseUrl: string, doc: string, bytes: Uint8Array, from: MessagePo
   queueReplicaWork(() => {
     const replica = replicaFor(baseUrl, doc)
     if (replica === undefined) return
-    const before = replica.version()
+    const before = versionOf(replica)
     // Total by construction: a frame this replica cannot merge (a truncated
     // update, a future format) must not take the worker down for every tab
     // and every other document. The daemon remains the source it can re-sync
     // from.
     try {
-      replica.import(bytes)
+      importInto(replica, bytes)
     } catch {
       return
     }
@@ -529,7 +602,7 @@ function ingest(baseUrl: string, doc: string, bytes: Uint8Array, from: MessagePo
     // different questions, and answering them with one value is what silently
     // dropped an edit the daemon refused.
     if (from !== null) {
-      unsavedTabEdits.set(replicaKey(baseUrl, doc), replica.version())
+      unsavedTabEdits.set(replicaKey(baseUrl, doc), versionOf(replica))
       scheduleWrite(baseUrl, doc)
     }
     // Only what the replica did not already have travels onward. Two things
@@ -537,7 +610,7 @@ function ingest(baseUrl: string, doc: string, bytes: Uint8Array, from: MessagePo
     // re-pushing work a sibling already delivered costs no broadcast, and the
     // daemon's echo of a tab's OWN push diffs to nothing — which is what stops
     // the round trip from looping back out as authority state.
-    const merged = replica.export({ mode: 'update', from: before })
+    const merged = exportSince(replica, before)
     if (merged.byteLength === 0) return
     fanOutUpdate(baseUrl, doc, bytesToBase64(merged), from)
   })
@@ -605,8 +678,9 @@ function handleSnapshotRequest(
     // scoped to a document it lacks. A document the daemon does not know is seeded, and answered
     // empty: forking from empty is the same path a first-ever open takes.
     const seeded = seededDocs.has(replicaKey(state.baseUrl, msg.doc))
-    const snapshot = replicaFor(state.baseUrl, msg.doc)?.export({ mode: 'snapshot' })
-    if (snapshot === undefined) return
+    const replica = replicaFor(state.baseUrl, msg.doc)
+    if (replica === undefined) return
+    const snapshot = exportSnapshot(replica)
     const answer = seeded ? bytesToBase64(snapshot) : ''
     postWorkerEvent(port, { type: 'snapshot', doc: msg.doc, snapshot: answer })
   })

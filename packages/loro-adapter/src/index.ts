@@ -35,6 +35,8 @@ export {
 export { reconcileCoreFacets, reconcileFacets } from './document-envelope-reconcile.js'
 export { type CrdtEngineOptions, createCrdtEngine } from './engine/engine.js'
 export { type JournaledEngine, journaledEngine } from './engine/journal.js'
+export type { LeaseVersion, RecordLease } from './engine/lease.js'
+export * as lease from './engine/lease.js'
 export { loadCrdtEngine } from './engine/load.js'
 export { randomPeerId } from './engine/peer.js'
 export { readValue } from './engine/read-value.js'

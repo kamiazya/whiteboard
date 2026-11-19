@@ -72,6 +72,8 @@ const FLOORS = {
 const NOT_RECORDED: Record<string, string> = {
   createCheckpointScheduler:
     'a timer over injected ports: its answer is when it fires, not a function of its input',
+  compareVersions:
+    'not recorded on its own: every compactionCut row replays it against the shallow root, and version-vector.test.ts holds its order laws as properties',
 }
 
 const isEmpty = (answerOf: Answer) => {

@@ -27,8 +27,16 @@ export async function readValue<T>(
   query: wire.Query,
   shape: AnswerShape<T>,
 ): Promise<T> {
-  const { value } = await engine.read({ handle, query })
-  const answer = value as { ok: unknown } | { err: string }
+  return unwrapAnswer(await engine.read({ handle, query }), query, shape)
+}
+
+/** `readValue` for an answer already in hand, which is what `readNow` gives. */
+export function unwrapAnswer<T>(
+  response: wire.ReadResponse,
+  query: wire.Query,
+  shape: AnswerShape<T>,
+): T {
+  const answer = response.value as { ok: unknown } | { err: string }
   if ('err' in answer) {
     const refusal = new Error(`${query.query} was refused: ${answer.err}`)
     refusal.name = answer.err
