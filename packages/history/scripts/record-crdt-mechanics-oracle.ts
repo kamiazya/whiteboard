@@ -145,6 +145,35 @@ for (let i = 0; i < 24; i++) {
   }
 }
 
+{
+  // A point concurrent with the shallow root: the cut can fall beside the root, neither before nor after it
+  for (let i = 0; i < 6; i++) {
+    const rng = rngOf(350 + i)
+    const a = new LoroDoc()
+    a.setPeerId(10n)
+    const b = new LoroDoc()
+    b.setPeerId(11n)
+    for (let k = 0; k < int(rng, 3, 8); k++) {
+      a.getMap('m').set(`a${k}`, k)
+      a.commit()
+    }
+    const root = a.frontiers()
+    for (let k = 0; k < int(rng, 2, 5); k++) {
+      b.getMap('m').set(`b${k}`, k)
+      b.commit()
+    }
+    const onlyB = b.frontiers()
+    a.import(b.export({ mode: 'update' }))
+    a.getMap('m').set('after', i)
+    a.commit()
+    const both = a.frontiers()
+    const shallow = a.export({ mode: 'shallow-snapshot', frontiers: root })
+    cutRow('shallow-concurrent', shallow, [pairsOfFrontiers(onlyB), pairsOfFrontiers(both)])
+    cutRow('shallow-concurrent-beside', shallow, [pairsOfFrontiers(onlyB)])
+    cutRow('shallow-concurrent-root', shallow, [pairsOfFrontiers(root), pairsOfFrontiers(both)])
+  }
+}
+
 // ---- frontiers text codec ----
 
 const frontierSamples: FrontierPairs[] = [
