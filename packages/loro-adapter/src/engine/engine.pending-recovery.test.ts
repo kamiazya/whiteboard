@@ -54,4 +54,38 @@ describe('recovering a document that holds a parked update', () => {
     engine.import({ handle, bytes: first, judge: 'none' })
     expect(await bodyOf(engine, handle)).toBe('ab')
   })
+
+  it('carries a parked update into a fork, so the fork completes it like its source', async () => {
+    const author = createCrdtEngine()
+    const authored = author.open({ peer: '1' })
+    const first = updateOf(writeBody(author, authored.handle, 'a'))
+    const second = updateOf(writeBody(author, authored.handle, 'ab'))
+
+    const engine = createCrdtEngine()
+    const source = engine.open({ peer: '2' })
+    expect(engine.import({ handle: source.handle, bytes: second, judge: 'none' })).toMatchObject({
+      pending: true,
+    })
+    const fork = engine.fork({ handle: source.handle, peer: '3' })
+    engine.import({ handle: source.handle, bytes: first, judge: 'none' })
+    engine.import({ handle: fork.handle, bytes: first, judge: 'none' })
+    expect(await bodyOf(engine, source.handle)).toBe('ab')
+    expect(await bodyOf(engine, fork.handle)).toBe('ab')
+  })
+
+  it("keeps a forked parked update through the fork's own refused write", async () => {
+    const author = createCrdtEngine()
+    const authored = author.open({ peer: '1' })
+    const first = updateOf(writeBody(author, authored.handle, 'a'))
+    const second = updateOf(writeBody(author, authored.handle, 'ab'))
+
+    const engine = createCrdtEngine()
+    const source = engine.open({ peer: '2' })
+    engine.import({ handle: source.handle, bytes: second, judge: 'none' })
+    const fork = engine.fork({ handle: source.handle, peer: '3' })
+    const refused = writeBody(engine, fork.handle, 'y'.repeat(MARKDOWN_MAX_CHARS + 1))
+    expect(refused.outcome).toBe('refused')
+    engine.import({ handle: fork.handle, bytes: first, judge: 'none' })
+    expect(await bodyOf(engine, fork.handle)).toBe('ab')
+  })
 })

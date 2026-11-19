@@ -265,8 +265,13 @@ function forkOf(source: Held, request: wire.ForkRequest): Held {
   const { peer, at } = request
   const id = peerOf(peer)
   const base = source.doc.export({ mode: 'snapshot' })
+  // A snapshot leaves the source's parked updates out, so they are carried
+  // across: the fork then completes them when their dependency arrives, as the
+  // source does, and its own rebuild after a refusal keeps them.
+  const parked = stillParkedAfter(base, source.parked)
   const doc = new LoroDoc()
   doc.import(base)
+  for (const update of parked) doc.import(update)
   doc.setPeerId(id)
   if (at !== undefined) {
     doc.checkout(at.map(({ peer: author, counter }) => ({ peer: author as `${number}`, counter })))
@@ -280,9 +285,9 @@ function forkOf(source: Held, request: wire.ForkRequest): Held {
     view: at !== undefined,
     shadow: null,
     base,
-    log: [],
-    logBytes: 0,
-    parked: [],
+    log: [...parked],
+    logBytes: parked.reduce((total, update) => total + update.byteLength, 0),
+    parked,
   }
 }
 
