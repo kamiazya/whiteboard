@@ -16,15 +16,30 @@
  * Tests are not scanned; they keep `loro-crdt` as a devDependency until the
  * package stops being a dependency of anything shipped.
  */
+import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
+import { parseSource } from './ast-helpers.js'
 import { readRepoSources } from './scan-roots.js'
+import { collectModuleSpecifiers } from './scanner.js'
 import { isShippedPath } from './source-scan.js'
-import { stripComments } from './strip-comments.js'
 
-/** `from 'loro-crdt'`, `import 'loro-crdt/x'` and `import('loro-crdt')`, one specifier each. */
-const LORO_IMPORT = /(?:\bfrom|\bimport\s*\(|\bimport)\s*['"]loro-crdt(?:\/[^'"]*)?['"]/
-/** The names of loro-adapter's surface whose type or value IS a LoroDoc. */
-const LORO_SHAPED_SURFACE = /\b(?:DocumentContainers|documentContainers|projectWorkspaceDocument)\b/
+const LORO_SHAPED_SURFACE = new Set([
+  'DocumentContainers',
+  'documentContainers',
+  'projectWorkspaceDocument',
+])
+
+/** Whether a module specifier names loro-crdt or one of its subpaths. */
+const isLoroSpecifier = (specifier: string) =>
+  specifier === 'loro-crdt' || specifier.startsWith('loro-crdt/')
+
+/** Whether any identifier in the file spells a name of the adapter's Loro-shaped surface. */
+function namesShapedSurface(source: ts.SourceFile): boolean {
+  const found = (node: ts.Node): boolean =>
+    (ts.isIdentifier(node) && LORO_SHAPED_SURFACE.has(node.text)) ||
+    ts.forEachChild(node, found) === true
+  return found(source)
+}
 
 /**
  * Shipped files that import `loro-crdt` outside loro-adapter, each with the
@@ -119,9 +134,10 @@ function scan(sources: ReadonlyArray<{ path: string; text: string }>): Scan {
   const direct: string[] = []
   const shaped: string[] = []
   for (const { path, text } of files) {
-    const code = stripComments(text, path)
-    if (LORO_IMPORT.test(code)) direct.push(path)
-    else if (LORO_SHAPED_SURFACE.test(code)) shaped.push(path)
+    const source = parseSource(path, text, false)
+    if (collectModuleSpecifiers(source).some(({ specifier }) => isLoroSpecifier(specifier))) {
+      direct.push(path)
+    } else if (namesShapedSurface(source)) shaped.push(path)
   }
   return { files: files.length, direct: direct.sort(), shaped: shaped.sort() }
 }
@@ -175,6 +191,7 @@ describe('the scan reads every form of the import', () => {
     "import 'loro-crdt'",
     ['const loro = await import', "('loro-crdt')"].join(''),
     'import { LoroDoc } from "loro-crdt/nodejs"',
+    ['const loro = await import', '(`loro-crdt`)'].join(''),
   ])('finds %s', (text) => {
     expect(found(at, text)).toEqual([at])
   })
@@ -186,6 +203,7 @@ describe('the scan reads every form of the import', () => {
     expect(found('apps/web/src/lib/a.test.ts', "import 'loro-crdt'")).toEqual([])
     expect(found('packages/loro-adapter/src/a.ts', "import 'loro-crdt'")).toEqual([])
     expect(found(at, "import 'loro-crdt-extra'")).toEqual([])
+    expect(found(at, 'const text = "import \'loro-crdt\'"')).toEqual([])
   })
 
   it('reads the adapter surface only where loro-crdt is not imported', () => {
@@ -193,5 +211,6 @@ describe('the scan reads every form of the import', () => {
     expect(
       scan([{ path: at, text: "import 'loro-crdt'\ndocumentContainers(doc, id)" }]).shaped,
     ).toEqual([])
+    expect(scan([{ path: at, text: "const text = 'documentContainers(doc)'" }]).shaped).toEqual([])
   })
 })
