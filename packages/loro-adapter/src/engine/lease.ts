@@ -129,20 +129,29 @@ export class WriteRefusedError extends Error {
 
 /**
  * Applies the batch as one commit. A refusal throws `WriteRefusedError` unless
- * the caller asks for it back with `refusal: 'return'`.
+ * the caller asks for it back with `refusal: 'return'`. `judge: 'none'` is for
+ * a host whose keeper judges what it is pushed, and makes no judging copy.
  */
-export function write(lease: RecordLease, batch: wire.Write[]): wire.MutationApplied
 export function write(
   lease: RecordLease,
   batch: wire.Write[],
-  options: { readonly refusal: 'return' },
+  options?: { readonly judge?: wire.WriteJudge },
+): wire.MutationApplied
+export function write(
+  lease: RecordLease,
+  batch: wire.Write[],
+  options: { readonly refusal: 'return'; readonly judge?: wire.WriteJudge },
 ): wire.MutationResult
 export function write(
   lease: RecordLease,
   batch: wire.Write[],
-  options?: { readonly refusal: 'return' },
+  options?: { readonly refusal?: 'return'; readonly judge?: wire.WriteJudge },
 ): wire.MutationResult {
-  const result = lease.engine.write({ handle: lease.handle, batch })
+  const result = lease.engine.write({
+    handle: lease.handle,
+    batch,
+    ...(options?.judge === undefined ? {} : { judge: options.judge }),
+  })
   if (result.outcome === 'refused' && options?.refusal !== 'return') {
     throw new WriteRefusedError(result.breach)
   }

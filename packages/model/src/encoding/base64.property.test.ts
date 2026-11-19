@@ -10,6 +10,15 @@ import { base64ToBytes, base64UrlToBytes, bytesToBase64, bytesToBase64Url } from
 
 const anyBytes = fc.uint8Array({ maxLength: 300 })
 
+// The encoder works a chunk at a time, so what can go wrong sits at the chunk
+// edges: a length just under, at and over a multiple of it.
+const CHUNK = 0x2000
+const aroundChunkEdges = fc
+  .tuple(fc.integer({ min: 0, max: 4 }), fc.integer({ min: -2, max: 2 }), fc.nat(255))
+  .map(([chunks, offset, fill]) =>
+    new Uint8Array(Math.max(0, chunks * CHUNK + offset)).map((_, i) => (i * 31 + fill) & 0xff),
+  )
+
 // Dense over the characters that decide validity, so a random string reaches
 // both the valid grammar and each way of falling off it.
 const nearBase64 = fc.string({
@@ -30,6 +39,13 @@ describe('base64 codec properties', () => {
     expect(bytesToBase64(input)).toBe(Buffer.from(input).toString('base64'))
     expect(bytesToBase64Url(input)).toBe(Buffer.from(input).toString('base64url'))
   })
+
+  fcTest.prop([aroundChunkEdges], withDefaults({ numRuns: 30 }))(
+    'encodes the way Node does at the edges of its chunks',
+    (input) => {
+      expect(bytesToBase64(input)).toBe(Buffer.from(input).toString('base64'))
+    },
+  )
 
   fcTest.prop([anyBytes], withDefaults())('the url variant never writes +, / or =', (input) => {
     expect(bytesToBase64Url(input)).toMatch(/^[A-Za-z0-9_-]*$/)

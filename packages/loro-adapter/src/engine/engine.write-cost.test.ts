@@ -126,6 +126,45 @@ describe('what a write costs the engine', () => {
   })
 })
 
+describe('what opening a log of updates costs the engine', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  const logOf = (count: number) => {
+    const origin = createCrdtEngine()
+    const from = origin.open({ peer: '1' })
+    const snapshot = origin.export({ handle: from.handle, mode: 'snapshot' }).bytes
+    const updates = Array.from({ length: count }, (_, i) => {
+      const result = writeBody(origin, from.handle, `edit ${i}`)
+      return (result as { localUpdate: string }).localUpdate
+    })
+    return { snapshot, updates }
+  }
+
+  // Loro applies a snapshot and 85 small updates one at a time in about a
+  // third of the time it takes them as one batch (36 ms against 99-119 ms).
+  it('applies a log that builds on its snapshot one update at a time, never as a batch', async () => {
+    const { snapshot, updates } = logOf(8)
+    const batch = vi.spyOn(LoroDoc.prototype, 'importBatch')
+    const engine = createCrdtEngine()
+    const { handle } = engine.open({ peer: '2', bytes: snapshot, updates })
+    expect(batch).not.toHaveBeenCalled()
+    expect(await bodyOf(engine, handle)).toBe('edit 7')
+  })
+
+  it('still applies a log with an update parked as a batch, so the parked update is known', async () => {
+    const { updates } = logOf(3)
+    const batch = vi.spyOn(LoroDoc.prototype, 'importBatch')
+    const engine = createCrdtEngine()
+    // The first update is withheld, so the other two build on operations the document lacks.
+    const { handle } = engine.open({ peer: '2', updates: updates.slice(1) })
+    expect(batch).toHaveBeenCalledTimes(1)
+    engine.import({ handle, bytes: updates[0] as string, judge: 'none' })
+    expect(await bodyOf(engine, handle)).toBe('edit 2')
+  })
+})
+
 describe('what a handle holds while it is open', () => {
   afterEach(() => {
     vi.restoreAllMocks()

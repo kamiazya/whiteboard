@@ -7,14 +7,17 @@
  * Counted rather than timed — every prefix test is a call of the model's
  * `isSelfOrDescendant`.
  */
-import { WORKSPACE_TREE_KEY } from '@kamiazya/whiteboard-loro-adapter'
-import { type BlobStore, blobRefKey } from '@kamiazya/whiteboard-ports'
-import { LoroDoc } from 'loro-crdt'
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { describe, expect, it, vi } from 'vitest'
-import type { WorkspaceDocs } from './workspace-docs.js'
+import {
+  INDEX_SUBJECTS,
+  indexOver,
+  inMemoryBlobStore,
+  liveWorkspaceDocs,
+} from './test-utils/index-subjects.js'
 
-// lazy-import: the index is imported after `vi.mock` wraps the prefix test,
-// so the calls it makes are the ones this file counts.
+// `vi.mock` is hoisted above the imports, so the index calls the wrapped
+// prefix test and the calls it makes are the ones this file counts.
 const counted = vi.hoisted(() => ({ calls: 0 }))
 vi.mock('@kamiazya/whiteboard-model', async (original) => {
   const actual = await original<typeof import('@kamiazya/whiteboard-model')>()
@@ -31,66 +34,21 @@ const WS = '01JDZNGS07Y9E7Q7XVJ69S28B9'
 const FOLDERS = 2000
 const DOCUMENTS = 500
 
-const notImplemented = (): Promise<never> => Promise.reject(new Error('not implemented'))
-
-function inMemoryBlobStore(): BlobStore {
-  const blobs = new Map<string, Uint8Array>()
-  return {
-    async put({ bytes }) {
-      const ref = { algorithm: 'sha-256', digestHex: '0'.repeat(64) } as const
-      blobs.set(blobRefKey(ref), new Uint8Array(bytes))
-      return { ref }
-    },
-    async get({ ref }) {
-      const bytes = blobs.get(blobRefKey(ref))
-      return bytes === undefined ? null : { bytes: new Uint8Array(bytes) }
-    },
-    async has({ ref }) {
-      return { exists: blobs.has(blobRefKey(ref)) }
-    },
-    async delete({ ref }) {
-      blobs.delete(blobRefKey(ref))
-    },
-  }
-}
-
-function inMemoryWorkspaceDocs(): WorkspaceDocs & { peek: (id: string) => LoroDoc } {
-  const docs = new Map<string, LoroDoc>()
-  return {
-    async open(workspaceId) {
-      return docs.get(workspaceId) ?? null
-    },
-    async create(workspaceId) {
-      const doc = docs.get(workspaceId) ?? new LoroDoc()
-      docs.set(workspaceId, doc)
-      return doc
-    },
-    async save() {
-      return null
-    },
-    readCursor: notImplemented,
-    catchUp: notImplemented,
-    storedVersion: notImplemented,
-    peek: (id) => docs.get(id) as LoroDoc,
-  }
-}
-
-describe('a move in a record holding many folders', () => {
+describe.each(INDEX_SUBJECTS)('a move in a record holding many folders over $name', (subject) => {
   it('tests each node against a prefix a bounded number of times', async () => {
-    const { LoroWorkspaceDocumentIndex } = await import('./loro-workspace-document-index.js')
-    const docs = inMemoryWorkspaceDocs()
-    const index = new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), {
-      listWorkspaces: async () => [],
-      findWorkspace: async () => null,
-      renameWorkspace: notImplemented,
-    })
+    const docs = liveWorkspaceDocs(subject)
+    const index = indexOver(subject, docs, inMemoryBlobStore())
     await index.createWorkspace({ workspaceId: WS })
-    for (let i = 0; i < DOCUMENTS; i++) {
-      await index.createDocument({ workspaceId: WS, path: `docs/d${i}`, kind: 'markdown' })
-    }
-    const tree = docs.peek(WS).getTree(WORKSPACE_TREE_KEY)
-    for (let i = 0; i < FOLDERS; i++) tree.createNode().data.set('segment', `f${i}`)
-    docs.peek(WS).commit()
+    // Placed in one batch: the move is the subject, and a create through the
+    // index reads the whole record each time.
+    subject.kind.write(
+      docs.peek(WS),
+      Array.from({ length: DOCUMENTS }, (_, i) => ({
+        op: 'createWorkspaceDocumentAtPath' as const,
+        args: { path: `docs/d${i}`, documentId: generateDocumentId(), kind: 'markdown' as const },
+      })),
+    )
+    await subject.fillFolders(docs.peek(WS), FOLDERS)
     const nodes = FOLDERS + DOCUMENTS + 1
 
     counted.calls = 0

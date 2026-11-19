@@ -293,19 +293,40 @@ function applyBatch(doc: LoroDoc, batch: wire.WriteRequest['batch']) {
   for (const { op, args } of batch) applyWriter(doc, op, args)
 }
 
+/**
+ * A document holding `opened` and whether any of it stays parked.
+ *
+ * Applied one at a time, which Loro does in about a third of the time it takes
+ * the same snapshot and tens of small updates as one batch. A parked update is
+ * only known at the end of a batch (a later update can unpark an earlier one),
+ * so a log that parks anything is applied again as a batch for that answer.
+ */
+function documentOf(
+  peer: bigint,
+  opened: readonly Uint8Array[],
+): { doc: LoroDoc; pending: boolean } {
+  const doc = new LoroDoc()
+  doc.setPeerId(peer)
+  let pending = false
+  for (const bytes of opened) pending ||= (doc.import(bytes).pending?.size ?? 0) > 0
+  if (!pending) return { doc, pending }
+  release(doc)
+  const batched = new LoroDoc()
+  batched.setPeerId(peer)
+  const status = batched.importBatch([...opened])
+  return { doc: batched, pending: (status.pending?.size ?? 0) > 0 }
+}
+
 function openDocument(request: wire.OpenRequest, defaultMergeInterval: number): Held {
   const { peer, bytes, updates, undoMergeIntervalMs } = wire.openRequestSchema.parse(request)
   const id = peerOf(peer)
   const mergeInterval = undoMergeIntervalMs ?? defaultMergeInterval
-  const doc = new LoroDoc()
-  doc.setPeerId(id)
   const base = bytes === undefined ? null : decoded(bytes)
   const baseUpdates = (updates ?? []).map(decoded)
   const opened = [...(base === null ? [] : [base]), ...baseUpdates]
-  // One batch, so a log of updates is applied once however many it holds.
-  const status = opened.length > 0 ? doc.importBatch(opened) : null
+  const { doc, pending } = documentOf(id, opened)
   // The updates a snapshot cannot hold stay parked, as an import's would.
-  const parked = (status?.pending?.size ?? 0) > 0 ? [...baseUpdates] : []
+  const parked = pending ? [...baseUpdates] : []
   const undo = new UndoManager(doc, { mergeInterval })
   return {
     doc,

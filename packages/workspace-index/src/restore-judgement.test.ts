@@ -3,29 +3,35 @@
  * that document. A document that merely sits somewhere inside them is not the
  * row's document, and restoring them would bring back its ancestor instead.
  */
-import {
-  createWorkspaceDocumentAtPath,
-  exportWorkspaceSubtree,
-} from '@kamiazya/whiteboard-loro-adapter'
-import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { restorableTrashDocuments } from './restore-judgement.js'
+import { INDEX_SUBJECTS, type IndexSubject } from './test-utils/index-subjects.js'
 
 const ROOT = '01BRWAAAAAAAAAAAAAAAAAAAA0'
 const CHILD = '01BRWAAAAAAAAAAAAAAAAAAAA1'
 
 /** A subtree rooted at `ROOT` holding `CHILD` beneath it. */
-function rootWithDescendant(): Uint8Array {
-  const doc = new LoroDoc()
-  createWorkspaceDocumentAtPath(doc, { path: 'top', documentId: ROOT, kind: 'markdown' })
-  createWorkspaceDocumentAtPath(doc, { path: 'top/inner', documentId: CHILD, kind: 'markdown' })
-  return exportWorkspaceSubtree(doc, 'top') as Uint8Array
+async function rootWithDescendant(subject: IndexSubject): Promise<Uint8Array> {
+  const record = await subject.kind.empty()
+  subject.kind.write(record, [
+    {
+      op: 'createWorkspaceDocumentAtPath',
+      args: { path: 'top', documentId: ROOT, kind: 'markdown' },
+    },
+    {
+      op: 'createWorkspaceDocumentAtPath',
+      args: { path: 'top/inner', documentId: CHILD, kind: 'markdown' },
+    },
+  ])
+  return subject.kind.exportSubtree(record, 'top') as Uint8Array
 }
 
-describe('judging bytes against the document a trash row is for', () => {
+describe.each(
+  INDEX_SUBJECTS,
+)('judging bytes against the document a trash row is for, over $name', (subject) => {
   it('accepts bytes rooted at the row document and counts its descendants', async () => {
     expect(
-      await restorableTrashDocuments(rootWithDescendant(), {
+      await restorableTrashDocuments(await rootWithDescendant(subject), {
         documentId: ROOT,
         parentPath: undefined,
       }),
@@ -34,7 +40,7 @@ describe('judging bytes against the document a trash row is for', () => {
 
   it('refuses bytes rooted at another document that merely hold the row document', async () => {
     expect(
-      await restorableTrashDocuments(rootWithDescendant(), {
+      await restorableTrashDocuments(await rootWithDescendant(subject), {
         documentId: CHILD,
         parentPath: undefined,
       }),

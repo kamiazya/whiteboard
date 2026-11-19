@@ -8,30 +8,14 @@
  * suite says so rather than a comment claiming it does.
  */
 
-import {
-  createWorkspaceDocumentAtPath,
-  documentContainers,
-  readCommentThreads,
-  readMarkdownBody,
-  resolveWorkspaceDocument,
-  setWorkspaceDocumentName,
-  setWorkspaceFolderName,
-  writeCommentThread,
-  writeMarkdownBody,
-} from '@kamiazya/whiteboard-loro-adapter'
-import {
-  type CommentThread,
-  generateDocumentId,
-  SINGLE_PERSON_NAMESPACE,
-} from '@kamiazya/whiteboard-model'
+import type { CommentThread } from '@kamiazya/whiteboard-model'
+import { generateDocumentId, SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
 import type {
-  BlobStore,
   RenameWorkspaceInput,
   WorkspaceEntry,
   WorkspaceLookup,
 } from '@kamiazya/whiteboard-ports'
 import {
-  blobRefKey,
   DisplayNameTakenError,
   DocumentPathTakenError,
   documentEntrySchema,
@@ -47,9 +31,14 @@ import {
   describeDocumentPinsConformance,
   describeDocumentTrashConformance,
 } from '@kamiazya/whiteboard-ports/test-utils'
-import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { LoroWorkspaceDocumentIndex } from './loro-workspace-document-index.js'
+import {
+  INDEX_SUBJECTS,
+  type IndexSubject,
+  inMemoryBlobStore,
+  storedWorkspaceDocs,
+} from './test-utils/index-subjects.js'
 import type { WorkspaceDocs } from './workspace-docs.js'
 
 /** The registry half of a rename: segment uniqueness across `workspaceIds`, then the new identity. */
@@ -82,18 +71,12 @@ function firstMatching(rows: WorkspaceEntry[], lookup: WorkspaceLookup): Workspa
   return rows.find((row) => matchesWorkspaceLookup(row, lookup)) ?? null
 }
 
-const notTailing = {
-  readCursor: () => Promise.reject(new Error('not implemented')),
-  catchUp: () => Promise.reject(new Error('not implemented')),
-  storedVersion: () => Promise.reject(new Error('not implemented')),
-}
-
 /**
  * Workspace documents in memory, kept the way a real store keeps them: only
  * what `save` exported survives, and every `open` is a restart that imports it
- * into a document nobody else holds.
+ * into a record nobody else holds.
  *
- * A double whose `save` is a no-op over live documents passes an index that
+ * A double whose `save` is a no-op over live records passes an index that
  * never calls `save` at all, because the mutation is already in the very
  * object the next read returns. A real backing store would have lost it, so the
  * conformance suites run here must not be able to pass on that.
@@ -104,42 +87,24 @@ const notTailing = {
  * reach the registry through whoever owns it, which in the daemon is
  * `CacheCoherentDocumentIndex`'s override and here is `seedWorkspace`.
  */
-function inMemoryWorkspaceDocs(): WorkspaceDocs & {
+function inMemoryWorkspaceDocs(subject: IndexSubject): WorkspaceDocs<unknown> & {
   listWorkspaces(): Promise<WorkspaceEntry[]>
   findWorkspace(lookup: WorkspaceLookup): Promise<WorkspaceEntry | null>
   seedWorkspace(entry: WorkspaceEntry): Promise<void>
   renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry>
 } {
   const identities = new Map<string, WorkspaceEntry>()
-  const stored = new Map<string, Uint8Array>()
-  let nextPeer = 1n
-  const fresh = (): LoroDoc => {
-    const doc = new LoroDoc()
-    doc.setPeerId(nextPeer)
-    nextPeer += 1n
-    return doc
-  }
+  const store = storedWorkspaceDocs(subject)
   const docs: ReturnType<typeof inMemoryWorkspaceDocs> = {
-    async open(workspaceId) {
-      const bytes = stored.get(workspaceId)
-      if (bytes === undefined) return null
-      const doc = fresh()
-      doc.import(bytes)
-      return doc
-    },
-    async create(workspaceId) {
-      return (await docs.open(workspaceId)) ?? fresh()
-    },
-    async save(workspaceId, doc) {
-      stored.set(workspaceId, doc.export({ mode: 'snapshot' }))
-      return null
-    },
-    // These doubles serve INDEX tests, which never tail. Rejecting rather than
-    // answering an empty cursor: a silent no-op would let a tailing test pass
-    // against a double that cannot tail.
-    ...notTailing,
+    ...store,
+    // The store's own methods call back into each other, so they are bound to it.
+    open: (workspaceId) => store.open(workspaceId),
+    create: (workspaceId) => store.create(workspaceId),
+    save: (workspaceId, record) => store.save(workspaceId, record),
     async listWorkspaces() {
-      return [...stored.keys()].map((workspaceId) => identities.get(workspaceId) ?? { workspaceId })
+      return [...store.stored.keys()].map(
+        (workspaceId) => identities.get(workspaceId) ?? { workspaceId },
+      )
     },
     findWorkspace: async (lookup) => firstMatching(await docs.listWorkspaces(), lookup),
     async seedWorkspace(entry) {
@@ -147,303 +112,312 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & {
       await docs.save(entry.workspaceId, await docs.create(entry.workspaceId))
     },
     async renameWorkspace(input) {
-      if (!stored.has(input.workspaceId)) throw new WorkspaceNotFoundError(input.workspaceId)
-      return renameIdentity(identities, [...stored.keys()], input)
+      if (!store.stored.has(input.workspaceId)) throw new WorkspaceNotFoundError(input.workspaceId)
+      return renameIdentity(identities, [...store.stored.keys()], input)
     },
   }
   return docs
 }
 
-/** Enough of a `BlobStore` for the evacuation a delete performs. */
-function inMemoryBlobStore(): BlobStore & { size: () => number } {
-  const blobs = new Map<string, Uint8Array>()
-  const key = blobRefKey
-  let next = 0
-  return {
-    async put({ bytes }) {
-      // A counter, not a real digest: nothing here reads the ref back for its
-      // content-addressing, and a fake keeps this double synchronous in spirit.
-      next += 1
-      const ref = { algorithm: 'sha-256', digestHex: String(next).padStart(64, '0') } as const
-      blobs.set(key(ref), new Uint8Array(bytes))
-      return { ref }
-    },
-    async get({ ref }) {
-      const bytes = blobs.get(key(ref))
-      return bytes === undefined ? null : { bytes: new Uint8Array(bytes) }
-    },
-    async has({ ref }) {
-      return { exists: blobs.has(key(ref)) }
-    },
-    async delete({ ref }) {
-      blobs.delete(key(ref))
-    },
-    size: () => blobs.size,
-  }
+/** The index over the subject's record kind, constructed here so the port's conformance suites are seen to run over it. */
+function indexOn(
+  subject: IndexSubject,
+  docs: WorkspaceDocs<unknown>,
+  blobs: ReturnType<typeof inMemoryBlobStore>,
+  registry: ConstructorParameters<typeof LoroWorkspaceDocumentIndex>[2],
+): LoroWorkspaceDocumentIndex<unknown> {
+  return new LoroWorkspaceDocumentIndex(docs, blobs, registry, { kind: subject.kind })
 }
 
-describe('LoroWorkspaceDocumentIndex', () => {
-  describeDocumentIndexConformance(async () => {
-    const docs = inMemoryWorkspaceDocs()
-    return {
-      index: new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs),
-      dispose: async () => {},
-      seedWorkspace: (entry) => docs.seedWorkspace(entry),
-    }
-  })
-})
-
-describe('LoroWorkspaceDocumentIndex pins', () => {
-  describeDocumentPinsConformance(async () => {
-    const docs = inMemoryWorkspaceDocs()
-    return {
-      index: new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs),
-      dispose: async () => {},
-    }
-  })
-})
-
-describe('LoroWorkspaceDocumentIndex folders', () => {
-  describeDocumentFoldersConformance(async () => {
-    const docs = inMemoryWorkspaceDocs()
-    return {
-      index: new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs),
-      dispose: async () => {},
-    }
-  })
-})
-
-describe('LoroWorkspaceDocumentIndex trash', () => {
-  describeDocumentTrashConformance(async () => {
-    const docs = inMemoryWorkspaceDocs()
-    const blobs = inMemoryBlobStore()
-    return {
-      index: new LoroWorkspaceDocumentIndex(docs, blobs, docs),
-      evacuatedBlobCount: async () => blobs.size(),
-      placeDocument: async ({ workspaceId, documentId, path }) => {
-        const doc = await docs.create(workspaceId)
-        createWorkspaceDocumentAtPath(doc, { path, documentId, kind: 'markdown' })
-        await docs.save(workspaceId, doc)
-      },
-      dispose: async () => {},
-    }
-  })
-})
-
-/** A document's body by path, read and written through the record the index keeps. */
-function markdownContentSeam(docs: WorkspaceDocs) {
-  const at = async (workspaceId: string, path: string) => {
-    const doc = await docs.open(workspaceId)
-    const entry = doc === null ? null : resolveWorkspaceDocument(doc, path)
-    if (doc === null || entry === null) throw new Error(`no document at ${path}`)
-    return { doc, containers: documentContainers(doc, entry.documentId) }
-  }
-  return {
-    write: async (workspaceId: string, path: string, marker: string) => {
-      const { doc, containers } = await at(workspaceId, path)
-      writeMarkdownBody(containers, marker)
-      doc.commit()
-      await docs.save(workspaceId, doc)
-    },
-    read: async (workspaceId: string, path: string) =>
-      readMarkdownBody((await at(workspaceId, path)).containers),
-    comment: async (workspaceId: string, path: string, threadId: string) => {
-      const { doc, containers } = await at(workspaceId, path)
-      writeCommentThread(containers, documentThread(threadId))
-      await docs.save(workspaceId, doc)
-    },
-    threadIds: async (workspaceId: string, path: string) =>
-      readCommentThreads((await at(workspaceId, path)).containers)
-        .map((thread) => thread.id)
-        .sort(),
-  }
-}
-
-function documentThread(id: string): CommentThread {
-  return {
-    id,
-    anchor: { kind: 'document' },
-    status: 'open',
-    messages: [{ id: `${id}-m1`, body: 'a question' }],
-  }
-}
-
-describe('LoroWorkspaceDocumentIndex duplicates', () => {
-  describeDocumentDuplicatesConformance(async () => {
-    const docs = inMemoryWorkspaceDocs()
-    return {
-      index: new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs),
-      content: markdownContentSeam(docs),
-      dispose: async () => {},
-    }
-  })
-})
-
-// Folders exist only in the tree, so these arrangements cannot be written
-// against the port-wide suite: a row-backed index has no folder to empty or to
-// collide with.
-describe('LoroWorkspaceDocumentIndex folders', () => {
-  const WS = '01BSXMXYEPZGZYHNN3KTQZ33EE'
-
-  async function makeIndex(): Promise<LoroWorkspaceDocumentIndex> {
-    const docs = inMemoryWorkspaceDocs()
-    const index = new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs)
-    await index.createWorkspace({ workspaceId: WS })
-    return index
-  }
-
-  it('frees the path of a folder a move emptied', async () => {
-    const index = await makeIndex()
-    await index.createDocument({ workspaceId: WS, path: 'a/b', kind: 'markdown' })
-    await index.createDocument({ workspaceId: WS, path: 'x', kind: 'markdown' })
-    await index.moveDocument({ workspaceId: WS, from: 'a/b', to: 'c' })
-
-    // A folder left standing at `a` would occupy the path and refuse this.
-    await index.moveDocument({ workspaceId: WS, from: 'x', to: 'a' })
-
-    expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual(['a', 'c'])
-  })
-
-  it('frees the path of a folder a delete emptied', async () => {
-    const index = await makeIndex()
-    await index.createDocument({ workspaceId: WS, path: 'a/b', kind: 'markdown' })
-    await index.createDocument({ workspaceId: WS, path: 'x', kind: 'markdown' })
-    await index.deleteDocument({ workspaceId: WS, path: 'a/b' })
-
-    // A folder left standing at `a` would occupy the path and refuse this.
-    await index.moveDocument({ workspaceId: WS, from: 'x', to: 'a' })
-
-    expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual(['a'])
-  })
-
-  // Two levels deep, emptying `a/b` is what empties `a`: a prune that walks
-  // once visits `a` while it still holds `b` and leaves it standing.
-  it('frees every ancestor folder a nested delete emptied', async () => {
-    const index = await makeIndex()
-    await index.createDocument({ workspaceId: WS, path: 'a/b/c', kind: 'markdown' })
-    await index.createDocument({ workspaceId: WS, path: 'x', kind: 'markdown' })
-    await index.deleteDocument({ workspaceId: WS, path: 'a/b/c' })
-
-    await index.moveDocument({ workspaceId: WS, from: 'x', to: 'a' })
-
-    expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual(['a'])
-  })
-
-  it('frees every ancestor folder a nested move emptied', async () => {
-    const index = await makeIndex()
-    await index.createDocument({ workspaceId: WS, path: 'a/b/c', kind: 'markdown' })
-    await index.createDocument({ workspaceId: WS, path: 'x', kind: 'markdown' })
-    await index.moveDocument({ workspaceId: WS, from: 'a/b/c', to: 'c' })
-
-    await index.moveDocument({ workspaceId: WS, from: 'x', to: 'a' })
-
-    expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual(['a', 'c'])
-  })
-
-  it('refuses to move one of two siblings onto the folder they share, and changes nothing', async () => {
-    const index = await makeIndex()
-    await index.createDocument({ workspaceId: WS, path: 'a/x', kind: 'markdown' })
-    await index.createDocument({ workspaceId: WS, path: 'a/y', kind: 'markdown' })
-
-    // `a/y` stays below `a`, so the move does not vacate the folder.
-    const rejection = await index
-      .moveDocument({ workspaceId: WS, from: 'a/x', to: 'a' })
-      .then(() => null)
-      .catch((err: unknown) => err)
-
-    expect(rejection).toBeInstanceOf(DocumentPathTakenError)
-    expect((rejection as DocumentPathTakenError).path).toBe('a')
-    expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual([
-      'a/x',
-      'a/y',
-    ])
-  })
-})
-
-// The port parses only a move's DESTINATION, so a placement some writer stored
-// off the grammar stays movable — renaming it is the one repair a listing that
-// cannot read it leaves open. Written into the tree directly, since every
-// index write now refuses that path.
-describe('LoroWorkspaceDocumentIndex, a path stored off the grammar', () => {
-  it('moves to a path the grammar accepts, and lists again', async () => {
-    const WS = '01FTVS1AXQE5KMZQPDXHC2RAKW'
-    const docs = inMemoryWorkspaceDocs()
-    const index = new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs)
-    await index.createWorkspace({ workspaceId: WS })
-    const doc = await docs.open(WS)
-    if (doc === null) throw new Error('the workspace record was not stored')
-    const placed = createWorkspaceDocumentAtPath(doc, {
-      path: 'Meeting notes',
-      documentId: generateDocumentId(),
-      kind: 'markdown',
+describe.each(INDEX_SUBJECTS)('workspace index over $name', (subject) => {
+  describe('LoroWorkspaceDocumentIndex', () => {
+    describeDocumentIndexConformance(async () => {
+      const docs = inMemoryWorkspaceDocs(subject)
+      return {
+        index: indexOn(subject, docs, inMemoryBlobStore(), docs),
+        dispose: async () => {},
+        seedWorkspace: (entry) => docs.seedWorkspace(entry),
+      }
     })
-    expect(placed).not.toBeNull()
-    await docs.save(WS, doc)
-
-    await index.moveDocument({ workspaceId: WS, from: 'Meeting notes', to: 'meeting-notes' })
-
-    const listed = await index.listDocuments({ workspaceId: WS })
-    expect(listed.map((entry) => entry.path)).toEqual(['meeting-notes'])
-    expect(listed.every((entry) => documentEntrySchema.safeParse(entry).success)).toBe(true)
   })
-})
 
-/**
- * A duplicate the keeper could not have seen — two replicas naming siblings
- * alike before they met — arrives by merge and is kept: both names list,
- * re-saving either one's own name is no refusal, and only a third write
- * taking the name is compared.
- */
-describe('LoroWorkspaceDocumentIndex names that collide in a merge', () => {
-  const WS = '012DEQE42WVNWWDSRRY87GHG91'
+  describe('LoroWorkspaceDocumentIndex pins', () => {
+    describeDocumentPinsConformance(async () => {
+      const docs = inMemoryWorkspaceDocs(subject)
+      return {
+        index: indexOn(subject, docs, inMemoryBlobStore(), docs),
+        dispose: async () => {},
+      }
+    })
+  })
 
-  async function mergedDuplicates() {
-    const docs = inMemoryWorkspaceDocs()
-    const index = new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs)
-    await index.createWorkspace({ workspaceId: WS })
-    for (const path of ['term/a/x', 'term/b/x', 'term/c/x']) {
-      await index.createDocument({ workspaceId: WS, path, kind: 'markdown' })
+  describe('LoroWorkspaceDocumentIndex folders', () => {
+    describeDocumentFoldersConformance(async () => {
+      const docs = inMemoryWorkspaceDocs(subject)
+      return {
+        index: indexOn(subject, docs, inMemoryBlobStore(), docs),
+        dispose: async () => {},
+      }
+    })
+  })
+
+  describe('LoroWorkspaceDocumentIndex trash', () => {
+    describeDocumentTrashConformance(async () => {
+      const docs = inMemoryWorkspaceDocs(subject)
+      const blobs = inMemoryBlobStore()
+      return {
+        index: indexOn(subject, docs, blobs, docs),
+        evacuatedBlobCount: async () => blobs.size(),
+        placeDocument: async ({ workspaceId, documentId, path }) => {
+          const record = await docs.create(workspaceId)
+          subject.kind.write(record, [
+            { op: 'createWorkspaceDocumentAtPath', args: { path, documentId, kind: 'markdown' } },
+          ])
+          await docs.save(workspaceId, record)
+        },
+        dispose: async () => {},
+      }
+    })
+  })
+
+  /** A document's body by path, read and written through the record the index keeps. */
+  function markdownContentSeam(subject: IndexSubject, docs: WorkspaceDocs<unknown>) {
+    const at = async (workspaceId: string, path: string) => {
+      const record = await docs.open(workspaceId)
+      const entry =
+        record === null
+          ? undefined
+          : (await subject.kind.documents(record)).find((row) => row.path === path)
+      if (record === null || entry === undefined) throw new Error(`no document at ${path}`)
+      return { record, documentId: entry.documentId }
     }
-    const plan = await index.createDocument({ workspaceId: WS, path: 'term/p1', kind: 'markdown' })
-    const other = await index.createDocument({ workspaceId: WS, path: 'term/p2', kind: 'markdown' })
-    const base = await docs.open(WS)
-    if (base === null) throw new Error('no workspace record')
-    const replica = LoroDoc.fromSnapshot(base.export({ mode: 'snapshot' }))
-    replica.setPeerId(99n)
-    // Each side names a different sibling alike, unaware of the other.
-    setWorkspaceFolderName(base, { path: 'term/a', name: 'Week 6' })
-    setWorkspaceDocumentName(base, { documentId: plan.documentId, name: 'Plan' })
-    setWorkspaceFolderName(replica, { path: 'term/b', name: 'week 6' })
-    setWorkspaceDocumentName(replica, { documentId: other.documentId, name: 'PLAN' })
-    base.import(replica.export({ mode: 'update' }))
-    await docs.save(WS, base)
-    return { index, plan, other }
+    return {
+      write: async (workspaceId: string, path: string, marker: string) => {
+        const { record, documentId } = await at(workspaceId, path)
+        subject.writeBody(record, documentId, marker)
+        await docs.save(workspaceId, record)
+      },
+      read: async (workspaceId: string, path: string) => {
+        const { record, documentId } = await at(workspaceId, path)
+        return subject.readBody(record, documentId)
+      },
+      comment: async (workspaceId: string, path: string, threadId: string) => {
+        const { record, documentId } = await at(workspaceId, path)
+        subject.writeThread(record, documentId, documentThread(threadId))
+        await docs.save(workspaceId, record)
+      },
+      threadIds: async (workspaceId: string, path: string) => {
+        const { record, documentId } = await at(workspaceId, path)
+        return subject.threadIds(record, documentId)
+      },
+    }
   }
 
-  it('keeps both folder names and both document names as they arrived', async () => {
-    const { index } = await mergedDuplicates()
+  function documentThread(id: string): CommentThread {
+    return {
+      id,
+      anchor: { kind: 'document' },
+      status: 'open',
+      messages: [{ id: `${id}-m1`, body: 'a question' }],
+    }
+  }
 
-    await expect(index.listFolderNames({ workspaceId: WS })).resolves.toEqual([
-      { path: 'term/a', name: 'Week 6' },
-      { path: 'term/b', name: 'week 6' },
-    ])
-    const named = (await index.listDocuments({ workspaceId: WS })).flatMap((entry) =>
-      entry.name === undefined ? [] : [entry.name],
-    )
-    expect(named.sort()).toEqual(['PLAN', 'Plan'])
+  describe('LoroWorkspaceDocumentIndex duplicates', () => {
+    describeDocumentDuplicatesConformance(async () => {
+      const docs = inMemoryWorkspaceDocs(subject)
+      return {
+        index: indexOn(subject, docs, inMemoryBlobStore(), docs),
+        content: markdownContentSeam(subject, docs),
+        dispose: async () => {},
+      }
+    })
   })
 
-  it('lets either one keep its own name, and refuses a third taking it', async () => {
-    const { index, other } = await mergedDuplicates()
+  // Folders exist only in the tree, so these arrangements cannot be written
+  // against the port-wide suite: a row-backed index has no folder to empty or to
+  // collide with.
+  describe('LoroWorkspaceDocumentIndex folders', () => {
+    const WS = '01BSXMXYEPZGZYHNN3KTQZ33EE'
 
-    await index.setFolderName({ workspaceId: WS, path: 'term/b', name: 'Week 6' })
-    await index.setDocumentName({ workspaceId: WS, documentId: other.documentId, name: 'Plan' })
+    async function makeIndex(): Promise<LoroWorkspaceDocumentIndex<unknown>> {
+      const docs = inMemoryWorkspaceDocs(subject)
+      const index = indexOn(subject, docs, inMemoryBlobStore(), docs)
+      await index.createWorkspace({ workspaceId: WS })
+      return index
+    }
 
-    await expect(
-      index.setFolderName({ workspaceId: WS, path: 'term/c', name: 'Week 6' }),
-    ).rejects.toThrow(DisplayNameTakenError)
-    await expect(
-      index.createDocument({ workspaceId: WS, path: 'term/p3', kind: 'markdown', name: 'plan' }),
-    ).rejects.toThrow(DisplayNameTakenError)
+    it('frees the path of a folder a move emptied', async () => {
+      const index = await makeIndex()
+      await index.createDocument({ workspaceId: WS, path: 'a/b', kind: 'markdown' })
+      await index.createDocument({ workspaceId: WS, path: 'x', kind: 'markdown' })
+      await index.moveDocument({ workspaceId: WS, from: 'a/b', to: 'c' })
+
+      // A folder left standing at `a` would occupy the path and refuse this.
+      await index.moveDocument({ workspaceId: WS, from: 'x', to: 'a' })
+
+      expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual([
+        'a',
+        'c',
+      ])
+    })
+
+    it('frees the path of a folder a delete emptied', async () => {
+      const index = await makeIndex()
+      await index.createDocument({ workspaceId: WS, path: 'a/b', kind: 'markdown' })
+      await index.createDocument({ workspaceId: WS, path: 'x', kind: 'markdown' })
+      await index.deleteDocument({ workspaceId: WS, path: 'a/b' })
+
+      // A folder left standing at `a` would occupy the path and refuse this.
+      await index.moveDocument({ workspaceId: WS, from: 'x', to: 'a' })
+
+      expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual(['a'])
+    })
+
+    // Two levels deep, emptying `a/b` is what empties `a`: a prune that walks
+    // once visits `a` while it still holds `b` and leaves it standing.
+    it('frees every ancestor folder a nested delete emptied', async () => {
+      const index = await makeIndex()
+      await index.createDocument({ workspaceId: WS, path: 'a/b/c', kind: 'markdown' })
+      await index.createDocument({ workspaceId: WS, path: 'x', kind: 'markdown' })
+      await index.deleteDocument({ workspaceId: WS, path: 'a/b/c' })
+
+      await index.moveDocument({ workspaceId: WS, from: 'x', to: 'a' })
+
+      expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual(['a'])
+    })
+
+    it('frees every ancestor folder a nested move emptied', async () => {
+      const index = await makeIndex()
+      await index.createDocument({ workspaceId: WS, path: 'a/b/c', kind: 'markdown' })
+      await index.createDocument({ workspaceId: WS, path: 'x', kind: 'markdown' })
+      await index.moveDocument({ workspaceId: WS, from: 'a/b/c', to: 'c' })
+
+      await index.moveDocument({ workspaceId: WS, from: 'x', to: 'a' })
+
+      expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual([
+        'a',
+        'c',
+      ])
+    })
+
+    it('refuses to move one of two siblings onto the folder they share, and changes nothing', async () => {
+      const index = await makeIndex()
+      await index.createDocument({ workspaceId: WS, path: 'a/x', kind: 'markdown' })
+      await index.createDocument({ workspaceId: WS, path: 'a/y', kind: 'markdown' })
+
+      // `a/y` stays below `a`, so the move does not vacate the folder.
+      const rejection = await index
+        .moveDocument({ workspaceId: WS, from: 'a/x', to: 'a' })
+        .then(() => null)
+        .catch((err: unknown) => err)
+
+      expect(rejection).toBeInstanceOf(DocumentPathTakenError)
+      expect((rejection as DocumentPathTakenError).path).toBe('a')
+      expect((await index.listDocuments({ workspaceId: WS })).map((e) => e.path)).toEqual([
+        'a/x',
+        'a/y',
+      ])
+    })
+  })
+
+  // The port parses only a move's DESTINATION, so a placement some writer stored
+  // off the grammar stays movable — renaming it is the one repair a listing that
+  // cannot read it leaves open. Written into the tree directly, since every
+  // index write now refuses that path.
+  describe('LoroWorkspaceDocumentIndex, a path stored off the grammar', () => {
+    it('moves to a path the grammar accepts, and lists again', async () => {
+      const WS = '01FTVS1AXQE5KMZQPDXHC2RAKW'
+      const docs = inMemoryWorkspaceDocs(subject)
+      const index = indexOn(subject, docs, inMemoryBlobStore(), docs)
+      await index.createWorkspace({ workspaceId: WS })
+      const record = await docs.open(WS)
+      if (record === null) throw new Error('the workspace record was not stored')
+      const documentId = generateDocumentId()
+      subject.kind.write(record, [
+        {
+          op: 'createWorkspaceDocumentAtPath',
+          args: { path: 'Meeting notes', documentId, kind: 'markdown' },
+        },
+      ])
+      expect(await subject.kind.entryById(record, documentId)).not.toBeNull()
+      await docs.save(WS, record)
+
+      await index.moveDocument({ workspaceId: WS, from: 'Meeting notes', to: 'meeting-notes' })
+
+      const listed = await index.listDocuments({ workspaceId: WS })
+      expect(listed.map((entry) => entry.path)).toEqual(['meeting-notes'])
+      expect(listed.every((entry) => documentEntrySchema.safeParse(entry).success)).toBe(true)
+    })
+  })
+
+  /**
+   * A duplicate the keeper could not have seen — two replicas naming siblings
+   * alike before they met — arrives by merge and is kept: both names list,
+   * re-saving either one's own name is no refusal, and only a third write
+   * taking the name is compared.
+   */
+  describe('LoroWorkspaceDocumentIndex names that collide in a merge', () => {
+    const WS = '012DEQE42WVNWWDSRRY87GHG91'
+
+    async function mergedDuplicates() {
+      const docs = inMemoryWorkspaceDocs(subject)
+      const index = indexOn(subject, docs, inMemoryBlobStore(), docs)
+      await index.createWorkspace({ workspaceId: WS })
+      for (const path of ['term/a/x', 'term/b/x', 'term/c/x']) {
+        await index.createDocument({ workspaceId: WS, path, kind: 'markdown' })
+      }
+      const plan = await index.createDocument({
+        workspaceId: WS,
+        path: 'term/p1',
+        kind: 'markdown',
+      })
+      const other = await index.createDocument({
+        workspaceId: WS,
+        path: 'term/p2',
+        kind: 'markdown',
+      })
+      const base = await docs.open(WS)
+      if (base === null) throw new Error('no workspace record')
+      const replica = subject.replica(base, 99)
+      // Each side names a different sibling alike, unaware of the other.
+      subject.kind.write(base, [
+        { op: 'setWorkspaceFolderName', args: { path: 'term/a', name: 'Week 6' } },
+        { op: 'setWorkspaceDocumentName', args: { documentId: plan.documentId, name: 'Plan' } },
+      ])
+      subject.kind.write(replica, [
+        { op: 'setWorkspaceFolderName', args: { path: 'term/b', name: 'week 6' } },
+        { op: 'setWorkspaceDocumentName', args: { documentId: other.documentId, name: 'PLAN' } },
+      ])
+      subject.merge(base, replica)
+      await docs.save(WS, base)
+      return { index, plan, other }
+    }
+
+    it('keeps both folder names and both document names as they arrived', async () => {
+      const { index } = await mergedDuplicates()
+
+      await expect(index.listFolderNames({ workspaceId: WS })).resolves.toEqual([
+        { path: 'term/a', name: 'Week 6' },
+        { path: 'term/b', name: 'week 6' },
+      ])
+      const named = (await index.listDocuments({ workspaceId: WS })).flatMap((entry) =>
+        entry.name === undefined ? [] : [entry.name],
+      )
+      expect(named.sort()).toEqual(['PLAN', 'Plan'])
+    })
+
+    it('lets either one keep its own name, and refuses a third taking it', async () => {
+      const { index, other } = await mergedDuplicates()
+
+      await index.setFolderName({ workspaceId: WS, path: 'term/b', name: 'Week 6' })
+      await index.setDocumentName({ workspaceId: WS, documentId: other.documentId, name: 'Plan' })
+
+      await expect(
+        index.setFolderName({ workspaceId: WS, path: 'term/c', name: 'Week 6' }),
+      ).rejects.toThrow(DisplayNameTakenError)
+      await expect(
+        index.createDocument({ workspaceId: WS, path: 'term/p3', kind: 'markdown', name: 'plan' }),
+      ).rejects.toThrow(DisplayNameTakenError)
+    })
   })
 })
