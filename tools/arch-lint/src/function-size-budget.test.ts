@@ -91,7 +91,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // complexity threshold, which is what the split was for. Splitting
   // further would cut a single visual unit in half without a reader gaining
   // anything.
-  'apps/web/src/components/annotations/thread-row.tsx#ThreadRow': 137, // +5: the conversation's subject reaches its Resolve verbs
+  'apps/web/src/components/annotations/thread-row.tsx#ThreadRow': 138, // +6: the conversation's subject, parsed once, reaches its Resolve verbs
   'apps/web/src/components/annotations/thread-row.tsx#ThreadConversation': 61,
   'apps/web/src/components/annotations/thread-row.tsx#ThreadMessages': 93,
   'apps/web/src/components/annotations/ReplyComposer.tsx#ReplyComposer': 54,
