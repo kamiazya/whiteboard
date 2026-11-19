@@ -61,17 +61,24 @@ export class DocumentEngineTrapError extends Error {
     /** Whether the engine that trapped is usable again; only a core operation can say it is not. */
     recovered = true,
   ) {
-    super(
-      doing === 'running'
-        ? `The Rust core aborted while running ${subject}; nothing from this request was stored. ${
-            recovered ? CORE_TRAP_RECOVERED : CORE_TRAP_UNRECOVERABLE
-          }`
-        : `The CRDT engine aborted while ${doing} ${subject}; nothing from this write was stored. ` +
-            `A very large document is the usual trigger. ${DOCUMENT_ENGINE_TRAP_ADVICE[doing]}`,
-      { cause },
-    )
+    super(engineTrapMessage(subject, doing, recovered), { cause })
     this.name = 'DocumentEngineTrapError'
   }
+}
+
+function engineTrapMessage(
+  subject: string,
+  doing: DocumentEngineTrapError['doing'],
+  recovered: boolean,
+): string {
+  if (doing !== 'running') {
+    return (
+      `The CRDT engine aborted while ${doing} ${subject}; nothing from this write was stored. ` +
+      `A very large document is the usual trigger. ${DOCUMENT_ENGINE_TRAP_ADVICE[doing]}`
+    )
+  }
+  const advice = recovered ? CORE_TRAP_RECOVERED : CORE_TRAP_UNRECOVERABLE
+  return `The Rust core aborted while running ${subject}; nothing from this request was stored. ${advice}`
 }
 
 const CORE_TRAP_RECOVERED =

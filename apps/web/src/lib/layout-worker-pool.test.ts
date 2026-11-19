@@ -426,6 +426,65 @@ describe('createLayoutWorkerPool', () => {
     pool.dispose()
   })
 
+  // A worker whose wasm instance trapped answers that one request as a failure
+  // and keeps serving: the core reset itself, so the worker is as good as new.
+  it('keeps a worker that answered one request as a failure and sends it the next', async () => {
+    const factory = fakeWorkerFactory()
+    const pool = createLayoutWorkerPool({ size: 1, createWorker: factory.create })
+
+    const first = pool.run({ id: 1 })
+    factory.live[0].reply(1, { type: 'failed', reason: 'CoreInstanceTrapped' })
+    await expect(first).resolves.toMatchObject({ type: 'failed' })
+    expect(factory.live[0].terminated).toBe(false)
+
+    const next = pool.run({ id: 2 })
+    expect(factory.live).toHaveLength(1)
+    expect(factory.live[0].sent).toEqual([1, 2])
+    factory.live[0].reply(2)
+    await next
+    pool.dispose()
+  })
+
+  // A worker that closed itself after its core could not be reset never fires
+  // `onerror`, and posts nothing again: its slot would look free for good.
+  it('replaces a worker that reports a fatal failure, after settling the request it failed', async () => {
+    const factory = fakeWorkerFactory()
+    const pool = createLayoutWorkerPool({ size: 1, createWorker: factory.create })
+
+    const doomed = pool.run({ id: 1 })
+    const queued = pool.run({ id: 2 })
+    factory.live[0].reply(1, { type: 'failed', reason: 'CoreUnrecoverable', fatal: true })
+    await expect(doomed).resolves.toMatchObject({ type: 'failed', fatal: true })
+    expect(factory.live[0].terminated).toBe(true)
+
+    // The request that was queued behind it runs on a fresh worker, not the dead one.
+    expect(factory.live).toHaveLength(2)
+    expect(factory.live[0].sent).toEqual([1])
+    expect(factory.live[1].sent).toEqual([2])
+    factory.live[1].reply(2, { ok: 'wanted' })
+    await expect(queued).resolves.toEqual({ id: 2, ok: 'wanted' })
+    pool.dispose()
+  })
+
+  it('runs the newer request again when a cancelled one reports a fatal failure', async () => {
+    const factory = fakeWorkerFactory()
+    const pool = createLayoutWorkerPool({ size: 1, createWorker: factory.create })
+
+    ignore(pool.run({ id: 1 }))
+    const queued = pool.run({ id: 2 })
+    pool.cancel(1)
+    // The cancel handed request 2 to the same worker, which then closes on 1.
+    expect(factory.live[0].sent).toEqual([1, 2])
+    factory.live[0].reply(1, { type: 'failed', reason: 'CoreUnrecoverable', fatal: true })
+    expect(factory.live[0].terminated).toBe(true)
+
+    expect(factory.live).toHaveLength(2)
+    expect(factory.live[1].sent).toEqual([2])
+    factory.live[1].reply(2, { ok: 'wanted' })
+    await expect(queued).resolves.toEqual({ id: 2, ok: 'wanted' })
+    pool.dispose()
+  })
+
   it('rejects everything still pending when the pool is disposed', async () => {
     const factory = fakeWorkerFactory()
     const pool = createLayoutWorkerPool({ size: 1, createWorker: factory.create })

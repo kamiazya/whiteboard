@@ -89,6 +89,21 @@ describe('computeDragPreview — connecting through the core', () => {
     expect(() => preview(throwing(defect))).toThrow(defect)
   })
 
+  it.each([
+    'CoreInstanceTrapped',
+    'CoreUnrecoverable',
+  ])('draws no line for the frame whose routing %s, rather than throwing out of a pointer move', (name) => {
+    const trapped = Object.assign(new Error('edge_route_layout trapped'), { name })
+    const core = fakeLayoutCore({
+      routing: {
+        routeLayout: () => {
+          throw trapped
+        },
+      },
+    })
+    expect(preview(core)).toEqual({ kind: 'line', path: [], arrows: [] })
+  })
+
   it('routes through this realm’s own core when it is handed none', () => {
     const drawn = preview(undefined)
     if (drawn?.kind !== 'line') throw new Error('expected a line')

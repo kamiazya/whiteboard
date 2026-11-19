@@ -24,6 +24,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/too
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
 import { type FolderNames, folderDisplayName, folderTrail } from '../../lib/folder-names.js'
+import { isCoreTrap } from '../../lib/spatial/core-trap.js'
 import { cn } from '../../lib/utils.js'
 import { isTagLibrary, TagLibraryBadge } from './tag-library-document.js'
 import { FolderNamesContext } from './use-folder-names.js'
@@ -285,7 +286,7 @@ function foundIn(text: string, query: string) {
   try {
     return findFolded(text, query)
   } catch (err) {
-    if (isSearchUnavailable(err)) return undefined
+    if (isSearchUnavailable(err) || isCoreTrap(err)) return undefined
     throw err
   }
 }

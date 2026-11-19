@@ -3,6 +3,7 @@ import type { LayoutCore, LayoutRefusal } from '@kamiazya/whiteboard-canvas-rend
 // of codec would carry its readers (the schemas) into the boot bundle.
 // Installing the OKF and JSON Canvas cores into codec is `codec-cores.ts`'s,
 // which only the call sites that read or write them import.
+import { isCoreTrap } from './core-trap.js'
 import type { WebCore } from './web-core.js'
 
 /**
@@ -38,13 +39,52 @@ export interface LayoutCoreHost {
   codecs(): Promise<WebCore>
 }
 
-/** What one loaded instance answers: every layout entry, through the one instance. */
-const layoutFrom = (core: WebCore): LayoutCore => ({
-  routing: core,
-  layout: core,
-  markdown: core,
-  query: core,
-})
+/**
+ * What a realm does with a call that trapped the instance: `refuse` draws it
+ * as the notice (the page, which must draw whatever happens), `throw` leaves it
+ * to the caller (the layout worker, which answers the request as a failure the
+ * asking thread redraws, and must learn when the instance cannot be reset).
+ */
+export type TrapPolicy = 'refuse' | 'throw'
+
+/** What a layout draws when the call trapped the core's wasm instance. */
+const CORE_TRAPPED: LayoutRefusal = { code: 'malformed', reason: 'core-trapped' }
+
+/**
+ * `call`, or the refusal for the one call that trapped the instance: the shim
+ * has already reset it, so the next call is answered, and a surface draws this
+ * draw's refusal as its notice instead of throwing out of a render. Anything
+ * else it throws is a defect and propagates.
+ */
+function refusingTraps<A extends unknown[], R>(
+  call: (...args: A) => R,
+): (...args: A) => R | { readonly refused: LayoutRefusal } {
+  return (...args) => {
+    try {
+      return call(...args)
+    } catch (err) {
+      if (isCoreTrap(err)) return { refused: CORE_TRAPPED }
+      throw err
+    }
+  }
+}
+
+/**
+ * What one loaded instance answers: every layout entry, through the one
+ * instance. Routing has no refusal arm, so its trap is thrown and its one
+ * caller (the connect preview) draws no line for that frame.
+ */
+const layoutFrom = (core: WebCore, traps: TrapPolicy): LayoutCore =>
+  traps === 'throw'
+    ? { routing: core, layout: core, markdown: core, query: core }
+    : {
+        routing: core,
+        layout: {
+          layoutSpatialCanvas: refusingTraps((...args) => core.layoutSpatialCanvas(...args)),
+        },
+        markdown: { layoutMarkdown: refusingTraps((...args) => core.layoutMarkdown(...args)) },
+        query: { layoutQuery: refusingTraps((...args) => core.layoutQuery(...args)) },
+      }
 
 /** A load that had not settled within its bound, abandoned and its fetch aborted. */
 class CoreLoadTimedOut extends Error {
@@ -137,6 +177,7 @@ interface LayoutCoreHostOptions {
   readonly timeoutMs?: number
   readonly retryAfterMs?: number
   readonly now?: () => number
+  readonly traps?: TrapPolicy
 }
 
 /** How many times a core became available, and who hears it move. */
@@ -190,6 +231,7 @@ export function createLayoutCoreHost(
     timeoutMs = CORE_LOAD_TIMEOUT_MS,
     retryAfterMs = CORE_RETRY_AFTER_MS,
     now = () => Date.now(),
+    traps = 'refuse',
   }: LayoutCoreHostOptions = {},
 ): LayoutCoreHost {
   let layout: LayoutCore | undefined
@@ -203,7 +245,7 @@ export function createLayoutCoreHost(
         failedAt = undefined
         retry.cancel()
         if (layout === undefined) {
-          layout = layoutFrom(core)
+          layout = layoutFrom(core, traps)
           announcer.announce()
         }
         return layout
@@ -242,14 +284,15 @@ let installed: LayoutCoreHost | undefined
  * `requireLayoutCore`: there is no TypeScript composer to lay it out
  * (ADR-0054 step 7, S18h).
  */
-export function installLayoutCore(): LayoutCoreHost {
+export function installLayoutCore(options: { readonly traps?: TrapPolicy } = {}): LayoutCoreHost {
   // The platform's fetch as it stood now. The wasm is a build asset, not an
   // API call: a later replacement of `globalThis.fetch` (a test double
   // answering 404 to every route it was not told of) would otherwise be asked
   // for bytes it knows nothing about.
   const fetchAsset: typeof fetch = globalThis.fetch?.bind(globalThis)
-  installed ??= createLayoutCoreHost(async (signal) =>
-    (await import('./layout-core-source.js')).loadWebCore(fetchAsset, signal),
+  installed ??= createLayoutCoreHost(
+    async (signal) => (await import('./layout-core-source.js')).loadWebCore(fetchAsset, signal),
+    options,
   )
   return installed
 }

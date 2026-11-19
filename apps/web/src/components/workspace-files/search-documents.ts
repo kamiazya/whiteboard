@@ -15,12 +15,14 @@ import { parentOfPath } from '@kamiazya/whiteboard-model'
 import { folderNamesOf, foldForSearch, isSearchUnavailable } from '@kamiazya/whiteboard-search'
 import { compareDocumentEntries, type WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { FolderNames } from '../../lib/folder-names.js'
+import { isCoreTrap } from '../../lib/spatial/core-trap.js'
 
 const NO_NAMES: FolderNames = new Map()
 
 /**
  * `answer`, or `degraded` when search has no core to answer (the wasm did not
- * load) or declines the input past a cap. This list filters as someone types
+ * load) declines the input past a cap, or trapped its instance
+ * (reset: the next call is answered). This list filters as someone types
  * and must draw whatever happens, so it falls back to plain text rather than
  * failing a render.
  */
@@ -28,7 +30,7 @@ function orDegraded<T>(degraded: T, answer: () => T): T {
   try {
     return answer()
   } catch (err) {
-    if (isSearchUnavailable(err)) return degraded
+    if (isSearchUnavailable(err) || isCoreTrap(err)) return degraded
     throw err
   }
 }
@@ -115,17 +117,24 @@ export function searchDocuments<T extends WorkspaceDocumentEntry>(
 ): readonly T[] {
   if (query.trim() === '') return []
   const q = query.trim().toLowerCase()
-  const texts = documents.flatMap((entry) => [
-    entry.path,
-    ...(entry.name === undefined ? [] : [entry.name]),
-    ...(entry.tags ?? []),
-  ])
+  // The query is folded in the same call as the texts it is compared with, so
+  // the two cannot be read in different forms: a trap that degraded only the
+  // query's own fold left a folded "cafe" no raw "café" contains.
+  const texts = [
+    q,
+    query.trim(),
+    ...documents.flatMap((entry) => [
+      entry.path,
+      ...(entry.name === undefined ? [] : [entry.name]),
+      ...(entry.tags ?? []),
+    ]),
+  ]
   const foldedTexts = foldAll(texts)
   const foldOf = (text: string) => foldedTexts.get(text) ?? comparable(text)
-  const folded = comparable(q)
+  const folded = foldOf(q)
   const own = documents.filter((entry) => documentMatchesSearch(q, folded, foldOf, entry))
   const matched = new Set(own)
-  const folderQuery = comparable(query.trim())
+  const folderQuery = foldOf(query.trim())
   const inFolder = new Map<string, boolean>()
   const folderMatches = (path: string): boolean => {
     const folder = parentOfPath(path)

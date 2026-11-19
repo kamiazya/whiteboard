@@ -199,22 +199,41 @@ export function createLayoutWorkerPool<Req extends { id: number }>(options: {
     pump()
   }
 
+  // A worker that will never post again must leave the pool, or its slot looks
+  // available and everything dispatched to it waits forever (the shared pool
+  // is never disposed). spawn() makes the replacement on the next dispatch.
+  const retire = (slot: Held) => {
+    const at = slots.indexOf(slot)
+    if (at !== -1) slots.splice(at, 1)
+    slot.worker.terminate()
+  }
+
+  // A fatal reply means the worker closed itself. It leaves the pool BEFORE
+  // anything settles, since settling pumps the queue onto the dead slot. The
+  // reply can be for a request `cancel` already freed while the slot went on
+  // to a newer one; the closed worker will never answer that one, so it goes
+  // back to the head of the queue for a fresh worker.
+  const retireFatal = (slot: Held, data: { id: number }) => {
+    const pending = slot.busyWith
+    slot.busyWith = null
+    retire(slot)
+    if (pending?.id === data.id) pending.resolve(data)
+    else if (pending !== null) queue.unshift(pending)
+    pump()
+  }
+
   const spawn = (): Held => {
     const worker = options.createWorker()
     const slot: Held = { worker, busyWith: null }
-    worker.onmessage = (event) => settle(slot, event.data.id, event.data)
+    worker.onmessage = (event) => {
+      if ((event.data as { fatal?: unknown }).fatal === true) retireFatal(slot, event.data)
+      else settle(slot, event.data.id, event.data)
+    }
     if ('onerror' in worker) {
       worker.onerror = () => {
         const pending = slot.busyWith
         slot.busyWith = null
-        // A worker whose module failed to load fires this once and then never
-        // posts again. Leaving its slot in the pool makes it look available,
-        // and everything dispatched to it waits forever — permanently, since
-        // the shared pool is a per-tab singleton nothing disposes. Drop it
-        // and let spawn() make a replacement on the next dispatch.
-        const at = slots.indexOf(slot)
-        if (at !== -1) slots.splice(at, 1)
-        worker.terminate()
+        retire(slot)
         pending?.reject(new Error('layout worker errored'))
         pump()
       }

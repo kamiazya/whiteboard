@@ -21,6 +21,12 @@ export default defineConfig({
         __dirname,
         '../../packages/canvas-viewer/src/font-loading.ts',
       ),
+      // The layout worker imports this subpath too, which a jsdom test of the
+      // worker's message handler resolves the way the browser project does.
+      '@kamiazya/whiteboard-canvas-viewer/measure-text': resolve(
+        __dirname,
+        '../../packages/canvas-viewer/src/measure-text.ts',
+      ),
       // Resolve canvas-viewer from source so tests run before `pnpm build`.
       '@kamiazya/whiteboard-canvas-viewer': resolve(
         __dirname,

@@ -64,6 +64,7 @@ import {
   WorkspaceMissingError,
 } from './files-source.js'
 import { searchReady } from './search-core.js'
+import { isCoreTrap } from './spatial/core-trap.js'
 import {
   type ContentRecord,
   lazyContentRecord,
@@ -207,7 +208,7 @@ function refusedAs<T>(degraded: T, answer: () => T): T {
   try {
     return answer()
   } catch (err) {
-    if (isSearchRefusal(err)) return degraded
+    if (isSearchRefusal(err) || isCoreTrap(err)) return degraded
     throw err
   }
 }

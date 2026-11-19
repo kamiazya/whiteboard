@@ -5,6 +5,8 @@ import type { WebCore } from './web-core.js'
 const instance = {} as WebCore
 /** What a layout draws when the realm's core did not load. */
 const CORE_UNAVAILABLE = { code: 'malformed', reason: 'core-unavailable' } as const
+/** What a layout draws when the call trapped the core's wasm instance. */
+const CORE_TRAPPED = { code: 'malformed', reason: 'core-trapped' } as const
 
 describe('createLayoutCoreHost', () => {
   it('answers no core until the load settles, then the loaded one on every entry, loading once', async () => {
@@ -12,12 +14,7 @@ describe('createLayoutCoreHost', () => {
     const host = createLayoutCoreHost(load)
     expect(host.current()).toBeUndefined()
     const core = await host.ready()
-    expect(core).toEqual({
-      routing: instance,
-      layout: instance,
-      markdown: instance,
-      query: instance,
-    })
+    expect(core.routing).toBe(instance)
     expect(host.current()).toBe(core)
     expect(await host.ready()).toBe(core)
     expect(load).toHaveBeenCalledTimes(1)
@@ -218,5 +215,77 @@ describe('a realm that never installed a core', () => {
     expect(fresh.currentLayoutCore()).toBeUndefined()
     expect(await fresh.layoutCoreReady()).toBeUndefined()
     expect(fresh.layoutCoreGeneration()).toBe(0)
+  })
+})
+
+const trapped = (name: 'CoreInstanceTrapped' | 'CoreUnrecoverable' = 'CoreInstanceTrapped') => {
+  const err = new Error('trapped')
+  err.name = name
+  return err
+}
+
+const noHighlight = () => undefined
+const noMeasure = () => ({}) as never
+
+describe('a layout that traps the core', () => {
+  it.each([
+    'layout',
+    'markdown',
+    'query',
+  ] as const)('draws the %s as a refusal for that one call, and answers the next from the core', async (entry) => {
+    const calls = { layoutSpatialCanvas: 0, layoutMarkdown: 0, layoutQuery: 0 }
+    const answer = { scene: 'drawn' }
+    const flaky =
+      (name: keyof typeof calls) =>
+      (..._args: unknown[]) => {
+        calls[name] += 1
+        if (calls[name] === 1) throw trapped()
+        return answer
+      }
+    const core = {
+      layoutSpatialCanvas: flaky('layoutSpatialCanvas'),
+      layoutMarkdown: flaky('layoutMarkdown'),
+      layoutQuery: flaky('layoutQuery'),
+    } as unknown as WebCore
+    const host = createLayoutCoreHost(async () => core)
+    const loaded = await host.ready()
+    const ask = {
+      layout: () => loaded.layout.layoutSpatialCanvas({} as never, noHighlight, noMeasure),
+      markdown: () => loaded.markdown.layoutMarkdown({} as never, noHighlight, noMeasure),
+      query: () => loaded.query.layoutQuery({} as never, noHighlight, undefined),
+    }[entry]
+    expect(ask()).toEqual({ refused: CORE_TRAPPED })
+    expect(ask()).toBe(answer)
+  })
+
+  it('draws an instance that cannot be reset the same way, and lets any other throw through', async () => {
+    const core = {
+      layoutSpatialCanvas: vi
+        .fn()
+        .mockImplementationOnce(() => {
+          throw trapped('CoreUnrecoverable')
+        })
+        .mockImplementationOnce(() => {
+          throw new TypeError('a defect')
+        }),
+    } as unknown as WebCore
+    const loaded = await createLayoutCoreHost(async () => core).ready()
+    const ask = () => loaded.layout.layoutSpatialCanvas({} as never, noHighlight, noMeasure)
+    expect(ask()).toEqual({ refused: CORE_TRAPPED })
+    expect(ask).toThrow(TypeError)
+  })
+})
+
+describe('a worker realm over a core that trapped', () => {
+  it('lets the trap through for its caller to answer', async () => {
+    const core = {
+      layoutSpatialCanvas: () => {
+        throw trapped()
+      },
+    } as unknown as WebCore
+    const loaded = await createLayoutCoreHost(async () => core, { traps: 'throw' }).ready()
+    expect(() => loaded.layout.layoutSpatialCanvas({} as never, noHighlight, noMeasure)).toThrow(
+      'trapped',
+    )
   })
 })
