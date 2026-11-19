@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { createCrdtEngine, loadCrdtEngine, randomPeerId, readValue } from '../index.js'
 import { writeMarkdownBody } from '../markdown-body.js'
-import { unplain } from './answers.js'
+import { createWorkspaceDocumentAtPath } from '../workspace-tree.js'
+import { answer, unplain } from './answers.js'
 
 function snapshotWithBody(body: string): string {
   const doc = new LoroDoc()
@@ -89,5 +90,79 @@ describe('unplain', () => {
 
   it('refuses a marker that names bytes, which an answer cannot carry back', () => {
     expect(() => unplain({ $loroState: {} })).toThrow(TypeError)
+  })
+
+  it.each([
+    { $bigint: '12' },
+    { $set: [1] },
+    { $undefined: true },
+    { $object: { $number: '1' } },
+    { $other: 1 },
+    { $constructor: { a: undefined } },
+  ])('gives back an application object shaped like a marker: %j', (value) => {
+    const answered = JSON.parse(JSON.stringify(answer(() => ({ facet: value, kept: [value] }))))
+    expect(unplain(answered.ok)).toEqual({ facet: value, kept: [value] })
+  })
+
+  it('still decodes the markers the answer itself wrote beside such an object', () => {
+    const answered = JSON.parse(JSON.stringify(answer(() => ({ big: 5n, lone: { $bigint: '7' } }))))
+    expect(unplain(answered.ok)).toEqual({ big: 5n, lone: { $bigint: '7' } })
+  })
+})
+
+describe('a marker-shaped value through the engine', () => {
+  const MARKER_SHAPED = { $bigint: '12' }
+
+  it('reads back a facet payload that looks like a marker, as the payload', async () => {
+    const engine = await loadCrdtEngine()
+    const { handle } = engine.open({ peer: randomPeerId() })
+    try {
+      engine.write({
+        handle,
+        batch: [{ op: 'writeFacets', args: { facets: { 'x.shape/v1': MARKER_SHAPED } } }],
+      })
+      const facets = await readValue(engine, handle, { query: 'facets' }, z.unknown())
+      expect(facets).toEqual({ 'x.shape/v1': MARKER_SHAPED })
+    } finally {
+      engine.close({ handle })
+    }
+  })
+
+  it('encodes each value of a document projection once', async () => {
+    const record = new LoroDoc()
+    const created = createWorkspaceDocumentAtPath(record, {
+      path: 'notes/a',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      kind: 'spatial',
+    })
+    record.commit()
+    const documentId = created?.documentId ?? ''
+    const engine = await loadCrdtEngine()
+    const { handle } = engine.open({
+      peer: randomPeerId(),
+      bytes: bytesToBase64(record.export({ mode: 'snapshot' })),
+    })
+    try {
+      engine.write({
+        handle,
+        batch: [
+          {
+            op: 'writeCanvasFacetsField',
+            args: { documentId, next: { 'x.shape/v1': MARKER_SHAPED } },
+          },
+        ],
+      })
+      const projection = await readValue(
+        engine,
+        handle,
+        { query: 'workspaceDocumentProjection', args: { documentId } },
+        z.object({ documentContent: z.object({ ok: z.unknown() }) }),
+      )
+      expect(projection.documentContent.ok).toMatchObject({
+        canvas: { facets: { 'x.shape/v1': MARKER_SHAPED } },
+      })
+    } finally {
+      engine.close({ handle })
+    }
   })
 })
