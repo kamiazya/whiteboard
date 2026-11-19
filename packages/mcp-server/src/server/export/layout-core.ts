@@ -19,6 +19,7 @@ import {
 } from '@kamiazya/whiteboard-server-core'
 import { z } from 'zod'
 import { findPackageRoot } from '../../shared/package-root.js'
+import { getLogger } from '../log.js'
 
 /**
  * Where this daemon finds the Rust core (ADR-0054), from its environment:
@@ -136,7 +137,7 @@ function loadCoreFrom(dir: string): Promise<Core> {
     loaded = (async () => {
       const glue = (await import(pathToFileURL(join(dir, 'whiteboard_wasm.js')).href)) as CoreGlue
       const bytes = await readFile(join(dir, 'whiteboard_wasm_bg.wasm'))
-      return coreFrom(glue, bytes)
+      return coreFrom(glue, bytes, { log: getLogger('core-wasm') })
     })()
     loaded.catch(() => loadedByDirectory.delete(dir))
     loadedByDirectory.set(dir, loaded)
