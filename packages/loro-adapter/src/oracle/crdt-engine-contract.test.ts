@@ -3,6 +3,7 @@ import { documentEngine } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { SYNC_TEXT_BREACH_CODES } from '../sync-text-limits.js'
 import { ORACLE_WRITERS } from '../test-utils/crdt-write-oracle.js'
+import { SYNC_WORKSPACE_BREACH_CODES } from '../workspace-sync-limits.js'
 
 /**
  * `contracts/crdt/document-engine.schema.json` is the wire the TypeScript and
@@ -99,7 +100,7 @@ describe('the CRDT document-engine contract', () => {
 
   it('names every breach shape the sync judges answer, and nothing else', () => {
     expect(sorted(documentEngine.breachShapeSchema.options)).toEqual(
-      sorted(Object.keys(SYNC_TEXT_BREACH_CODES)),
+      sorted([...Object.keys(SYNC_TEXT_BREACH_CODES), ...Object.keys(SYNC_WORKSPACE_BREACH_CODES)]),
     )
   })
 

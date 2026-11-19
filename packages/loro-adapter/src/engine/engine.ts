@@ -25,6 +25,7 @@ import {
   syncTextLimitJudge,
 } from '../sync-text-limits.js'
 import { documentsTouchedSince } from '../touched-documents.js'
+import { judgeWorkspaceSyncImport, type WorkspaceSyncBreach } from '../workspace-sync-limits.js'
 import {
   documentContainers,
   importWorkspaceSubtree,
@@ -91,8 +92,10 @@ function decoded(text: string): Uint8Array {
   return bytes
 }
 
-function breachOf(breach: SyncTextBreach): wire.Breach {
-  return { shape: breach.shape, container: breach.container }
+function breachOf(breach: SyncTextBreach | WorkspaceSyncBreach): wire.Breach {
+  return 'container' in breach
+    ? { shape: breach.shape, container: breach.container }
+    : { shape: breach.shape }
 }
 
 /** The workspace documents the operations after `before` wrote to; none for a document that is its own root. */
@@ -191,12 +194,37 @@ function mutate(entry: Held, apply: (doc: LoroDoc) => void): wire.MutationResult
   }
 }
 
+/**
+ * What a workspace sync would refuse of `update`, judged on the copy kept at
+ * the document's version. The judge leaves the update in the copy it
+ * judges, and the copy is no longer one of the document's versions once it
+ * refuses, so it is dropped then.
+ */
+function judgeOnShadow(
+  entry: Held,
+  update: Uint8Array,
+): SyncTextBreach | WorkspaceSyncBreach | null {
+  const shadow = shadowAtHead(entry)
+  try {
+    const breach = judgeWorkspaceSyncImport(shadow, update)
+    if (breach !== null) entry.shadow = null
+    return breach
+  } catch (error) {
+    entry.shadow = null
+    throw error
+  }
+}
+
 function importInto(entry: Held, request: wire.ImportRequest): wire.MutationResult {
   editable(entry)
   const incoming = decoded(request.bytes)
-  if ((request.judge ?? 'text') === 'text') {
+  const judge = request.judge ?? 'text'
+  if (judge === 'text') {
     entry.judge ??= syncTextLimitJudge(entry.doc)
     const breach = entry.judge(incoming)
+    if (breach !== null) return { outcome: 'refused', breach: breachOf(breach) }
+  } else if (judge === 'workspace-sync') {
+    const breach = judgeOnShadow(entry, incoming)
     if (breach !== null) return { outcome: 'refused', breach: breachOf(breach) }
   }
   const before = entry.doc.oplogVersion()

@@ -48,6 +48,22 @@ pub enum BreachShape {
     RetiredCommentPlane,
     /// Written `unattached-container`.
     UnattachedContainer,
+    /// Written `causal-gap`.
+    CausalGap,
+    /// Written `too-many-documents`.
+    TooManyDocuments,
+    /// Written `too-many-folders`.
+    TooManyFolders,
+    /// Written `unreadable-document-meta`.
+    UnreadableDocumentMeta,
+    /// Written `invalid-path`.
+    InvalidPath,
+    /// Written `document-name-too-long`.
+    DocumentNameTooLong,
+    /// Written `folder-name-refused`.
+    FolderNameRefused,
+    /// Written `document-kind-changed`.
+    DocumentKindChanged,
 }
 
 impl BreachShape {
@@ -74,6 +90,14 @@ impl BreachShape {
             Self::RetiredShape => "retired-shape",
             Self::RetiredCommentPlane => "retired-comment-plane",
             Self::UnattachedContainer => "unattached-container",
+            Self::CausalGap => "causal-gap",
+            Self::TooManyDocuments => "too-many-documents",
+            Self::TooManyFolders => "too-many-folders",
+            Self::UnreadableDocumentMeta => "unreadable-document-meta",
+            Self::InvalidPath => "invalid-path",
+            Self::DocumentNameTooLong => "document-name-too-long",
+            Self::FolderNameRefused => "folder-name-refused",
+            Self::DocumentKindChanged => "document-kind-changed",
         }
     }
 
@@ -100,6 +124,14 @@ impl BreachShape {
             "retired-shape" => Some(Self::RetiredShape),
             "retired-comment-plane" => Some(Self::RetiredCommentPlane),
             "unattached-container" => Some(Self::UnattachedContainer),
+            "causal-gap" => Some(Self::CausalGap),
+            "too-many-documents" => Some(Self::TooManyDocuments),
+            "too-many-folders" => Some(Self::TooManyFolders),
+            "unreadable-document-meta" => Some(Self::UnreadableDocumentMeta),
+            "invalid-path" => Some(Self::InvalidPath),
+            "document-name-too-long" => Some(Self::DocumentNameTooLong),
+            "folder-name-refused" => Some(Self::FolderNameRefused),
+            "document-kind-changed" => Some(Self::DocumentKindChanged),
             _ => None,
         }
     }
@@ -143,12 +175,14 @@ pub type DocumentId = String;
 /// What open answers: an engine-held document, never reused in an engine life. A close ends it.
 pub type Handle = i64;
 
-/// What judges imported bytes: the text limits, or nothing for trusted bytes.
+/// What judges imported bytes: text limits, workspace-sync checks too, or none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ImportJudge {
     /// Written `text`.
     #[default]
     Text,
+    /// Written `workspace-sync`.
+    WorkspaceSync,
     /// Written `none`.
     None,
 }
@@ -158,6 +192,7 @@ impl ImportJudge {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Text => "text",
+            Self::WorkspaceSync => "workspace-sync",
             Self::None => "none",
         }
     }
@@ -166,6 +201,7 @@ impl ImportJudge {
     pub fn from_wire(text: &str) -> Option<Self> {
         match text {
             "text" => Some(Self::Text),
+            "workspace-sync" => Some(Self::WorkspaceSync),
             "none" => Some(Self::None),
             _ => None,
         }

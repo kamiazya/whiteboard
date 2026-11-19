@@ -253,7 +253,7 @@ update naming none of `x-whiteboard`, `comments`, `elements`, `okf-body` (not `t
 pre-ADR-0038 kind write is let through by decision); the daemon's judge has no fast path and is
 the authority for every browser push.
 `importWithinSyncLimits` (`operations/sync-update-limit.ts`) adds the workspace record's placement checks
-(`placementRefusal`): a node left unreadable — any write to a tree node's own
+(loro-adapter's `judgeWorkspaceSyncImport`, answered by `workspaceSyncRefusal`): a node left unreadable — any write to a tree node's own
 map is node meta, timestamps and folder keys included
 (`UnreadableDocumentMetaError`), a document moved off the path grammar or past
 `DOCUMENT_PATH_MAX_LENGTH` (`OffGrammarPathError`), a name grown past
