@@ -175,7 +175,8 @@ function forkJournaled(held: Records, engine: CrdtEngine, request: wire.ForkRequ
   const opened = engine.fork(request)
   if (request.at !== undefined) return opened
   const source = held.get(request.handle)
-  const base = source?.base ?? exportedBytes(engine.export({ handle: opened.handle, mode: 'snapshot' }))
+  const base =
+    source?.base ?? exportedBytes(engine.export({ handle: opened.handle, mode: 'snapshot' }))
   const pending = (source?.pending ?? []).map(({ update }) => ({ update }))
   held.set(opened.handle, { peer: request.peer, base, pending, nextSeq: 1 })
   return opened
