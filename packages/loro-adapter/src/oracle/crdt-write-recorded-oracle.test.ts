@@ -116,6 +116,8 @@ const OTHER_WRITES: Record<string, string> = {
   syncRootContainer: 'covered by writeWorkspaceDocumentContent and reconcileDocContent',
   clearRootContainer: 'covered by writeWorkspaceDocumentContent and reconcileDocContent',
   copyContainerValue: 'covered by writeWorkspaceDocumentContent (projection and restore copies)',
+  applyDocumentEdit:
+    'covered by writeMarkdownBody, reconcileSpatialCanvas and writeSpatialNode, the writes each arm makes',
   spliceText: 'covered by writeMarkdownBody and minimalChange',
   openMergeableMap:
     'covered by writeCommentThread and writeProposal, which open every mergeable map',

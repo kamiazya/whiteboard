@@ -138,18 +138,18 @@ describe('restoring a trashed document', () => {
     return exportWorkspaceSubtree(doc, 'top') as Uint8Array
   }
 
-  it('counts the folders the subtree would bring back', () => {
+  it('counts the folders the subtree would bring back', async () => {
     expect(
-      restorableTrashDocuments(trashedWithFolder('inner'), {
+      await restorableTrashDocuments(trashedWithFolder('inner'), {
         documentId: '01BRWAAAAAAAAAAAAAAAAAAAA0',
         parentPath: undefined,
       }),
     ).toEqual({ documents: 1, folders: 1 })
   })
 
-  it('refuses a subtree holding a folder the path grammar refuses', () => {
+  it('refuses a subtree holding a folder the path grammar refuses', async () => {
     expect(
-      restorableTrashDocuments(trashedWithFolder('not a segment'), {
+      await restorableTrashDocuments(trashedWithFolder('not a segment'), {
         documentId: '01BRWAAAAAAAAAAAAAAAAAAAA0',
         parentPath: undefined,
       }),

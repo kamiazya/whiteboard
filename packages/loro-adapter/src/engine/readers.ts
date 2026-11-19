@@ -6,7 +6,7 @@
  * tree node. Typed by the contract's `QueryName`, so a reader added to the
  * contract owes an entry here and one removed here fails to compile.
  */
-import type { documentEngine } from '@kamiazya/whiteboard-model'
+import { type documentEngine, documentKindSchema } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import { readAnnotations } from '../annotations.js'
@@ -48,12 +48,15 @@ import { type Answer, answerLater, attempt, versionOfPairs } from './answers.js'
 
 /**
  * The arguments a read takes. The contract leaves them any-value, so the
- * engine holds them to the two it knows: the hosting node of a document inside
- * a workspace record, and the version a since-reader compares against.
+ * engine holds them to the three it knows: the hosting node of a document inside
+ * a workspace record, the kind its index row records, and the version a
+ * since-reader compares against.
  */
 const readArgsSchema = z
   .object({
     documentId: z.string().optional(),
+    /** The kind the document's index row records, for a document that records none itself. */
+    kind: documentKindSchema.optional(),
     since: z.array(z.tuple([z.string(), z.number().int()])).optional(),
   })
   .strict()
@@ -79,7 +82,7 @@ const since = (args: ReadArgs) => versionOfPairs(args.since ?? [])
 
 export const READERS: Record<documentEngine.QueryName, Reader> = {
   documentKind: content(readDocumentKind),
-  documentContent: content(readDocumentContent),
+  documentContent: (doc, args) => readDocumentContent(hostOf(doc, args), args.kind),
   spatialCanvas: content(readSpatialCanvasWithSkipped),
   nodeLocks: content((host) => [...readNodeLocks(host)].sort()),
   edgeLocks: content((host) => [...readEdgeLocks(host)].sort()),

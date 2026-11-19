@@ -31,6 +31,10 @@ export type BreachShape = z.infer<typeof breachShapeSchema>
 export const bytesSchema = z.string()
 export type Bytes = z.infer<typeof bytesSchema>
 
+/** What a decoded byte string holds: a version vector or a frontier. */
+export const decodeKindSchema = z.enum(['version', 'frontiers'])
+export type DecodeKind = z.infer<typeof decodeKindSchema>
+
 /** A document id: the workspace tree node hosting it. */
 export const documentIdSchema = z.string()
 export type DocumentId = z.infer<typeof documentIdSchema>
@@ -38,6 +42,10 @@ export type DocumentId = z.infer<typeof documentIdSchema>
 /** What open answers: an engine-held document, never reused in an engine life. A close ends it. */
 export const handleSchema = z.number().int().meta({ minimum: undefined, maximum: undefined })
 export type Handle = z.infer<typeof handleSchema>
+
+/** What judges imported bytes: the text limits, or nothing for trusted bytes. */
+export const importJudgeSchema = z.enum(['text', 'none'])
+export type ImportJudge = z.infer<typeof importJudgeSchema>
 
 /** A Loro peer id: the unsigned 64-bit number in decimal. */
 export const peerIdSchema = z.string()
@@ -86,6 +94,21 @@ export const readResponseSchema = z.strictObject({
   value: z.unknown(),
 })
 export type ReadResponse = z.infer<typeof readResponseSchema>
+
+/** One replacement in a text container. */
+export const textRunSchema = z.strictObject({
+  index: z.number().int().min(0).meta({ maximum: undefined }),
+  remove: z.number().int().min(0).meta({ maximum: undefined }),
+  insert: z.string(),
+})
+export type TextRun = z.infer<typeof textRunSchema>
+
+/** What the undo history of a document can do. */
+export const undoStateResponseSchema = z.strictObject({
+  canUndo: z.boolean(),
+  canRedo: z.boolean(),
+})
+export type UndoStateResponse = z.infer<typeof undoStateResponseSchema>
 
 /** A write by name: one per writer of the recorded write oracle. */
 export const writerNameSchema = z.enum([
@@ -152,6 +175,13 @@ export const closeRequestSchema = z.strictObject({
 })
 export type CloseRequest = z.infer<typeof closeRequestSchema>
 
+/** Read a version or a frontier an engine encoded; no document is needed. */
+export const decodeRequestSchema = z.strictObject({
+  kind: decodeKindSchema,
+  bytes: bytesSchema,
+})
+export type DecodeRequest = z.infer<typeof decodeRequestSchema>
+
 /** What an export produced. */
 export const exportResponseSchema = z.strictObject({
   bytes: bytesSchema,
@@ -169,14 +199,24 @@ export type ExportSnapshotRequest = z.infer<typeof exportSnapshotRequestSchema>
 export const importRequestSchema = z.strictObject({
   handle: handleSchema,
   bytes: bytesSchema,
+  judge: importJudgeSchema.optional(),
 })
 export type ImportRequest = z.infer<typeof importRequestSchema>
+
+/** Place an exported document and all under it into a workspace record. */
+export const importSubtreeRequestSchema = z.strictObject({
+  handle: handleSchema,
+  bytes: bytesSchema,
+  parentPath: z.string().optional(),
+})
+export type ImportSubtreeRequest = z.infer<typeof importSubtreeRequestSchema>
 
 /** A call that took effect: the documents it changed, none when it was a no-op. */
 export const mutationAppliedSchema = z.strictObject({
   outcome: z.literal('applied'),
   changed: z.array(documentIdSchema),
   localUpdate: bytesSchema.optional(),
+  pending: z.boolean().optional(),
 })
 export type MutationApplied = z.infer<typeof mutationAppliedSchema>
 
@@ -184,6 +224,7 @@ export type MutationApplied = z.infer<typeof mutationAppliedSchema>
 export const openRequestSchema = z.strictObject({
   peer: peerIdSchema,
   bytes: bytesSchema.optional(),
+  undoMergeIntervalMs: z.number().int().min(0).meta({ maximum: undefined }).optional(),
 })
 export type OpenRequest = z.infer<typeof openRequestSchema>
 
@@ -206,22 +247,32 @@ export const redoRequestSchema = z.strictObject({
 })
 export type RedoRequest = z.infer<typeof redoRequestSchema>
 
-/** Replace a run of a text container, in UTF-16 code units. */
+/** Replace runs of a text container, in UTF-16 code units. */
 export const textSpliceRequestSchema = z.strictObject({
   handle: handleSchema,
   documentId: documentIdSchema.optional(),
   text: z.string(),
-  index: z.number().int().min(0).meta({ maximum: undefined }),
-  remove: z.number().int().min(0).meta({ maximum: undefined }),
-  insert: z.string(),
+  runs: z.array(textRunSchema),
 })
 export type TextSpliceRequest = z.infer<typeof textSpliceRequestSchema>
+
+/** Forget the undo and redo history of an open document. */
+export const undoClearRequestSchema = z.strictObject({
+  handle: handleSchema,
+})
+export type UndoClearRequest = z.infer<typeof undoClearRequestSchema>
 
 /** Undo the last local change of an open document. */
 export const undoRequestSchema = z.strictObject({
   handle: handleSchema,
 })
 export type UndoRequest = z.infer<typeof undoRequestSchema>
+
+/** Ask whether an open document can undo or redo. */
+export const undoStateRequestSchema = z.strictObject({
+  handle: handleSchema,
+})
+export type UndoStateRequest = z.infer<typeof undoStateRequestSchema>
 
 /** One peer in a version or a frontier: the peer and a counter. */
 export const versionEntrySchema = z.strictObject({
@@ -230,12 +281,24 @@ export const versionEntrySchema = z.strictObject({
 })
 export type VersionEntry = z.infer<typeof versionEntrySchema>
 
+/** Ask an open document which operations it holds. */
+export const versionRequestSchema = z.strictObject({
+  handle: handleSchema,
+})
+export type VersionRequest = z.infer<typeof versionRequestSchema>
+
 /** One write: the writer and its arguments, any-value on purpose. */
 export const writeSchema = z.strictObject({
   op: writerNameSchema,
   args: z.unknown(),
 })
 export type Write = z.infer<typeof writeSchema>
+
+/** What encoded version bytes held. */
+export const decodeResponseSchema = z.strictObject({
+  entries: z.array(versionEntrySchema),
+})
+export type DecodeResponse = z.infer<typeof decodeResponseSchema>
 
 /** Export the current state, keeping history only from a frontier on. */
 export const exportShallowSnapshotRequestSchema = z.strictObject({
@@ -253,6 +316,14 @@ export const exportUpdateRequestSchema = z.strictObject({
 })
 export type ExportUpdateRequest = z.infer<typeof exportUpdateRequestSchema>
 
+/** Copy an open document under a new peer, optionally viewed as it was at a frontier. */
+export const forkRequestSchema = z.strictObject({
+  handle: handleSchema,
+  peer: peerIdSchema,
+  at: z.array(versionEntrySchema).optional(),
+})
+export type ForkRequest = z.infer<typeof forkRequestSchema>
+
 /** A call refused for breaking a limit: nothing changed and there is no update. */
 export const mutationRefusedSchema = z.strictObject({
   outcome: z.literal('refused'),
@@ -266,6 +337,15 @@ export const readRequestSchema = z.strictObject({
   query: querySchema,
 })
 export type ReadRequest = z.infer<typeof readRequestSchema>
+
+/** The operations an open document holds, as the engine encodes them. */
+export const versionResponseSchema = z.strictObject({
+  version: z.array(versionEntrySchema),
+  frontiers: z.array(versionEntrySchema),
+  encodedVersion: bytesSchema,
+  encodedFrontiers: bytesSchema,
+})
+export type VersionResponse = z.infer<typeof versionResponseSchema>
 
 /** Apply writes to an open document as one batch. */
 export const writeRequestSchema = z.strictObject({

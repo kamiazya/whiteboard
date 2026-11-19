@@ -263,7 +263,7 @@ export class LoroWorkspaceDocumentIndex
       // the writer wrote. Judged on scratch copies, so nothing is placed first.
       const segments = entry.path.split('/')
       const parentPath = segments.length > 1 ? segments.slice(0, -1).join('/') : undefined
-      const restoring = restorableTrashDocuments(stored.bytes, {
+      const restoring = await restorableTrashDocuments(stored.bytes, {
         documentId: input.documentId,
         parentPath,
       })

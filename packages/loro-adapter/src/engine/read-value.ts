@@ -1,7 +1,11 @@
 import type { documentEngine as wire } from '@kamiazya/whiteboard-model'
-import type { z } from 'zod'
 import { unplain } from './answers.js'
 import type { CrdtEngine } from './types.js'
+
+/** What types an answer: a Zod schema, or any parser that yields `T` from the value. */
+export interface AnswerShape<T> {
+  parse(value: unknown): T
+}
 
 /**
  * One named read, answered as the value the reader produced.
@@ -14,13 +18,14 @@ import type { CrdtEngine } from './types.js'
  *
  * `shape` types the answer. The contract leaves it any-value on purpose, so a
  * caller whose reader is already total over the shape passes `z.custom<T>()`
- * and says so; one that wants it checked passes a schema.
+ * (or a parser that only asserts the type, where it holds no zod) and says so;
+ * one that wants it checked passes a schema.
  */
 export async function readValue<T>(
   engine: Pick<CrdtEngine, 'read'>,
   handle: wire.Handle,
   query: wire.Query,
-  shape: z.ZodType<T>,
+  shape: AnswerShape<T>,
 ): Promise<T> {
   const { value } = await engine.read({ handle, query })
   const answer = value as { ok: unknown } | { err: string }
