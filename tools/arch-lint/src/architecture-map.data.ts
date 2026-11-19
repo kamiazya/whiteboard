@@ -165,10 +165,11 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-loro-adapter',
       '@kamiazya/whiteboard-search',
     ],
-    // loro-crdt: the port hands the cache a LoroDoc, which extraction reads.
     // zod: the aggregate's facts and the backlink entry are schemas the
-    // daemon's published output schema composes.
-    allowedThirdParty: ['loro-crdt', 'zod'],
+    // daemon's published output schema composes. No CRDT engine: the port
+    // hands the cache plain content and the planners return plain edits, so a
+    // keeper alone holds the document.
+    allowedThirdParty: ['zod'],
   },
   '@kamiazya/whiteboard-loro-adapter': {
     // Deliberately NOT ports: this package adapts loro-crdt to the model and

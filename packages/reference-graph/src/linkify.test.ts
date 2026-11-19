@@ -14,7 +14,8 @@ import {
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { linkifyMentionsIn, linkMarkupFor } from './linkify.js'
+import { linkMarkupFor } from './linkify.js'
+import { linkifyInPlace } from './test-utils/in-place.js'
 import { ReferenceRewriteTooLargeError } from './text-limit.js'
 
 const TARGET = { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'redis', name: 'Redis' }
@@ -24,7 +25,7 @@ describe('linkifyMentionsIn', () => {
     const doc = new LoroDoc()
     writeMarkdownBody(doc, 'Redis is fast. See [[redis|Redis]]. Redis again.')
 
-    expect(linkifyMentionsIn(doc, 'markdown', TARGET)).toBe(2)
+    expect(linkifyInPlace(doc, 'markdown', TARGET)).toBe(2)
     expect(doc.getText(MARKDOWN_BODY_KEY).toString()).toBe(
       '[[redis|Redis]] is fast. See [[redis|Redis]]. [[redis|Redis]] again.',
     )
@@ -35,7 +36,7 @@ describe('linkifyMentionsIn', () => {
     writeMarkdownBody(doc, 'Nothing here.')
     const before = doc.oplogVersion().encode()
 
-    expect(linkifyMentionsIn(doc, 'markdown', TARGET)).toBe(0)
+    expect(linkifyInPlace(doc, 'markdown', TARGET)).toBe(0)
     expect(doc.oplogVersion().encode()).toEqual(before)
   })
 
@@ -59,7 +60,7 @@ describe('linkifyMentionsIn', () => {
     })
     writeSpatialCanvas(doc, board)
 
-    expect(linkifyMentionsIn(doc, 'spatial', TARGET)).toBe(1)
+    expect(linkifyInPlace(doc, 'spatial', TARGET)).toBe(1)
     const canvas = readSpatialCanvas(doc)
     expect(nodeText(canvas.nodes.find((n) => n.id === 'a') ?? canvas.nodes[0]!)).toBe(
       'we use [[redis|Redis]]',
@@ -101,7 +102,7 @@ describe('linkifyMentionsIn', () => {
     // The subject is present: the reader must really be skipping these.
     expect(readSpatialCanvas(doc).nodes.map((n) => n.id)).toEqual(['a', 'b'])
 
-    expect(linkifyMentionsIn(doc, 'spatial', TARGET)).toBe(1)
+    expect(linkifyInPlace(doc, 'spatial', TARGET)).toBe(1)
 
     expect(Object.keys(doc.getMap('nodes').toJSON())).toContain('future-node')
     expect(Object.keys(doc.getMap('edges').toJSON())).toEqual(['future-edge'])
@@ -119,7 +120,7 @@ describe('linkifyMentionsIn, held to the text ceilings', () => {
 
     const thrown = (() => {
       try {
-        linkifyMentionsIn(doc, 'markdown', SHORT)
+        linkifyInPlace(doc, 'markdown', SHORT)
       } catch (err) {
         return err
       }
@@ -150,7 +151,7 @@ describe('linkifyMentionsIn, held to the text ceilings', () => {
     })
     const before = doc.oplogVersion().encode()
 
-    expect(() => linkifyMentionsIn(doc, 'spatial', SHORT)).toThrow(
+    expect(() => linkifyInPlace(doc, 'spatial', SHORT)).toThrow(
       expect.objectContaining({
         breach: expect.objectContaining({ shape: 'node-text', nodeId: 'dense' }),
       }),
@@ -164,7 +165,7 @@ describe('linkifyMentionsIn, held to the text ceilings', () => {
     const doc = new LoroDoc()
     writeMarkdownBody(doc, `${filler}x`)
 
-    expect(linkifyMentionsIn(doc, 'markdown', SHORT)).toBe(1)
+    expect(linkifyInPlace(doc, 'markdown', SHORT)).toBe(1)
     expect(doc.getText(MARKDOWN_BODY_KEY).toString()).toHaveLength(MARKDOWN_MAX_CHARS)
   })
 })

@@ -2,8 +2,8 @@ import { writeDocumentKind, writeMarkdownBody } from '@kamiazya/whiteboard-loro-
 import { installSearchCore, type SearchCore } from '@kamiazya/whiteboard-search'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it } from 'vitest'
-import { extractContentFacts } from './extract.js'
 import { backlinksIn } from './reference-aggregate.js'
+import { factsOf } from './test-utils/in-place.js'
 
 // Extraction and the excerpts answer through the realm's search core. A core
 // that declines an input past its caps is answered with the degraded form each
@@ -115,7 +115,7 @@ describe('extraction when the search core declines an input', () => {
         throw refusal()
       },
     })
-    const extracted = extractContentFacts({ kind: 'markdown' }, doc())
+    const extracted = factsOf(doc(), 'markdown')
     expect(extracted.texts).toEqual([])
     expect(extracted.refs.map((ref) => ref.target)).toEqual(['plan'])
   })
@@ -126,6 +126,6 @@ describe('extraction when the search core declines an input', () => {
         throw new Error('a defect')
       },
     })
-    expect(() => extractContentFacts({ kind: 'markdown' }, doc())).toThrowError('a defect')
+    expect(() => factsOf(doc(), 'markdown')).toThrowError('a defect')
   })
 })

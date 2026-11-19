@@ -1,3 +1,4 @@
+import { readContentWithTags } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import {
   type BacklinkEntry,
@@ -33,8 +34,10 @@ export function browserBacklinksReader(index: DocumentIndex): (documentId: strin
   const cache = new ContentFactsCache({
     // The workspace is the browser's active one — the only one this keeper
     // holds open — so the port's workspace argument has nothing to select.
-    loadDocument: async (_workspaceId, documentId) =>
-      projectDocumentContent(await record(), documentId),
+    loadContent: async (_workspaceId, entry) => {
+      const doc = await projectDocumentContent(await record(), entry.documentId)
+      return doc === null ? null : readContentWithTags(doc, entry.kind)
+    },
   })
   return async (documentId) => {
     // Extraction and the excerpts are the search core's.

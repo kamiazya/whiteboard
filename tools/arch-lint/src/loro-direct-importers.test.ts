@@ -49,7 +49,6 @@ function namesShapedSurface(source: ts.SourceFile): boolean {
 const LORO_DIRECT: Readonly<Record<string, string>> = {
   'apps/web/src/lib/browser-backend.ts': 'M5: browser keeper',
   'apps/web/src/lib/browser-file-sweep.ts': 'M5: browser keeper',
-  'apps/web/src/lib/browser-files-source-tags.ts': 'M5: browser keeper',
   'apps/web/src/lib/browser-files-source.ts': 'M5: browser keeper',
   'apps/web/src/lib/browser-version-store.ts': 'M5: browser keeper',
   'apps/web/src/lib/browser-versions-backend.ts': 'M5: browser keeper',
@@ -78,8 +77,6 @@ const LORO_DIRECT: Readonly<Record<string, string>> = {
   'packages/mcp-server/src/server/store/workspace-doc-cache.ts': 'M8: daemon store',
   'packages/mcp-server/src/server/store/workspace-plane.ts': 'M8: daemon store',
   'packages/mcp-server/src/server/store/workspace-tail.ts': 'M8: daemon store',
-  'packages/reference-graph/src/content-facts-cache.ts': 'M3: reference-graph takes plain values',
-  'packages/reference-graph/src/extract.ts': 'M3: reference-graph takes plain values',
   'packages/server-core/src/document-io.ts': 'M7: server-core',
   'packages/server-core/src/operations/apply-workspace-document-update.ts': 'M7: server-core',
   'packages/server-core/src/operations/promote-carried.ts': 'M7: server-core',
@@ -111,8 +108,6 @@ const LORO_SHAPED: Readonly<Record<string, string>> = {
   'apps/web/src/lib/browser-import-content.ts': 'M5: browser keeper',
   'apps/web/src/lib/browser-linkify.ts': 'M5: browser keeper',
   'apps/web/src/lib/browser-tag-library-write.ts': 'M5: browser keeper',
-  'packages/reference-graph/src/linkify.ts': 'M3: reference-graph takes plain values',
-  'packages/reference-graph/src/rewrite.ts': 'M3: reference-graph takes plain values',
 }
 
 const SCANNED = /^(?:apps|packages)\/[^/]+\/src\//

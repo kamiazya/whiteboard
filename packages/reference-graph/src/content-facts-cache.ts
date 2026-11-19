@@ -1,6 +1,6 @@
+import type { ContentWithTags } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToHex } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
-import type { LoroDoc } from 'loro-crdt'
 import { type ContentFacts, extractContentFacts } from './extract.js'
 
 const EMPTY_FACTS: ContentFacts = { refs: [], texts: [], bearers: [] }
@@ -14,11 +14,12 @@ const EMPTY_FACTS: ContentFacts = { refs: [], texts: [], bearers: [] }
  * when a cached answer is stale, stay written once for both.
  */
 export interface DocumentContentSource {
-  /** The stored document, or null when nothing is stored for it yet. */
-  loadDocument(
-    workspaceId: string,
-    documentId: DocumentEntry['documentId'],
-  ): Promise<LoroDoc | null>
+  /**
+   * The stored document's content, or null when nothing is stored for it yet.
+   * The keeper reads it out of whatever holds the document, under the
+   * listing's kind, so what reaches this package is plain values.
+   */
+  loadContent(workspaceId: string, entry: DocumentEntry): Promise<ContentWithTags | null>
   /**
    * An opaque version per document, for entries whose listing carries no
    * `contentDigest` — an index that does not hold the content cannot derive
@@ -116,9 +117,9 @@ export class ContentFactsCache {
     const cached = held.get(entry.documentId)
     if (stamp !== undefined && cached?.stamp === stamp) return cached.facts
 
-    const doc = await this.source.loadDocument(workspaceId, entry.documentId)
-    const facts = doc === null ? EMPTY_FACTS : extractContentFacts(entry, doc)
-    if (stamp === undefined || doc === null) held.delete(entry.documentId)
+    const loaded = await this.source.loadContent(workspaceId, entry)
+    const facts = loaded === null ? EMPTY_FACTS : extractContentFacts(loaded)
+    if (stamp === undefined || loaded === null) held.delete(entry.documentId)
     else held.set(entry.documentId, { stamp, facts })
     return facts
   }

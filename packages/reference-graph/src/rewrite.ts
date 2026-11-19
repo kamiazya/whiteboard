@@ -1,14 +1,6 @@
 import { rewriteCanvasReferences, rewriteReferenceTargets } from '@kamiazya/whiteboard-codec'
+import type { DocumentContent, DocumentEdit } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  type DocumentContainers,
-  MARKDOWN_BODY_KEY,
-  NODES_KEY,
-  readDocumentContent,
-  writeMarkdownBody,
-  writeSpatialNode,
-} from '@kamiazya/whiteboard-loro-adapter'
-import {
-  type DocumentKind,
   growsPast,
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
@@ -19,62 +11,49 @@ import {
 import { ReferenceRewriteTooLargeError } from './text-limit.js'
 
 /**
- * Repoints one document's references IN PLACE by a rename plan (codec's
- * `planReferenceRewrite`: old alias to new target), and answers whether
- * anything changed — so the keeper saves only what moved. Saving is the
- * keeper's, as with `linkifyMentionsIn`: this works on whatever holds the
- * document, a standalone doc on the daemon or a node of the browser's
- * workspace record.
+ * Plans repointing one document's references by a rename plan (codec's
+ * `planReferenceRewrite`: old alias to new target), from its content alone.
+ * Answers the edit, or null when nothing changed — so the keeper saves only
+ * what moved. Applying and saving are the keeper's, as with
+ * `planLinkifyMentions`.
  *
- * The kind is `readDocumentContent`'s to decide, so a document that records
- * none is rewritten as the canvas the rest of the system reads it as: a
- * markdown write over one would replace its nodes with a body.
+ * The content is `readDocumentContent`'s to decide the kind of, so a document
+ * that records none is rewritten as the canvas the rest of the system reads it
+ * as: a markdown write over one would replace its nodes with a body.
  *
  * A new path can be longer than the old one, so a document dense with
  * references can be carried past a text ceiling. Such a document is refused
- * WHOLE, before anything is written — `ReferenceRewriteTooLargeError` — rather
+ * WHOLE, before any edit is planned — `ReferenceRewriteTooLargeError` — rather
  * than half-followed: its references keep the old path, and the keeper
  * reports it beside the documents it could not load.
  */
-export function rewriteDocumentReferences(
-  doc: DocumentContainers,
+export function planDocumentReferenceRewrite(
+  content: DocumentContent,
   plan: ReadonlyMap<string, string>,
-  entryKind: DocumentKind | undefined,
-): boolean {
-  const content = readDocumentContent(doc, entryKind)
+): DocumentEdit | null {
   if (content.kind === 'spatial') {
     const result = rewriteCanvasReferences(content.canvas, plan)
-    if (!result.changed) return false
-    assertNodesFit(doc, content.canvas, result.changedNodes)
-    // Targeted writes, never a whole-canvas resync: readSpatialCanvas drops
-    // records the current schema cannot parse, and writing the whole canvas
-    // back would DELETE them.
-    for (const node of result.changedNodes) writeSpatialNode(doc, node)
-    return true
+    if (!result.changed) return null
+    assertNodesFit(content.canvas, result.changedNodes)
+    // Targeted node writes, never a whole-canvas resync: readSpatialCanvas
+    // drops records the current schema cannot parse, and writing the whole
+    // canvas back would DELETE them.
+    return { kind: 'spatial-nodes', nodes: result.changedNodes }
   }
   const { body } = content
   const next = rewriteReferenceTargets(body, plan)
   // Kept although a body naming a planned alias is a body the rewrite
   // changes (scan and rewrite share `scanReferences`): it costs a comparison,
   // and a keeper that saved an unchanged document would report it as updated.
-  if (next === body) return false
+  if (next === body) return null
   if (growsPast(MARKDOWN_MAX_CHARS, body.length, next.length)) {
-    throw new ReferenceRewriteTooLargeError({
-      shape: 'body',
-      chars: next.length,
-      container: doc.getText(MARKDOWN_BODY_KEY).id,
-    })
+    throw new ReferenceRewriteTooLargeError({ shape: 'body', chars: next.length })
   }
-  writeMarkdownBody(doc, next)
-  return true
+  return { kind: 'markdown-body', body: next }
 }
 
 /** Refuses the rewrite when any changed node's text grew past the node ceiling. */
-function assertNodesFit(
-  doc: DocumentContainers,
-  canvas: SpatialCanvas,
-  changed: readonly SpatialNode[],
-): void {
+function assertNodesFit(canvas: SpatialCanvas, changed: readonly SpatialNode[]): void {
   for (const node of changed) {
     const after = nodeText(node)
     if (after === undefined) continue
@@ -85,7 +64,6 @@ function assertNodesFit(
       shape: 'node-text',
       chars: after.length,
       nodeId: node.id,
-      container: doc.getMap(NODES_KEY).id,
     })
   }
 }

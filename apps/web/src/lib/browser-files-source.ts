@@ -8,8 +8,10 @@ import {
   trashRestoreRefusal,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
-  type DocumentContent,
+  applyDocumentEdit,
+  type ContentWithTags,
   documentContainers,
+  readContentWithTags,
   readDocumentContent,
   readFacets,
   readMarkdownBody,
@@ -30,7 +32,7 @@ import {
   hasDocumentTrash,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
-import { rewriteDocumentReferences, splitBearerTags } from '@kamiazya/whiteboard-reference-graph'
+import { planDocumentReferenceRewrite, splitBearerTags } from '@kamiazya/whiteboard-reference-graph'
 import {
   folderNamesOf,
   fullTextSearch,
@@ -113,15 +115,15 @@ async function* readDocumentsFrom(entries: readonly ReadableEntry[]): AsyncGener
     } catch {
       continue
     }
-    let content: DocumentContent
+    let read: ContentWithTags
     try {
-      content = readDocumentContent(doc, entry.kind)
+      read = readContentWithTags(doc, entry.kind)
     } catch {
       // A canvas this build cannot parse is the same miss as an unreadable
       // document: it carries nothing anyone here can read.
       continue
     }
-    yield { documentId: entry.documentId, doc, content }
+    yield { documentId: entry.documentId, ...read }
   }
 }
 
@@ -138,11 +140,11 @@ function rewriteInRecord(
 ): boolean {
   if (resolveWorkspaceDocumentById(workspace, entry.documentId) === null) return false
   try {
-    return rewriteDocumentReferences(
-      documentContainers(workspace, entry.documentId),
-      plan,
-      entry.kind,
-    )
+    const doc = documentContainers(workspace, entry.documentId)
+    const edit = planDocumentReferenceRewrite(readDocumentContent(doc, entry.kind), plan)
+    if (edit === null) return false
+    applyDocumentEdit(doc, edit)
+    return true
   } catch {
     return false
   }

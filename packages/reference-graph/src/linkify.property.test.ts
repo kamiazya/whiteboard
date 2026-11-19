@@ -27,7 +27,8 @@ import {
 } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { linkifyMentionsIn, linkMarkupFor } from './linkify.js'
+import { linkMarkupFor } from './linkify.js'
+import { linkifyInPlace } from './test-utils/in-place.js'
 
 const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
@@ -131,8 +132,8 @@ describe('linkifyMentionsIn, a canvas node against a markdown body', () => {
         edges: [],
       })
 
-      const inBody = linkifyMentionsIn(body, 'markdown', target)
-      const onBoard = linkifyMentionsIn(board, 'spatial', target)
+      const inBody = linkifyInPlace(body, 'markdown', target)
+      const onBoard = linkifyInPlace(board, 'spatial', target)
 
       reached.runs += 1
       if (inBody >= 2) reached.severalLinks += 1

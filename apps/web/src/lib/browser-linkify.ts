@@ -1,6 +1,10 @@
-import { documentContainers, readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  applyDocumentEdit,
+  documentContainers,
+  readDocumentContent,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
-import { linkifyMentionsIn } from '@kamiazya/whiteboard-reference-graph'
+import { planLinkifyMentions } from '@kamiazya/whiteboard-reference-graph'
 import {
   BrowserWorkspaceDocs,
   openWorkspaceOrNull,
@@ -15,7 +19,7 @@ import { touchContentTimestamp } from './content-timestamp.js'
  * and answer how many.
  *
  * What a link is written as, which spans count, and what a board keeps are
- * the shared `linkifyMentionsIn`'s — the daemon runs the same function. What
+ * the shared `planLinkifyMentions`'s — the daemon runs the same function. What
  * is the browser's is WHERE the source lives: a node of this browser's
  * workspace record, edited in place and saved as an incremental update, so the
  * edit is an ordinary CRDT edit that merges with anyone else's rather than a
@@ -41,16 +45,13 @@ export async function linkifyBrowserMentions(
   const workspace = await openWorkspaceOrNull(docs)
   if (workspace === null) throw new Error('The workspace could not be opened to add the links.')
   const containers = documentContainers(workspace, sourceDocumentId)
-  const linked = linkifyMentionsIn(
-    containers,
-    source.kind ?? readDocumentKind(containers) ?? 'spatial',
-    {
-      documentId: target.documentId,
-      path: target.path,
-      name: target.name,
-    },
-  )
-  if (linked === 0) return 0
+  const { linked, edit } = planLinkifyMentions(readDocumentContent(containers, source.kind), {
+    documentId: target.documentId,
+    path: target.path,
+    name: target.name,
+  })
+  if (edit === null) return 0
+  applyDocumentEdit(containers, edit)
   await saveAndAnnounce(docs, workspaceId, workspace)
   await touchContentTimestamp(sourceDocumentId, dbName)
   return linked

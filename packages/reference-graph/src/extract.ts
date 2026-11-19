@@ -1,9 +1,5 @@
 import { scanReferences } from '@kamiazya/whiteboard-codec'
-import {
-  type DocumentContent,
-  readCoreFacets,
-  readDocumentContent,
-} from '@kamiazya/whiteboard-loro-adapter'
+import type { ContentWithTags, DocumentContent } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   CanvasEdge,
   SpatialCanvas,
@@ -11,9 +7,7 @@ import type {
   TagBearerKind,
 } from '@kamiazya/whiteboard-model'
 import { frameLabel, isDocumentId, nodeFile, nodeText } from '@kamiazya/whiteboard-model'
-import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import { isSearchRefusal, searchableTexts } from '@kamiazya/whiteboard-search'
-import type { LoroDoc } from 'loro-crdt'
 import type { DocumentReferenceFacts, RawReference } from './reference-aggregate.js'
 
 function textReferences(value: string): RawReference[] {
@@ -119,24 +113,21 @@ function textsOf(content: DocumentContent): string[] {
   }
 }
 
-export function extractContentFacts(
-  entry: Pick<DocumentEntry, 'kind'>,
-  doc: LoroDoc,
-): ContentFacts {
-  const content = readDocumentContent(doc, entry.kind)
+export function extractContentFacts(loaded: ContentWithTags): ContentFacts {
+  const { content } = loaded
   if (content.kind === 'markdown') {
     return {
       refs: textReferences(content.body),
       // The prose itself, for mention detection against other documents'
       // names — and the same strings search ranks, by construction.
       texts: textsOf(content),
-      bearers: tagBearersOf(doc, content),
+      bearers: tagBearersOf(loaded),
     }
   }
   return {
     refs: spatialReferences(content.canvas),
     texts: textsOf(content),
-    bearers: tagBearersOf(doc, content),
+    bearers: tagBearersOf(loaded),
   }
 }
 
@@ -145,9 +136,8 @@ export function extractContentFacts(
  * read — the one definition of "what bears a tag", so the daemon's projection
  * and the browser keeper's cannot count different things.
  */
-export function tagBearersOf(doc: LoroDoc, content: DocumentContent): TagBearer[] {
+export function tagBearersOf({ content, tags }: ContentWithTags): TagBearer[] {
   if (content.kind === 'spatial') return spatialBearers(content.canvas)
-  const tags = readCoreFacets(doc)?.tags
   return tags === undefined || tags.length === 0 ? [] : [{ what: 'document', text: '', tags }]
 }
 

@@ -1,13 +1,6 @@
 import { documentReferenceMarkup } from '@kamiazya/whiteboard-codec'
+import type { DocumentContent, DocumentEdit } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  type DocumentContainers,
-  MARKDOWN_BODY_KEY,
-  NODES_KEY,
-  readSpatialCanvas,
-  reconcileSpatialCanvas,
-} from '@kamiazya/whiteboard-loro-adapter'
-import {
-  type DocumentKind,
   growsPast,
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
@@ -40,52 +33,56 @@ export function linkMarkupFor(target: LinkifyTarget): string {
   )
 }
 
+/** What linking would do to one document: how many mentions, and the edit that does it. */
+export interface LinkifyPlan {
+  readonly linked: number
+  /** Null when there is nothing to link, so a keeper writes and saves nothing. */
+  readonly edit: DocumentEdit | null
+}
+
 /**
- * Turns a source document's unlinked mentions of `target` into links, IN
- * PLACE, and answers how many. Commits only when something changed, so a
- * source with nothing to link writes nothing. Saving is the keeper's: this
- * works on whatever holds the document — a standalone doc on the daemon, a
- * node of the workspace record in the browser — which is what
- * `DocumentContainers` is for.
+ * Plans turning a source document's unlinked mentions of `target` into links,
+ * from its content alone. Applying and saving are the keeper's: it holds the
+ * document, whether a standalone doc on the daemon or a node of the workspace
+ * record in the browser.
  *
- * A markdown body is edited by targeted text splices (reverse order, one
- * commit), so a concurrent edit elsewhere in the body merges instead of being
- * clobbered by a whole-body replace.
+ * A markdown body is edited by targeted text splices (descending, so each is
+ * planned on the original offsets), so a concurrent edit elsewhere in the body
+ * merges instead of being clobbered by a whole-body replace.
  *
  * A canvas rewrites TEXT NODES only: a `[[link]]` in a label renders as
  * literal brackets, so labels are mention-detected and never rewritten. The
- * canvas is written as a visible diff against the canvas that was read, so
+ * canvas is planned as a visible diff against the canvas that was read, so
  * only the rewritten nodes are touched: lines, tags, facets and comments are
  * not this operation's to change, and a record the reader skipped (a newer
  * client's) is not this operation's to delete.
  *
  * Each link is longer than the name it replaces, so linking can carry a body
  * or a node past the ceiling every other write to it is held to: that throws
- * `ReferenceRewriteTooLargeError` before anything is written.
+ * `ReferenceRewriteTooLargeError` before any plan exists.
  */
-export function linkifyMentionsIn(
-  doc: DocumentContainers,
-  kind: DocumentKind,
-  target: LinkifyTarget,
-): number {
+export function planLinkifyMentions(content: DocumentContent, target: LinkifyTarget): LinkifyPlan {
   const markup = linkMarkupFor(target)
-  if (kind === 'markdown') {
-    const text = doc.getText(MARKDOWN_BODY_KEY)
-    const body = text.toString()
+  if (content.kind === 'markdown') {
+    const body = content.body
     const spans = unlinkedNameSpans(body, target.name)
     const grown = body.length + spans.length * (markup.length - target.name.length)
     if (growsPast(MARKDOWN_MAX_CHARS, body.length, grown)) {
-      throw new ReferenceRewriteTooLargeError({ shape: 'body', chars: grown, container: text.id })
+      throw new ReferenceRewriteTooLargeError({ shape: 'body', chars: grown })
     }
-    for (const span of [...spans].reverse()) {
-      text.delete(span.index, span.length)
-      text.insert(span.index, markup)
+    if (spans.length === 0) return { linked: 0, edit: null }
+    return {
+      linked: spans.length,
+      edit: {
+        kind: 'markdown-splices',
+        runs: [...spans]
+          .reverse()
+          .map((span) => ({ index: span.index, remove: span.length, insert: markup })),
+      },
     }
-    if (spans.length > 0) doc.commit()
-    return spans.length
   }
 
-  const canvas = readSpatialCanvas(doc)
+  const canvas = content.canvas
   let linked = 0
   const nodes = canvas.nodes.map((node) => {
     const text = nodeText(node)
@@ -99,15 +96,20 @@ export function linkifyMentionsIn(
         shape: 'node-text',
         chars: grown,
         nodeId: node.id,
-        container: doc.getMap(NODES_KEY).id,
       })
     }
     linked += spans.length
     return withNodeText(node, spliced(text, spans, markup))
   })
-  if (linked > 0)
-    reconcileSpatialCanvas(doc, canvas, spatialCanvasSchema.parse({ ...canvas, nodes }))
-  return linked
+  if (linked === 0) return { linked: 0, edit: null }
+  return {
+    linked,
+    edit: {
+      kind: 'spatial-canvas',
+      before: canvas,
+      after: spatialCanvasSchema.parse({ ...canvas, nodes }),
+    },
+  }
 }
 
 /**

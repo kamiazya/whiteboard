@@ -1,16 +1,13 @@
-import type { DocumentContent } from '@kamiazya/whiteboard-loro-adapter'
+import type { ContentWithTags } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { tagBearersOf } from '@kamiazya/whiteboard-reference-graph'
-import type { LoroDoc } from 'loro-crdt'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 
 type TagBearers = ReturnType<typeof tagBearersOf>
 
 /** One document read from the store, with its content already read as the half its kind names. */
-export interface ReadDocument {
+export interface ReadDocument extends ContentWithTags {
   documentId: string
-  doc: LoroDoc
-  content: DocumentContent
 }
 
 /**
@@ -72,7 +69,7 @@ export function createTagBearersCache(
 
     const { bearers, unread } = partition(held, entries, keys)
     for await (const one of read(unread)) {
-      const found = tagBearersOf(one.doc, one.content)
+      const found = tagBearersOf(one)
       bearers.set(one.documentId, found)
       const key = keys.get(one.documentId)
       if (key === undefined) held.delete(one.documentId)
