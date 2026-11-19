@@ -21,6 +21,7 @@
 import { writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { documentEngine } from '@kamiazya/whiteboard-model'
 import {
   coreFacetsSchema,
   type documentEngine,
