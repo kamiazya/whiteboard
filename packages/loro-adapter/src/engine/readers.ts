@@ -44,7 +44,7 @@ import {
   resolveWorkspaceDocumentById,
   unreadableWorkspaceNodes,
 } from '../workspace-tree.js'
-import { type Answer, answer, answerLater, versionOfPairs } from './answers.js'
+import { type Answer, answerLater, attempt, versionOfPairs } from './answers.js'
 
 /**
  * The arguments a read takes. The contract leaves them any-value, so the
@@ -121,9 +121,9 @@ export const READERS: Record<documentEngine.QueryName, Reader> = {
       ? null
       : {
           value: projected.toJSON(),
-          documentContent: answer(() => readDocumentContent(projected)),
-          stateSize: answer(() => stateSize(projected)),
-          contentDigest: answer(() => contentDigestOfDocument(projected)),
+          documentContent: attempt(() => readDocumentContent(projected)),
+          stateSize: attempt(() => stateSize(projected)),
+          contentDigest: attempt(() => contentDigestOfDocument(projected)),
         }
   },
 }

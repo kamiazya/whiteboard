@@ -113,12 +113,22 @@ const refusal = (error: unknown): Answer => ({
   err: error instanceof Error ? error.constructor.name : typeof error,
 })
 
-export function answer(read: () => unknown): Answer {
+/**
+ * A read's outcome with its value as produced. An answer that holds other
+ * outcomes builds them with this, so the one `answer` around them encodes each
+ * value once; encoding an already-encoded marker as data would wrap it.
+ */
+export function attempt(read: () => unknown): Answer {
   try {
-    return { ok: plain(read()) }
+    return { ok: read() }
   } catch (error) {
     return refusal(error)
   }
+}
+
+export function answer(read: () => unknown): Answer {
+  const outcome = attempt(read)
+  return 'ok' in outcome ? { ok: plain(outcome.ok) } : outcome
 }
 
 export async function answerLater(read: () => Promise<unknown>): Promise<Answer> {
