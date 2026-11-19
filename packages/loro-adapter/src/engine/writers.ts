@@ -66,8 +66,8 @@ import { setProposedChangeStatus, writeProposal } from '../proposals.js'
 import { markThreadPassages } from '../thread-marks.js'
 import { documentsTouchedSince, stampEditedDocuments } from '../touched-documents.js'
 import { duplicateWorkspaceDocument } from '../workspace-duplicate.js'
-import { setWorkspaceFolderName } from '../workspace-folder-name.js'
-import { recordTrashEntry, type TrashEntry } from '../workspace-trash.js'
+import { reapplyFolderNames, setWorkspaceFolderName } from '../workspace-folder-name.js'
+import { forgetTrashEntry, recordTrashEntry, type TrashEntry } from '../workspace-trash.js'
 import {
   createWorkspaceDocument,
   createWorkspaceDocumentAtPath,
@@ -145,6 +145,11 @@ export const WRITERS = {
       }
     }),
   ),
+  // Loro's text takes UTF-16 code unit offsets from JavaScript, the unit the contract counts in.
+  spliceText: content<{ text: string; runs: documentEngine.TextRun[] }>((h, a) => {
+    const target = h.getText(a.text)
+    for (const { index, remove, insert } of a.runs) target.splice(index, remove, insert)
+  }),
   // ---- markdown body, envelope, kind ----
   writeMarkdownBody: content<{ body: string }>((h, a) => writeMarkdownBody(h, a.body)),
   writeDocumentKind: content<{ kind: DocumentKind }>((h, a) => writeDocumentKind(h, a.kind)),
@@ -273,6 +278,12 @@ export const WRITERS = {
   }>((doc, a) => updateWorkspaceDocumentMeta(doc, a.documentId, a.patch)),
   pruneEmptyFolders: workspace<Record<string, never>>((doc) => pruneEmptyFolders(doc)),
   recordTrashEntry: workspace<{ entry: TrashEntry }>((doc, a) => recordTrashEntry(doc, a.entry)),
+  forgetTrashEntry: workspace<{ documentId: string }>((doc, a) =>
+    forgetTrashEntry(doc, a.documentId),
+  ),
+  reapplyFolderNames: workspace<{ names: Array<{ path: string; name: string }> }>((doc, a) =>
+    reapplyFolderNames(doc, a.names),
+  ),
   duplicateWorkspaceDocument: workspace<Parameters<typeof duplicateWorkspaceDocument>[1]>(
     (doc, a) => duplicateWorkspaceDocument(doc, a),
   ),

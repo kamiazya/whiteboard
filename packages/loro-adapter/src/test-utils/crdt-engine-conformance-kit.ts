@@ -5,6 +5,7 @@
  */
 import { base64ToBytes, documentEngine as wire } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
+import { exportedBytes } from '../engine/answers.js'
 import type { CrdtEngine } from '../engine/types.js'
 
 export const bytesOf = (b64: string): Uint8Array => {
@@ -31,7 +32,7 @@ export function held(
   handle: number,
   mode: 'snapshot' | 'update' = 'update',
 ): LoroDoc {
-  return decode(engine.export({ handle, mode }).bytes)
+  return decode(exportedBytes(engine.export({ handle, mode })))
 }
 
 export async function ask(

@@ -703,8 +703,8 @@ const RUST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Generated: a match arm per value of the contract's WriterName enum, which
   // grows with the writers of the CRDT write oracle. The emitter writes one arm
   // per value, so the next shrink is a table the emitter emits instead.
-  'crates/core/model/src/generated/crdt.rs#WriterName.as_str': 52,
-  'crates/core/model/src/generated/crdt.rs#WriterName.from_wire': 53,
+  'crates/core/model/src/generated/crdt.rs#WriterName.as_str': 54,
+  'crates/core/model/src/generated/crdt.rs#WriterName.from_wire': 55,
   // The vendored markdown-rs (crates/core/markdown/src/vendored): the upstream
   // tokenizer's states, resolvers and tree builder, each one long because it
   // walks a stream of events by position in one pass, and `state::call` one

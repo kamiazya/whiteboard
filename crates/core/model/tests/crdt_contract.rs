@@ -7,12 +7,12 @@ use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_model::Value;
 use whiteboard_model::crdt::{
     Breach, BreachShape, CloseRequest, DecodeKind, DecodeRequest, DecodeResponse, ExportRequest,
-    ExportResponse, ExportShallowSnapshotRequest, ExportSnapshotRequest, ExportUpdateRequest,
-    ForkRequest, ImportJudge, ImportRequest, ImportSubtreeRequest, MutationApplied,
-    MutationRefused, MutationResult, OpenRequest, OpenResponse, PlacedRoot, Query, QueryName,
-    ReadRequest, ReadResponse, RedoRequest, TextRun, TextSpliceRequest, TrimRequest,
+    ExportResponse, ExportShallowSnapshotRequest, ExportSnapshotRequest, ExportSubtreeRequest,
+    ExportUpdateRequest, ForkRequest, ImportJudge, ImportRequest, ImportSubtreeRequest,
+    MutationApplied, MutationRefused, MutationResult, OpenRequest, OpenResponse, PlacedRoot, Query,
+    QueryName, ReadRequest, ReadResponse, RedoRequest, TextRun, TextSpliceRequest, TrimRequest,
     UndoClearRequest, UndoRequest, UndoStateRequest, UndoStateResponse, VersionEntry,
-    VersionRequest, VersionResponse, Write, WriteRequest, WriterName,
+    VersionRequest, VersionResponse, Write, WriteJudge, WriteRequest, WriterName,
 };
 use whiteboard_model::json::parse;
 
@@ -69,8 +69,9 @@ macro_rules! wire_enum_covered {
 
 wire_enum_covered!(every_breach_shape_round_trips, BreachShape, 28);
 wire_enum_covered!(every_query_name_round_trips, QueryName, 33);
-wire_enum_covered!(every_writer_name_round_trips, WriterName, 47);
+wire_enum_covered!(every_writer_name_round_trips, WriterName, 50);
 wire_enum_covered!(every_import_judge_round_trips, ImportJudge, 3);
+wire_enum_covered!(every_write_judge_round_trips, WriteJudge, 2);
 wire_enum_covered!(every_decode_kind_round_trips, DecodeKind, 2);
 
 #[test]
@@ -85,6 +86,7 @@ fn a_union_defaults_to_its_first_member_and_each_constant_is_the_contract_tag() 
     );
     assert_eq!(ExportSnapshotRequest::MODE, "snapshot");
     assert_eq!(ExportUpdateRequest::MODE, "update");
+    assert_eq!(ExportSubtreeRequest::MODE, "subtree");
     assert_eq!(ExportShallowSnapshotRequest::MODE, "shallow-snapshot");
     assert_eq!(MutationApplied::OUTCOME, "applied");
     assert_eq!(MutationRefused::OUTCOME, "refused");
@@ -97,6 +99,7 @@ fn every_message_defaults_empty_and_clones_equal_with_an_unsigned_index() {
         document_id: Some("doc".into()),
         text: "body".into(),
         runs: vec![TextRun { index: u64::MAX, remove: 0, insert: "x".into() }],
+        judge: Some(WriteJudge::None),
     };
     assert_eq!(splice.clone(), splice);
     assert_ne!(splice, TextSpliceRequest::default());
@@ -111,6 +114,12 @@ fn every_message_defaults_empty_and_clones_equal_with_an_unsigned_index() {
         ExportRequest::ExportUpdateRequest(update.clone()).clone(),
         ExportRequest::ExportUpdateRequest(update)
     );
+    let subtree = ExportSubtreeRequest { handle: 1, path: "a/b".into() };
+    assert_eq!(
+        ExportRequest::ExportSubtreeRequest(subtree.clone()).clone(),
+        ExportRequest::ExportSubtreeRequest(subtree.clone())
+    );
+    assert_ne!(subtree, ExportSubtreeRequest::default());
     let shallow =
         ExportShallowSnapshotRequest { handle: 1, frontiers: vec![VersionEntry::default()] };
     assert_ne!(shallow, ExportShallowSnapshotRequest::default());
@@ -141,6 +150,7 @@ fn results_requests_and_opening_messages_carry_their_fields() {
     let write = WriteRequest {
         handle: 2,
         batch: vec![Write { op: WriterName::SetNodeLock, args: Value::Bool(true) }],
+        judge: Some(WriteJudge::None),
     };
     assert_ne!(write.clone(), WriteRequest::default());
 
@@ -154,12 +164,21 @@ fn results_requests_and_opening_messages_carry_their_fields() {
         undo_merge_interval_ms: None,
     };
     assert_ne!(opened.clone(), OpenRequest::default());
+}
+
+#[test]
+fn the_calls_that_close_undo_redo_and_export_carry_their_fields() {
     assert_eq!(TrimRequest::default(), TrimRequest { handle: 0 });
     assert_eq!(OpenResponse::default().handle, 0);
     assert_eq!(CloseRequest::default(), CloseRequest { handle: 0 });
-    assert_eq!(UndoRequest::default(), UndoRequest { handle: 0 });
-    assert_eq!(RedoRequest::default(), RedoRequest { handle: 0 });
-    assert_eq!(ExportResponse::default().bytes, "");
+    assert_eq!(UndoRequest::default(), UndoRequest { handle: 0, judge: None });
+    assert_eq!(RedoRequest::default(), RedoRequest { handle: 0, judge: None });
+    assert_ne!(UndoRequest { handle: 0, judge: Some(WriteJudge::None) }, UndoRequest::default());
+    assert_ne!(RedoRequest { handle: 0, judge: Some(WriteJudge::Text) }, RedoRequest::default());
+    assert_eq!(ExportResponse::default().bytes, None);
+    assert_ne!(ExportResponse { bytes: Some("AA==".into()) }, ExportResponse::default());
+    assert_eq!(WriteJudge::default(), WriteJudge::Text);
+    assert_eq!(WriteRequest::default().judge, None);
     assert_eq!(ImportRequest::default().bytes, "");
     assert_eq!(ReadResponse::default().value, Value::Null);
     assert_eq!(Write::default().op, WriterName::WriteSpatialCanvas);
@@ -192,7 +211,11 @@ fn the_calls_for_judging_versions_forks_and_undo_state_carry_their_fields() {
         UndoStateResponse::default(),
         UndoStateResponse { can_undo: false, can_redo: false }
     );
-    let subtree =
-        ImportSubtreeRequest { handle: 1, bytes: "AA==".into(), parent_path: Some("a/b".into()) };
+    let subtree = ImportSubtreeRequest {
+        handle: 1,
+        bytes: "AA==".into(),
+        parent_path: Some("a/b".into()),
+        judge: Some(WriteJudge::None),
+    };
     assert_ne!(subtree.clone(), ImportSubtreeRequest::default());
 }

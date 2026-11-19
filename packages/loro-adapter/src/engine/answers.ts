@@ -7,7 +7,17 @@
  * because the Rust engine has to refuse the same rows, and a message is the one
  * thing a port words differently.
  */
+import type { documentEngine } from '@kamiazya/whiteboard-model'
 import { type Frontiers, LoroDoc, VersionVector } from 'loro-crdt'
+
+/**
+ * The bytes of an export that must hold some: a snapshot, an update and a
+ * shallow snapshot always do, and only a subtree export finds nothing.
+ */
+export function exportedBytes(answer: documentEngine.ExportResponse): string {
+  if (answer.bytes === undefined) throw new RangeError('the export holds no bytes')
+  return answer.bytes
+}
 
 export type Answer = { ok: unknown } | { err: string }
 

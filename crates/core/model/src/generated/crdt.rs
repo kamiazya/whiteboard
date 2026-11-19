@@ -391,6 +391,35 @@ pub struct UndoStateResponse {
     pub can_redo: bool,
 }
 
+/// What judges a local change: the text limits, or none when the keeper judges pushes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WriteJudge {
+    /// Written `text`.
+    #[default]
+    Text,
+    /// Written `none`.
+    None,
+}
+
+impl WriteJudge {
+    /// The value as the contract writes it.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Text => "text",
+            Self::None => "none",
+        }
+    }
+
+    /// The variant a written value names, if any.
+    pub fn from_wire(text: &str) -> Option<Self> {
+        match text {
+            "text" => Some(Self::Text),
+            "none" => Some(Self::None),
+            _ => None,
+        }
+    }
+}
+
 /// A write by name: one per writer of the recorded write oracle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum WriterName {
@@ -489,6 +518,12 @@ pub enum WriterName {
     RecordTrashEntry,
     /// Written `duplicateWorkspaceDocument`.
     DuplicateWorkspaceDocument,
+    /// Written `spliceText`.
+    SpliceText,
+    /// Written `forgetTrashEntry`.
+    ForgetTrashEntry,
+    /// Written `reapplyFolderNames`.
+    ReapplyFolderNames,
 }
 
 impl WriterName {
@@ -542,6 +577,9 @@ impl WriterName {
             Self::PruneEmptyFolders => "pruneEmptyFolders",
             Self::RecordTrashEntry => "recordTrashEntry",
             Self::DuplicateWorkspaceDocument => "duplicateWorkspaceDocument",
+            Self::SpliceText => "spliceText",
+            Self::ForgetTrashEntry => "forgetTrashEntry",
+            Self::ReapplyFolderNames => "reapplyFolderNames",
         }
     }
 
@@ -595,6 +633,9 @@ impl WriterName {
             "pruneEmptyFolders" => Some(Self::PruneEmptyFolders),
             "recordTrashEntry" => Some(Self::RecordTrashEntry),
             "duplicateWorkspaceDocument" => Some(Self::DuplicateWorkspaceDocument),
+            "spliceText" => Some(Self::SpliceText),
+            "forgetTrashEntry" => Some(Self::ForgetTrashEntry),
+            "reapplyFolderNames" => Some(Self::ReapplyFolderNames),
             _ => None,
         }
     }
@@ -628,8 +669,8 @@ pub struct DecodeRequest {
 /// What an export produced.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExportResponse {
-    /// The exported bytes.
-    pub bytes: Bytes,
+    /// The exported bytes; absent when a subtree export finds no node at its path.
+    pub bytes: Option<Bytes>,
 }
 
 /// Export everything an open document holds.
@@ -642,6 +683,20 @@ pub struct ExportSnapshotRequest {
 impl ExportSnapshotRequest {
     /// What `mode` is always written as.
     pub const MODE: &str = "snapshot";
+}
+
+/// Export the node at a path of a workspace record, with all under it, as a record.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExportSubtreeRequest {
+    /// The workspace record.
+    pub handle: Handle,
+    /// The path of the document or folder to export.
+    pub path: String,
+}
+
+impl ExportSubtreeRequest {
+    /// What `mode` is always written as.
+    pub const MODE: &str = "subtree";
 }
 
 /// Merge exported bytes into an open document.
@@ -664,6 +719,8 @@ pub struct ImportSubtreeRequest {
     pub bytes: Bytes,
     /// The folder path to place it under; absent places it at the root.
     pub parent_path: Option<String>,
+    /// What judges the update this call produces; absent is text.
+    pub judge: Option<WriteJudge>,
 }
 
 /// Open a document: from exported bytes and updates after them, or empty.
@@ -709,6 +766,8 @@ pub struct Query {
 pub struct RedoRequest {
     /// The document.
     pub handle: Handle,
+    /// What judges the update this call produces; absent is text.
+    pub judge: Option<WriteJudge>,
 }
 
 /// Replace runs of a text container, in UTF-16 code units.
@@ -722,6 +781,8 @@ pub struct TextSpliceRequest {
     pub text: String,
     /// The runs, applied in order as one commit; each counts against the text as the runs before it left it.
     pub runs: Vec<TextRun>,
+    /// What judges the update this call produces; absent is text.
+    pub judge: Option<WriteJudge>,
 }
 
 /// Free what an idle open document holds only to judge its next write.
@@ -743,6 +804,8 @@ pub struct UndoClearRequest {
 pub struct UndoRequest {
     /// The document.
     pub handle: Handle,
+    /// What judges the update this call produces; absent is text.
+    pub judge: Option<WriteJudge>,
 }
 
 /// Ask whether an open document can undo or redo.
@@ -882,6 +945,8 @@ pub struct WriteRequest {
     pub handle: Handle,
     /// The writes, applied in order.
     pub batch: Vec<Write>,
+    /// What judges the update this call produces; absent is text.
+    pub judge: Option<WriteJudge>,
 }
 
 /// Export an open document; the mode says what it carries and what it needs.
@@ -893,6 +958,8 @@ pub enum ExportRequest {
     ExportUpdateRequest(ExportUpdateRequest),
     /// A `ExportShallowSnapshotRequest`.
     ExportShallowSnapshotRequest(ExportShallowSnapshotRequest),
+    /// A `ExportSubtreeRequest`.
+    ExportSubtreeRequest(ExportSubtreeRequest),
 }
 
 impl Default for ExportRequest {

@@ -38,6 +38,31 @@ describe('what a write costs the engine', () => {
     expect(forkAt).not.toHaveBeenCalled()
   })
 
+  it('judges a write the host has not asked to judge on no copy at all', () => {
+    const engine = createCrdtEngine()
+    const { handle } = engine.open({ peer: '1' })
+    const fork = vi.spyOn(LoroDoc.prototype, 'fork')
+    const forkAt = vi.spyOn(LoroDoc.prototype, 'forkAt')
+    const batch = (body: string) => [{ op: 'writeMarkdownBody', args: { body } }]
+    for (let i = 0; i < 5; i++) {
+      engine.write(wire.writeRequestSchema.parse({ handle, batch: batch(`${i}`), judge: 'none' }))
+    }
+    engine.textSplice({
+      handle,
+      text: 'body',
+      runs: [{ index: 0, remove: 0, insert: 'a' }],
+      judge: 'none',
+    })
+    engine.undo({ handle, judge: 'none' })
+    engine.redo({ handle, judge: 'none' })
+    expect(fork).not.toHaveBeenCalled()
+    expect(forkAt).not.toHaveBeenCalled()
+    // The document and its undo history are all the handle holds: no judging copy was made.
+    const docs = vi.spyOn(LoroDoc.prototype, 'free')
+    engine.close({ handle })
+    expect(docs).toHaveBeenCalledTimes(1)
+  })
+
   it('refuses a write past a limit without replaying the history behind it', async () => {
     const engine = createCrdtEngine()
     const { handle } = engine.open({ peer: '1' })

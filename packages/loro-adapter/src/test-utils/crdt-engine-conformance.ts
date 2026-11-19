@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs'
 import { MARKDOWN_MAX_CHARS, documentEngine as wire } from '@kamiazya/whiteboard-model'
 import { decodeImportBlobMeta, type LoroDoc } from 'loro-crdt'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { frontierPairs, type VersionPairs, versionPairs } from '../engine/answers.js'
+import { exportedBytes, frontierPairs, type VersionPairs, versionPairs } from '../engine/answers.js'
 import { journaledEngine } from '../engine/journal.js'
 import type { CrdtEngine } from '../engine/types.js'
 import {
@@ -55,6 +55,18 @@ import {
   describeTrim,
 } from './crdt-engine-conformance-lifecycle.js'
 import { describeWorkspaceSyncJudging } from './crdt-engine-conformance-workspace-sync.js'
+import {
+  describeIndexWrites,
+  describeJudgeVocabulary,
+  describeSpliceJudging,
+  describeSpliceWriter,
+  describeSpliceWriterHosted,
+  describeSpliceWriterHostedDocument,
+  describeSubtreeExport,
+  describeUndoJudging,
+  describeWriteJudging,
+  describeWriteJudgingThrow,
+} from './crdt-engine-conformance-writes.js'
 import { fc, withDefaults } from './fast-check.js'
 
 const recorded = (name: string) =>
@@ -245,7 +257,7 @@ function describeExportAndImport(makeEngine: () => CrdtEngine) {
       const opened = b.open({ peer: '2', bytes: a.export({ handle, mode: 'snapshot' }).bytes })
       const from = versionEntries(held(a, handle))
       write(a, handle, 'writeMarkdownBody', { body: 'one two' })
-      const { bytes } = a.export({ handle, mode: 'update', from })
+      const bytes = exportedBytes(a.export({ handle, mode: 'update', from }))
       expect(mutation(b.import({ handle: opened.handle, bytes })).outcome).toBe('applied')
       expect(await bodyOf(b, opened.handle)).toBe('one two')
     })
@@ -748,6 +760,16 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeReadNow(makeEngine)
     describeOpenWithUpdates(makeEngine)
     describeTrim(makeEngine)
+    describeWriteJudging(makeEngine)
+    describeUndoJudging(makeEngine)
+    describeSpliceJudging(makeEngine)
+    describeWriteJudgingThrow(makeEngine)
+    describeJudgeVocabulary()
+    describeSpliceWriter(makeEngine)
+    describeSpliceWriterHosted(makeEngine)
+    describeSpliceWriterHostedDocument(makeEngine)
+    describeIndexWrites(makeEngine)
+    describeSubtreeExport(makeEngine)
     describeJournal(makeEngine)
     describeJournalOfParkedUpdates(makeEngine)
     describeJournalOfViewCopy(makeEngine)

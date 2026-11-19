@@ -62,6 +62,7 @@ import {
   WIDE,
   WORDS,
 } from './oracle-recorder-kit.js'
+import { addIndexWriteCases } from './oracle-write-index-cases.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const OUT = join(here, '..', 'src', 'oracle', 'crdt-write.jsonl')
@@ -731,6 +732,9 @@ const pureScene: Scene = {
 for (const [i, [current, next]] of PAIRS.entries()) {
   add('minimalChange', `pair-${i}`, pureScene, { current, next })
 }
+
+// Recorded after every other row, so the rows before them keep their ids.
+addIndexWriteCases({ add, contentCases, text: TEXT })
 
 // ---- recording ----
 

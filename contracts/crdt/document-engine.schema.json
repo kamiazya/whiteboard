@@ -76,7 +76,10 @@
         "updateWorkspaceDocumentMeta",
         "pruneEmptyFolders",
         "recordTrashEntry",
-        "duplicateWorkspaceDocument"
+        "duplicateWorkspaceDocument",
+        "spliceText",
+        "forgetTrashEntry",
+        "reapplyFolderNames"
       ]
     },
     "QueryName": {
@@ -192,6 +195,11 @@
       "description": "What judges imported bytes: text limits, workspace-sync checks too, or none.",
       "type": "string",
       "enum": ["text", "workspace-sync", "none"]
+    },
+    "WriteJudge": {
+      "description": "What judges a local change: the text limits, or none when the keeper judges pushes.",
+      "type": "string",
+      "enum": ["text", "none"]
     },
     "Write": {
       "description": "One write: the writer and its arguments, any-value on purpose.",
@@ -378,6 +386,29 @@
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
+    "ExportSubtreeRequest": {
+      "description": "Export the node at a path of a workspace record, with all under it, as a record.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The workspace record."
+        },
+        "mode": {
+          "type": "string",
+          "const": "subtree",
+          "description": "Always subtree."
+        },
+        "path": {
+          "type": "string",
+          "description": "The path of the document or folder to export."
+        }
+      },
+      "required": ["handle", "mode", "path"],
+      "x-wb-order": ["handle", "mode", "path"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
     "ExportRequest": {
       "description": "Export an open document; the mode says what it carries and what it needs.",
       "oneOf": [
@@ -389,6 +420,9 @@
         },
         {
           "$ref": "#/$defs/ExportShallowSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/ExportSubtreeRequest"
         }
       ],
       "discriminator": {
@@ -401,10 +435,9 @@
       "properties": {
         "bytes": {
           "$ref": "#/$defs/Bytes",
-          "description": "The exported bytes."
+          "description": "The exported bytes; absent when a subtree export finds no node at its path."
         }
       },
-      "required": ["bytes"],
       "x-wb-order": ["bytes"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
@@ -534,10 +567,14 @@
             "$ref": "#/$defs/Write"
           },
           "description": "The writes, applied in order."
+        },
+        "judge": {
+          "$ref": "#/$defs/WriteJudge",
+          "description": "What judges the update this call produces; absent is text."
         }
       },
       "required": ["handle", "batch"],
-      "x-wb-order": ["handle", "batch"],
+      "x-wb-order": ["handle", "batch", "judge"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -580,10 +617,14 @@
         "handle": {
           "$ref": "#/$defs/Handle",
           "description": "The document."
+        },
+        "judge": {
+          "$ref": "#/$defs/WriteJudge",
+          "description": "What judges the update this call produces; absent is text."
         }
       },
       "required": ["handle"],
-      "x-wb-order": ["handle"],
+      "x-wb-order": ["handle", "judge"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -594,10 +635,14 @@
         "handle": {
           "$ref": "#/$defs/Handle",
           "description": "The document."
+        },
+        "judge": {
+          "$ref": "#/$defs/WriteJudge",
+          "description": "What judges the update this call produces; absent is text."
         }
       },
       "required": ["handle"],
-      "x-wb-order": ["handle"],
+      "x-wb-order": ["handle", "judge"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -707,10 +752,14 @@
             "$ref": "#/$defs/TextRun"
           },
           "description": "The runs, applied in order as one commit; each counts against the text as the runs before it left it."
+        },
+        "judge": {
+          "$ref": "#/$defs/WriteJudge",
+          "description": "What judges the update this call produces; absent is text."
         }
       },
       "required": ["handle", "text", "runs"],
-      "x-wb-order": ["handle", "documentId", "text", "runs"],
+      "x-wb-order": ["handle", "documentId", "text", "runs", "judge"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -729,10 +778,14 @@
         "parentPath": {
           "type": "string",
           "description": "The folder path to place it under; absent places it at the root."
+        },
+        "judge": {
+          "$ref": "#/$defs/WriteJudge",
+          "description": "What judges the update this call produces; absent is text."
         }
       },
       "required": ["handle", "bytes"],
-      "x-wb-order": ["handle", "bytes", "parentPath"],
+      "x-wb-order": ["handle", "bytes", "parentPath", "judge"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },

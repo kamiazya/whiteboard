@@ -27,7 +27,7 @@ import {
 import { documentsTouchedSince } from '../touched-documents.js'
 import { judgeWorkspaceSyncImport, type WorkspaceSyncBreach } from '../workspace-sync-limits.js'
 import {
-  documentContainers,
+  exportWorkspaceSubtree,
   importWorkspaceSubtree,
   WORKSPACE_TREE_KEY,
 } from '../workspace-tree.js'
@@ -178,12 +178,21 @@ function shadowAtHead(entry: Held): LoroDoc {
   return entry.shadow
 }
 
-/** One commit: `apply`, then the update it produced judged as a peer would judge it. */
-function mutate(entry: Held, apply: (doc: LoroDoc) => void): wire.MutationResult {
+/**
+ * One commit: `apply`, then the update it produced judged as a peer would judge
+ * it. With `judge: 'none'` the update is not judged and no copy is kept for it:
+ * the host's keeper judges what it is pushed, so a second copy of the document
+ * would be cost for nothing.
+ */
+function mutate(
+  entry: Held,
+  apply: (doc: LoroDoc) => void,
+  judge: wire.WriteJudge = 'text',
+): wire.MutationResult {
   editable(entry)
   const { doc } = entry
   const before = doc.oplogVersion()
-  const shadow = shadowAtHead(entry)
+  const shadow = judge === 'text' ? shadowAtHead(entry) : null
   try {
     apply(doc)
     doc.commit()
@@ -198,9 +207,9 @@ function mutate(entry: Held, apply: (doc: LoroDoc) => void): wire.MutationResult
   // copy is single-use on a refusal (the judge leaves operations in it), and
   // the next write forks a new one; a second copy kept clean is the upgrade if
   // refusals are measured to matter.
-  let breach: SyncTextBreach | null
+  let breach: SyncTextBreach | null = null
   try {
-    breach = importWithinTextLimits(shadow, update).breach
+    if (shadow !== null) breach = importWithinTextLimits(shadow, update).breach
   } catch (error) {
     dropShadow(entry)
     restore(entry)
@@ -261,6 +270,10 @@ function importInto(entry: Held, request: wire.ImportRequest): wire.MutationResu
 }
 
 function exportFrom(doc: LoroDoc, request: wire.ExportRequest): wire.ExportResponse {
+  if (request.mode === 'subtree') {
+    const bytes = exportWorkspaceSubtree(doc, request.path)
+    return bytes === null ? {} : { bytes: bytesToBase64(bytes) }
+  }
   if (request.mode === 'snapshot') return { bytes: bytesToBase64(doc.export({ mode: 'snapshot' })) }
   if (request.mode === 'update') {
     const since =
@@ -274,15 +287,6 @@ function exportFrom(doc: LoroDoc, request: wire.ExportRequest): wire.ExportRespo
     counter,
   }))
   return { bytes: bytesToBase64(doc.export({ mode: 'shallow-snapshot', frontiers: kept })) }
-}
-
-function spliceText(doc: LoroDoc, request: wire.TextSpliceRequest) {
-  const { documentId, text, runs } = request
-  const host = documentId === undefined ? doc : documentContainers(doc, documentId)
-  // Loro's text takes UTF-16 code unit offsets from JavaScript, which is the
-  // unit this contract counts in.
-  const target = host.getText(text)
-  for (const { index, remove, insert } of runs) target.splice(index, remove, insert)
 }
 
 function applyBatch(doc: LoroDoc, batch: wire.WriteRequest['batch']) {
@@ -407,6 +411,26 @@ function inspections(heldBy: (handle: number) => Held) {
   }
 }
 
+/** Places the subtree and names the root it placed, when the bytes held a document. */
+function placeSubtree(
+  heldBy: (handle: number) => Held,
+  { handle, bytes, parentPath, judge }: wire.ImportSubtreeRequest,
+): wire.MutationResult {
+  let placed: ReturnType<typeof importWorkspaceSubtree> = null
+  const result = mutate(
+    heldBy(handle),
+    (doc) => {
+      placed = importWorkspaceSubtree(doc, decoded(bytes), parentPath)
+    },
+    judge,
+  )
+  // `placed` is the closure's own record of the root, so TypeScript narrows it to null.
+  const root = placed as ReturnType<typeof importWorkspaceSubtree>
+  return result.outcome === 'applied' && root !== null
+    ? { ...result, root: { documentId: root.documentId, path: root.path } }
+    : result
+}
+
 /** The calls that change a document: each is one commit, judged and restored on refusal. */
 function mutations(heldBy: (handle: number) => Held) {
   return {
@@ -415,37 +439,38 @@ function mutations(heldBy: (handle: number) => Held) {
       return importInto(heldBy(parsed.handle), parsed)
     },
     write(request: wire.WriteRequest) {
-      const { handle, batch } = wire.writeRequestSchema.parse(request)
-      return mutate(heldBy(handle), (doc) => applyBatch(doc, batch))
+      const { handle, batch, judge } = wire.writeRequestSchema.parse(request)
+      return mutate(heldBy(handle), (doc) => applyBatch(doc, batch), judge)
     },
     undo(request: wire.UndoRequest) {
-      const entry = heldBy(wire.undoRequestSchema.parse(request).handle)
-      return mutate(entry, () => {
-        entry.undo.undo()
-      })
+      const { handle, judge } = wire.undoRequestSchema.parse(request)
+      const entry = heldBy(handle)
+      return mutate(
+        entry,
+        () => {
+          entry.undo.undo()
+        },
+        judge,
+      )
     },
     redo(request: wire.RedoRequest) {
-      const entry = heldBy(wire.redoRequestSchema.parse(request).handle)
-      return mutate(entry, () => {
-        entry.undo.redo()
-      })
+      const { handle, judge } = wire.redoRequestSchema.parse(request)
+      const entry = heldBy(handle)
+      return mutate(
+        entry,
+        () => {
+          entry.undo.redo()
+        },
+        judge,
+      )
     },
     textSplice(request: wire.TextSpliceRequest) {
-      const parsed = wire.textSpliceRequestSchema.parse(request)
-      return mutate(heldBy(parsed.handle), (doc) => spliceText(doc, parsed))
+      const { handle, documentId, text, runs, judge } = wire.textSpliceRequestSchema.parse(request)
+      const args = { ...(documentId === undefined ? {} : { documentId }), text, runs }
+      return mutate(heldBy(handle), (doc) => applyWriter(doc, 'spliceText', args), judge)
     },
-    importSubtree(request: wire.ImportSubtreeRequest) {
-      const { handle, bytes, parentPath } = wire.importSubtreeRequestSchema.parse(request)
-      let placed: ReturnType<typeof importWorkspaceSubtree> = null
-      const result = mutate(heldBy(handle), (doc) => {
-        placed = importWorkspaceSubtree(doc, decoded(bytes), parentPath)
-      })
-      // `placed` is the closure's own record of the root, so TypeScript narrows it to null.
-      const root = placed as ReturnType<typeof importWorkspaceSubtree>
-      return result.outcome === 'applied' && root !== null
-        ? { ...result, root: { documentId: root.documentId, path: root.path } }
-        : result
-    },
+    importSubtree: (request: wire.ImportSubtreeRequest) =>
+      placeSubtree(heldBy, wire.importSubtreeRequestSchema.parse(request)),
   }
 }
 
