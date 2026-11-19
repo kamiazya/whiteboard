@@ -15,6 +15,7 @@ function coreAnswering(answer: unknown) {
   const glue: CoreGlue = {
     initSync: () => undefined,
     abi_version: () => EXPECTED_ABI,
+    __wbg_reset_state: () => undefined,
     edge_route_layout: () => new Float64Array(),
     layout_spatial_canvas: () => '[]',
     register_layout_fonts: () => '[]',
