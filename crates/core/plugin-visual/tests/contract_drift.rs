@@ -17,7 +17,7 @@ use whiteboard_model::Value;
 use whiteboard_model::json;
 use whiteboard_plugin_visual::host::VISUAL_HOST;
 
-const CONTRACTS: [(&str, &str); 6] = [
+const CONTRACTS: [(&str, &str); 7] = [
     (
         "facets/engine/engine.schema.json",
         include_str!("../../../../contracts/facets/engine/engine.schema.json"),
@@ -36,6 +36,10 @@ const CONTRACTS: [(&str, &str); 6] = [
     ),
     ("model/okf.schema.json", include_str!("../../../../contracts/model/okf.schema.json")),
     ("model/spatial.schema.json", include_str!("../../../../contracts/model/spatial.schema.json")),
+    (
+        "crdt/document-engine.schema.json",
+        include_str!("../../../../contracts/crdt/document-engine.schema.json"),
+    ),
 ];
 
 /// Every string under `key`, at any depth, in the order the contract reads.
