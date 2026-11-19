@@ -1,5 +1,13 @@
 import type { CheckpointScheduler } from '@kamiazya/whiteboard-history'
-import type { LoroDoc } from 'loro-crdt'
+import { encodeFrontiers, type LoroDoc } from 'loro-crdt'
+
+/** The scheduler over the daemon's documents. */
+export type DocumentCheckpointScheduler = CheckpointScheduler<LoroDoc>
+
+/** A document's frontier as the bytes the scheduler compares and never decodes. */
+export function documentFrontier(doc: LoroDoc): Uint8Array {
+  return encodeFrontiers(doc.oplogFrontiers())
+}
 
 /**
  * The one automatic-checkpoint scheduler, shared by every path that writes a
@@ -22,9 +30,9 @@ import type { LoroDoc } from 'loro-crdt'
  * that ever needs a per-workspace quiet window or actor swaps this for a
  * lookup keyed by workspace id.
  */
-let installed: CheckpointScheduler | null = null
+let installed: DocumentCheckpointScheduler | null = null
 
-export function installAutoCheckpoint(scheduler: CheckpointScheduler): void {
+export function installAutoCheckpoint(scheduler: DocumentCheckpointScheduler): void {
   installed = scheduler
 }
 

@@ -1,9 +1,12 @@
-import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { type CheckpointScheduler, createCheckpointScheduler } from '@kamiazya/whiteboard-history'
 import { rebasePath } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
-import type { BrowserVersionStore } from '../lib/browser-version-store.js'
+import {
+  type BrowserVersionStore,
+  recordFrontier,
+  type WorkspaceRecordDoc,
+} from '../lib/browser-version-store.js'
 import type { VersionsRecordSeam } from '../lib/browser-versions-backend.js'
 import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { listenToWorkspace, type WorkspaceBroadcast } from '../lib/workspace-broadcast.js'
@@ -30,7 +33,7 @@ interface LivePath {
  * document returning: it comes back under the path it was deleted from.
  */
 function followBroadcast(
-  checkpoints: CheckpointScheduler,
+  checkpoints: CheckpointScheduler<WorkspaceRecordDoc>,
   workspaceId: string,
   live: LivePath,
   message: WorkspaceBroadcast,
@@ -51,7 +54,7 @@ function followBroadcast(
 }
 
 function useLivePath(
-  checkpoints: CheckpointScheduler,
+  checkpoints: CheckpointScheduler<WorkspaceRecordDoc>,
   documentPath: string | null,
   listen: typeof listenToWorkspace,
 ): LivePath {
@@ -83,7 +86,7 @@ function useLivePath(
 
 function armCheckpoint(
   recordSource: VersionsRecordSeam | null,
-  checkpoints: CheckpointScheduler,
+  checkpoints: CheckpointScheduler<WorkspaceRecordDoc>,
   live: { readonly path: string | null },
 ): () => void {
   return () => {
@@ -127,6 +130,22 @@ export async function settleAutoCheckpoints(): Promise<void> {
   while (inFlight.size > 0) await Promise.all(inFlight)
 }
 
+function createBrowserCheckpoints(
+  versionStore: Pick<BrowserVersionStore, 'save' | 'isUnchangedSinceLastVersion'>,
+) {
+  return createCheckpointScheduler({
+    frontierOf: recordFrontier,
+    alreadyCheckpointed: (w, p) => versionStore.isUnchangedSinceLastVersion(w, p),
+    save: (workspaceId, path) =>
+      versionStore.save(workspaceId, path, {
+        auto: true,
+        // The person at this browser is not who took this one.
+        operator: { kind: 'system', displayName: 'auto-save' },
+      }),
+    onError: (err) => log.warn('automatic checkpoint failed', err),
+  })
+}
+
 /**
  * Automatic checkpoints for the browser keeper, on the same mechanic the
  * daemon runs (`@kamiazya/whiteboard-history`): a trailing debounce that lands
@@ -150,20 +169,12 @@ export function useAutoCheckpoint(
   documentPath: string | null,
   listen: typeof listenToWorkspace = listenToWorkspace,
 ): CheckpointPair {
-  const checkpoints = useMemo(() => {
-    return createCheckpointScheduler<VersionEntry>({
-      alreadyCheckpointed: (w, p) => versionStore.isUnchangedSinceLastVersion(w, p),
-      save: (workspaceId, path) =>
-        versionStore.save(workspaceId, path, {
-          auto: true,
-          // The person at this browser is not who took this one.
-          operator: { kind: 'system', displayName: 'auto-save' },
-        }),
-      onError: (err) => log.warn('automatic checkpoint failed', err),
-    })
-    // Re-created per record source, so nothing pending outlives leaving this
-    // document for another (the effect below takes the outgoing one's).
-  }, [recordSource, versionStore])
+  // Re-created per record source, so nothing pending outlives leaving this
+  // document for another (the effect below takes the outgoing one's).
+  const checkpoints = useMemo(
+    () => createBrowserCheckpoints(versionStore),
+    [recordSource, versionStore],
+  )
 
   // Leaving a document inside its quiet window is a person finishing with it,
   // so the pause it was waiting for is taken now — the way a tab closing

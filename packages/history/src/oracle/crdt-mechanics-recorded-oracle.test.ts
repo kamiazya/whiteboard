@@ -5,9 +5,6 @@ import {
   autoVersionsOverCap,
   CHECKPOINT_QUIET_MS,
   carriedAutoVersionsOverCap,
-  compactionCut,
-  frontiersFromBase64,
-  frontiersToBase64,
   MAX_AUTO_PER_DOCUMENT,
   MAX_MANUAL_PER_DOCUMENT,
   MAX_RESTORE_POINTS_PER_DOCUMENT,
@@ -17,8 +14,11 @@ import {
 import {
   type Answer,
   answer,
+  compactionCutOverDoc,
   type FrontierPairs,
+  frontiersFromBase64ToFrontiers,
   frontiersOfPairs,
+  frontiersToBase64OfFrontiers,
   pairsOfFrontiers,
 } from '../test-utils/crdt-mechanics-oracle.js'
 
@@ -153,13 +153,13 @@ describe('the recorded CRDT mechanics oracle', () => {
           case 'compactionCut': {
             const doc = new LoroDoc()
             doc.import(new Uint8Array(Buffer.from(row.doc as string, 'base64')))
-            const cut = compactionCut(doc, (row.points ?? []).map(frontiersOfPairs))
+            const cut = compactionCutOverDoc(doc, (row.points ?? []).map(frontiersOfPairs))
             return cut === null ? null : pairsOfFrontiers(cut)
           }
           case 'frontiersToBase64':
-            return frontiersToBase64(frontiersOfPairs(row.frontiers ?? []))
+            return frontiersToBase64OfFrontiers(frontiersOfPairs(row.frontiers ?? []))
           case 'frontiersFromBase64':
-            return pairsOfFrontiers(frontiersFromBase64(row.text as string))
+            return pairsOfFrontiers(frontiersFromBase64ToFrontiers(row.text as string))
           case 'autoVersionsOverCap':
             return autoVersionsOverCap(row.autos ?? [], sets(row.referenced), row.cap)
           case 'carriedAutoVersionsOverCap':

@@ -26,6 +26,7 @@ const { FileVersionStore } = await import('./version-store.js')
 const { saveDocument, compactWorkspace, getWorkspaceDoc, _clearWorkspaceDocCacheForTests } =
   await import('./document-store.js')
 const { frontiersToBase64 } = await import('@kamiazya/whiteboard-history')
+const { encodeFrontiers } = await import('loro-crdt')
 
 function canvasOf(text: string): SpatialCanvas {
   return { nodes: [textNode({ id: 'n', text, x: 0, y: 0, width: 100, height: 40 })], edges: [] }
@@ -413,7 +414,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       )
 
       const points = (await store.workspaceVersionFrontiers('01PAW75F73PVC402Y3V151KT6R')).map(
-        frontiersToBase64,
+        (frontiers) => frontiersToBase64(encodeFrontiers(frontiers)),
       )
       expect(points.sort()).toEqual(
         [await frontiersOf(first.id), await frontiersOf(second.id)].sort(),

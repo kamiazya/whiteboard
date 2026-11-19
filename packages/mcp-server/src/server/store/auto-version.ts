@@ -1,5 +1,6 @@
-import { type CheckpointScheduler, createCheckpointScheduler } from '@kamiazya/whiteboard-history'
+import { createCheckpointScheduler } from '@kamiazya/whiteboard-history'
 import { getLogger } from '../log.js'
+import { type DocumentCheckpointScheduler, documentFrontier } from './auto-checkpoint.js'
 import type { OperatorInfo, VersionEntry, VersionStore } from './version-store.js'
 
 /**
@@ -26,14 +27,15 @@ export interface AutoVersionOptions {
   readonly daemonActor?: string
 }
 
-export type AutoVersionTrigger = CheckpointScheduler
+export type AutoVersionTrigger = DocumentCheckpointScheduler
 
 export function createAutoVersionTrigger(
   versionStore: VersionStore,
   options: AutoVersionOptions = {},
 ): AutoVersionTrigger {
   const { daemonActor } = options
-  return createCheckpointScheduler<VersionEntry>({
+  return createCheckpointScheduler({
+    frontierOf: documentFrontier,
     ...(options.quietMs === undefined ? {} : { quietMs: options.quietMs }),
     ...(options.ceilingMs === undefined ? {} : { ceilingMs: options.ceilingMs }),
     ...(options.onSaved === undefined ? {} : { onSaved: options.onSaved }),

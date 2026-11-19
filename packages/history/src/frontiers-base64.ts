@@ -7,17 +7,19 @@
  * same way). One codec — `model`'s, which runs on every runtime this package
  * must — so no keeper reaches for `Buffer` and the shared layer stays
  * `node:*`-free.
+ *
+ * The bytes are the engine's encoded frontiers and stay opaque here: encoding
+ * a frontier and decoding it again belong to whoever holds the engine.
  */
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
-import { decodeFrontiers, encodeFrontiers, type Frontiers } from 'loro-crdt'
 
-export function frontiersToBase64(frontiers: Frontiers): string {
-  return bytesToBase64(encodeFrontiers(frontiers))
+export function frontiersToBase64(encoded: Uint8Array): string {
+  return bytesToBase64(encoded)
 }
 
-/** Throws on text that is not base64, and whatever `decodeFrontiers` throws on bytes that are not a frontier; callers name the location. */
-export function frontiersFromBase64(text: string): Frontiers {
+/** Throws on text that is not base64; callers name the location. */
+export function frontiersFromBase64(text: string): Uint8Array {
   const bytes = base64ToBytes(text)
   if (bytes === null) throw new Error('frontiers are not base64')
-  return decodeFrontiers(bytes)
+  return bytes
 }

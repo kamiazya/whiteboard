@@ -200,12 +200,14 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // A document's history as pure mechanics over the workspace record: the
     // checkpoint scheduler, version retention, and frontier encoding. Both
     // keepers run them; what differs between the keepers is where the rows
-    // live, which stays in each composition root. loro-crdt because a
-    // checkpoint's identity is a frontier of the record. model for the one
-    // base64 codec a frontier is stored through. Branch operations
-    // and merge planning were here too until ADR-0029 retired the branch.
+    // live, which stays in each composition root. No engine: a checkpoint's
+    // identity is an encoded frontier it is handed, and a cut is computed over
+    // version vectors the keeper supplies, so the Rust port takes no handle.
+    // model for the one base64 codec a frontier is stored through. Branch
+    // operations and merge planning were here too until ADR-0029 retired the
+    // branch.
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
-    allowedThirdParty: ['loro-crdt'],
+    allowedThirdParty: [],
   },
   '@kamiazya/whiteboard-server-core': {
     allowedInternalDeps: [

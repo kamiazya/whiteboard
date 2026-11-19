@@ -23,10 +23,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@kamiazya/whiteboard-model": "workspace:*",
-    "loro-crdt": "catalog:"
+    "@kamiazya/whiteboard-model": "workspace:*"
   },
   "devDependencies": {
+    "loro-crdt": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

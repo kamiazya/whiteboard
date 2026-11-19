@@ -603,10 +603,10 @@ importers:
       '@kamiazya/whiteboard-model':
         specifier: workspace:*
         version: link:../model
+    devDependencies:
       loro-crdt:
         specifier: 'catalog:'
         version: 1.17.1
-    devDependencies:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

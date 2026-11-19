@@ -2,7 +2,6 @@ import type {
   CompactWorkspaceResult,
   DocumentSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { compactionCut } from '@kamiazya/whiteboard-history'
 import {
   createWorkspaceDocumentAtPath,
   projectWorkspaceDocument,
@@ -54,6 +53,7 @@ import type { VersionStore } from './version-store.js'
 import {
   cacheBackedWorkspaceDocs,
   catchUpWorkspaceDoc,
+  compactionCutOfDoc,
   evictWorkspaceDocCache,
   getWorkspaceDoc,
   openWorkspaceDocIfStored,
@@ -647,7 +647,7 @@ export async function compactWorkspace(
     const doc = await getWorkspaceDoc(workspaceId, scope)
 
     // Causal, never by date: a carried row may date itself before its point.
-    const cut = compactionCut(doc, points)
+    const cut = compactionCutOfDoc(doc, points)
     const shallow = cut === null ? null : doc.export({ mode: 'shallow-snapshot', frontiers: cut })
     if (shallow === null || shallow.byteLength >= beforeBytes) {
       return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }

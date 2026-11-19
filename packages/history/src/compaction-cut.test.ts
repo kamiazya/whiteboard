@@ -1,6 +1,7 @@
 import { type Frontiers, LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { compactionCut } from './compaction-cut.js'
+import { compactionCut as compactionCutOfVectors } from './compaction-cut.js'
+import { compactionCutOverDoc as compactionCut } from './test-utils/crdt-mechanics-oracle.js'
 
 function write(doc: LoroDoc, key: string, value: number): Frontiers {
   doc.getMap('m').set(key, value)
@@ -73,5 +74,31 @@ describe('compactionCut', () => {
     shallow.import(doc.export({ mode: 'shallow-snapshot', frontiers: root }))
     expect(compactionCut(shallow, [early, head])).toBeNull()
     expect(compactionCut(shallow, [root, head])).toEqual(root)
+  })
+})
+
+describe('compactionCut over plain version vectors', () => {
+  const at = (...pairs: Array<[string, number]>) => new Map(pairs)
+  const noRoot = at()
+
+  it('is the per-peer fewest ops any point has seen', () => {
+    expect(
+      compactionCutOfVectors([at(['1', 5], ['2', 3]), at(['1', 2], ['2', 9])], noRoot),
+    ).toEqual(at(['1', 2], ['2', 3]))
+  })
+
+  it('is no cut for no points, or for points that share no op', () => {
+    expect(compactionCutOfVectors([], noRoot)).toBeNull()
+    expect(compactionCutOfVectors([at(['1', 2]), at(['2', 2])], noRoot)).toBeNull()
+  })
+
+  it('is the root itself when the points all stand at it, and no cut before it', () => {
+    const root = at(['1', 4])
+    expect(compactionCutOfVectors([at(['1', 4]), at(['1', 8])], root)).toEqual(root)
+    expect(compactionCutOfVectors([at(['1', 3]), at(['1', 8])], root)).toBeNull()
+  })
+
+  it('is no cut concurrent with the root, which no record can check out', () => {
+    expect(compactionCutOfVectors([at(['2', 3])], at(['1', 4]))).toBeNull()
   })
 })

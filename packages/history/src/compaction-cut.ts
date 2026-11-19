@@ -10,43 +10,28 @@
  * The cut is the intersection of every version's version vector: per peer,
  * the fewest ops any version has seen. A version is downward-closed in the
  * causal order, so the intersection is too, and lies in every version's past.
+ *
+ * Over plain version vectors: turning a frontier into one needs the op log, so
+ * the keeper that holds it converts the points and the root in, and the cut
+ * back out.
  */
-import { type Frontiers, type LoroDoc, type PeerID, VersionVector } from 'loro-crdt'
+import { compareVersions, intersectVersions, type VersionVector } from './version-vector.js'
 
 /**
- * The frontiers every point descends from, or null when there is no cut worth
- * taking: no points, a point the record does not hold, no op every point has
- * seen, or a cut that would fall before the record's existing shallow root.
+ * The version every point descends from, or null when there is no cut worth
+ * taking: no points, no op every point has seen, or a cut that would fall
+ * before the record's existing shallow root (`root`, the version of that root
+ * itself — the record can no longer check out anything earlier, so cutting
+ * there would export from history it does not hold).
  */
-export function compactionCut(doc: LoroDoc, points: readonly Frontiers[]): Frontiers | null {
-  let common: Map<PeerID, number> | null = null
-  for (const point of points) {
-    let seen: Map<PeerID, number>
-    try {
-      seen = doc.frontiersToVV(point).toJSON()
-    } catch {
-      return null
-    }
-    if (common === null) {
-      common = seen
-      continue
-    }
-    const next = new Map<PeerID, number>()
-    for (const [peer, end] of common) {
-      const other = seen.get(peer)
-      if (other !== undefined) next.set(peer, Math.min(end, other))
-    }
-    common = next
-  }
-  if (common === null || common.size === 0) return null
-  const cut = VersionVector.parseJSON(common)
-  // `frontiersToVV` answers for a point before the shallow root too, though
-  // the record can no longer check one out; cutting there would export from
-  // history the record does not hold.
-  // The root's own vector, not `shallowSinceVV()`: that one stops one op
-  // short of the root, so a cut one op before the root compared equal to it.
-  const root = doc.frontiersToVV(doc.shallowSinceFrontiers())
-  const order = cut.compare(root)
-  if (order === undefined || order < 0) return null
-  return doc.vvToFrontiers(cut)
+export function compactionCut(
+  points: readonly VersionVector[],
+  root: VersionVector,
+): VersionVector | null {
+  const [first, ...rest] = points
+  if (first === undefined) return null
+  const common = rest.reduce(intersectVersions, first)
+  if (common.size === 0) return null
+  const order = compareVersions(common, root)
+  return order === 'before' || order === 'concurrent' ? null : common
 }

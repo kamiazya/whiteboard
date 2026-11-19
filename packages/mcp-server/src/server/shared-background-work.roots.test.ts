@@ -35,7 +35,7 @@ function fakeSweeper() {
 function fakeScheduler() {
   const signalled: string[] = []
   const flush = vi.fn(async () => undefined)
-  const scheduler: CheckpointScheduler = Object.assign(
+  const scheduler: CheckpointScheduler<LoroDoc> = Object.assign(
     (workspaceId: string, path: string) => {
       signalled.push(`${workspaceId}/${path}`)
     },

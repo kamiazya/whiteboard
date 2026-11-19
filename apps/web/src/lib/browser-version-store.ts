@@ -75,6 +75,14 @@ export interface BrowserVersionStoreDeps {
   readonly dbName?: string
 }
 
+/** The workspace record a keeper's checkpoints are taken against. */
+export type WorkspaceRecordDoc = LoroDoc
+
+/** A record's frontier as the bytes the checkpoint scheduler compares and never decodes. */
+export function recordFrontier(record: WorkspaceRecordDoc): Uint8Array {
+  return new Uint8Array(encodeFrontiers(record.oplogFrontiers()))
+}
+
 /**
  * The browser keeper's version history — the twin of the daemon's
  * `FileVersionStore`, over IndexedDB.

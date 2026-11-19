@@ -1,6 +1,8 @@
-import { LoroDoc } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createCheckpointScheduler } from './scheduler.js'
+
+const frontierOf = (doc: LoroDoc) => encodeFrontiers(doc.oplogFrontiers())
 
 function edited(doc: LoroDoc, key: string): LoroDoc {
   doc.getMap('nodes').set(key, 1)
@@ -15,8 +17,9 @@ describe('createCheckpointScheduler', () => {
   function harness(opts: { quietMs?: number; ceilingMs?: number } = {}) {
     const saves: Array<{ path: string }> = []
     const errors: unknown[] = []
-    const scheduler = createCheckpointScheduler<{ id: string }>({
+    const scheduler = createCheckpointScheduler<LoroDoc, { id: string }>({
       ...opts,
+      frontierOf,
       save: async (_ws, path) => {
         saves.push({ path })
         return { id: `v${saves.length}` }
@@ -75,7 +78,8 @@ describe('createCheckpointScheduler', () => {
     let fail = true
     const saves: string[] = []
     const errors: unknown[] = []
-    const scheduler = createCheckpointScheduler<void>({
+    const scheduler = createCheckpointScheduler<LoroDoc, void>({
+      frontierOf,
       quietMs: 100,
       save: async (_ws, path) => {
         if (fail) throw new Error('disk full')
@@ -96,7 +100,8 @@ describe('createCheckpointScheduler', () => {
   it('takes the checkpoint when the keeper cannot say whether one already exists', async () => {
     const saves: string[] = []
     const errors: unknown[] = []
-    const scheduler = createCheckpointScheduler<void>({
+    const scheduler = createCheckpointScheduler<LoroDoc, void>({
+      frontierOf,
       quietMs: 100,
       alreadyCheckpointed: async () => {
         throw new Error('keeper unreachable')
@@ -114,7 +119,8 @@ describe('createCheckpointScheduler', () => {
 
   it('skips the save when the keeper already holds the document as it stands', async () => {
     const saves: string[] = []
-    const scheduler = createCheckpointScheduler<void>({
+    const scheduler = createCheckpointScheduler<LoroDoc, void>({
+      frontierOf,
       quietMs: 100,
       alreadyCheckpointed: async () => true,
       save: async (_ws, path) => {
@@ -130,7 +136,8 @@ describe('createCheckpointScheduler', () => {
   it('flush resolves only after the saves it started have finished', async () => {
     let finishSave: () => void = () => {}
     const saved: string[] = []
-    const scheduler = createCheckpointScheduler<void>({
+    const scheduler = createCheckpointScheduler<LoroDoc, void>({
+      frontierOf,
       quietMs: 60_000,
       save: (_ws, path) =>
         new Promise<void>((resolve) => {
