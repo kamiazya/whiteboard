@@ -1,5 +1,4 @@
 import {
-  readDocumentContent,
   writeCoreFacets,
   writeDocumentKind,
   writeMarkdownBody,
@@ -9,8 +8,9 @@ import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-u
 import { snippetAround } from '@kamiazya/whiteboard-search'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { extractContentFacts, splitBearerTags, tagBearersOf } from './extract.js'
+import { splitBearerTags, tagBearersOf } from './extract.js'
 import { backlinksIn } from './reference-aggregate.js'
+import { factsOf, loaded } from './test-utils/in-place.js'
 
 function docWith(kind: 'spatial' | 'markdown' | undefined): LoroDoc {
   const doc = new LoroDoc()
@@ -26,7 +26,7 @@ function docWith(kind: 'spatial' | 'markdown' | undefined): LoroDoc {
 }
 
 const targetsOf = (entryKind: 'spatial' | 'markdown' | undefined, doc: LoroDoc) =>
-  extractContentFacts({ kind: entryKind }, doc).refs.map((ref) => ref.target)
+  factsOf(doc, entryKind).refs.map((ref) => ref.target)
 
 describe('extractContentFacts chooses the half a document is read as', () => {
   it('trusts the kind the document records over the index row, as readDocumentContent does', () => {
@@ -48,7 +48,7 @@ describe('extractContentFacts texts', () => {
   it('lead with the description a markdown document records, so the daemon indexes it', () => {
     const doc = docWith('markdown')
     writeCoreFacets(doc, { type: 'note', description: 'Quarterly zebracrossing summary' })
-    expect(extractContentFacts({ kind: 'markdown' }, doc).texts).toEqual([
+    expect(factsOf(doc, 'markdown').texts).toEqual([
       'Quarterly zebracrossing summary',
       'see [[from-the-body]]',
     ])
@@ -72,7 +72,7 @@ describe('what a document bears', () => {
 
   it('names a board, each box and each edge that carries a tag, and nothing that carries none', () => {
     const doc = board()
-    const bearers = tagBearersOf(doc, readDocumentContent(doc, 'spatial'))
+    const bearers = tagBearersOf(loaded(doc, 'spatial'))
     expect(bearers.map(({ what, id, tags }) => ({ what, id, tags }))).toEqual([
       { what: 'board', id: undefined, tags: ['team:core'] },
       { what: 'node', id: 'a', tags: ['health:ok'] },
@@ -84,16 +84,14 @@ describe('what a document bears', () => {
   it('names a note by its frontmatter tags, and a note with none bears nothing', () => {
     const tagged = new LoroDoc()
     writeCoreFacets(tagged, { type: 'note', tags: ['q3'] })
-    expect(
-      tagBearersOf(tagged, readDocumentContent(tagged, 'markdown')).map((b) => b.what),
-    ).toEqual(['document'])
+    expect(tagBearersOf(loaded(tagged, 'markdown')).map((b) => b.what)).toEqual(['document'])
     const bare = new LoroDoc()
-    expect(tagBearersOf(bare, readDocumentContent(bare, 'markdown'))).toEqual([])
+    expect(tagBearersOf(loaded(bare, 'markdown'))).toEqual([])
   })
 
   it('splits a board into its own tags and what its boxes and edges carry, deduplicated', () => {
     const doc = board()
-    expect(splitBearerTags(tagBearersOf(doc, readDocumentContent(doc, 'spatial')))).toEqual({
+    expect(splitBearerTags(tagBearersOf(loaded(doc, 'spatial')))).toEqual({
       own: ['team:core'],
       carried: ['health:ok', 'link:slow'],
     })
@@ -110,7 +108,7 @@ const geo = { x: 0, y: 0, width: 10, height: 10 }
 function bearersOfCanvas(canvas: Parameters<typeof writeSpatialCanvas>[1]) {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, canvas)
-  return tagBearersOf(doc, readDocumentContent(doc, 'spatial'))
+  return tagBearersOf(loaded(doc, 'spatial'))
 }
 
 describe('what a tag bearer is called in an excerpt', () => {
@@ -163,7 +161,7 @@ describe('a wikilink in cached facts', () => {
       doc,
       '[[01ARZ3NDEKTSV4RRFFQ69G5FAV]] [[notes/plan]] [[01ARZ3NDEKTSV4RRFFQ69G5FAU]]',
     )
-    const refs = extractContentFacts({ kind: 'markdown' }, doc).refs
+    const refs = factsOf(doc, 'markdown').refs
     expect(refs.map((ref) => ref.via === 'wikilink' && ref.byId)).toEqual([true, false, false])
   })
 })
@@ -173,7 +171,7 @@ describe('a wikilink excerpt in cached facts', () => {
   const doc = new LoroDoc()
   writeDocumentKind(doc, 'markdown')
   writeMarkdownBody(doc, body)
-  const facts = extractContentFacts({ kind: 'markdown' }, doc)
+  const facts = factsOf(doc, 'markdown')
 
   it('is held as a place in the text, not as a copy of the excerpt', () => {
     // A copy per reference is what made a dense body cost ~23x its size in

@@ -1,5 +1,5 @@
-import { readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
-import { linkifyMentionsIn } from '@kamiazya/whiteboard-reference-graph'
+import { applyDocumentEdit, readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
+import { planLinkifyMentions } from '@kamiazya/whiteboard-reference-graph'
 import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
@@ -58,12 +58,14 @@ export async function linkifyMentions(
   // Reached over HTTP alone, so no MCP adapter holds the lock around it.
   return withWorkspaceWrite(deps, input.workspaceId, async () => {
     const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
-    const linked = linkifyMentionsIn(doc, source.kind ?? readDocumentKind(doc) ?? 'spatial', {
+    const { linked, edit } = planLinkifyMentions(readDocumentContent(doc, source.kind), {
       documentId: input.targetDocumentId,
       path: target.path,
       name: targetName,
     })
-    if (linked > 0) await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
+    if (edit === null) return { linked }
+    applyDocumentEdit(doc, edit)
+    await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
     return { linked }
   })
 }

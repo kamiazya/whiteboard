@@ -17,7 +17,7 @@ import {
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { rewriteDocumentReferences } from './rewrite.js'
+import { rewriteInPlace } from './test-utils/in-place.js'
 import { ReferenceRewriteTooLargeError } from './text-limit.js'
 
 const PLAN = new Map([['design/login', 'archive/login']])
@@ -27,7 +27,7 @@ describe('rewriteDocumentReferences', () => {
     const doc = new LoroDoc()
     writeMarkdownBody(doc, 'see [[design/login]] and [[unrelated]]')
 
-    expect(rewriteDocumentReferences(doc, PLAN, 'markdown')).toBe(true)
+    expect(rewriteInPlace(doc, PLAN, 'markdown')).toBe(true)
     expect(readMarkdownBody(doc)).toBe('see [[archive/login]] and [[unrelated]]')
   })
 
@@ -36,7 +36,7 @@ describe('rewriteDocumentReferences', () => {
     writeMarkdownBody(doc, 'see [[unrelated]]')
     const before = doc.oplogVersion().encode()
 
-    expect(rewriteDocumentReferences(doc, PLAN, 'markdown')).toBe(false)
+    expect(rewriteInPlace(doc, PLAN, 'markdown')).toBe(false)
     expect(doc.oplogVersion().encode()).toEqual(before)
   })
 
@@ -54,7 +54,7 @@ describe('rewriteDocumentReferences', () => {
       }),
     )
 
-    expect(rewriteDocumentReferences(doc, PLAN, 'spatial')).toBe(true)
+    expect(rewriteInPlace(doc, PLAN, 'spatial')).toBe(true)
     const canvas = readSpatialCanvas(doc)
     const byId = (id: string) => canvas.nodes.find((node) => node.id === id)
     expect(nodeText(byId('t') ?? canvas.nodes[0]!)).toBe('see [[archive/login]]')
@@ -73,7 +73,7 @@ describe('rewriteDocumentReferences', () => {
     )
     const before = doc.oplogVersion().encode()
 
-    expect(rewriteDocumentReferences(doc, PLAN, 'spatial')).toBe(false)
+    expect(rewriteInPlace(doc, PLAN, 'spatial')).toBe(false)
     expect(doc.oplogVersion().encode()).toEqual(before)
   })
 
@@ -92,7 +92,7 @@ describe('rewriteDocumentReferences', () => {
       }),
     )
 
-    expect(rewriteDocumentReferences(doc, PLAN, undefined)).toBe(true)
+    expect(rewriteInPlace(doc, PLAN, undefined)).toBe(true)
     const [node] = readSpatialCanvas(doc).nodes
     expect(node === undefined ? undefined : nodeText(node)).toBe('see [[archive/login]]')
   })
@@ -105,9 +105,7 @@ describe('rewriteDocumentReferences', () => {
     createWorkspaceDocumentAtPath(workspace, { path: 'daily', documentId: id, kind: 'markdown' })
     writeMarkdownBody(documentContainers(workspace, id), 'see [[design/login]]')
 
-    expect(rewriteDocumentReferences(documentContainers(workspace, id), PLAN, 'markdown')).toBe(
-      true,
-    )
+    expect(rewriteInPlace(documentContainers(workspace, id), PLAN, 'markdown')).toBe(true)
     expect(readMarkdownBody(documentContainers(workspace, id))).toBe('see [[archive/login]]')
   })
 })
@@ -120,9 +118,7 @@ describe('rewriteDocumentReferences, held to the text ceilings', () => {
     writeMarkdownBody(doc, '[[a]] '.repeat(Math.floor(MARKDOWN_MAX_CHARS / 12)))
     const before = doc.oplogVersion().encode()
 
-    expect(() => rewriteDocumentReferences(doc, LONG, 'markdown')).toThrow(
-      ReferenceRewriteTooLargeError,
-    )
+    expect(() => rewriteInPlace(doc, LONG, 'markdown')).toThrow(ReferenceRewriteTooLargeError)
     expect(doc.oplogVersion().encode()).toEqual(before)
   })
 
@@ -148,7 +144,7 @@ describe('rewriteDocumentReferences, held to the text ceilings', () => {
     )
     const before = doc.oplogVersion().encode()
 
-    expect(() => rewriteDocumentReferences(doc, LONG, 'spatial')).toThrow(
+    expect(() => rewriteInPlace(doc, LONG, 'spatial')).toThrow(
       expect.objectContaining({
         breach: expect.objectContaining({ shape: 'node-text', nodeId: 'dense' }),
       }),
@@ -160,7 +156,7 @@ describe('rewriteDocumentReferences, held to the text ceilings', () => {
     const doc = new LoroDoc()
     writeMarkdownBody(doc, `${'y'.repeat(MARKDOWN_MAX_CHARS)} [[design/login]]`)
 
-    expect(rewriteDocumentReferences(doc, new Map([['design/login', 'd']]), 'markdown')).toBe(true)
+    expect(rewriteInPlace(doc, new Map([['design/login', 'd']]), 'markdown')).toBe(true)
     expect(readMarkdownBody(doc).endsWith('[[d]]')).toBe(true)
   })
 })

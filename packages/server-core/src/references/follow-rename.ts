@@ -27,10 +27,11 @@
  * rewrite refuses it whole, before writing, and it keeps the old path.
  */
 import { type DocumentMove, planReferenceRewrite } from '@kamiazya/whiteboard-codec'
+import { applyDocumentEdit, readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentId } from '@kamiazya/whiteboard-model'
 import {
   type ContentFactsCache,
-  rewriteDocumentReferences,
+  planDocumentReferenceRewrite,
 } from '@kamiazya/whiteboard-reference-graph'
 import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -93,7 +94,9 @@ export async function followReferencesAfterRename(
         input.workspaceId,
         entry.documentId as DocumentId,
       )
-      if (!rewriteDocumentReferences(doc, plan, entry.kind)) continue
+      const edit = planDocumentReferenceRewrite(readDocumentContent(doc, entry.kind), plan)
+      if (edit === null) continue
+      applyDocumentEdit(doc, edit)
       await saveDocumentSnapshot(deps, input.workspaceId, entry.documentId as DocumentId, doc)
       updated.push(entry.documentId)
     } catch {

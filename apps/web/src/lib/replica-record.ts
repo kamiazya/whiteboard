@@ -22,6 +22,7 @@ import type { WorkspaceStencils } from '@kamiazya/whiteboard-facet-engine'
 import {
   documentContainers,
   projectWorkspaceDocument,
+  readContentWithTags,
   readDocumentContent,
   readEdgeLocks,
   readFacets,
@@ -170,7 +171,7 @@ export function replicaTagsInUse(
 ): string[] {
   const bearers = entries.flatMap((entry) => {
     const doc = projectWorkspaceDocument(record, entry.documentId)
-    return doc === null ? [] : tagBearersOf(doc, readDocumentContent(doc, entry.kind))
+    return doc === null ? [] : tagBearersOf(readContentWithTags(doc, entry.kind))
   })
   return tagsInUse(bearers).map((row) => row.tag)
 }

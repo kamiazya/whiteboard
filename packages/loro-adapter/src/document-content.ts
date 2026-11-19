@@ -44,3 +44,23 @@ export function readDocumentContent(doc: DocumentContainers, kind?: DocumentKind
     ...(description === undefined ? {} : { description }),
   }
 }
+
+/**
+ * A document's content with the one thing about it that is not content: the
+ * tags its OKF frontmatter carries. Both are plain values, so whatever derives
+ * facts from a document (search, references, tag bearers) can run without
+ * holding the document.
+ */
+export interface ContentWithTags {
+  readonly content: DocumentContent
+  /** Absent for a spatial document, whose own tags are on its canvas. */
+  readonly tags?: readonly string[]
+}
+
+/** `readDocumentContent` plus the frontmatter tags of a markdown document. */
+export function readContentWithTags(doc: DocumentContainers, kind?: DocumentKind): ContentWithTags {
+  const content = readDocumentContent(doc, kind)
+  if (content.kind !== 'markdown') return { content }
+  const tags = readCoreFacets(doc)?.tags
+  return tags === undefined ? { content } : { content, tags }
+}

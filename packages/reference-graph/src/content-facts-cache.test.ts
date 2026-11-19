@@ -1,5 +1,5 @@
+import type { ContentWithTags } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
-import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { ContentFactsCache, type DocumentContentSource } from './content-facts-cache.js'
 
@@ -25,15 +25,17 @@ function entry(
  * A keeper reduced to what the cache asks of it: version bytes per document
  * (null = nothing stored), and a count of how often it had to load one.
  */
+const EMPTY_NOTE: ContentWithTags = { content: { kind: 'markdown', body: '' } }
+
 function fakeSource(frontiers: Map<string, Uint8Array | null>) {
   const loads: string[] = []
   const source: DocumentContentSource = {
     async readVersions(_workspaceId, documentIds) {
       return new Map(documentIds.map((id) => [id, frontiers.get(id) ?? null]))
     },
-    async loadDocument(_workspaceId, documentId) {
-      loads.push(documentId)
-      return frontiers.get(documentId) === null ? null : new LoroDoc()
+    async loadContent(_workspaceId, entry) {
+      loads.push(entry.documentId)
+      return frontiers.get(entry.documentId) === null ? null : EMPTY_NOTE
     },
   }
   return { source, loads }
@@ -142,9 +144,9 @@ describe('ContentFactsCache over the listing digest', () => {
   function loadOnlySource() {
     const loads: string[] = []
     const source: DocumentContentSource = {
-      async loadDocument(_workspaceId, documentId) {
-        loads.push(documentId)
-        return new LoroDoc()
+      async loadContent(_workspaceId, entry) {
+        loads.push(entry.documentId)
+        return EMPTY_NOTE
       },
     }
     return { source, loads }
@@ -184,7 +186,7 @@ describe('ContentFactsCache over the listing digest', () => {
   })
 
   it('answers empty facts for a listed document whose content is not stored', async () => {
-    const cache = new ContentFactsCache({ loadDocument: async () => null })
+    const cache = new ContentFactsCache({ loadContent: async () => null })
 
     const facts = await cache.factsFor(WS, [entry(A, 'markdown', 'd1')])
 

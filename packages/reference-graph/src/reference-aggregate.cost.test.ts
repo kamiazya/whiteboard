@@ -3,8 +3,9 @@ import { documentIdSchema, NODE_TEXT_MAX_CHARS } from '@kamiazya/whiteboard-mode
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { extractContentFacts } from './extract.js'
+import type { extractContentFacts } from './extract.js'
 import { backlinksIn } from './reference-aggregate.js'
+import { factsOf } from './test-utils/in-place.js'
 
 // Counts every excerpt a backlinks answer cuts, without changing what it cuts.
 const excerpts = vi.hoisted(() => ({ built: 0 }))
@@ -47,7 +48,7 @@ beforeAll(() => {
     ),
     edges: [],
   })
-  content = new Map([[SOURCE, extractContentFacts({ kind: 'spatial' }, doc)]])
+  content = new Map([[SOURCE, factsOf(doc, 'spatial')]])
 })
 
 afterEach(() => {
