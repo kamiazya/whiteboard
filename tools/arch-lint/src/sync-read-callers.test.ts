@@ -13,9 +13,8 @@
  * no longer names it is stale. The host kit's `readNow(lease, ...)` is the same
  * call under another receiver and is found the same way.
  */
-import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { parseSource } from './ast-helpers.js'
+import { countNamedUses } from './named-use-scan.js'
 import { readRepoSources } from './scan-roots.js'
 import { isShippedPath } from './source-scan.js'
 
@@ -27,14 +26,11 @@ const ADAPTER = 'packages/loro-adapter/src/'
 
 /**
  * Whether the file names `readNow` anywhere code can reach it: a call, a method
- * taken as a value, an import. A bare reference counts, since `.map(engine.readNow)`
- * is the same dependence with no call to see.
+ * taken as a value, an import under any alias, a bracket access. A bare reference
+ * counts, since `.map(engine.readNow)` is the same dependence with no call to see.
  */
-function namesReadNow(source: ts.SourceFile): boolean {
-  const found = (node: ts.Node): boolean =>
-    (ts.isIdentifier(node) && node.text === 'readNow') || ts.forEachChild(node, found) === true
-  return found(source)
-}
+const namesReadNow = (path: string, text: string): boolean =>
+  countNamedUses(path, text, ['readNow']) > 0
 
 interface Scan {
   readonly files: number
@@ -45,9 +41,7 @@ function scan(sources: ReadonlyArray<{ path: string; text: string }>): Scan {
   const files = sources.filter(
     ({ path }) => SCANNED.test(path) && !path.startsWith(ADAPTER) && isShippedPath(path),
   )
-  const callers = files
-    .filter(({ path, text }) => namesReadNow(parseSource(path, text, false)))
-    .map(({ path }) => path)
+  const callers = files.filter(({ path, text }) => namesReadNow(path, text)).map(({ path }) => path)
   return { files: files.length, callers: callers.sort() }
 }
 
@@ -87,7 +81,9 @@ describe('the scan reads every form of the call', () => {
     'engine?.readNow(request)',
     'kit.readNow(lease, query, shape)',
     'const read = engine.readNow',
-    "import { readNow } from 'x'",
+    "import { readNow } from 'x'\nreadNow(lease, query, shape)",
+    "import { readNow as now } from 'x'\nnow(lease, query, shape)",
+    "engine['readNow'](request)",
   ])('finds %s', (text) => {
     expect(found(at, text)).toEqual([at])
   })
@@ -96,6 +92,7 @@ describe('the scan reads every form of the call', () => {
     expect(found(at, '// engine.readNow(request)')).toEqual([])
     expect(found(at, 'const text = "engine.readNow(request)"')).toEqual([])
     expect(found(at, 'engine.readNowAndThen(request)')).toEqual([])
+    expect(found(at, "const name = 'readNow'")).toEqual([])
     expect(found('apps/web/src/lib/a.test.ts', 'engine.readNow(request)')).toEqual([])
     expect(found('packages/loro-adapter/src/a.ts', 'engine.readNow(request)')).toEqual([])
   })
