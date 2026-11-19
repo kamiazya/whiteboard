@@ -105,7 +105,7 @@ function plain(value: unknown): unknown {
   return { $unrepresentable: typeof value }
 }
 
-function answer(read: () => unknown): Answer {
+export function answer(read: () => unknown): Answer {
   try {
     return { ok: plain(read()) }
   } catch (error) {
@@ -113,7 +113,7 @@ function answer(read: () => unknown): Answer {
   }
 }
 
-async function answerLater(read: () => Promise<unknown>): Promise<Answer> {
+export async function answerLater(read: () => Promise<unknown>): Promise<Answer> {
   try {
     return { ok: plain(await read()) }
   } catch (error) {
