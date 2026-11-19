@@ -470,7 +470,7 @@ describe('createLayoutWorkerPool', () => {
     const factory = fakeWorkerFactory()
     const pool = createLayoutWorkerPool({ size: 1, createWorker: factory.create })
 
-    void pool.run({ id: 1 })
+    ignore(pool.run({ id: 1 }))
     const queued = pool.run({ id: 2 })
     pool.cancel(1)
     // The cancel handed request 2 to the same worker, which then closes on 1.
