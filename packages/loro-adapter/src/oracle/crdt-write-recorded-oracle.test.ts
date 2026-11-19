@@ -108,7 +108,7 @@ const WRITER_FLOORS = {
 /**
  * Every exported function in this package that names a write, and where it is
  * recorded. A writer the registry does not hold is covered through one it does,
- * or is not a write of this slice and says why.
+ * or is not a writer and says why.
  */
 const OTHER_WRITES: Record<string, string> = {
   reconcileSpatialCanvasInto: 'covered by reconcileSpatialCanvas and withDocumentBatch',

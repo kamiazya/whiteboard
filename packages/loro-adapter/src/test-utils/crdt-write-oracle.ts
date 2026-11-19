@@ -86,7 +86,6 @@ import {
   setWorkspaceLastCompactedAt,
   setWorkspacePinned,
   updateWorkspaceDocumentMeta,
-  type WorkspaceDocumentMetaPatch,
   writeWorkspaceDocumentContent,
 } from '../workspace-tree.js'
 import { versionOfPairs } from './crdt-read-oracle.js'
@@ -272,9 +271,10 @@ export const WRITERS = {
   setWorkspacePinned: workspace<{ documentId: string; pinned: boolean }>((doc, a) =>
     setWorkspacePinned(doc, a.documentId, a.pinned),
   ),
-  updateWorkspaceDocumentMeta: workspace<{ documentId: string; patch: WorkspaceDocumentMetaPatch }>(
-    (doc, a) => updateWorkspaceDocumentMeta(doc, a.documentId, a.patch),
-  ),
+  updateWorkspaceDocumentMeta: workspace<{
+    documentId: string
+    patch: Parameters<typeof updateWorkspaceDocumentMeta>[2]
+  }>((doc, a) => updateWorkspaceDocumentMeta(doc, a.documentId, a.patch)),
   pruneEmptyFolders: workspace<Record<string, never>>((doc) => pruneEmptyFolders(doc)),
   recordTrashEntry: workspace<{ entry: TrashEntry }>((doc, a) => recordTrashEntry(doc, a.entry)),
   duplicateWorkspaceDocument: workspace<Parameters<typeof duplicateWorkspaceDocument>[1]>(
