@@ -51,7 +51,7 @@ import { type Answer, answer, answerLater, versionOfPairs } from './answers.js'
  * engine holds them to the two it knows: the hosting node of a document inside
  * a workspace record, and the version a since-reader compares against.
  */
-export const readArgsSchema = z
+const readArgsSchema = z
   .object({
     documentId: z.string().optional(),
     since: z.array(z.tuple([z.string(), z.number().int()])).optional(),
@@ -77,7 +77,7 @@ function requiredId(args: ReadArgs): string {
 
 const since = (args: ReadArgs) => versionOfPairs(args.since ?? [])
 
-export const READERS = {
+export const READERS: Record<documentEngine.QueryName, Reader> = {
   documentKind: content(readDocumentKind),
   documentContent: content(readDocumentContent),
   spatialCanvas: content(readSpatialCanvasWithSkipped),
@@ -126,7 +126,7 @@ export const READERS = {
           contentDigest: answer(() => contentDigestOfDocument(projected)),
         }
   },
-} satisfies Record<documentEngine.QueryName, Reader>
+}
 
 /** The readers that take a document's own containers, in the order a row records them. */
 export const CONTENT_QUERIES = [

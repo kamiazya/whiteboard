@@ -42,6 +42,7 @@ export interface CrdtEngineOptions {
 interface Held {
   doc: LoroDoc
   readonly peer: bigint
+  readonly mergeInterval: number
   undo: UndoManager
   judge: ReturnType<typeof syncTextLimitJudge> | null
 }
@@ -62,154 +63,155 @@ function decoded(text: string): Uint8Array {
 }
 
 function breachOf(breach: SyncTextBreach): wire.Breach {
-  return 'container' in breach
-    ? { shape: breach.shape, container: breach.container }
-    : { shape: breach.shape }
+  return { shape: breach.shape, container: breach.container }
+}
+
+/** The workspace documents the operations after `before` wrote to; none for a document that is its own root. */
+function touchedSince(doc: LoroDoc, before: VersionVector): string[] {
+  return WORKSPACE_TREE_KEY in doc.getShallowValue()
+    ? documentsTouchedSince(doc, before).map(({ documentId }) => documentId)
+    : []
+}
+
+/** Rebuilds `entry` as it was at `frontiers`; its undo history starts over. */
+function restore(entry: Held, frontiers: Frontiers) {
+  const doc = entry.doc.forkAt(frontiers)
+  doc.setPeerId(entry.peer)
+  entry.doc = doc
+  entry.undo = new UndoManager(doc, { mergeInterval: entry.mergeInterval })
+  entry.judge = null
+}
+
+/** One commit: `apply`, then the update it produced judged as a peer would judge it. */
+function mutate(entry: Held, apply: (doc: LoroDoc) => void): wire.MutationResult {
+  const { doc } = entry
+  const before = doc.oplogVersion()
+  const frontiers = doc.frontiers()
+  const judged = doc.fork()
+  try {
+    apply(doc)
+    doc.commit()
+  } catch (error) {
+    restore(entry, frontiers)
+    throw error
+  }
+  if (doc.oplogVersion().compare(before) === 0) return { changed: [] }
+  const update = doc.export({ mode: 'update', from: before })
+  // ponytail: the judgement imports the update into a copy of the document
+  // from before the write, so every write costs a fork of it; a long-lived
+  // copy brought up by each write, as `syncTextLimitJudge` keeps for
+  // imports, is the upgrade if that is measured to matter. A fork is taken
+  // up front because rebuilding the version from history (`forkAt`) replays
+  // every operation — 2 s for a document holding one 256 Ki insert.
+  let breach: SyncTextBreach | null
+  try {
+    breach = importWithinTextLimits(judged, update).breach
+  } catch (error) {
+    restore(entry, frontiers)
+    throw error
+  }
+  if (breach !== null) {
+    restore(entry, frontiers)
+    return { changed: [], breach: breachOf(breach) }
+  }
+  return { changed: touchedSince(doc, before), localUpdate: bytesToBase64(update) }
+}
+
+function importInto(entry: Held, bytes: string): wire.MutationResult {
+  entry.judge ??= syncTextLimitJudge(entry.doc)
+  const incoming = decoded(bytes)
+  const breach = entry.judge(incoming)
+  if (breach !== null) return { changed: [], breach: breachOf(breach) }
+  const before = entry.doc.oplogVersion()
+  entry.doc.import(incoming)
+  return { changed: touchedSince(entry.doc, before) }
+}
+
+function exportFrom(doc: LoroDoc, request: wire.ExportRequest): wire.ExportResponse {
+  const { mode, from, frontiers } = request
+  if (mode === 'snapshot') return { bytes: bytesToBase64(doc.export({ mode: 'snapshot' })) }
+  if (mode === 'update') {
+    const since =
+      from === undefined
+        ? undefined
+        : versionOfPairs(from.map(({ peer, counter }) => [peer, counter]))
+    return { bytes: bytesToBase64(doc.export({ mode: 'update', from: since })) }
+  }
+  const kept =
+    frontiers === undefined
+      ? doc.frontiers()
+      : frontiers.map(({ peer, counter }) => ({ peer: peer as `${number}`, counter }))
+  return { bytes: bytesToBase64(doc.export({ mode: 'shallow-snapshot', frontiers: kept })) }
+}
+
+function spliceText(doc: LoroDoc, request: wire.TextSpliceRequest) {
+  const { documentId, text, index, remove, insert } = request
+  const host = documentId === undefined ? doc : documentContainers(doc, documentId)
+  // Loro's text takes UTF-16 code unit offsets from JavaScript, which is the
+  // unit this contract counts in.
+  host.getText(text).splice(index, remove, insert)
+}
+
+function openDocument(request: wire.OpenRequest, mergeInterval: number): Held {
+  const { peer, bytes } = wire.openRequestSchema.parse(request)
+  const id = peerOf(peer)
+  const doc = new LoroDoc()
+  doc.setPeerId(id)
+  if (bytes !== undefined) doc.import(decoded(bytes))
+  const undo = new UndoManager(doc, { mergeInterval })
+  return { doc, peer: id, mergeInterval, undo, judge: null }
+}
+
+function heldIn(handles: Map<number, Held>, handle: number): Held {
+  const found = handles.get(handle)
+  if (found === undefined) throw new RangeError(`no document is open as handle ${handle}`)
+  return found
 }
 
 export function createCrdtEngine(options: CrdtEngineOptions = {}): CrdtEngine {
   const mergeInterval = options.undoMergeIntervalMs ?? DEFAULT_UNDO_MERGE_MS
   const handles = new Map<number, Held>()
-  let next = 0
-
-  const undoOver = (doc: LoroDoc) => new UndoManager(doc, { mergeInterval })
-
-  const heldBy = (handle: number): Held => {
-    const found = handles.get(handle)
-    if (found === undefined) throw new RangeError(`no document is open as handle ${handle}`)
-    return found
-  }
-
-  /** The workspace documents the operations after `before` wrote to; none for a document that is its own root. */
-  const touchedSince = (doc: LoroDoc, before: VersionVector): string[] =>
-    WORKSPACE_TREE_KEY in doc.getShallowValue()
-      ? documentsTouchedSince(doc, before).map(({ documentId }) => documentId)
-      : []
-
-  /** Rebuilds `entry` as it was at `frontiers`; its undo history starts over. */
-  const restore = (entry: Held, frontiers: Frontiers) => {
-    const doc = entry.doc.forkAt(frontiers)
-    doc.setPeerId(entry.peer)
-    entry.doc = doc
-    entry.undo = undoOver(doc)
-    entry.judge = null
-  }
-
-  /** One commit: `apply`, then the update it produced judged as a peer would judge it. */
-  const mutate = (entry: Held, apply: (doc: LoroDoc) => void): wire.MutationResult => {
-    const { doc } = entry
-    const before = doc.oplogVersion()
-    const frontiers = doc.frontiers()
-    const judged = doc.fork()
-    try {
-      apply(doc)
-      doc.commit()
-    } catch (error) {
-      restore(entry, frontiers)
-      throw error
-    }
-    const after = entry.doc.oplogVersion()
-    if (after.compare(before) === 0) return { changed: [] }
-    const update = doc.export({ mode: 'update', from: before })
-    // ponytail: the judgement imports the update into a copy of the document
-    // from before the write, so every write costs a fork of it; a long-lived
-    // copy brought up by each write, as `syncTextLimitJudge` keeps for
-    // imports, is the upgrade if that is measured to matter. A fork is taken
-    // up front because rebuilding the version from history (`forkAt`) replays
-    // every operation — 2 s for a document holding one 256 Ki insert.
-    let breach: SyncTextBreach | null
-    try {
-      breach = importWithinTextLimits(judged, update).breach
-    } catch (error) {
-      restore(entry, frontiers)
-      throw error
-    }
-    if (breach !== null) {
-      restore(entry, frontiers)
-      return { changed: [], breach: breachOf(breach) }
-    }
-    return { changed: touchedSince(doc, before), localUpdate: bytesToBase64(update) }
-  }
+  const heldBy = (handle: number) => heldIn(handles, handle)
 
   return {
     open(request) {
-      const { peer, bytes } = wire.openRequestSchema.parse(request)
-      const doc = new LoroDoc()
-      doc.setPeerId(peerOf(peer))
-      if (bytes !== undefined) doc.import(decoded(bytes))
-      const handle = next
-      next += 1
-      handles.set(handle, { doc, peer: peerOf(peer), undo: undoOver(doc), judge: null })
+      const handle = handles.size
+      handles.set(handle, openDocument(request, mergeInterval))
       return { handle }
     },
-
     import(request) {
       const { handle, bytes } = wire.importRequestSchema.parse(request)
-      const entry = heldBy(handle)
-      entry.judge ??= syncTextLimitJudge(entry.doc)
-      const incoming = decoded(bytes)
-      const breach = entry.judge(incoming)
-      if (breach !== null) return { changed: [], breach: breachOf(breach) }
-      const before = entry.doc.oplogVersion()
-      entry.doc.import(incoming)
-      return { changed: touchedSince(entry.doc, before) }
+      return importInto(heldBy(handle), bytes)
     },
-
     export(request) {
-      const { handle, mode, from, frontiers } = wire.exportRequestSchema.parse(request)
-      const { doc } = heldBy(handle)
-      if (mode === 'snapshot') return { bytes: bytesToBase64(doc.export({ mode: 'snapshot' })) }
-      if (mode === 'update') {
-        const since =
-          from === undefined
-            ? undefined
-            : versionOfPairs(from.map(({ peer, counter }) => [peer, counter]))
-        return { bytes: bytesToBase64(doc.export({ mode: 'update', from: since })) }
-      }
-      const kept =
-        frontiers === undefined
-          ? doc.frontiers()
-          : frontiers.map(({ peer, counter }) => ({ peer: peer as `${number}`, counter }))
-      return { bytes: bytesToBase64(doc.export({ mode: 'shallow-snapshot', frontiers: kept })) }
+      const parsed = wire.exportRequestSchema.parse(request)
+      return exportFrom(heldBy(parsed.handle).doc, parsed)
     },
-
     write(request) {
       const { handle, batch } = wire.writeRequestSchema.parse(request)
       return mutate(heldBy(handle), (doc) => {
         for (const { op, args } of batch) applyWriter(doc, op, args)
       })
     },
-
     async read(request) {
       const { handle, query } = wire.readRequestSchema.parse(request)
       return { value: await readQuery(heldBy(handle).doc, query) }
     },
-
     undo(request) {
-      const { handle } = wire.undoRequestSchema.parse(request)
-      const entry = heldBy(handle)
+      const entry = heldBy(wire.undoRequestSchema.parse(request).handle)
       return mutate(entry, () => {
         entry.undo.undo()
       })
     },
-
     redo(request) {
-      const { handle } = wire.redoRequestSchema.parse(request)
-      const entry = heldBy(handle)
+      const entry = heldBy(wire.redoRequestSchema.parse(request).handle)
       return mutate(entry, () => {
         entry.undo.redo()
       })
     },
-
     textSplice(request) {
-      const { handle, documentId, text, index, remove, insert } =
-        wire.textSpliceRequestSchema.parse(request)
-      return mutate(heldBy(handle), (doc) => {
-        const host = documentId === undefined ? doc : documentContainers(doc, documentId)
-        // Loro's text takes UTF-16 code unit offsets from JavaScript, which is
-        // the unit this contract counts in.
-        host.getText(text).splice(index, remove, insert)
-      })
+      const parsed = wire.textSpliceRequestSchema.parse(request)
+      return mutate(heldBy(parsed.handle), (doc) => spliceText(doc, parsed))
     },
   }
 }

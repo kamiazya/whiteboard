@@ -64,6 +64,14 @@ implementations live in the composition roots.
   `test-utils/file-collection-conformance` is the scenario both run; a
   verdict one keeper is known to reach differently is a `knownDivergences`
   entry with its reason, never an omitted step (today there are none).
+- **The CRDT document engine** (`src/engine/`): `createCrdtEngine` is the
+  TypeScript implementation of `contracts/crdt/document-engine.schema.json`
+  (ADR-0054's engine seam), dispatching through the writer and reader tables
+  the recorded oracles replay; `journaledEngine` keeps base bytes plus
+  unacknowledged updates host-side to rebuild a lost handle.
+  `test-utils/crdt-engine-conformance` is the suite any engine passes. A
+  refused write or update leaves the document as it was; undo history of the
+  handle restarts then.
 - **A duplicate is one record change** (`workspace-duplicate.ts`), written
   through the projection rather than `copyNodeData`, so the source's id,
   segment, name, timestamps and plane keys stay behind.

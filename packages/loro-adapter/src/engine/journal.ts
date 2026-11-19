@@ -23,7 +23,7 @@ import { documentEngine as wire } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { CrdtEngine } from './types.js'
 
-export const journalSchema = z
+const journalSchema = z
   .object({
     peer: wire.peerIdSchema,
     base: wire.bytesSchema,
@@ -32,10 +32,10 @@ export const journalSchema = z
     ),
   })
   .strict()
-export type Journal = z.infer<typeof journalSchema>
+type Journal = z.infer<typeof journalSchema>
 
 /** A mutation's answer, and the sequence number its local update was journalled under. */
-export type JournaledMutation = wire.MutationResult & { seq?: number }
+type JournaledMutation = wire.MutationResult & { seq?: number }
 
 export interface JournaledEngine {
   open(request: wire.OpenRequest): wire.OpenResponse
@@ -60,79 +60,80 @@ interface Held {
   nextSeq: number
 }
 
+type Records = Map<number, Held>
+
+function recordOf(held: Records, handle: number): Held {
+  const record = held.get(handle)
+  if (record === undefined) throw new RangeError(`no journal for handle ${handle}`)
+  return record
+}
+
+function journalLocal(
+  held: Records,
+  handle: number,
+  result: wire.MutationResult,
+): JournaledMutation {
+  if (result.localUpdate === undefined) return result
+  const record = recordOf(held, handle)
+  const seq = record.nextSeq
+  record.nextSeq += 1
+  record.pending.push({ seq, update: result.localUpdate })
+  return { ...result, seq }
+}
+
+function acknowledgeUpTo(held: Records, engine: CrdtEngine, handle: number, upTo: number) {
+  const record = recordOf(held, handle)
+  const kept = record.pending.filter(({ seq }) => seq !== undefined && seq > upTo)
+  if (kept.length === record.pending.length) return
+  // The new base is the state NOW, which already holds the local updates still
+  // waiting on the keeper; importing one of them again on rebuild is a no-op,
+  // and they stay listed so the host knows what to resend.
+  record.base = engine.export({ handle, mode: 'snapshot' }).bytes
+  record.pending = kept
+}
+
+function rebuild(held: Records, engine: CrdtEngine, journal: Journal): wire.OpenResponse {
+  const { peer, base, pending } = journalSchema.parse(journal)
+  const opened = engine.open({ peer, bytes: base })
+  for (const { update } of pending) {
+    const result = engine.import({ handle: opened.handle, bytes: update })
+    if (result.breach !== undefined) {
+      throw new Error(`a journalled update was refused as ${result.breach.shape}`)
+    }
+  }
+  const nextSeq = pending.reduce((next, { seq }) => Math.max(next, (seq ?? 0) + 1), 1)
+  held.set(opened.handle, { peer, base, pending: [...pending], nextSeq })
+  return opened
+}
+
 export function journaledEngine(engine: CrdtEngine): JournaledEngine {
-  const held = new Map<number, Held>()
-
-  const recordOf = (handle: number): Held => {
-    const record = held.get(handle)
-    if (record === undefined) throw new RangeError(`no journal for handle ${handle}`)
-    return record
-  }
-
-  const local = (handle: number, result: wire.MutationResult): JournaledMutation => {
-    if (result.localUpdate === undefined) return result
-    const record = recordOf(handle)
-    const seq = record.nextSeq
-    record.nextSeq += 1
-    record.pending.push({ seq, update: result.localUpdate })
-    return { ...result, seq }
-  }
-
-  const begin = (peer: string, base: string, handle: number) => {
-    held.set(handle, { peer, base, pending: [], nextSeq: 1 })
-  }
-
+  const held: Records = new Map()
   return {
     open(request) {
       const opened = engine.open(request)
       const base = request.bytes ?? engine.export({ handle: opened.handle, mode: 'snapshot' }).bytes
-      begin(request.peer, base, opened.handle)
+      held.set(opened.handle, { peer: request.peer, base, pending: [], nextSeq: 1 })
       return opened
     },
     import(request) {
       const result = engine.import(request)
       // A refused import changed nothing, so it is nothing to rebuild.
       if (result.breach === undefined) {
-        recordOf(request.handle).pending.push({ update: request.bytes })
+        recordOf(held, request.handle).pending.push({ update: request.bytes })
       }
       return result
     },
     export: (request) => engine.export(request),
-    write: (request) => local(request.handle, engine.write(request)),
+    write: (request) => journalLocal(held, request.handle, engine.write(request)),
     read: (request) => engine.read(request),
-    undo: (request) => local(request.handle, engine.undo(request)),
-    redo: (request) => local(request.handle, engine.redo(request)),
-    textSplice: (request) => local(request.handle, engine.textSplice(request)),
+    undo: (request) => journalLocal(held, request.handle, engine.undo(request)),
+    redo: (request) => journalLocal(held, request.handle, engine.redo(request)),
+    textSplice: (request) => journalLocal(held, request.handle, engine.textSplice(request)),
     journal(handle) {
-      const record = recordOf(handle)
-      return journalSchema.parse({
-        peer: record.peer,
-        base: record.base,
-        pending: record.pending,
-      })
+      const { peer, base, pending } = recordOf(held, handle)
+      return journalSchema.parse({ peer, base, pending })
     },
-    acknowledge(handle, upTo) {
-      const record = recordOf(handle)
-      const kept = record.pending.filter(({ seq }) => seq !== undefined && seq > upTo)
-      if (kept.length === record.pending.length) return
-      // The new base is the state NOW, which already holds the local updates
-      // still waiting on the keeper; importing one of them again on rebuild is
-      // a no-op, and they stay listed so the host knows what to resend.
-      record.base = engine.export({ handle, mode: 'snapshot' }).bytes
-      record.pending = kept
-    },
-    rehydrate(journal) {
-      const { peer, base, pending } = journalSchema.parse(journal)
-      const opened = engine.open({ peer, bytes: base })
-      for (const { update } of pending) {
-        const result = engine.import({ handle: opened.handle, bytes: update })
-        if (result.breach !== undefined) {
-          throw new Error(`a journalled update was refused as ${result.breach.shape}`)
-        }
-      }
-      const nextSeq = pending.reduce((next, { seq }) => Math.max(next, (seq ?? 0) + 1), 1)
-      held.set(opened.handle, { peer, base, pending: [...pending], nextSeq })
-      return opened
-    },
+    acknowledge: (handle, upTo) => acknowledgeUpTo(held, engine, handle, upTo),
+    rehydrate: (journal) => rebuild(held, engine, journal),
   }
 }

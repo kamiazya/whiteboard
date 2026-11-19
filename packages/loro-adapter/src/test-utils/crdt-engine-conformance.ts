@@ -259,13 +259,13 @@ const FIRST = '01J00000000000000000000001'
 const SECOND = '01J00000000000000000000002'
 const WORKSPACE_DOCUMENT = { documentId: FIRST, segment: 'note', kind: 'markdown' }
 
-function describeContract(makeEngine: () => CrdtEngine) {
-  const openWith = (engine: CrdtEngine, body: string, peer = '1') => {
-    const { handle } = engine.open({ peer })
-    write(engine, handle, 'writeMarkdownBody', { body })
-    return handle
-  }
+const openWith = (engine: CrdtEngine, body: string, peer = '1') => {
+  const { handle } = engine.open({ peer })
+  write(engine, handle, 'writeMarkdownBody', { body })
+  return handle
+}
 
+function describeExportAndImport(makeEngine: () => CrdtEngine) {
   describe('export and import', () => {
     it('opens a snapshot as the document it was exported from', async () => {
       const a = makeEngine()
@@ -311,7 +311,9 @@ function describeContract(makeEngine: () => CrdtEngine) {
       expect(result).toEqual({ changed: [] })
     })
   })
+}
 
+function describeUndoAndRedo(makeEngine: () => CrdtEngine) {
   describe('undo and redo', () => {
     it('undoes a write and redoes it, each as a local update a peer can take', async () => {
       const a = makeEngine()
@@ -352,7 +354,9 @@ function describeContract(makeEngine: () => CrdtEngine) {
       expect(mutation(a.undo({ handle }))).toEqual({ changed: [] })
     })
   })
+}
 
+function describeTextSpliceUtf16(makeEngine: () => CrdtEngine) {
   describe('a text splice counts UTF-16 code units', () => {
     it('places an edit after an astral character by its two units', async () => {
       const engine = makeEngine()
@@ -381,7 +385,9 @@ function describeContract(makeEngine: () => CrdtEngine) {
       expect(await bodyOf(engine, handle, FIRST)).toBe('😀yo')
     })
   })
+}
 
+function describeChanged(makeEngine: () => CrdtEngine) {
   describe('what a mutation reports as changed', () => {
     it('names the documents an edit reached and no other', () => {
       const engine = makeEngine()
@@ -414,7 +420,9 @@ function describeContract(makeEngine: () => CrdtEngine) {
       ).toEqual({ changed: [FIRST] })
     })
   })
+}
 
+function describeRefusal(makeEngine: () => CrdtEngine) {
   describe('a refusal changes nothing', () => {
     it('leaves the document as it was when a writer of the batch throws', async () => {
       const engine = makeEngine()
@@ -460,7 +468,9 @@ function describeContract(makeEngine: () => CrdtEngine) {
       expect(await bodyOf(engine, handle)).toBe('kept')
     })
   })
+}
 
+function describeJournal(makeEngine: () => CrdtEngine) {
   describe('a journal rebuilds a lost handle', () => {
     it('rebuilds a document from its base and the updates since', async () => {
       const journaled = journaledEngine(makeEngine())
@@ -527,7 +537,9 @@ function describeContract(makeEngine: () => CrdtEngine) {
       expect(await bodyOf(peerEngine, there.handle)).toBe('>base theirs')
     })
   })
+}
 
+function describeConvergence(makeEngine: () => CrdtEngine) {
   describe('two engines that trade their local updates converge', () => {
     // A boundary between code points, in UTF-16 units: an edit that cut an
     // astral character in half names text no engine can hold.
@@ -629,7 +641,7 @@ function describeContract(makeEngine: () => CrdtEngine) {
         concurrent / runs,
         'share of cases where both sides wrote before a trade',
       ).toBeGreaterThan(0.3)
-      expect(merged, 'concurrent cases whose merge kept an edit').toBeGreaterThan(5)
+      expect(merged, 'concurrent cases whose merge kept an edit').toBeGreaterThan(15)
     })
   })
 }
@@ -643,6 +655,12 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
   describe('CRDT engine conformance', () => {
     describeReadReplay(makeEngine)
     describeWriteReplay(makeEngine)
-    describeContract(makeEngine)
+    describeExportAndImport(makeEngine)
+    describeUndoAndRedo(makeEngine)
+    describeTextSpliceUtf16(makeEngine)
+    describeChanged(makeEngine)
+    describeRefusal(makeEngine)
+    describeJournal(makeEngine)
+    describeConvergence(makeEngine)
   })
 }

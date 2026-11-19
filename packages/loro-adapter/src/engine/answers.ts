@@ -16,10 +16,8 @@ export type VersionPairs = Array<[string, number]>
 
 /** Peers are u64 decimal strings, so they compare as numbers, not as text. */
 function comparePeers(a: string, b: string): number {
-  const left = BigInt(a)
-  const right = BigInt(b)
-  if (left === right) return 0
-  return left < right ? -1 : 1
+  // Only the sign is read, and a nonzero difference never rounds to zero.
+  return Number(BigInt(a) - BigInt(b))
 }
 
 export function versionPairs(version: VersionVector): VersionPairs {
