@@ -27,18 +27,17 @@ const canvasAnswer = z.object({ canvas: z.custom<SpatialCanvas>() })
  * first decode pays it once per realm.
  */
 export async function decodeSpatialSnapshot(bytes: Uint8Array): Promise<SpatialCanvas> {
-  engineBundle ??= import('@kamiazya/whiteboard-loro-adapter').then(
-    async (adapter) => ({
+  engineBundle ??= import('@kamiazya/whiteboard-loro-adapter')
+    .then(async (adapter) => ({
       engine: await adapter.loadCrdtEngine(),
       randomPeerId: adapter.randomPeerId,
       readValue: adapter.readValue,
-    }),
-    (error: unknown) => {
-      // A chunk that failed to load once is asked for again by the next decode.
+    }))
+    .catch((error: unknown) => {
+      // A chunk or engine that failed to load once is asked for again by the next decode.
       engineBundle = undefined
       throw error
-    },
-  )
+    })
   const { engine, randomPeerId, readValue } = await engineBundle
   const { handle } = engine.open({ peer: randomPeerId(), bytes: bytesToBase64(bytes) })
   try {

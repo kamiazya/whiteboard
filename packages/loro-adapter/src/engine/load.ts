@@ -11,12 +11,11 @@ let loaded: Promise<CrdtEngine> | undefined
  * next call.
  */
 export function loadCrdtEngine(): Promise<CrdtEngine> {
-  loaded ??= import('./engine.js').then(
-    ({ createCrdtEngine }) => createCrdtEngine(),
-    (error: unknown) => {
+  loaded ??= import('./engine.js')
+    .then(({ createCrdtEngine }) => createCrdtEngine())
+    .catch((error: unknown) => {
       loaded = undefined
       throw error
-    },
-  )
+    })
   return loaded
 }
