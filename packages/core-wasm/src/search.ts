@@ -264,16 +264,24 @@ class SearchIndex {
    * text, as `documentTerms` applies it; folder names are indexed as written.
    */
   upsert(doc: SearchableDocument, alsoIndex?: AlsoIndex): boolean {
-    this.#live('index-upsert')
+    // `alsoIndex` is a caller's callback and may re-enter the core, trap it and
+    // mint an index that reuses this handle number, so the liveness check
+    // comes after every callback and directly before the write.
     const expand = expander(alsoIndex)
+    const path = expand(doc.path)
+    const name = expand(doc.name ?? '')
+    const texts = doc.texts.map(expand)
+    const documentId = idOf(this.#channel, 'index-upsert', doc.documentId)
+    const folders = doc.folders === undefined ? null : doc.folders.map(toWellFormed)
+    this.#live('index-upsert')
     const [replaced] = this.#channel.call(
       'index-upsert',
       this.#handle,
-      idOf(this.#channel, 'index-upsert', doc.documentId),
-      expand(doc.path),
-      expand(doc.name ?? ''),
-      doc.texts.map(expand),
-      doc.folders === undefined ? null : doc.folders.map(toWellFormed),
+      documentId,
+      path,
+      name,
+      texts,
+      folders,
     )
     if (!isBoolean(replaced))
       throw this.#channel.errors.refused('search_op', 'malformed', 'index-upsert')
