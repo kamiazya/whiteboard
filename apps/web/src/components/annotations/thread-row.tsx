@@ -45,11 +45,7 @@ export interface ThreadEdit {
  * scanning the rail saw `**tighten**` while the card beside it drew
  * emphasis.
  */
-function RowSubject({ body, expanded }: { body: string; expanded: boolean }) {
-  // Memoised on the body because the row re-renders whenever the page does —
-  // on a markdown document that is every keystroke — and a parse per row per
-  // render puts every listed conversation's markdown on each one.
-  const excerpt = useMemo(() => commentExcerpt(body), [body])
+function RowSubject({ excerpt, expanded }: { excerpt: string; expanded: boolean }) {
   return (
     <span
       className={cn(
@@ -200,8 +196,8 @@ const SUBJECT_EXCERPT_CHARS = 40
  * The excerpt is the row's own plain text, so a screen reader is not read the
  * markup the row itself does not show.
  */
-function verbLabel(verb: string, thread: CommentThread): string {
-  const body = commentExcerpt(thread.messages[0]?.body ?? '').replace(/\s+/g, ' ')
+function verbLabel(verb: string, subject: string): string {
+  const body = subject.replace(/\s+/g, ' ')
   if (body === '') return verb
   const excerpt =
     body.length > SUBJECT_EXCERPT_CHARS ? `${body.slice(0, SUBJECT_EXCERPT_CHARS)}…` : body
@@ -209,11 +205,11 @@ function verbLabel(verb: string, thread: CommentThread): string {
 }
 
 function ConversationResolve({
-  thread,
+  subject,
   status,
   onPress,
 }: {
-  thread: CommentThread
+  subject: string
   status: CommentThreadStatus
   onPress: () => void
 }) {
@@ -221,7 +217,7 @@ function ConversationResolve({
   return (
     <button
       type="button"
-      aria-label={verbLabel(verb, thread)}
+      aria-label={verbLabel(verb, subject)}
       onClick={onPress}
       className="flex min-h-11 items-center gap-1.5 self-start rounded px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
     >
@@ -354,12 +350,12 @@ function RowMeta({
 }
 
 function RowResolve({
-  thread,
+  subject,
   status,
   interactive,
   onPress,
 }: {
-  thread: CommentThread
+  subject: string
   status: CommentThreadStatus
   interactive: boolean
   onPress: () => void
@@ -375,7 +371,7 @@ function RowResolve({
   return (
     <button
       type="button"
-      aria-label={verbLabel(verb, thread)}
+      aria-label={verbLabel(verb, subject)}
       title={verb}
       onClick={onPress}
       className={ROW_VERB_CLASS}
@@ -434,6 +430,11 @@ export function ThreadRow({
   // crossing is the whole transition and this stays false.
   const about = anchorLabelOf?.(thread.anchor) ?? anchorLabel(thread.anchor)
   const leaving = pending.has(thread.id) && filter !== 'all' && status !== filter
+  // The row's plain text, parsed once per body: the row re-renders whenever the
+  // page does — on a markdown document that is every keystroke — and the
+  // subject and both Resolve labels read it.
+  const firstBody = thread.messages[0]?.body ?? ''
+  const subject = useMemo(() => commentExcerpt(firstBody), [firstBody])
   return (
     <li
       data-thread-id={thread.id}
@@ -452,7 +453,7 @@ export function ThreadRow({
             accessibility tree, which is why merging the two
             restructured the row rather than adding a class. */}
         <RowResolve
-          thread={thread}
+          subject={subject}
           status={status}
           // While the conversation is open its own Resolve is the one target:
           // two identical ones, a row apart, is how the wrong thread got
@@ -492,7 +493,7 @@ export function ThreadRow({
               control that collapses this conversation, and a row
               named "whole document 3 messages 0s ago" is not one
               anybody could act on. */}
-          <RowSubject body={thread.messages[0]?.body ?? ''} expanded={expanded} />
+          <RowSubject excerpt={subject} expanded={expanded} />
           <RowMeta
             thread={thread}
             status={status}
@@ -514,7 +515,7 @@ export function ThreadRow({
           resolveVerb={
             onResolve === undefined ? null : (
               <ConversationResolve
-                thread={thread}
+                subject={subject}
                 status={status}
                 onPress={() => resolveWithBeat(thread)}
               />
