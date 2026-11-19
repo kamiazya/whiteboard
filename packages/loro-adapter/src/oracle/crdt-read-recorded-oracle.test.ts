@@ -111,11 +111,12 @@ describe('the recorded CRDT read oracle', () => {
     for (const key of ['workspaceMeta', 'trash']) {
       expect(populated(key, 'workspace'), `workspace rows with ${key}`).toBeGreaterThan(2)
     }
+    const populatedTree = (row: Row) => {
+      const tree = row.deep.updates[WORKSPACE_TREE_KEY]
+      return Array.isArray(tree) && tree.length > 0
+    }
     expect(
-      rows.filter(
-        (r) =>
-          r.host === 'workspace' && JSON.stringify(r.deep.updates[WORKSPACE_TREE_KEY]) !== '[]',
-      ).length,
+      rows.filter((r) => r.host === 'workspace' && populatedTree(r)).length,
       'workspace rows with a populated tree',
     ).toBeGreaterThan(50)
     expect(
@@ -129,6 +130,15 @@ describe('the recorded CRDT read oracle', () => {
     expect(
       rows.filter((r) => r.shape.endsWith('deleted') || r.shape === 'ws-trash').length,
       'rows holding a deleted item',
+    ).toBeGreaterThan(15)
+    // Effects, not labels: a row counts here only when a reader's recorded answer names a removal.
+    const removals = (row: Row) => {
+      const answer = (row.readers as { removedSince?: { ok?: unknown } }).removedSince?.ok
+      return Array.isArray(answer) && answer.length > 0
+    }
+    expect(
+      rows.filter(removals).length,
+      'rows whose removed-since answer names a removal',
     ).toBeGreaterThan(15)
   })
 
