@@ -47,7 +47,6 @@ import { writeMarkdownBody } from '../src/markdown-body.js'
 import { writeProposal } from '../src/proposals.js'
 import { answer, frontierPairs, versionPairs } from '../src/test-utils/crdt-read-oracle.js'
 import { applyWriter, type WriterName } from '../src/test-utils/crdt-write-oracle.js'
-import { markThreadPassages } from '../src/thread-marks.js'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceDocument,
@@ -103,71 +102,74 @@ const KINDS = ['markdown', 'spatial'] as const
 let docCounter = 0
 const nextId = () => ulid(++docCounter % 1000)
 
-function fillContent(
-  host: Parameters<typeof writeSpatialCanvas>[0],
-  doc: LoroDoc,
-  content: ContentKind,
-  rng: Rng,
-): Facts {
-  const facts: Facts = { threadIds: [], proposals: [] }
-  if (content === 'spatial') {
-    const [drawn] = sample(spatialCanvasArbitrary, rng, 1)
-    const lines: CanvasLine[] = sample(canvasLineArbitrary, rng, 1)
-    const base = drawn ?? { nodes: [], edges: [] }
-    // The two nodes added last always exist, so an edge between them is never absent.
-    const edges: CanvasEdge[] =
-      base.edges.length === 0
-        ? [{ id: 'e1', from: { node: 'g1' }, to: { node: 't1' } }]
-        : base.edges
-    const canvas = {
-      ...base,
-      edges,
-      nodes: [
-        ...base.nodes.filter((n) => n.id !== 'g1' && n.id !== 't1'),
-        groupNode({ id: 'g1', x: 0, y: 0, width: 400, height: 300, label: sentence(rng, 2) }),
-        textNode({ id: 't1', x: 10, y: 10, width: 120, height: 60, text: pick(rng, WIDE) }),
-      ],
-      ...(rng() < 0.5 ? { lines } : {}),
-    }
-    attempt(() => writeSpatialCanvas(host, canvas))
-    attempt(() => writeDocumentKind(host, 'spatial'))
-    facts.canvas = canvas
-  } else if (content !== 'empty') {
-    attempt(() => writeDocumentKind(host, 'markdown'))
-    const text = body(rng, rng() < 0.5)
-    writeMarkdownBody(host, text)
-    facts.text = text
-    if (content === 'threads') {
-      const threads = sample(commentThreadArbitrary, rng, 2)
-      threads.forEach((thread, i) => {
-        attempt(() => writeCommentThread(host, { ...thread, id: `t${i}` }))
-        facts.threadIds.push(`t${i}`)
-      })
-      attempt(() => writeThreadMessage(host, 't0', { id: 'm-late', body: sentence(rng, 3) }))
-    } else if (content === 'proposals') {
-      const proposals = sample(arbitraryForSchema(proposalSchema), rng, 2)
-      proposals.forEach((proposal: Proposal, i) => {
-        const named = { ...proposal, id: `p${i}` }
-        attempt(() => writeProposal(host, named))
-        facts.proposals.push(named)
-      })
-    } else if (content === 'envelope') {
-      const [core] = sample(arbitraryForSchema(coreFacetsSchema), rng, 1)
-      const [trust] = sample(arbitraryForSchema(trustFacetsSchema), rng, 1)
-      if (core !== undefined) {
-        const { title: _title, ...stored } = core
-        attempt(() => writeCoreFacets(host, stored))
-      }
-      if (trust !== undefined) attempt(() => writeTrustFacets(host, trust))
-    }
+type Host = Parameters<typeof writeSpatialCanvas>[0]
+
+function fillSpatial(host: Host, rng: Rng, facts: Facts) {
+  const [drawn] = sample(spatialCanvasArbitrary, rng, 1)
+  const lines: CanvasLine[] = sample(canvasLineArbitrary, rng, 1)
+  const base = drawn ?? { nodes: [], edges: [] }
+  // The two nodes added last always exist, so an edge between them is never absent.
+  const edges: CanvasEdge[] =
+    base.edges.length === 0 ? [{ id: 'e1', from: { node: 'g1' }, to: { node: 't1' } }] : base.edges
+  const canvas = {
+    ...base,
+    edges,
+    nodes: [
+      ...base.nodes.filter((n) => n.id !== 'g1' && n.id !== 't1'),
+      groupNode({ id: 'g1', x: 0, y: 0, width: 400, height: 300, label: sentence(rng, 2) }),
+      textNode({ id: 't1', x: 10, y: 10, width: 120, height: 60, text: pick(rng, WIDE) }),
+    ],
+    ...(rng() < 0.5 ? { lines } : {}),
   }
-  void doc
+  attempt(() => writeSpatialCanvas(host, canvas))
+  attempt(() => writeDocumentKind(host, 'spatial'))
+  facts.canvas = canvas
+}
+
+function fillEnvelope(host: Host, rng: Rng) {
+  const [core] = sample(arbitraryForSchema(coreFacetsSchema), rng, 1)
+  const [trust] = sample(arbitraryForSchema(trustFacetsSchema), rng, 1)
+  if (core !== undefined) {
+    const { title: _title, ...stored } = core
+    attempt(() => writeCoreFacets(host, stored))
+  }
+  if (trust !== undefined) attempt(() => writeTrustFacets(host, trust))
+}
+
+function fillMarkdown(host: Host, content: ContentKind, rng: Rng, facts: Facts) {
+  attempt(() => writeDocumentKind(host, 'markdown'))
+  const text = body(rng, rng() < 0.5)
+  writeMarkdownBody(host, text)
+  facts.text = text
+  if (content === 'threads') {
+    const threads = sample(commentThreadArbitrary, rng, 2)
+    threads.forEach((thread, i) => {
+      attempt(() => writeCommentThread(host, { ...thread, id: `t${i}` }))
+      facts.threadIds.push(`t${i}`)
+    })
+    attempt(() => writeThreadMessage(host, 't0', { id: 'm-late', body: sentence(rng, 3) }))
+  } else if (content === 'proposals') {
+    const proposals = sample(arbitraryForSchema(proposalSchema), rng, 2)
+    proposals.forEach((proposal: Proposal, i) => {
+      const named = { ...proposal, id: `p${i}` }
+      attempt(() => writeProposal(host, named))
+      facts.proposals.push(named)
+    })
+  } else if (content === 'envelope') {
+    fillEnvelope(host, rng)
+  }
+}
+
+function fillContent(host: Host, content: ContentKind, rng: Rng): Facts {
+  const facts: Facts = { threadIds: [], proposals: [] }
+  if (content === 'spatial') fillSpatial(host, rng, facts)
+  else if (content !== 'empty') fillMarkdown(host, content, rng, facts)
   return facts
 }
 
 function documentScene(content: ContentKind, rng: Rng): Scene {
   const doc = peer(new LoroDoc(), 1)
-  const facts = fillContent(doc, doc, content, rng)
+  const facts = fillContent(doc, content, rng)
   return { doc, host: 'document', facts }
 }
 
@@ -179,7 +181,7 @@ function workspaceScene(content: ContentKind, rng: Rng): Scene {
   const facts =
     documentId === undefined
       ? { threadIds: [], proposals: [] }
-      : fillContent(documentContainers(doc, documentId), doc, content, rng)
+      : fillContent(documentContainers(doc, documentId), content, rng)
   return { doc, host: 'workspace', ...(documentId === undefined ? {} : { documentId }), facts }
 }
 
@@ -577,7 +579,7 @@ contentCases(
 
 function sourceDoc(content: ContentKind, rng: Rng): string {
   const source = peer(new LoroDoc(), 7)
-  fillContent(source, source, content, rng)
+  fillContent(source, content, rng)
   const text = body(rng, true)
   if (content === 'markdown') writeMarkdownBody(source, text)
   source.commit()
@@ -870,9 +872,9 @@ const pureScene: Scene = {
   host: 'document',
   facts: { threadIds: [], proposals: [] },
 }
-PAIRS.forEach(([current, next], i) =>
-  add('minimalChange', `pair-${i}`, pureScene, { current, next }),
-)
+for (const [i, [current, next]] of PAIRS.entries()) {
+  add('minimalChange', `pair-${i}`, pureScene, { current, next })
+}
 
 // ---- recording ----
 

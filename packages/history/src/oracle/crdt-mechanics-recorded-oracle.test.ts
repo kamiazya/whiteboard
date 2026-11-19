@@ -112,11 +112,10 @@ describe('the recorded CRDT mechanics oracle', () => {
       .map((entry) => entry.trim())
       .filter((entry) => entry !== '' && !entry.startsWith('type '))
     expect(names.length, 'exported values found').toBeGreaterThan(10)
-    const constants = rows.find((r) => r.op === 'constants')
-    const recorded = new Set([
-      ...Object.keys(FLOORS),
-      ...Object.keys((constants?.result as { ok: object }).ok),
-    ])
+    const limits = rows
+      .filter((r) => r.op === 'constants')
+      .flatMap((r) => ('ok' in r.result ? Object.keys(r.result.ok as object) : []))
+    const recorded = new Set([...Object.keys(FLOORS), ...limits])
     expect(
       names.filter((n) => !recorded.has(n) && !(n in NOT_RECORDED)),
       'exports neither recorded nor classified',

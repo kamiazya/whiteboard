@@ -131,7 +131,7 @@ for (let i = 0; i < 24; i++) {
     cutRow('shallow-before-root', shallow, pick(1))
   }
 }
-{
+function cutsOverMidHistoryRoot() {
   // a shallow root in the middle of a history, with versions on both sides
   for (let i = 0; i < 6; i++) {
     const { doc, points } = history(300 + i, 2, 12)
@@ -145,7 +145,7 @@ for (let i = 0; i < 24; i++) {
   }
 }
 
-{
+function cutsBesideRoot() {
   // A point concurrent with the shallow root: the cut can fall beside the root, neither before nor after it
   for (let i = 0; i < 6; i++) {
     const rng = rngOf(350 + i)
@@ -173,6 +173,9 @@ for (let i = 0; i < 24; i++) {
     cutRow('shallow-concurrent-root', shallow, [pairsOfFrontiers(root), pairsOfFrontiers(both)])
   }
 }
+
+cutsOverMidHistoryRoot()
+cutsBesideRoot()
 
 // ---- frontiers text codec ----
 

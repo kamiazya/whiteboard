@@ -113,7 +113,7 @@ export function answer(read: () => unknown): Answer {
   }
 }
 
-export async function answerLater(read: () => Promise<unknown>): Promise<Answer> {
+async function answerLater(read: () => Promise<unknown>): Promise<Answer> {
   try {
     return { ok: plain(await read()) }
   } catch (error) {
