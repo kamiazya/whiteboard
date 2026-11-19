@@ -12,7 +12,11 @@
  * thing a port words differently.
  */
 import type { LoroDoc, VersionVector } from 'loro-crdt'
-import {
+import { type Answer, answer, versionPairs } from '../engine/answers.js'
+import { CONTENT_QUERIES, READERS, readQuery } from '../engine/readers.js'
+import { documentContainers } from '../workspace-tree.js'
+
+export {
   type Answer,
   answer,
   frontierPairs,
@@ -20,10 +24,6 @@ import {
   versionOfPairs,
   versionPairs,
 } from '../engine/answers.js'
-import { CONTENT_QUERIES, READERS, readQuery } from '../engine/readers.js'
-import { documentContainers } from '../workspace-tree.js'
-
-export { type Answer, answer, frontierPairs, type VersionPairs, versionOfPairs, versionPairs }
 
 /** Every read a document's own containers answer, hosted on a root or on a tree node. */
 function contentReaders(doc: LoroDoc, documentId?: string): Record<string, Answer> {
