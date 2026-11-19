@@ -35,11 +35,7 @@ export type Bytes = z.infer<typeof bytesSchema>
 export const documentIdSchema = z.string()
 export type DocumentId = z.infer<typeof documentIdSchema>
 
-/** What an export carries: all of it, the operations since a version, or a shallow state. */
-export const exportModeSchema = z.enum(['snapshot', 'update', 'shallow-snapshot'])
-export type ExportMode = z.infer<typeof exportModeSchema>
-
-/** What open answers: an engine-held document, never reused in an engine life. */
+/** What open answers: an engine-held document, never reused in an engine life. A close ends it. */
 export const handleSchema = z.number().int().meta({ minimum: undefined, maximum: undefined })
 export type Handle = z.infer<typeof handleSchema>
 
@@ -140,7 +136,6 @@ export const writerNameSchema = z.enum([
   'pruneEmptyFolders',
   'recordTrashEntry',
   'duplicateWorkspaceDocument',
-  'minimalChange',
 ])
 export type WriterName = z.infer<typeof writerNameSchema>
 
@@ -151,11 +146,24 @@ export const breachSchema = z.strictObject({
 })
 export type Breach = z.infer<typeof breachSchema>
 
+/** Release a document: its handle is then invalid and any call on it is refused. */
+export const closeRequestSchema = z.strictObject({
+  handle: handleSchema,
+})
+export type CloseRequest = z.infer<typeof closeRequestSchema>
+
 /** What an export produced. */
 export const exportResponseSchema = z.strictObject({
   bytes: bytesSchema,
 })
 export type ExportResponse = z.infer<typeof exportResponseSchema>
+
+/** Export everything an open document holds. */
+export const exportSnapshotRequestSchema = z.strictObject({
+  handle: handleSchema,
+  mode: z.literal('snapshot'),
+})
+export type ExportSnapshotRequest = z.infer<typeof exportSnapshotRequestSchema>
 
 /** Merge exported bytes into an open document. */
 export const importRequestSchema = z.strictObject({
@@ -163,6 +171,14 @@ export const importRequestSchema = z.strictObject({
   bytes: bytesSchema,
 })
 export type ImportRequest = z.infer<typeof importRequestSchema>
+
+/** A call that took effect: the documents it changed, none when it was a no-op. */
+export const mutationAppliedSchema = z.strictObject({
+  outcome: z.literal('applied'),
+  changed: z.array(documentIdSchema),
+  localUpdate: bytesSchema.optional(),
+})
+export type MutationApplied = z.infer<typeof mutationAppliedSchema>
 
 /** Open a document: from bytes an engine exported, or empty. */
 export const openRequestSchema = z.strictObject({
@@ -195,8 +211,8 @@ export const textSpliceRequestSchema = z.strictObject({
   handle: handleSchema,
   documentId: documentIdSchema.optional(),
   text: z.string(),
-  index: z.number().int().meta({ minimum: undefined, maximum: undefined }),
-  remove: z.number().int().meta({ minimum: undefined, maximum: undefined }),
+  index: z.number().int().min(0).meta({ maximum: undefined }),
+  remove: z.number().int().min(0).meta({ maximum: undefined }),
   insert: z.string(),
 })
 export type TextSpliceRequest = z.infer<typeof textSpliceRequestSchema>
@@ -221,22 +237,28 @@ export const writeSchema = z.strictObject({
 })
 export type Write = z.infer<typeof writeSchema>
 
-/** Export an open document. */
-export const exportRequestSchema = z.strictObject({
+/** Export the state at a frontier, without the history before it. */
+export const exportShallowSnapshotRequestSchema = z.strictObject({
   handle: handleSchema,
-  mode: exportModeSchema,
-  from: z.array(versionEntrySchema).optional(),
-  frontiers: z.array(versionEntrySchema).optional(),
+  mode: z.literal('shallow-snapshot'),
+  frontiers: z.array(versionEntrySchema),
 })
-export type ExportRequest = z.infer<typeof exportRequestSchema>
+export type ExportShallowSnapshotRequest = z.infer<typeof exportShallowSnapshotRequestSchema>
 
-/** What a call that changes a document answers: what changed, the update, a refusal. */
-export const mutationResultSchema = z.strictObject({
-  changed: z.array(documentIdSchema),
-  localUpdate: bytesSchema.optional(),
-  breach: breachSchema.optional(),
+/** Export the operations since a version. */
+export const exportUpdateRequestSchema = z.strictObject({
+  handle: handleSchema,
+  mode: z.literal('update'),
+  from: z.array(versionEntrySchema).optional(),
 })
-export type MutationResult = z.infer<typeof mutationResultSchema>
+export type ExportUpdateRequest = z.infer<typeof exportUpdateRequestSchema>
+
+/** A call refused for breaking a limit: nothing changed and there is no update. */
+export const mutationRefusedSchema = z.strictObject({
+  outcome: z.literal('refused'),
+  breach: breachSchema,
+})
+export type MutationRefused = z.infer<typeof mutationRefusedSchema>
 
 /** Ask an open document a question. */
 export const readRequestSchema = z.strictObject({
@@ -251,3 +273,18 @@ export const writeRequestSchema = z.strictObject({
   batch: z.array(writeSchema),
 })
 export type WriteRequest = z.infer<typeof writeRequestSchema>
+
+/** Export an open document; the mode says what it carries and what it needs. */
+export const exportRequestSchema = z.discriminatedUnion('mode', [
+  exportSnapshotRequestSchema,
+  exportUpdateRequestSchema,
+  exportShallowSnapshotRequestSchema,
+])
+export type ExportRequest = z.infer<typeof exportRequestSchema>
+
+/** What a call that changes a document answers: it took effect, or it was refused. */
+export const mutationResultSchema = z.discriminatedUnion('outcome', [
+  mutationAppliedSchema,
+  mutationRefusedSchema,
+])
+export type MutationResult = z.infer<typeof mutationResultSchema>
