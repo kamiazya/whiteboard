@@ -15,18 +15,23 @@
  * `LoroWorkspaceDocumentIndex`, so this is the one place the judgement lives.
  */
 import {
-  importWithinTextLimits,
-  importWorkspaceSubtree,
-  readWorkspaceNodes,
-  unreadableWorkspaceNodes,
+  type CrdtEngine,
+  loadCrdtEngine,
+  randomPeerId,
+  readValue,
+  type WorkspaceNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  bytesToBase64,
   DOCUMENT_NAME_MAX_LENGTH,
   DOCUMENT_PATH_MAX_LENGTH,
   documentPathSchema,
   isSelfOrDescendant,
 } from '@kamiazya/whiteboard-model'
-import { LoroDoc } from 'loro-crdt'
+
+// The readers answer in the shapes the loro-adapter functions behind them
+// return; this package asserts the type and holds no schema of its own for it.
+const assertedAs = <T>() => ({ parse: (value: unknown) => value as T })
 
 /**
  * How many documents and folders the bytes would place for `documentId`
@@ -34,37 +39,75 @@ import { LoroDoc } from 'loro-crdt'
  * the folders `parentPath` itself needs — or `null` when they may not be
  * placed at all.
  */
-export function restorableTrashDocuments(
+export async function restorableTrashDocuments(
   bytes: Uint8Array,
   input: { readonly documentId: string; readonly parentPath: string | undefined },
-): { readonly documents: number; readonly folders: number } | null {
+): Promise<{ readonly documents: number; readonly folders: number } | null> {
+  const engine = await loadCrdtEngine()
+  const encoded = bytesToBase64(bytes)
   // An empty record replays no runs, so this judges what the bytes HOLD — a
   // body or node text past its bound — at the cost of loading a snapshot.
-  const { breach } = importWithinTextLimits(new LoroDoc(), bytes)
-  if (breach !== null) return null
+  const judged = engine.open({ peer: randomPeerId() })
+  try {
+    if (engine.import({ handle: judged.handle, bytes: encoded }).outcome === 'refused') return null
+  } finally {
+    engine.close({ handle: judged.handle })
+  }
   // Placed under the row's parent path as the live record would place it, so
   // the paths read back are the ones the restore would create.
-  const placed = new LoroDoc()
-  const restored = importWorkspaceSubtree(placed, bytes, input.parentPath)
-  // Bytes holding some other document — another row's, say — are refused, so
-  // a row can only bring back the document it is for.
-  if (restored?.documentId !== input.documentId) return null
-  if (unreadableWorkspaceNodes(placed).length > 0) return null
-  return placeableNodes(placed, restored.path)
+  const placed = engine.open({ peer: randomPeerId() })
+  try {
+    return await placementOf(engine, placed.handle, encoded, input)
+  } finally {
+    engine.close({ handle: placed.handle })
+  }
+}
+
+async function placementOf(
+  engine: CrdtEngine,
+  handle: number,
+  encoded: string,
+  input: { readonly documentId: string; readonly parentPath: string | undefined },
+): Promise<{ readonly documents: number; readonly folders: number } | null> {
+  const placed = engine.importSubtree({
+    handle,
+    bytes: encoded,
+    ...(input.parentPath === undefined ? {} : { parentPath: input.parentPath }),
+  })
+  if (placed.outcome === 'refused') return null
+  // The bytes' root must be the row's document — one that merely sits inside
+  // them is not, and restoring them would bring back its ancestor — so a row
+  // can only bring back the document it is for.
+  const { root } = placed
+  if (root === undefined || root.documentId !== input.documentId) return null
+  const unreadable = await readValue(
+    engine,
+    handle,
+    { query: 'unreadableNodes' },
+    assertedAs<readonly string[]>(),
+  )
+  if (unreadable.length > 0) return null
+  const nodes = await readValue(
+    engine,
+    handle,
+    { query: 'nodes' },
+    assertedAs<readonly WorkspaceNode[]>(),
+  )
+  return placeableNodes(nodes, root.path)
 }
 
 /**
- * The documents and the folders below `top` that `placed` holds, or `null`
+ * The documents and the folders below `top` that `nodes` hold, or `null`
  * when any node sits at a path the grammar refuses or a document carries a
  * name past the bound.
  */
 function placeableNodes(
-  placed: LoroDoc,
+  nodes: readonly WorkspaceNode[],
   top: string,
 ): { readonly documents: number; readonly folders: number } | null {
   let documents = 0
   let folders = 0
-  for (const node of readWorkspaceNodes(placed)) {
+  for (const node of nodes) {
     if (node.path.length > DOCUMENT_PATH_MAX_LENGTH) return null
     if (!documentPathSchema.safeParse(node.path).success) return null
     if (node.type === 'document') {

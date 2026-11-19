@@ -6,10 +6,13 @@
 use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_model::Value;
 use whiteboard_model::crdt::{
-    Breach, BreachShape, CloseRequest, ExportRequest, ExportResponse, ExportShallowSnapshotRequest,
-    ExportSnapshotRequest, ExportUpdateRequest, ImportRequest, MutationApplied, MutationRefused,
-    MutationResult, OpenRequest, OpenResponse, Query, QueryName, ReadRequest, ReadResponse,
-    RedoRequest, TextSpliceRequest, UndoRequest, VersionEntry, Write, WriteRequest, WriterName,
+    Breach, BreachShape, CloseRequest, DecodeKind, DecodeRequest, DecodeResponse, ExportRequest,
+    ExportResponse, ExportShallowSnapshotRequest, ExportSnapshotRequest, ExportUpdateRequest,
+    ForkRequest, ImportJudge, ImportRequest, ImportSubtreeRequest, MutationApplied,
+    MutationRefused, MutationResult, OpenRequest, OpenResponse, PlacedRoot, Query, QueryName,
+    ReadRequest, ReadResponse, RedoRequest, TextRun, TextSpliceRequest, UndoClearRequest,
+    UndoRequest, UndoStateRequest, UndoStateResponse, VersionEntry, VersionRequest,
+    VersionResponse, Write, WriteRequest, WriterName,
 };
 use whiteboard_model::json::parse;
 
@@ -67,6 +70,8 @@ macro_rules! wire_enum_covered {
 wire_enum_covered!(every_breach_shape_round_trips, BreachShape, 20);
 wire_enum_covered!(every_query_name_round_trips, QueryName, 33);
 wire_enum_covered!(every_writer_name_round_trips, WriterName, 47);
+wire_enum_covered!(every_import_judge_round_trips, ImportJudge, 2);
+wire_enum_covered!(every_decode_kind_round_trips, DecodeKind, 2);
 
 #[test]
 fn a_union_defaults_to_its_first_member_and_each_constant_is_the_contract_tag() {
@@ -91,13 +96,12 @@ fn every_message_defaults_empty_and_clones_equal_with_an_unsigned_index() {
         handle: 3,
         document_id: Some("doc".into()),
         text: "body".into(),
-        index: u64::MAX,
-        remove: 0,
-        insert: "x".into(),
+        runs: vec![TextRun { index: u64::MAX, remove: 0, insert: "x".into() }],
     };
     assert_eq!(splice.clone(), splice);
     assert_ne!(splice, TextSpliceRequest::default());
-    assert_eq!(TextSpliceRequest::default().index, 0);
+    assert_eq!(TextRun::default().index, 0);
+    assert!(TextSpliceRequest::default().runs.is_empty());
 
     let update = ExportUpdateRequest {
         handle: 1,
@@ -118,7 +122,12 @@ fn results_requests_and_opening_messages_carry_their_fields() {
         breach: Breach { shape: BreachShape::Body, container: Some("c".into()) },
     };
     assert_ne!(MutationResult::MutationRefused(refused.clone()), MutationResult::default());
-    let applied = MutationApplied { changed: vec!["d".into()], local_update: Some("AA==".into()) };
+    let applied = MutationApplied {
+        changed: vec!["d".into()],
+        local_update: Some("AA==".into()),
+        pending: Some(true),
+        root: Some(PlacedRoot { document_id: "d".into(), path: "a/b".into() }),
+    };
     assert_eq!(
         MutationResult::MutationApplied(applied.clone()),
         MutationResult::MutationApplied(applied)
@@ -136,6 +145,7 @@ fn results_requests_and_opening_messages_carry_their_fields() {
     assert_ne!(write.clone(), WriteRequest::default());
 
     assert_eq!(OpenRequest::default().bytes, None);
+    assert_eq!(OpenRequest::default().undo_merge_interval_ms, None);
     assert_eq!(OpenResponse::default().handle, 0);
     assert_eq!(CloseRequest::default(), CloseRequest { handle: 0 });
     assert_eq!(UndoRequest::default(), UndoRequest { handle: 0 });
@@ -145,4 +155,35 @@ fn results_requests_and_opening_messages_carry_their_fields() {
     assert_eq!(ReadResponse::default().value, Value::Null);
     assert_eq!(Write::default().op, WriterName::WriteSpatialCanvas);
     assert!(format!("{:?}", Breach::default()).contains("Run"));
+}
+
+#[test]
+fn the_calls_for_judging_versions_forks_and_undo_state_carry_their_fields() {
+    assert_eq!(ImportRequest::default().judge, None);
+    assert_eq!(ImportJudge::default(), ImportJudge::Text);
+    assert_eq!(DecodeKind::default(), DecodeKind::Version);
+    assert_eq!(MutationApplied::default().pending, None);
+    let decode = DecodeRequest { kind: DecodeKind::Frontiers, bytes: "AA==".into() };
+    assert_ne!(decode.clone(), DecodeRequest::default());
+    let entries = vec![VersionEntry { peer: "7".into(), counter: 2 }];
+    assert_ne!(DecodeResponse { entries: entries.clone() }, DecodeResponse::default());
+    let version = VersionResponse {
+        version: entries.clone(),
+        frontiers: entries.clone(),
+        encoded_version: "AA==".into(),
+        encoded_frontiers: "AQ==".into(),
+    };
+    assert_ne!(version.clone(), VersionResponse::default());
+    assert_eq!(VersionRequest::default(), VersionRequest { handle: 0 });
+    let fork = ForkRequest { handle: 1, peer: "9".into(), at: Some(entries) };
+    assert_ne!(fork.clone(), ForkRequest::default());
+    assert_eq!(UndoStateRequest::default(), UndoStateRequest { handle: 0 });
+    assert_eq!(UndoClearRequest::default(), UndoClearRequest { handle: 0 });
+    assert_eq!(
+        UndoStateResponse::default(),
+        UndoStateResponse { can_undo: false, can_redo: false }
+    );
+    let subtree =
+        ImportSubtreeRequest { handle: 1, bytes: "AA==".into(), parent_path: Some("a/b".into()) };
+    assert_ne!(subtree.clone(), ImportSubtreeRequest::default());
 }

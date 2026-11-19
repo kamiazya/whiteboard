@@ -13,7 +13,16 @@ export interface CrdtEngine {
   open(request: wire.OpenRequest): wire.OpenResponse
   /** Frees the document; every later call naming the handle is refused. */
   close(request: wire.CloseRequest): void
-  /** Merges bytes an engine exported; a breach refuses them and changes nothing. */
+  /**
+   * A copy of the document under another peer: its head, or when `at` names
+   * frontiers a view at them, which reads and takes no edit.
+   */
+  fork(request: wire.ForkRequest): wire.OpenResponse
+  /**
+   * Merges bytes an engine exported; a breach refuses them and changes
+   * nothing. The answer says whether the bytes build on operations the
+   * document lacks.
+   */
   import(request: wire.ImportRequest): wire.MutationResult
   export(request: wire.ExportRequest): wire.ExportResponse
   /**
@@ -25,5 +34,15 @@ export interface CrdtEngine {
   read(request: wire.ReadRequest): Promise<wire.ReadResponse>
   undo(request: wire.UndoRequest): wire.MutationResult
   redo(request: wire.RedoRequest): wire.MutationResult
+  /** Applies the runs in order as one commit. */
   textSplice(request: wire.TextSpliceRequest): wire.MutationResult
+  /** Places an exported document with everything under it into a workspace record. */
+  importSubtree(request: wire.ImportSubtreeRequest): wire.MutationResult
+  /** The operations the document holds, as versions and as the bytes a keeper stores. */
+  version(request: wire.VersionRequest): wire.VersionResponse
+  /** Reads a version or a frontier an engine encoded; no document is needed. */
+  decode(request: wire.DecodeRequest): wire.DecodeResponse
+  undoState(request: wire.UndoStateRequest): wire.UndoStateResponse
+  /** Forgets what an undo or a redo could take back. */
+  undoClear(request: wire.UndoClearRequest): void
 }

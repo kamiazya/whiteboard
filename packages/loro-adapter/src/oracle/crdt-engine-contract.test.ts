@@ -141,14 +141,43 @@ describe('the CRDT document-engine contract', () => {
     expect(documentEngine.closeRequestSchema.safeParse({}).success).toBe(false)
   })
 
-  it('refuses a splice that starts or removes below zero', () => {
-    const splice = { handle: 0, text: 'body', index: 0, remove: 0, insert: '' }
+  it('refuses a run that starts or removes below zero, or at a fraction', () => {
+    const splice = { handle: 0, text: 'body', runs: [{ index: 0, remove: 0, insert: '' }] }
     expect(documentEngine.textSpliceRequestSchema.safeParse(splice).success).toBe(true)
     for (const bad of [{ index: -1 }, { remove: -1 }, { index: 1.5 }]) {
-      expect(documentEngine.textSpliceRequestSchema.safeParse({ ...splice, ...bad }).success).toBe(
+      const runs = [{ index: 0, remove: 0, insert: '', ...bad }]
+      expect(documentEngine.textSpliceRequestSchema.safeParse({ ...splice, runs }).success).toBe(
         false,
       )
     }
+    expect(
+      documentEngine.textSpliceRequestSchema.safeParse({ handle: 0, text: 'body', index: 0 })
+        .success,
+    ).toBe(false)
+  })
+
+  it('names what an import is judged by, and refuses another judge', () => {
+    for (const judge of ['text', 'none']) {
+      expect(
+        documentEngine.importRequestSchema.safeParse({ handle: 0, bytes: 'AA==', judge }).success,
+      ).toBe(true)
+    }
+    expect(documentEngine.importRequestSchema.safeParse({ handle: 0, bytes: 'AA==' }).success).toBe(
+      true,
+    )
+    expect(
+      documentEngine.importRequestSchema.safeParse({ handle: 0, bytes: 'AA==', judge: 'any' })
+        .success,
+    ).toBe(false)
+  })
+
+  it('asks a fork for a peer, and a decode for what it holds', () => {
+    expect(documentEngine.forkRequestSchema.safeParse({ handle: 0 }).success).toBe(false)
+    expect(documentEngine.forkRequestSchema.safeParse({ handle: 0, peer: '2' }).success).toBe(true)
+    expect(documentEngine.decodeRequestSchema.safeParse({ bytes: 'AA==' }).success).toBe(false)
+    expect(
+      documentEngine.decodeRequestSchema.safeParse({ kind: 'other', bytes: 'AA==' }).success,
+    ).toBe(false)
   })
 
   it('asks an export for what its mode needs: a shallow snapshot names its frontiers', () => {

@@ -84,8 +84,6 @@ const LORO_DIRECT: Readonly<Record<string, string>> = {
   'packages/server-core/src/operations/restore-version.ts': 'M7: server-core',
   'packages/server-core/src/operations/sync-update-limit.ts': 'M7: server-core',
   'packages/server-core/src/render/assert-spatial-document.ts': 'M7: server-core',
-  'packages/server-core/src/render/resolve-file-references.ts':
-    'C1: documentContent has no index-row kind fallback',
   'packages/server-core/src/server-deps.ts': 'M7: server-core',
   'packages/server-core/src/tools/body-edit.ts': 'M7: server-core',
   'packages/server-core/src/tools/canvas-edit-session.ts': 'M7: server-core',
@@ -98,7 +96,6 @@ const LORO_DIRECT: Readonly<Record<string, string>> = {
   'packages/server-core/src/tools/thread-edit.ts': 'M7: server-core',
   'packages/workspace-index/src/document-store-workspace-docs.ts': 'M8: workspace-index storage',
   'packages/workspace-index/src/loro-workspace-document-index.ts': 'M8: workspace-index storage',
-  'packages/workspace-index/src/restore-judgement.ts': 'C1: needs an importWorkspaceSubtree writer',
   'packages/workspace-index/src/workspace-docs.ts': 'M8: workspace-index storage',
 }
 

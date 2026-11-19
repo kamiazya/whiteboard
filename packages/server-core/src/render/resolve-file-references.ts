@@ -3,12 +3,26 @@ import {
   type LoadedReference,
   type ReferenceContentAccount,
 } from '@kamiazya/whiteboard-canvas-render'
-import { readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
-import { documentIdSchema, documentPathSchema, type WorkspaceId } from '@kamiazya/whiteboard-model'
+import {
+  type DocumentContent,
+  loadCrdtEngine,
+  randomPeerId,
+  readValue,
+} from '@kamiazya/whiteboard-loro-adapter'
+import {
+  bytesToBase64,
+  documentIdSchema,
+  documentPathSchema,
+  type WorkspaceId,
+} from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
-import { LoroDoc } from 'loro-crdt'
+import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
+
+// The answer is any-value by contract; the reader is the adapter's own
+// readDocumentContent, which already yields this shape.
+const contentAnswer = z.custom<DocumentContent>()
 
 /**
  * Resolves one reference to the document it names.
@@ -111,9 +125,22 @@ async function readReferencedDocument(
   })
   if (snapshot === null) return named
 
-  const doc = new LoroDoc()
-  doc.import(reassembleSnapshot(snapshot.manifest, snapshot.chunks))
-  const content = readDocumentContent(doc, entry.kind)
+  const engine = await loadCrdtEngine()
+  const { handle } = engine.open({
+    peer: randomPeerId(),
+    bytes: bytesToBase64(reassembleSnapshot(snapshot.manifest, snapshot.chunks)),
+  })
+  let content: DocumentContent
+  try {
+    content = await readValue(
+      engine,
+      handle,
+      { query: 'documentContent', args: { kind: entry.kind } },
+      contentAnswer,
+    )
+  } finally {
+    engine.close({ handle })
+  }
   return account.admit({
     ...named,
     ...(content.kind === 'markdown' ? { body: content.body } : { canvas: content.canvas }),

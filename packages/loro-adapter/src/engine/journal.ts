@@ -47,6 +47,12 @@ export interface JournaledEngine {
   undo(request: wire.UndoRequest): JournaledMutation
   redo(request: wire.RedoRequest): JournaledMutation
   textSplice(request: wire.TextSpliceRequest): JournaledMutation
+  importSubtree(request: wire.ImportSubtreeRequest): JournaledMutation
+  fork(request: wire.ForkRequest): wire.OpenResponse
+  version(request: wire.VersionRequest): wire.VersionResponse
+  decode(request: wire.DecodeRequest): wire.DecodeResponse
+  undoState(request: wire.UndoStateRequest): wire.UndoStateResponse
+  undoClear(request: wire.UndoClearRequest): void
   journal(handle: wire.Handle): Journal
   /** The keeper holds every local update up to and including `upTo`. */
   acknowledge(handle: wire.Handle, upTo: number): void
@@ -97,7 +103,7 @@ function rebuild(held: Records, engine: CrdtEngine, journal: Journal): wire.Open
   const { peer, base, pending } = journalSchema.parse(journal)
   const opened = engine.open({ peer, bytes: base })
   for (const { update } of pending) {
-    const result = engine.import({ handle: opened.handle, bytes: update })
+    const result = engine.import({ handle: opened.handle, bytes: update, judge: 'none' })
     if (result.outcome === 'refused') {
       throw new Error(`a journalled update was refused as ${result.breach.shape}`)
     }
@@ -134,6 +140,20 @@ export function journaledEngine(engine: CrdtEngine): JournaledEngine {
     undo: (request) => journalLocal(held, request.handle, engine.undo(request)),
     redo: (request) => journalLocal(held, request.handle, engine.redo(request)),
     textSplice: (request) => journalLocal(held, request.handle, engine.textSplice(request)),
+    importSubtree: (request) => journalLocal(held, request.handle, engine.importSubtree(request)),
+    // A view at a version has nothing to rebuild from, so only a copy of the head is journalled.
+    fork(request) {
+      const opened = engine.fork(request)
+      if (request.at === undefined) {
+        const base = engine.export({ handle: opened.handle, mode: 'snapshot' }).bytes
+        held.set(opened.handle, { peer: request.peer, base, pending: [], nextSeq: 1 })
+      }
+      return opened
+    },
+    version: (request) => engine.version(request),
+    decode: (request) => engine.decode(request),
+    undoState: (request) => engine.undoState(request),
+    undoClear: (request) => engine.undoClear(request),
     journal(handle) {
       const { peer, base, pending } = recordOf(held, handle)
       return journalSchema.parse({ peer, base, pending })

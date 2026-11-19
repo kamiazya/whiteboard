@@ -15,16 +15,40 @@
  * it says about it.
  */
 import { readFileSync } from 'node:fs'
-import {
-  base64ToBytes,
-  MARKDOWN_MAX_CHARS,
-  documentEngine as wire,
-} from '@kamiazya/whiteboard-model'
-import { decodeImportBlobMeta, LoroDoc } from 'loro-crdt'
+import { MARKDOWN_MAX_CHARS, documentEngine as wire } from '@kamiazya/whiteboard-model'
+import { decodeImportBlobMeta, type LoroDoc } from 'loro-crdt'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { frontierPairs, type VersionPairs, versionPairs } from '../engine/answers.js'
 import { journaledEngine } from '../engine/journal.js'
 import type { CrdtEngine } from '../engine/types.js'
+import {
+  describeDocumentKindFallback,
+  describeFork,
+  describeImportJudging,
+  describeImportPending,
+  describeSpliceRuns,
+  describeSpliceRunsRefused,
+  describeSubtreeImport,
+  describeSubtreeRoot,
+  describeUndoHistory,
+  describeVersion,
+  describeVersionDecoding,
+} from './crdt-engine-conformance-calls.js'
+import {
+  applied,
+  ask,
+  bodyOf,
+  bytesOf,
+  FIRST,
+  held,
+  jsonOf,
+  mutation,
+  openWith,
+  SECOND,
+  splice,
+  WORKSPACE_DOCUMENT,
+  write,
+} from './crdt-engine-conformance-kit.js'
 import { fc, withDefaults } from './fast-check.js'
 
 const recorded = (name: string) =>
@@ -63,93 +87,6 @@ interface WriteRow {
   vv: VersionPairs
   frontiers: Array<[string, number]>
   update: string
-}
-
-const bytesOf = (b64: string): Uint8Array => {
-  const bytes = base64ToBytes(b64)
-  if (bytes === null) throw new TypeError('not base64')
-  return bytes
-}
-const decode = (b64: string): LoroDoc => {
-  const doc = new LoroDoc()
-  doc.import(bytesOf(b64))
-  return doc
-}
-// A JSON round trip rather than structuredClone: it drops `undefined` members
-// the way the wire does, which structuredClone keeps.
-const jsonOf = (value: unknown): unknown => JSON.parse(JSON.stringify(value))
-
-/**
- * The document an engine's handle holds, as the bytes it exports and npm
- * loro-crdt reads them. An update carries operations only, so a root container
- * a reader merely opened is not in it; a snapshot carries those too.
- */
-function held(engine: CrdtEngine, handle: number, mode: 'snapshot' | 'update' = 'update'): LoroDoc {
-  return decode(engine.export({ handle, mode }).bytes)
-}
-
-async function ask(
-  engine: CrdtEngine,
-  handle: number,
-  query: string,
-  args?: Record<string, unknown>,
-): Promise<unknown> {
-  const request = wire.readRequestSchema.parse({
-    handle,
-    query: args === undefined ? { query } : { query, args },
-  })
-  return jsonOf(wire.readResponseSchema.parse(await engine.read(request)).value)
-}
-
-async function bodyOf(engine: CrdtEngine, handle: number, documentId?: string): Promise<string> {
-  const answer = (await ask(
-    engine,
-    handle,
-    'markdownBody',
-    documentId === undefined ? undefined : { documentId },
-  )) as { ok: string }
-  return answer.ok
-}
-
-/** A journaled engine adds the `seq` it journalled the update under; the wire's own fields are judged. */
-const mutation = (result: object) => {
-  const { seq: _journalled, ...wireFields } = result as { seq?: number }
-  return wire.mutationResultSchema.parse(wireFields)
-}
-
-/** A mutation the test expects the engine to have applied. */
-function applied(result: object): wire.MutationApplied {
-  const parsed = mutation(result)
-  if (parsed.outcome !== 'applied') {
-    throw new Error(`the engine refused the call as ${parsed.breach.shape}`)
-  }
-  return parsed
-}
-
-function write(engine: CrdtEngine, handle: number, op: string, args: unknown) {
-  return applied(engine.write(wire.writeRequestSchema.parse({ handle, batch: [{ op, args }] })))
-}
-
-function splice(
-  engine: CrdtEngine,
-  handle: number,
-  index: number,
-  remove: number,
-  insert: string,
-  documentId?: string,
-) {
-  return applied(
-    engine.textSplice(
-      wire.textSpliceRequestSchema.parse({
-        handle,
-        ...(documentId === undefined ? {} : { documentId }),
-        text: 'body',
-        index,
-        remove,
-        insert,
-      }),
-    ),
-  )
 }
 
 const versionEntries = (doc: LoroDoc) =>
@@ -281,16 +218,6 @@ function describeWriteReplay(makeEngine: () => CrdtEngine) {
       expect(result.changed.length > 0 && result.localUpdate === undefined, 'changed').toBe(false)
     })
   })
-}
-
-const FIRST = '01J00000000000000000000001'
-const SECOND = '01J00000000000000000000002'
-const WORKSPACE_DOCUMENT = { documentId: FIRST, segment: 'note', kind: 'markdown' }
-
-const openWith = (engine: CrdtEngine, body: string, peer = '1') => {
-  const { handle } = engine.open({ peer })
-  write(engine, handle, 'writeMarkdownBody', { body })
-  return handle
 }
 
 function describeExportAndImport(makeEngine: () => CrdtEngine) {
@@ -475,7 +402,7 @@ function describeChanged(makeEngine: () => CrdtEngine) {
       const edit = splice(a, handle, 0, 0, 'x', FIRST)
       expect(
         mutation(b.import({ handle: there.handle, bytes: edit.localUpdate as string })),
-      ).toEqual({ outcome: 'applied', changed: [FIRST] })
+      ).toEqual({ outcome: 'applied', changed: [FIRST], pending: false })
     })
   })
 }
@@ -525,8 +452,7 @@ function describeRefusal(makeEngine: () => CrdtEngine) {
       expect(await bodyOf(engine, handle)).toBe('kept')
       write(engine, handle, 'writeMarkdownBody', { body: 'still works' })
       expect(await bodyOf(engine, handle)).toBe('still works')
-      // Restoring the version before the refused write replays history.
-    }, 30_000)
+    })
 
     it('refuses an incoming update past a sync limit and keeps the document', async () => {
       const engine = makeEngine()
@@ -575,9 +501,7 @@ function describeJournal(makeEngine: () => CrdtEngine) {
         wire.textSpliceRequestSchema.parse({
           handle,
           text: 'body',
-          index: 5,
-          remove: 0,
-          insert: ' second',
+          runs: [{ index: 5, remove: 0, insert: ' second' }],
         }),
       )
       expect(first.seq).toBe(1)
@@ -735,6 +659,17 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeTextSpliceUtf16(makeEngine)
     describeChanged(makeEngine)
     describeRefusal(makeEngine)
+    describeVersion(makeEngine)
+    describeVersionDecoding(makeEngine)
+    describeFork(makeEngine)
+    describeImportJudging(makeEngine)
+    describeImportPending(makeEngine)
+    describeUndoHistory(makeEngine)
+    describeSpliceRuns(makeEngine)
+    describeSpliceRunsRefused(makeEngine)
+    describeDocumentKindFallback(makeEngine)
+    describeSubtreeImport(makeEngine)
+    describeSubtreeRoot(makeEngine)
     describeJournal(makeEngine)
     describeConvergence(makeEngine)
   })

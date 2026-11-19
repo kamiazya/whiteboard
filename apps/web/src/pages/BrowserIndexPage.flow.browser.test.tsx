@@ -187,11 +187,27 @@ describe('browser list landing (browser — real IndexedDB)', () => {
     await userEvent.click(
       await within(trash).findByText(/^Trash \(2\)/, undefined, { timeout: 15_000 }),
     )
-    await userEvent.click(
-      (await within(trash).findAllByRole('button', { name: 'Restore' }, { timeout: 15_000 }))[0]!,
-    )
+    // The NOTE's row, so the restored document can be read back below: its
+    // name was seeded from the heading typed above.
+    const noteRow = (
+      await within(trash).findByText('From the list', undefined, {
+        timeout: 15_000,
+      })
+    ).closest('li') as HTMLElement
+    await userEvent.click(within(noteRow).getByRole('button', { name: 'Restore' }))
     await waitFor(() => expect(screen.queryAllByTestId('card-title')).toHaveLength(1), {
       timeout: 15_000,
     })
+
+    // The restored note opens with the body it was deleted with: a restore
+    // that placed some other record would list a card and read back nothing.
+    await userEvent.click(screen.getAllByTestId('card-title')[0]!.closest('button')!)
+    await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
+    await waitFor(
+      () => {
+        expect(document.querySelector('.cm-content')?.textContent).toContain('# From the list')
+      },
+      { timeout: 15_000 },
+    )
   })
 })

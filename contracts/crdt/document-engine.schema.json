@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CRDT document engine",
-  "description": "The wire of the CRDT document engine: open, close, import, export, write, read, undo, redo and a text splice over a handle. No callback crosses it; the TypeScript and the Rust engine will both implement it.",
+  "description": "The wire of the CRDT document engine: open, fork, close, import, export, write, read, version, undo, redo, text splices and subtree imports over a handle. No callback crosses it; the TypeScript and the Rust engine both implement it.",
   "x-wb-emit": {
     "zod": "packages/model/src/generated/crdt.zod.ts",
     "rust": "crates/core/model/src/generated/crdt.rs"
@@ -180,6 +180,11 @@
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
+    "ImportJudge": {
+      "description": "What judges imported bytes: the text limits, or nothing for trusted bytes.",
+      "type": "string",
+      "enum": ["text", "none"]
+    },
     "Write": {
       "description": "One write: the writer and its arguments, any-value on purpose.",
       "type": "object",
@@ -227,10 +232,15 @@
         "bytes": {
           "$ref": "#/$defs/Bytes",
           "description": "The document to open; empty when absent."
+        },
+        "undoMergeIntervalMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Consecutive local edits within this many milliseconds are one undo step; absent takes the engine default, zero makes every commit a step."
         }
       },
       "required": ["peer"],
-      "x-wb-order": ["peer", "bytes"],
+      "x-wb-order": ["peer", "bytes", "undoMergeIntervalMs"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -273,10 +283,14 @@
         "bytes": {
           "$ref": "#/$defs/Bytes",
           "description": "A snapshot, update or shallow snapshot."
+        },
+        "judge": {
+          "$ref": "#/$defs/ImportJudge",
+          "description": "What judges the bytes before they land; absent is text."
         }
       },
       "required": ["handle", "bytes"],
-      "x-wb-order": ["handle", "bytes"],
+      "x-wb-order": ["handle", "bytes", "judge"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -382,6 +396,117 @@
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
+    "VersionRequest": {
+      "description": "Ask an open document which operations it holds.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        }
+      },
+      "required": ["handle"],
+      "x-wb-order": ["handle"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "VersionResponse": {
+      "description": "The operations an open document holds, as the engine encodes them.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "description": "The version vector of every operation held."
+        },
+        "frontiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "description": "The frontiers of every operation held."
+        },
+        "encodedVersion": {
+          "$ref": "#/$defs/Bytes",
+          "description": "The version vector in the engine encoding, what a keeper stores."
+        },
+        "encodedFrontiers": {
+          "$ref": "#/$defs/Bytes",
+          "description": "The frontiers in the engine encoding, what a keeper stores."
+        }
+      },
+      "required": ["version", "frontiers", "encodedVersion", "encodedFrontiers"],
+      "x-wb-order": ["version", "frontiers", "encodedVersion", "encodedFrontiers"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "DecodeKind": {
+      "description": "What a decoded byte string holds: a version vector or a frontier.",
+      "type": "string",
+      "enum": ["version", "frontiers"]
+    },
+    "DecodeRequest": {
+      "description": "Read a version or a frontier an engine encoded; no document is needed.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/DecodeKind",
+          "description": "Which it holds."
+        },
+        "bytes": {
+          "$ref": "#/$defs/Bytes",
+          "description": "The encoded bytes."
+        }
+      },
+      "required": ["kind", "bytes"],
+      "x-wb-order": ["kind", "bytes"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "DecodeResponse": {
+      "description": "What encoded version bytes held.",
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "description": "The peers and counters."
+        }
+      },
+      "required": ["entries"],
+      "x-wb-order": ["entries"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "ForkRequest": {
+      "description": "Copy an open document under a new peer, optionally viewed as it was at a frontier.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document to copy."
+        },
+        "peer": {
+          "$ref": "#/$defs/PeerId",
+          "description": "The peer the copy writes as."
+        },
+        "at": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "description": "The frontiers to check the copy out at, which leaves it detached and read-only; absent copies the head."
+        }
+      },
+      "required": ["handle", "peer"],
+      "x-wb-order": ["handle", "peer", "at"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
     "WriteRequest": {
       "description": "Apply writes to an open document as one batch.",
       "type": "object",
@@ -463,22 +588,56 @@
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
-    "TextSpliceRequest": {
-      "description": "Replace a run of a text container, in UTF-16 code units.",
+    "UndoStateRequest": {
+      "description": "Ask whether an open document can undo or redo.",
       "type": "object",
       "properties": {
         "handle": {
           "$ref": "#/$defs/Handle",
           "description": "The document."
+        }
+      },
+      "required": ["handle"],
+      "x-wb-order": ["handle"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "UndoStateResponse": {
+      "description": "What the undo history of a document can do.",
+      "type": "object",
+      "properties": {
+        "canUndo": {
+          "type": "boolean",
+          "description": "Whether an undo would change the document."
         },
-        "documentId": {
-          "$ref": "#/$defs/DocumentId",
-          "description": "The hosting tree node; absent for a document that is its own root."
-        },
-        "text": {
-          "type": "string",
-          "description": "The text container key in the document."
-        },
+        "canRedo": {
+          "type": "boolean",
+          "description": "Whether a redo would change the document."
+        }
+      },
+      "required": ["canUndo", "canRedo"],
+      "x-wb-order": ["canUndo", "canRedo"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "UndoClearRequest": {
+      "description": "Forget the undo and redo history of an open document.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        }
+      },
+      "required": ["handle"],
+      "x-wb-order": ["handle"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "TextRun": {
+      "description": "One replacement in a text container.",
+      "type": "object",
+      "properties": {
         "index": {
           "type": "integer",
           "description": "Where the run starts, in UTF-16 code units.",
@@ -494,8 +653,77 @@
           "description": "The text to insert."
         }
       },
-      "required": ["handle", "text", "index", "remove", "insert"],
-      "x-wb-order": ["handle", "documentId", "text", "index", "remove", "insert"],
+      "required": ["index", "remove", "insert"],
+      "x-wb-order": ["index", "remove", "insert"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "TextSpliceRequest": {
+      "description": "Replace runs of a text container, in UTF-16 code units.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        },
+        "documentId": {
+          "$ref": "#/$defs/DocumentId",
+          "description": "The hosting tree node; absent for a document that is its own root."
+        },
+        "text": {
+          "type": "string",
+          "description": "The text container key in the document."
+        },
+        "runs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/TextRun"
+          },
+          "description": "The runs, applied in order as one commit; each counts against the text as the runs before it left it."
+        }
+      },
+      "required": ["handle", "text", "runs"],
+      "x-wb-order": ["handle", "documentId", "text", "runs"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "ImportSubtreeRequest": {
+      "description": "Place an exported document and all under it into a workspace record.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The workspace record."
+        },
+        "bytes": {
+          "$ref": "#/$defs/Bytes",
+          "description": "A snapshot of a record whose first root is the document."
+        },
+        "parentPath": {
+          "type": "string",
+          "description": "The folder path to place it under; absent places it at the root."
+        }
+      },
+      "required": ["handle", "bytes"],
+      "x-wb-order": ["handle", "bytes", "parentPath"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "PlacedRoot": {
+      "description": "The document an import-subtree call placed at the top of the bytes, and where.",
+      "type": "object",
+      "properties": {
+        "documentId": {
+          "$ref": "#/$defs/DocumentId",
+          "description": "The document at the root of the bytes."
+        },
+        "path": {
+          "type": "string",
+          "description": "The path it now holds in the record, under the parent path the call was given."
+        }
+      },
+      "required": ["documentId", "path"],
+      "x-wb-order": ["documentId", "path"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -518,10 +746,18 @@
         "localUpdate": {
           "$ref": "#/$defs/Bytes",
           "description": "The update that carries the change; absent when nothing changed."
+        },
+        "pending": {
+          "type": "boolean",
+          "description": "An import answers whether the bytes build on operations the document lacks, so some stay parked; absent on every other call."
+        },
+        "root": {
+          "$ref": "#/$defs/PlacedRoot",
+          "description": "An import-subtree call answers the document it placed at the root of the bytes; absent on every other call and when the bytes hold no document."
         }
       },
       "required": ["outcome", "changed"],
-      "x-wb-order": ["outcome", "changed", "localUpdate"],
+      "x-wb-order": ["outcome", "changed", "localUpdate", "pending", "root"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
