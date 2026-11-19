@@ -278,17 +278,10 @@ export function useWorkerScene(
         requestFor: layoutRequestFor,
         onReply: (response, sent, worker) => {
           if (response.type === 'failed') {
-            if (response.fatal === true) {
-              // Its core could not be reset and the worker has closed itself.
-              // Unlike a missing face this is the worker's alone: the next
-              // request starts a fresh one, and this draw is the main thread's.
-              worker.terminate()
-              workerRef.current = null
-            } else if (response.reason === FONT_DEGRADED) {
-              fontDegraded.current = true
-              // Not a transient failure: this realm cannot measure text the
-              // way the main thread does, so every later request would be
-              // wrong the same way. Retire the worker and stay synchronous.
+            if (response.fatal === true || response.reason === FONT_DEGRADED) {
+              // A missing face is permanent, so stay synchronous; a worker that
+              // closed itself (its core could not be reset) is replaced next time.
+              fontDegraded.current ||= response.fatal !== true
               worker.terminate()
               workerRef.current = null
             }

@@ -199,33 +199,29 @@ export function createLayoutWorkerPool<Req extends { id: number }>(options: {
     pump()
   }
 
+  // A worker that will never post again must leave the pool, or its slot looks
+  // available and everything dispatched to it waits forever (the shared pool
+  // is never disposed). spawn() makes the replacement on the next dispatch.
+  const retire = (slot: Held) => {
+    const at = slots.indexOf(slot)
+    if (at !== -1) slots.splice(at, 1)
+    slot.worker.terminate()
+  }
+
   const spawn = (): Held => {
     const worker = options.createWorker()
     const slot: Held = { worker, busyWith: null }
+    // A fatal reply (the worker closed itself) leaves the pool BEFORE it
+    // settles: settling pumps the queue, which would reuse the dead slot.
     worker.onmessage = (event) => {
-      // A worker that closed itself (its core could not be reset) posts this
-      // and nothing after, and never fires `onerror`: it leaves the pool
-      // BEFORE its request settles, since settling pumps the queue and would
-      // hand the next request to a worker that is gone.
-      if ((event.data as { fatal?: unknown }).fatal === true) {
-        const at = slots.indexOf(slot)
-        if (at !== -1) slots.splice(at, 1)
-        worker.terminate()
-      }
+      if ((event.data as { fatal?: unknown }).fatal === true) retire(slot)
       settle(slot, event.data.id, event.data)
     }
     if ('onerror' in worker) {
       worker.onerror = () => {
         const pending = slot.busyWith
         slot.busyWith = null
-        // A worker whose module failed to load fires this once and then never
-        // posts again. Leaving its slot in the pool makes it look available,
-        // and everything dispatched to it waits forever — permanently, since
-        // the shared pool is a per-tab singleton nothing disposes. Drop it
-        // and let spawn() make a replacement on the next dispatch.
-        const at = slots.indexOf(slot)
-        if (at !== -1) slots.splice(at, 1)
-        worker.terminate()
+        retire(slot)
         pending?.reject(new Error('layout worker errored'))
         pump()
       }

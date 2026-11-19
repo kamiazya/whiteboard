@@ -34,7 +34,6 @@ import {
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { resolveCanvasSymbol } from '@kamiazya/whiteboard-plugin-visual'
-import { isCoreUnrecoverable } from './core-trap.js'
 import { decodeSpatialSnapshot } from './decode-spatial-snapshot.js'
 import { outlineFromSpatial } from './document-outline.js'
 import { unhandledKind } from './exhaustive.js'
@@ -60,6 +59,7 @@ import { namesAReference } from './names-a-reference.js'
 import { startLayoutCore } from './page-layout-core.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
 import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
+import { isCoreUnrecoverable } from './spatial/core-trap.js'
 import { layoutCoreReady } from './spatial/layout-core.js'
 import {
   type RenderCanvasCoreOptions,

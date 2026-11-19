@@ -1,11 +1,9 @@
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import { isCoreTrap, isCoreUnrecoverable } from '../core-trap.js'
+import { loadOracleGlue } from '../../../vitest.oracle-glue.js'
+import { isCoreTrap, isCoreUnrecoverable } from './core-trap.js'
 import type { LayoutCoreHost } from './layout-core.js'
 import { createLayoutCoreHost } from './layout-core.js'
 import { renderCanvasToSvgWith } from './scene-render-core.js'
@@ -28,8 +26,6 @@ vi.mock('./layout-core.js', async (importOriginal) => ({
   currentLayoutCore: () => host.current?.current(),
 }))
 
-const dir = process.env.WHITEBOARD_WASM_DIR ?? ''
-
 interface OracleGlue {
   poison_instance(): void
 }
@@ -40,9 +36,7 @@ const canvas = {
 }
 
 async function realm(traps: 'refuse' | 'throw') {
-  const module = (await import(
-    /* @vite-ignore */ pathToFileURL(join(dir, 'whiteboard_wasm.js')).href
-  )) as OracleGlue & CoreGlue
+  const { glue: module, wasm } = await loadOracleGlue<OracleGlue & CoreGlue>()
   // The next layout call poisons the instance from inside the artifact, so the
   // trap surfaces through the shim's own guard and the instance is really reset.
   let trapNext = false
@@ -56,7 +50,7 @@ async function realm(traps: 'refuse' | 'throw') {
       return module.layout_spatial_canvas(...args)
     },
   } as unknown as CoreGlue
-  const core = coreFrom(glue, readFileSync(join(dir, 'whiteboard_wasm_bg.wasm')))
+  const core = coreFrom(glue, wasm)
   host.current = createLayoutCoreHost(async () => core as unknown as WebCore, { traps })
   await host.current.ready()
   return {

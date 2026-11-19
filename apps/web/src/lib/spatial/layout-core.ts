@@ -3,7 +3,7 @@ import type { LayoutCore, LayoutRefusal } from '@kamiazya/whiteboard-canvas-rend
 // of codec would carry its readers (the schemas) into the boot bundle.
 // Installing the OKF and JSON Canvas cores into codec is `codec-cores.ts`'s,
 // which only the call sites that read or write them import.
-import { isCoreTrap } from '../core-trap.js'
+import { isCoreTrap } from './core-trap.js'
 import type { WebCore } from './web-core.js'
 
 /**

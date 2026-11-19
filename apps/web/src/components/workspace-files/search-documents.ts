@@ -13,9 +13,9 @@
 
 import { parentOfPath } from '@kamiazya/whiteboard-model'
 import { folderNamesOf, foldForSearch, isSearchUnavailable } from '@kamiazya/whiteboard-search'
-import { isCoreTrap } from '../../lib/core-trap.js'
 import { compareDocumentEntries, type WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { FolderNames } from '../../lib/folder-names.js'
+import { isCoreTrap } from '../../lib/spatial/core-trap.js'
 
 const NO_NAMES: FolderNames = new Map()
 

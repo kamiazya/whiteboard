@@ -341,7 +341,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/command-writes.ts#writeCommandTarget': 119,
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
-  'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 153,
+  'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 159, // +6: a fatal reply retires its worker before it settles
   'apps/web/src/lib/layout-worker.ts#handleLayout': 69, // +1: commentLayer, for a thumbnail drawn without comments
   'apps/web/src/lib/browser-files-source.ts#createBrowserFilesSource': 277,
   // The credential negotiates the `prf` extension at CREATE (ADR-0042 d6),

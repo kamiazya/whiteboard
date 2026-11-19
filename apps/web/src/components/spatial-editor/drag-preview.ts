@@ -27,7 +27,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
-import { isCoreTrap } from '../../lib/core-trap.js'
+import { isCoreTrap } from '../../lib/spatial/core-trap.js'
 import type { Box, NodeBox } from '../../lib/spatial/geometry.js'
 import { hitTest, resizeBoxByDelta } from '../../lib/spatial/geometry.js'
 import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'

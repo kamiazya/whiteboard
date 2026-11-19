@@ -54,7 +54,6 @@ import {
 } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { touchContentTimestamp } from './content-timestamp.js'
-import { isCoreTrap } from './core-trap.js'
 import { createSeededDocumentAt } from './create-seeded-document.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import { DocumentFileStore } from './document-file-store.js'
@@ -65,6 +64,7 @@ import {
   WorkspaceMissingError,
 } from './files-source.js'
 import { searchReady } from './search-core.js'
+import { isCoreTrap } from './spatial/core-trap.js'
 import {
   type ContentRecord,
   lazyContentRecord,

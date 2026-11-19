@@ -25,7 +25,7 @@
  */
 
 import { isSearchUnavailable, markdownPlainText } from '@kamiazya/whiteboard-search'
-import { isCoreTrap } from './core-trap.js'
+import { isCoreTrap } from './spatial/core-trap.js'
 
 export function commentExcerpt(body: string): string {
   try {
