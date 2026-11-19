@@ -178,6 +178,10 @@ fn bindgen(target_dir: &Path) -> Result<Vec<PathBuf>, Vec<String>> {
             "web",
             "--remove-name-section",
             "--remove-producers-section",
+            // Generates `__wbg_reset_state`, the only way to replace an
+            // instance a panic aborted: plain `initSync` returns early once
+            // an instance is set. Pinned by wasm-bindgen's `=` version.
+            "--experimental-reset-state-function",
             "--out-dir",
         ])
         .arg(&out)

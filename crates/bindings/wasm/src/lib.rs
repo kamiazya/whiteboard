@@ -42,16 +42,29 @@ pub mod spatial_layout;
 /// reports a different value: a test lane handed the shipped artifact, or a
 /// shim handed the oracle one, is refused at init.
 #[cfg(not(feature = "oracle-surface"))]
-pub const ABI_VERSION: &str = "45";
+pub const ABI_VERSION: &str = "46";
 /// See the default build's constant.
 #[cfg(feature = "oracle-surface")]
-pub const ABI_VERSION: &str = "45+oracle-surface";
+pub const ABI_VERSION: &str = "46+oracle-surface";
 
 /// The ABI identifier the shim compares against its own.
 #[wasm_bindgen]
 #[must_use]
 pub fn abi_version() -> String {
     ABI_VERSION.to_owned()
+}
+
+/// Traps on purpose, so the shim's recovery from a dead instance is tested
+/// against a real abort rather than a stand-in. Oracle builds only: a shipped
+/// artifact must not carry an export whose job is to kill the instance.
+///
+/// # Panics
+/// Always.
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen)]
+#[cfg(any(test, feature = "oracle-surface"))]
+#[expect(clippy::panic, reason = "the deliberate trap the poison-and-recover scenario needs")]
+pub fn poison_instance() {
+    panic!("poison_instance: deliberate trap");
 }
 
 /// `det::math::hypot` over two arrays, one answer per index.
@@ -116,7 +129,9 @@ pub fn edge_route_on_grid(input: &[f64]) -> Vec<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ABI_VERSION, abi_version, det_cos, det_hypot, det_sin, edge_route_on_grid};
+    use super::{
+        ABI_VERSION, abi_version, det_cos, det_hypot, det_sin, edge_route_on_grid, poison_instance,
+    };
 
     #[test]
     fn the_grid_export_flattens_the_route_and_refuses_a_malformed_input() {
@@ -140,5 +155,11 @@ mod tests {
     #[test]
     fn exports_the_declared_abi_version() {
         assert_eq!(abi_version(), ABI_VERSION);
+    }
+
+    #[test]
+    #[should_panic(expected = "deliberate trap")]
+    fn poison_instance_panics() {
+        poison_instance();
     }
 }
