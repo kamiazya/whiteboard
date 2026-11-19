@@ -1,7 +1,12 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { Finalizer } from './font-handles.js'
 import { type RefusalCode, SEARCH_OP_CAPS } from './generated/input-caps.js'
-import { assertLive, finalizerPerGeneration, generationOf, isRecoveryError } from './recover.js'
+import {
+  assertLive,
+  type Finalizer,
+  finalizerPerGeneration,
+  generationOf,
+  isRecoveryError,
+} from './recover.js'
 
 // Lexical search over the wasm artifact (`crates/bindings/wasm/src/search`):
 // one export, `search_op`, takes `[op, ...args]` as JSON and answers

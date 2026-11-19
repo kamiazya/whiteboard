@@ -8,23 +8,18 @@ import {
   CoreUnrecoverable,
   coreFrom,
   EXPECTED_ABI,
-  MAX_RESET_ATTEMPTS,
 } from './index.js'
 import { LayoutCaches } from './layout-caches.js'
-import { recoverable } from './recover.js'
+import { MAX_RESET_ATTEMPTS, recoverable } from './recover.js'
 import { searchOver } from './search.js'
 
 const trap = () => Object.assign(new Error('unreachable'), { name: 'RuntimeError' })
 const overflow = () =>
   Object.assign(new Error('Maximum call stack size exceeded'), { name: 'RangeError' })
 
-/**
- * A glue whose instance is a counter of resets, whose next call to a named
- * export throws what it is told to, and whose handles restart from 0 in each
- * instance as the core's do.
- */
-function fakeGlue() {
-  const state = {
+/** What the fake instance keeps and what a test steers it by. */
+function newState() {
+  return {
     resets: 0,
     resetFails: 0,
     abi: EXPECTED_ABI,
@@ -34,10 +29,25 @@ function fakeGlue() {
     registered: 0,
     nextHandle: 0,
   }
+}
+
+/**
+ * A glue whose instance is a counter of resets, whose next call to a named
+ * export throws what it is told to, and whose handles restart from 0 in each
+ * instance as the core's do.
+ */
+function fakeGlue() {
+  const state = newState()
   const maybeThrow = () => {
     const err = state.nextThrow
     state.nextThrow = undefined
     if (err !== undefined) throw err
+  }
+  const answer = (op: string) => {
+    if (op === 'index-new') return `["ok",${state.nextHandle++}]`
+    if (op === 'fold') return '["ok","folded"]'
+    if (op === 'index-size') return '["ok",0,0]'
+    return '["ok",true]'
   }
   const glue = {
     initSync: () => ({}),
@@ -54,10 +64,7 @@ function fakeGlue() {
       const [op, ...args] = JSON.parse(request) as [string, ...unknown[]]
       state.searchCalls.push([op, ...args])
       maybeThrow()
-      if (op === 'index-new') return `["ok",${state.nextHandle++}]`
-      if (op === 'fold') return '["ok","folded"]'
-      if (op === 'index-size') return '["ok",0,0]'
-      return '["ok",true]'
+      return answer(op)
     },
     register_layout_fonts() {
       maybeThrow()

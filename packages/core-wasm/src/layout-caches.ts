@@ -1,5 +1,4 @@
-import type { Finalizer } from './font-handles.js'
-import { finalizerPerGeneration, generationOf } from './recover.js'
+import { type Finalizer, finalizerPerGeneration, generationOf } from './recover.js'
 
 // A caller's content cache, kept in the core (owner decision q56): a layout
 // names it by a surface id this module mints once per cache object and core,

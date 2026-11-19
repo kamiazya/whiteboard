@@ -1,5 +1,3 @@
-import type { Finalizer } from './font-handles.js'
-
 // A panic aborts the wasm instance (`panic = "abort"`), and from the trap on
 // the instance keeps answering over whatever state the panic interrupted. So a
 // call that traps discards the instance (wasm-bindgen's reset-state function
@@ -12,6 +10,12 @@ import type { Finalizer } from './font-handles.js'
 // something else (or nothing) in the new one, which numbers its handles from
 // zero. Every handle therefore carries the generation it was minted in; a
 // handle from an older one is refused, and a finalizer for one does nothing.
+
+/** What releases a handle once the object naming it is collected; a `FinalizationRegistry`. */
+export interface Finalizer {
+  register(target: object, handle: number, token: object): void
+  unregister(token: object): void
+}
 
 /** A call trapped; the instance was discarded and the next call runs on a fresh one. */
 export class CoreInstanceTrapped extends Error {

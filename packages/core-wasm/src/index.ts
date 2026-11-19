@@ -82,8 +82,6 @@ export {
   CoreHandleLost,
   CoreInstanceTrapped,
   CoreUnrecoverable,
-  MAX_RESET_ATTEMPTS,
-  type RecoveryLog,
 } from './recover.js'
 
 /** The artifact speaks another ABI than this shim: the two came from different commits. */

@@ -1,5 +1,5 @@
 import { REGISTER_LAYOUT_FONTS_CAPS, type RefusalCode } from './generated/input-caps.js'
-import { finalizerPerGeneration, generationOf } from './recover.js'
+import { type Finalizer, finalizerPerGeneration, generationOf } from './recover.js'
 import { wireOf } from './value-wire.js'
 
 // The faces a font-table measurer reads cross into the core once, at
@@ -32,11 +32,7 @@ interface FontsErrors {
   refused(operation: string, code: RefusalCode, detail?: string): Error
 }
 
-/** What releases a handle once the measurer naming it is collected; a `FinalizationRegistry`. */
-export interface Finalizer {
-  register(target: object, handle: number, token: object): void
-  unregister(token: object): void
-}
+export type { Finalizer }
 
 const OPERATION = 'register_layout_fonts'
 
