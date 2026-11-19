@@ -25,9 +25,11 @@ const SCANNED = /^(?:apps|packages)\/[^/]+\/src\//
 const ADAPTER = 'packages/loro-adapter/src/'
 
 /**
- * Whether the file names `readNow` anywhere code can reach it: a call, a method
- * taken as a value, an import under any alias, a bracket access. A bare reference
+ * Whether the file USES `readNow`: a call, a method taken as a value, a bracket
+ * access, under the name or an alias it was imported as. A bare reference
  * counts, since `.map(engine.readNow)` is the same dependence with no call to see.
+ * An import or re-export on its own does not: it reads nothing, and the file
+ * that goes on to use the name is the one listed.
  */
 const namesReadNow = (path: string, text: string): boolean =>
   countNamedUses(path, text, ['readNow']) > 0
@@ -88,11 +90,13 @@ describe('the scan reads every form of the call', () => {
     expect(found(at, text)).toEqual([at])
   })
 
-  it('skips a comment, a string, a test, loro-adapter itself and a look-alike name', () => {
+  it('skips a comment, a string, a test, loro-adapter itself, a look-alike name and an unused import', () => {
     expect(found(at, '// engine.readNow(request)')).toEqual([])
     expect(found(at, 'const text = "engine.readNow(request)"')).toEqual([])
     expect(found(at, 'engine.readNowAndThen(request)')).toEqual([])
     expect(found(at, "const name = 'readNow'")).toEqual([])
+    expect(found(at, "import { readNow } from 'x'")).toEqual([])
+    expect(found(at, "export { readNow } from 'x'")).toEqual([])
     expect(found('apps/web/src/lib/a.test.ts', 'engine.readNow(request)')).toEqual([])
     expect(found('packages/loro-adapter/src/a.ts', 'engine.readNow(request)')).toEqual([])
   })
