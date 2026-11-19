@@ -205,6 +205,11 @@ export type WorkerFailure = {
   readonly type: 'failed'
   readonly id: number
   readonly reason: string
+  /**
+   * The worker's wasm instance trapped and could not be reset, so it has
+   * closed itself: it answers nothing more, and the caller replaces it.
+   */
+  readonly fatal?: true
 }
 
 export type MarkdownRailResponse =

@@ -1,5 +1,5 @@
 import { getAppLogger } from './app-logger.js'
-import { installLayoutCore, layoutCoreReady } from './spatial/layout-core.js'
+import { installLayoutCore, layoutCoreReady, type TrapPolicy } from './spatial/layout-core.js'
 
 /**
  * Installs this realm's Rust core and settles once it has loaded, so the first
@@ -12,8 +12,8 @@ import { installLayoutCore, layoutCoreReady } from './spatial/layout-core.js'
  * The same instance answers search, installed here so the file list, which
  * filters as someone types, finds it ready.
  */
-export function startLayoutCore(): Promise<void> {
-  installLayoutCore()
+export function startLayoutCore(options: { readonly traps?: TrapPolicy } = {}): Promise<void> {
+  installLayoutCore(options)
   return layoutCoreReady().then(installSearch, (err: unknown) => {
     getAppLogger('layout-core').error('the Rust core did not load; nothing can be laid out', err)
   })

@@ -46,6 +46,25 @@ describe('searchDocuments without a usable search core', () => {
     expect(searchDocuments(docs, 'triage').map((d) => d.path)).toEqual(['inbox/triage'])
   })
 
+  it.each([
+    'CoreInstanceTrapped',
+    'CoreUnrecoverable',
+    'CoreHandleLost',
+  ])('compares lower-cased text for the call whose core raised %s', (name) => {
+    realm = installSearchCore(undefined)
+    if (realm === undefined) throw new Error('the test realm installs a search core')
+    installSearchCore({
+      ...realm,
+      foldForSearch: () => {
+        throw Object.assign(new Error('the instance was reset'), { name })
+      },
+      folderNamesOf: () => {
+        throw Object.assign(new Error('the instance was reset'), { name })
+      },
+    })
+    expect(searchDocuments(docs, 'triage').map((d) => d.path)).toEqual(['inbox/triage'])
+  })
+
   it('does not hide a failure that is neither', () => {
     realm = installSearchCore(undefined)
     if (realm === undefined) throw new Error('the test realm installs a search core')

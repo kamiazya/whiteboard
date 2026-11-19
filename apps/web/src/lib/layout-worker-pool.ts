@@ -202,7 +202,18 @@ export function createLayoutWorkerPool<Req extends { id: number }>(options: {
   const spawn = (): Held => {
     const worker = options.createWorker()
     const slot: Held = { worker, busyWith: null }
-    worker.onmessage = (event) => settle(slot, event.data.id, event.data)
+    worker.onmessage = (event) => {
+      // A worker that closed itself (its core could not be reset) posts this
+      // and nothing after, and never fires `onerror`: it leaves the pool
+      // BEFORE its request settles, since settling pumps the queue and would
+      // hand the next request to a worker that is gone.
+      if ((event.data as { fatal?: unknown }).fatal === true) {
+        const at = slots.indexOf(slot)
+        if (at !== -1) slots.splice(at, 1)
+        worker.terminate()
+      }
+      settle(slot, event.data.id, event.data)
+    }
     if ('onerror' in worker) {
       worker.onerror = () => {
         const pending = slot.busyWith

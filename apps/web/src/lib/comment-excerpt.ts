@@ -23,7 +23,9 @@
  * the core before its first render, so this is the degraded path and not the
  * usual one, and the source still identifies the conversation.
  */
+
 import { isSearchUnavailable, markdownPlainText } from '@kamiazya/whiteboard-search'
+import { isCoreTrap } from './core-trap.js'
 
 export function commentExcerpt(body: string): string {
   try {
@@ -31,7 +33,7 @@ export function commentExcerpt(body: string): string {
   } catch (err) {
     // No core in this realm, or a body past what it reads: the source is a
     // worse summary than the rendering and a better one than nothing.
-    if (isSearchUnavailable(err)) return body.trim()
+    if (isSearchUnavailable(err) || isCoreTrap(err)) return body.trim()
     throw err
   }
 }

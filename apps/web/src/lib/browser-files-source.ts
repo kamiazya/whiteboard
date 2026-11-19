@@ -54,6 +54,7 @@ import {
 } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { touchContentTimestamp } from './content-timestamp.js'
+import { isCoreTrap } from './core-trap.js'
 import { createSeededDocumentAt } from './create-seeded-document.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import { DocumentFileStore } from './document-file-store.js'
@@ -207,7 +208,7 @@ function refusedAs<T>(degraded: T, answer: () => T): T {
   try {
     return answer()
   } catch (err) {
-    if (isSearchRefusal(err)) return degraded
+    if (isSearchRefusal(err) || isCoreTrap(err)) return degraded
     throw err
   }
 }

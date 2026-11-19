@@ -13,6 +13,7 @@
 
 import { parentOfPath } from '@kamiazya/whiteboard-model'
 import { folderNamesOf, foldForSearch, isSearchUnavailable } from '@kamiazya/whiteboard-search'
+import { isCoreTrap } from '../../lib/core-trap.js'
 import { compareDocumentEntries, type WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { FolderNames } from '../../lib/folder-names.js'
 
@@ -20,7 +21,8 @@ const NO_NAMES: FolderNames = new Map()
 
 /**
  * `answer`, or `degraded` when search has no core to answer (the wasm did not
- * load) or declines the input past a cap. This list filters as someone types
+ * load) declines the input past a cap, or trapped its instance
+ * (reset: the next call is answered). This list filters as someone types
  * and must draw whatever happens, so it falls back to plain text rather than
  * failing a render.
  */
@@ -28,7 +30,7 @@ function orDegraded<T>(degraded: T, answer: () => T): T {
   try {
     return answer()
   } catch (err) {
-    if (isSearchUnavailable(err)) return degraded
+    if (isSearchUnavailable(err) || isCoreTrap(err)) return degraded
     throw err
   }
 }

@@ -34,6 +34,7 @@ import {
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { resolveCanvasSymbol } from '@kamiazya/whiteboard-plugin-visual'
+import { isCoreUnrecoverable } from './core-trap.js'
 import { decodeSpatialSnapshot } from './decode-spatial-snapshot.js'
 import { outlineFromSpatial } from './document-outline.js'
 import { unhandledKind } from './exhaustive.js'
@@ -82,7 +83,10 @@ const fontReady = ensureViewerFontLoaded()
 // place. A load that fails is logged once; each request after it asks for the
 // core again (`measurable`) and draws the missing-core notice while it cannot
 // load, so a page whose own retry loaded re-asks a worker that loads too.
-const coreReady = startLayoutCore()
+// A trap is the request's failure here, not a notice drawn into a picture the
+// store could keep: the asking thread redraws it, and an instance that cannot
+// be reset must reach `fail` to retire this worker.
+const coreReady = startLayoutCore({ traps: 'throw' })
 /** Every theme face posted so far, settled — what a layout waits on before it measures. */
 let facesReady: Promise<unknown> = Promise.resolve()
 
@@ -132,12 +136,18 @@ function remember(
  * call rather than a font gate and a catch block written out per arm.
  */
 function fail(id: number, cause: unknown): void {
+  const fatal = isCoreUnrecoverable(cause)
   const failed: WorkerFailure = {
     type: 'failed',
     id,
     reason: describeThrown(cause),
+    ...(fatal ? { fatal: true } : {}),
   }
   self.postMessage(failed)
+  // An instance that could not be reset refuses every later call, so this
+  // worker could only answer failures. Closing it after the reply is posted
+  // leaves the pool's and the editor's replacement of it to the reply's flag.
+  if (fatal) self.close()
 }
 
 /**

@@ -21,6 +21,7 @@ import { findFolded, isSearchUnavailable } from '@kamiazya/whiteboard-search'
 import { LayoutGrid, List } from 'lucide-react'
 import { type KeyboardEvent, type ReactNode, useContext, useId, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
+import { isCoreTrap } from '../../lib/core-trap.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentAccessibleName, documentLabel } from '../../lib/document-label.js'
 import { type FolderNames, folderDisplayName, folderTrail } from '../../lib/folder-names.js'
@@ -285,7 +286,7 @@ function foundIn(text: string, query: string) {
   try {
     return findFolded(text, query)
   } catch (err) {
-    if (isSearchUnavailable(err)) return undefined
+    if (isSearchUnavailable(err) || isCoreTrap(err)) return undefined
     throw err
   }
 }
