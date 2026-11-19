@@ -384,6 +384,16 @@ function RowResolve({
   )
 }
 
+/**
+ * The row's plain text, parsed once per body: the row re-renders whenever the
+ * page does — on a markdown document that is every keystroke — and the subject
+ * and both Resolve labels read it.
+ */
+function useRowSubject(thread: CommentThread): string {
+  const firstBody = thread.messages[0]?.body ?? ''
+  return useMemo(() => commentExcerpt(firstBody), [firstBody])
+}
+
 export function ThreadRow({
   thread,
   openThreadId,
@@ -430,11 +440,7 @@ export function ThreadRow({
   // crossing is the whole transition and this stays false.
   const about = anchorLabelOf?.(thread.anchor) ?? anchorLabel(thread.anchor)
   const leaving = pending.has(thread.id) && filter !== 'all' && status !== filter
-  // The row's plain text, parsed once per body: the row re-renders whenever the
-  // page does — on a markdown document that is every keystroke — and the
-  // subject and both Resolve labels read it.
-  const firstBody = thread.messages[0]?.body ?? ''
-  const subject = useMemo(() => commentExcerpt(firstBody), [firstBody])
+  const subject = useRowSubject(thread)
   return (
     <li
       data-thread-id={thread.id}
