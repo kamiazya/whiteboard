@@ -543,6 +543,62 @@ function describeJournal(makeEngine: () => CrdtEngine) {
   })
 }
 
+/** The body a fresh engine holds once it has rebuilt a document from its journal. */
+async function rebuiltBody(
+  makeEngine: () => CrdtEngine,
+  journal: Parameters<ReturnType<typeof journaledEngine>['rehydrate']>[0],
+): Promise<string> {
+  const afresh = journaledEngine(makeEngine())
+  return bodyOf(afresh, afresh.rehydrate(journal).handle)
+}
+
+function describeJournalOfParkedUpdates(makeEngine: () => CrdtEngine) {
+  describe('a journal keeps an update opened before the one it builds on', () => {
+    // B is authored on top of A; a keeper's log can hand B over first.
+    const authored = () => {
+      const author = makeEngine()
+      const { handle } = author.open({ peer: '7' })
+      const a = write(author, handle, 'writeMarkdownBody', { body: 'a' }).localUpdate as string
+      const b = splice(author, handle, 1, 0, 'b').localUpdate as string
+      return { a, b }
+    }
+
+    it('rebuilds the body once the missing update arrives', async () => {
+      const { a, b } = authored()
+      const journaled = journaledEngine(makeEngine())
+      const { handle } = journaled.open({ peer: '1', updates: [b] })
+      journaled.import({ handle, bytes: a })
+      expect(await bodyOf(journaled, handle)).toBe('ab')
+      expect(await rebuiltBody(makeEngine, journaled.journal(handle))).toBe('ab')
+    })
+
+    it('does not fold a still-parked update away when the keeper acknowledges', async () => {
+      const { a, b } = authored()
+      const journaled = journaledEngine(makeEngine())
+      const { handle } = journaled.open({ peer: '1', updates: [b] })
+      const mine = write(journaled, handle, 'writeMarkdownBody', { body: 'mine' })
+      journaled.acknowledge(handle, (mine as { seq?: number }).seq ?? 1)
+      journaled.import({ handle, bytes: a })
+      const live = await bodyOf(journaled, handle)
+
+      const afresh = journaledEngine(makeEngine())
+      const again = afresh.rehydrate(journaled.journal(handle))
+      expect(await bodyOf(afresh, again.handle)).toBe(live)
+      expect(afresh.journal(again.handle).pending.length).toBeGreaterThan(0)
+    })
+
+    it('rebuilds a fork that carried a parked update', async () => {
+      const { a, b } = authored()
+      const journaled = journaledEngine(makeEngine())
+      const source = journaled.open({ peer: '1', updates: [b] })
+      const fork = journaled.fork({ handle: source.handle, peer: '2' })
+      journaled.import({ handle: fork.handle, bytes: a })
+      expect(await bodyOf(journaled, fork.handle)).toBe('ab')
+      expect(await rebuiltBody(makeEngine, journaled.journal(fork.handle))).toBe('ab')
+    })
+  })
+}
+
 function describeConvergence(makeEngine: () => CrdtEngine) {
   describe('two engines that trade their local updates converge', () => {
     // A boundary between code points, in UTF-16 units: an edit that cut an
@@ -681,6 +737,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeOpenWithUpdates(makeEngine)
     describeTrim(makeEngine)
     describeJournal(makeEngine)
+    describeJournalOfParkedUpdates(makeEngine)
     describeConvergence(makeEngine)
   })
 }
