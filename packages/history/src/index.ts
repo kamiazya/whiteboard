@@ -14,3 +14,4 @@ export {
 } from './checkpoints/scheduler.js'
 export { compactionCut } from './compaction-cut.js'
 export { frontiersFromBase64, frontiersToBase64 } from './frontiers-base64.js'
+export { compareVersions } from './version-vector.js'
