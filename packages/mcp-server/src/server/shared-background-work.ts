@@ -1,8 +1,7 @@
-import type { CheckpointScheduler } from '@kamiazya/whiteboard-history'
 import { FILE_GC_STOP_TIMEOUT_MS } from '../shared/stop-timeouts.js'
 import type { BackgroundWork, BackgroundWorker } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
-import { installAutoCheckpoint } from './store/auto-checkpoint.js'
+import { type DocumentCheckpointScheduler, installAutoCheckpoint } from './store/auto-checkpoint.js'
 import {
   disposeAutoCompact,
   installAutoCompact,
@@ -270,11 +269,13 @@ export function createSharedWorkers(
  */
 export interface SharedWorkerArming {
   /** Read at START and STOP time rather than captured; see `CheckpointHolder`. */
-  checkpointScheduler: () => CheckpointScheduler | undefined
+  checkpointScheduler: () => DocumentCheckpointScheduler | undefined
   fileGc: BackgroundWorker
 }
 
-function autoCheckpointWork(scheduler: () => CheckpointScheduler | undefined): BackgroundWork {
+function autoCheckpointWork(
+  scheduler: () => DocumentCheckpointScheduler | undefined,
+): BackgroundWork {
   return {
     name: 'auto-checkpoint',
     trigger: 'a document update, taken once that document has been quiet for five minutes',

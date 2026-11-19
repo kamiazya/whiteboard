@@ -1,3 +1,4 @@
+import { compactionCut } from '@kamiazya/whiteboard-history'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { isDatabaseBusy } from '@kamiazya/whiteboard-ports'
 import {
@@ -6,7 +7,7 @@ import {
   type WorkspaceDocCursor,
   type WorkspaceDocs,
 } from '@kamiazya/whiteboard-workspace-index'
-import { type LoroDoc, VersionVector } from 'loro-crdt'
+import { type Frontiers, type LoroDoc, type PeerID, VersionVector } from 'loro-crdt'
 import { getLogger } from '../log.js'
 import { corruptStoredData, isCorruptStoredDataError } from './corrupt-stored-data.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
@@ -471,4 +472,25 @@ export function cacheBackedWorkspaceDocs(scope: StoreScope = globalStoreScope): 
       )
     },
   }
+}
+
+/**
+ * `compactionCut` over a live record: its frontiers are turned into version
+ * vectors here, where the op log is, and the cut is turned back. A point the
+ * record does not hold has no vector, and then there is nothing to cut.
+ */
+export function compactionCutOfDoc(doc: LoroDoc, points: readonly Frontiers[]): Frontiers | null {
+  let vectors: Array<Map<string, number>>
+  try {
+    vectors = points.map((point) => new Map<string, number>(doc.frontiersToVV(point).toJSON()))
+  } catch {
+    return null
+  }
+  // The root's own vector, not `shallowSinceVV()`: that one stops one op short
+  // of the root, so a cut one op before the root compared equal to it.
+  const root = new Map<string, number>(doc.frontiersToVV(doc.shallowSinceFrontiers()).toJSON())
+  const cut = compactionCut(vectors, root)
+  return cut === null
+    ? null
+    : doc.vvToFrontiers(VersionVector.parseJSON(new Map(cut) as Map<PeerID, number>))
 }

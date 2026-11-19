@@ -28,7 +28,6 @@
  * so is what to do when one fails.
  */
 import { isSelfOrDescendant, rebasePath } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
 import { frontiersToBase64 } from '../frontiers-base64.js'
 
 /** The pause after which a document is considered settled. */
@@ -36,11 +35,17 @@ export const CHECKPOINT_QUIET_MS = 5 * 60_000
 /** How long editing may run with no pause before a checkpoint is taken regardless. */
 const CHECKPOINT_CEILING_MS = 30 * 60_000
 
-export interface CheckpointSchedulerOptions<Entry> {
+export interface CheckpointSchedulerOptions<Doc, Entry> {
   readonly quietMs?: number
   readonly ceilingMs?: number
+  /**
+   * The document's encoded frontier now. Asked when a checkpoint is about to
+   * be taken, not when an update arrives, so a burst of edits pays for one
+   * read. The scheduler never decodes it: it only asks whether it moved.
+   */
+  readonly frontierOf: (doc: Doc) => Uint8Array
   /** Writes the checkpoint. */
-  readonly save: (workspaceId: string, path: string, doc: LoroDoc) => Promise<Entry>
+  readonly save: (workspaceId: string, path: string, doc: Doc) => Promise<Entry>
   /**
    * Does the newest STORED checkpoint already hold this document's state?
    *
@@ -76,9 +81,9 @@ export interface CheckpointSchedulerOptions<Entry> {
   readonly onError: (err: unknown, at: { workspaceId: string; path: string }) => void
 }
 
-export interface CheckpointScheduler {
+export interface CheckpointScheduler<Doc> {
   /** "This document just changed." Cheap, synchronous, and safe to call per update. */
-  (workspaceId: string, path: string, doc: LoroDoc): void
+  (workspaceId: string, path: string, doc: Doc): void
   /**
    * "This document, and everything below it, now lives at `to`." Pending work
    * follows the move: the checkpoint is keyed by path and the keeper resolves
@@ -99,9 +104,9 @@ export interface CheckpointScheduler {
   stop(): void
 }
 
-interface Pending {
+interface Pending<Doc> {
   timer: ReturnType<typeof setTimeout>
-  doc: LoroDoc
+  doc: Doc
   /** When the run of edits this checkpoint would cover began. */
   since: number
 }
@@ -122,7 +127,7 @@ function pathAfterMove(key: string, workspaceId: string, from: string, to: strin
  * smaller harm than the pause a person stopped at going unrecorded.
  */
 async function keeperHolds(
-  options: Pick<CheckpointSchedulerOptions<unknown>, 'alreadyCheckpointed'>,
+  options: Pick<CheckpointSchedulerOptions<unknown, unknown>, 'alreadyCheckpointed'>,
   workspaceId: string,
   path: string,
 ): Promise<boolean> {
@@ -139,16 +144,16 @@ async function keeperHolds(
  * for, and the taking itself — the part that needs the keeper's `save`,
  * kept apart from the timers that decide WHEN.
  */
-function createCheckpointTaker<Entry>(options: CheckpointSchedulerOptions<Entry>) {
+function createCheckpointTaker<Doc, Entry>(options: CheckpointSchedulerOptions<Doc, Entry>) {
   /** The frontier each key was last checkpointed at — the diff check. */
   const savedAt = new Map<string, string>()
 
   return {
-    async take(workspaceId: string, path: string, doc: LoroDoc): Promise<void> {
+    async take(workspaceId: string, path: string, doc: Doc): Promise<void> {
       const key = `${workspaceId}/${path}`
       // Encoding a frontier is free (measured at 0ms), so the "has anything
       // changed" question costs nothing and a quiet document writes no row.
-      const now = frontiersToBase64(doc.oplogFrontiers())
+      const now = frontiersToBase64(options.frontierOf(doc))
       if (savedAt.get(key) === now) return
 
       // Memory said nothing, so ask the rows. A read per checkpoint is
@@ -180,15 +185,15 @@ function createCheckpointTaker<Entry>(options: CheckpointSchedulerOptions<Entry>
   }
 }
 
-export function createCheckpointScheduler<Entry>(
-  options: CheckpointSchedulerOptions<Entry>,
-): CheckpointScheduler {
+export function createCheckpointScheduler<Doc, Entry>(
+  options: CheckpointSchedulerOptions<Doc, Entry>,
+): CheckpointScheduler<Doc> {
   const quietMs = options.quietMs ?? CHECKPOINT_QUIET_MS
   const ceilingMs = options.ceilingMs ?? CHECKPOINT_CEILING_MS
   // In-place Map mutation is intentional throughout: this is closure-private
   // scheduler state, never shared or observed, so the immutability rule
   // (which guards shared/observable data) does not apply.
-  const pending = new Map<string, Pending>()
+  const pending = new Map<string, Pending<Doc>>()
   const inFlight = new Set<Promise<unknown>>()
   const taker = createCheckpointTaker(options)
 
@@ -206,7 +211,7 @@ export function createCheckpointScheduler<Entry>(
     inFlight.add(run)
   }
 
-  function arm(workspaceId: string, path: string, doc: LoroDoc, since: number): void {
+  function arm(workspaceId: string, path: string, doc: Doc, since: number): void {
     const key = `${workspaceId}/${path}`
     // The ceiling is measured from the START of this run of edits, so a
     // session that never pauses still gets checkpoints at that cadence
@@ -222,11 +227,11 @@ export function createCheckpointScheduler<Entry>(
     pending.set(key, { timer, doc, since })
   }
 
-  const trigger = ((workspaceId: string, path: string, doc: LoroDoc): void => {
+  const trigger = ((workspaceId: string, path: string, doc: Doc): void => {
     const existing = pending.get(`${workspaceId}/${path}`)
     if (existing) clearTimeout(existing.timer)
     arm(workspaceId, path, doc, existing?.since ?? Date.now())
-  }) as CheckpointScheduler
+  }) as CheckpointScheduler<Doc>
 
   trigger.moved = (workspaceId: string, from: string, to: string): void => {
     if (from === to) return

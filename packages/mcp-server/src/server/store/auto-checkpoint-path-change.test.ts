@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type CheckpointScheduler, createCheckpointScheduler } from '@kamiazya/whiteboard-history'
+import { encodeFrontiers, type LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
@@ -35,13 +36,14 @@ const { wbDocumentCreate, wbDocumentMove, wbDocumentDelete, createCanvasEditTool
 describe('a pending automatic checkpoint when its document moves or is deleted', () => {
   const saved: string[] = []
   const failed: string[] = []
-  let scheduler: CheckpointScheduler
+  let scheduler: CheckpointScheduler<LoroDoc>
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'wb-checkpoint-path-'))
     saved.length = 0
     failed.length = 0
-    scheduler = createCheckpointScheduler<void>({
+    scheduler = createCheckpointScheduler<LoroDoc, void>({
+      frontierOf: (doc) => encodeFrontiers(doc.oplogFrontiers()),
       quietMs: 60_000,
       save: async (_workspaceId, path) => {
         saved.push(path)

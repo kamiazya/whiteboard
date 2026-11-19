@@ -19,9 +19,6 @@ import {
   autoVersionsOverCap,
   CHECKPOINT_QUIET_MS,
   carriedAutoVersionsOverCap,
-  compactionCut,
-  frontiersFromBase64,
-  frontiersToBase64,
   MAX_AUTO_PER_DOCUMENT,
   MAX_MANUAL_PER_DOCUMENT,
   MAX_RESTORE_POINTS_PER_DOCUMENT,
@@ -30,8 +27,11 @@ import {
 } from '../src/index.js'
 import {
   answer,
+  compactionCutOverDoc,
   type FrontierPairs,
+  frontiersFromBase64ToFrontiers,
   frontiersOfPairs,
+  frontiersToBase64OfFrontiers,
   pairsOfFrontiers,
 } from '../src/test-utils/crdt-mechanics-oracle.js'
 
@@ -104,7 +104,7 @@ function cutRow(tag: string, bytes: Uint8Array, points: readonly FrontierPairs[]
     tag,
     ...args,
     result: answer(() => {
-      const cut = compactionCut(doc, points.map(frontiersOfPairs))
+      const cut = compactionCutOverDoc(doc, points.map(frontiersOfPairs))
       return cut === null ? null : pairsOfFrontiers(cut)
     }),
   })
@@ -201,7 +201,7 @@ for (const [i, pairs] of frontierSamples.entries()) {
     op: 'frontiersToBase64',
     tag: `sample-${i}`,
     frontiers: pairs,
-    result: answer(() => frontiersToBase64(frontiersOfPairs(pairs))),
+    result: answer(() => frontiersToBase64OfFrontiers(frontiersOfPairs(pairs))),
   })
 }
 for (let i = 0; i < 12; i++) {
@@ -211,7 +211,7 @@ for (let i = 0; i < 12; i++) {
     op: 'frontiersToBase64',
     tag: `history-${i}`,
     frontiers: pairs,
-    result: answer(() => frontiersToBase64(frontiersOfPairs(pairs))),
+    result: answer(() => frontiersToBase64OfFrontiers(frontiersOfPairs(pairs))),
   })
 }
 const texts = [
@@ -236,7 +236,7 @@ for (const [i, text] of texts.entries()) {
     op: 'frontiersFromBase64',
     tag: `text-${i}`,
     text,
-    result: answer(() => pairsOfFrontiers(frontiersFromBase64(text))),
+    result: answer(() => pairsOfFrontiers(frontiersFromBase64ToFrontiers(text))),
   })
 }
 

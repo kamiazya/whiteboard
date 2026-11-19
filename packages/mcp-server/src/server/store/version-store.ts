@@ -15,8 +15,13 @@ import { DocumentNotFoundError } from '@kamiazya/whiteboard-ports'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { Insertable } from 'kysely'
 import { sql } from 'kysely'
-import type { Frontiers, LoroDoc } from 'loro-crdt'
-import { VersionVector } from 'loro-crdt'
+import {
+  decodeFrontiers,
+  encodeFrontiers,
+  type Frontiers,
+  type LoroDoc,
+  VersionVector,
+} from 'loro-crdt'
 import { nanoid } from 'nanoid'
 import { getLogger } from '../log.js'
 import { validateDocumentPath, validateVersionId, validateWorkspaceId } from '../validators.js'
@@ -341,7 +346,7 @@ export class FileVersionStore implements VersionStore {
       if (opts.restoredFrom !== undefined) {
         await refusePastRestorePointCeiling(db, workspaceId, documentId)
       }
-      const frontiers = frontiersToBase64(storedWorkspace.frontiers())
+      const frontiers = frontiersToText(storedWorkspace.frontiers())
       await db
         .insertInto('versions')
         .values(
@@ -399,7 +404,7 @@ export class FileVersionStore implements VersionStore {
             opts: row,
             operator: row.operator,
             elementCount: row.elementCount,
-            frontiers: frontiersToBase64(row.frontiers),
+            frontiers: frontiersToText(row.frontiers),
             contentDigest: row.contentDigest,
             createdAt: row.createdAt,
           }),
@@ -660,7 +665,7 @@ export class FileVersionStore implements VersionStore {
       .execute()
     return rows.map((row) => {
       try {
-        return frontiersFromBase64(row.frontiers)
+        return frontiersFromText(row.frontiers)
       } catch (error) {
         throw corruptStoredData(
           `versions/${row.id}`,
@@ -754,10 +759,20 @@ export class FileVersionStore implements VersionStore {
   }
 }
 
+/** A frontier as the text a version row stores: the engine's bytes, base64. */
+function frontiersToText(frontiers: Frontiers): string {
+  return frontiersToBase64(encodeFrontiers(frontiers))
+}
+
+/** Throws on text that is not a stored frontier. */
+function frontiersFromText(text: string): Frontiers {
+  return decodeFrontiers(frontiersFromBase64(text))
+}
+
 /** Moves `doc` to a saved version's point; frontiers it cannot reach are corruption. */
 function checkoutVersion(doc: LoroDoc, versionId: string, frontiers: string): void {
   try {
-    doc.checkout(frontiersFromBase64(frontiers))
+    doc.checkout(frontiersFromText(frontiers))
   } catch (error) {
     throw corruptStoredData(
       `versions/${versionId}`,

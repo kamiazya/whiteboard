@@ -38,9 +38,11 @@ Four modules, and `src/index.ts` is the whole published surface:
   alone, so a promote never evicts the keeper's own autos.
 - `compaction-cut.ts`: where compaction may cut — the point every version
   descends from (per-peer minimum of their version vectors), never by date.
-  `null` means fold nothing.
-- `frontiers-base64.ts`: frontiers as text, through `model`'s base64 codec so
-  no keeper reaches for `Buffer`.
+  `null` means fold nothing. Over the plain version vectors beside it
+  (`compareVersions`, `intersectVersions`); the keeper holding the op log
+  converts frontiers to vectors and back.
+- `frontiers-base64.ts`: encoded frontiers (opaque bytes) as text, through
+  `model`'s base64 codec so no keeper reaches for `Buffer`.
 
 ## What does NOT belong here
 
@@ -69,8 +71,10 @@ eleven pointers at once.
 
 ## Dependency rules
 
-- Runtime: `loro-crdt` and `model`, and nothing else. `model` is here for its
-  base64 codec alone; there is no schema to own, so not `zod`.
+- Runtime: `model`, and nothing else. It is here for its base64 codec alone;
+  there is no schema to own, so not `zod`. No engine: frontiers arrive as
+  encoded bytes and version vectors as plain maps, so `loro-crdt` is a
+  devDependency of the tests and their oracle adapter only.
 - Forbidden: `node:*`, DOM globals, `inversify` — it runs in both roots and a
   worker. `Buffer` is the one that was here before the move; `model`'s base64
   codec is what replaced it.

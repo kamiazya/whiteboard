@@ -28,7 +28,7 @@ const { disposeAutoCompact } = await import('./store/auto-compact.js')
 function fakeScheduler() {
   const signalled: string[] = []
   const flush = vi.fn(async () => undefined)
-  const scheduler: CheckpointScheduler = Object.assign(
+  const scheduler: CheckpointScheduler<LoroDoc> = Object.assign(
     (workspaceId: string, path: string) => {
       signalled.push(`${workspaceId}/${path}`)
     },
@@ -47,7 +47,7 @@ describe('the auto-checkpoint declaration both kinds of root arm', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  function httpDeclaration(scheduler: () => CheckpointScheduler | undefined) {
+  function httpDeclaration(scheduler: () => CheckpointScheduler<LoroDoc> | undefined) {
     const declared = sharedBackgroundWork(createSharedWorkers('instance-a', globalStoreScope), {
       checkpointScheduler: scheduler,
       fileGc: { start: () => {}, stop: async () => {} },
