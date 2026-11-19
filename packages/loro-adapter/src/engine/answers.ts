@@ -73,6 +73,33 @@ function plain(value: unknown): unknown {
   return { $unrepresentable: typeof value }
 }
 
+/**
+ * What `plain` wrote, as the value it described. A reader's own consumer takes
+ * the answer back through here so an `undefined`, a non-finite number, a
+ * bigint, a `Set` or a `Map` is what the reader produced and not the marker
+ * that carried it over the wire. A loro state marker names exported bytes, which
+ * an answer cannot carry back, so it is refused.
+ */
+export function unplain(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(unplain)
+  if (typeof value !== 'object' || value === null) return value
+  const entries = Object.entries(value)
+  const [marker, body] = entries[0] ?? []
+  if (entries.length === 1 && marker !== undefined) {
+    if (marker === '$undefined') return undefined
+    if (marker === '$number') return Number(body)
+    if (marker === '$bigint') return BigInt(String(body))
+    if (marker === '$set') return new Set((body as unknown[]).map(unplain))
+    if (marker === '$map') {
+      return new Map((body as Array<[unknown, unknown]>).map(([k, v]) => [unplain(k), unplain(v)]))
+    }
+    if (marker === '$loroState' || marker === '$unrepresentable') {
+      throw new TypeError(`an answer cannot carry back ${marker}`)
+    }
+  }
+  return Object.fromEntries(entries.map(([key, member]) => [key, unplain(member)]))
+}
+
 const refusal = (error: unknown): Answer => ({
   err: error instanceof Error ? error.constructor.name : typeof error,
 })
