@@ -33,8 +33,7 @@ import { isShippedPath, isTestPath } from './source-scan.js'
  * Forwarded names with no importer, as `<entry path>#<name>`, each with why.
  * Shrink-only: an entry that gains an importer or goes away fails as stale.
  */
-const UNIMPORTED: Readonly<Record<string, string>> = {
-}
+const UNIMPORTED: Readonly<Record<string, string>> = {}
 
 /**
  * Forwards from a RUNTIME entry that only tests import through it, as

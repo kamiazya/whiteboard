@@ -69,7 +69,9 @@ describe('a core abort inside a request', () => {
   })
 
   it('answers an instance that could not be reset as the same refusal, saying so', async () => {
-    const app = daemonWhoseNextCallThrows(new CoreUnrecoverable('search', { cause: new Error('unreachable') }))
+    const app = daemonWhoseNextCallThrows(
+      new CoreUnrecoverable('search', { cause: new Error('unreachable') }),
+    )
 
     const res = await app.request(ROUTES[1][1], { headers: AUTH })
 
