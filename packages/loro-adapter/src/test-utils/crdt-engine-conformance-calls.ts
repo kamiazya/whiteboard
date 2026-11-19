@@ -7,7 +7,7 @@
 import { MARKDOWN_MAX_CHARS, documentEngine as wire } from '@kamiazya/whiteboard-model'
 import { decodeFrontiers, LoroDoc, VersionVector } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { frontierPairs, versionPairs } from '../engine/answers.js'
+import { exportedBytes, frontierPairs, versionPairs } from '../engine/answers.js'
 import type { CrdtEngine } from '../engine/types.js'
 import { exportWorkspaceSubtree } from '../workspace-tree.js'
 import {
@@ -94,7 +94,7 @@ export function describeFork(makeEngine: () => CrdtEngine) {
       expect(await bodyOf(engine, copy.handle)).toBe('shared copy')
       expect(await bodyOf(engine, handle)).toBe('origin shared')
       splice(engine, copy.handle, 0, 0, '>')
-      const theirs = engine.export({ handle: copy.handle, mode: 'update' }).bytes
+      const theirs = exportedBytes(engine.export({ handle: copy.handle, mode: 'update' }))
       engine.import({ handle, bytes: theirs })
       expect(await bodyOf(engine, handle)).toBe('origin >shared copy')
       expect(

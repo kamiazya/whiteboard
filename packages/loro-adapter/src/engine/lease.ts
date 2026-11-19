@@ -12,6 +12,7 @@ import {
   bytesToBase64,
   type documentEngine as wire,
 } from '@kamiazya/whiteboard-model'
+import { exportedBytes } from './answers.js'
 import { type AnswerShape, readValue, unwrapAnswer } from './read-value.js'
 import type { CrdtEngine } from './types.js'
 
@@ -80,7 +81,7 @@ export function versionOf(lease: RecordLease): LeaseVersion {
 }
 
 export function exportSnapshot(lease: RecordLease): Uint8Array {
-  return bytesOf(lease.engine.export({ handle: lease.handle, mode: 'snapshot' }).bytes)
+  return bytesOf(exportedBytes(lease.engine.export({ handle: lease.handle, mode: 'snapshot' })))
 }
 
 /** The operations after a version `versionOf` encoded; the whole history for `null`. */
@@ -91,7 +92,9 @@ export function exportUpdateSince(lease: RecordLease, since: Uint8Array | null):
       ? undefined
       : engine.decode({ kind: 'version', bytes: bytesToBase64(since) }).entries
   return bytesOf(
-    engine.export({ handle, mode: 'update', ...(from === undefined ? {} : { from }) }).bytes,
+    exportedBytes(
+      engine.export({ handle, mode: 'update', ...(from === undefined ? {} : { from }) }),
+    ),
   )
 }
 

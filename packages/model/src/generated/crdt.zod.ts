@@ -118,6 +118,10 @@ export const undoStateResponseSchema = z.strictObject({
 })
 export type UndoStateResponse = z.infer<typeof undoStateResponseSchema>
 
+/** What judges a local change: the text limits, or none when the keeper judges pushes. */
+export const writeJudgeSchema = z.enum(['text', 'none'])
+export type WriteJudge = z.infer<typeof writeJudgeSchema>
+
 /** A write by name: one per writer of the recorded write oracle. */
 export const writerNameSchema = z.enum([
   'writeSpatialCanvas',
@@ -167,6 +171,9 @@ export const writerNameSchema = z.enum([
   'pruneEmptyFolders',
   'recordTrashEntry',
   'duplicateWorkspaceDocument',
+  'spliceText',
+  'forgetTrashEntry',
+  'reapplyFolderNames',
 ])
 export type WriterName = z.infer<typeof writerNameSchema>
 
@@ -192,7 +199,7 @@ export type DecodeRequest = z.infer<typeof decodeRequestSchema>
 
 /** What an export produced. */
 export const exportResponseSchema = z.strictObject({
-  bytes: bytesSchema,
+  bytes: bytesSchema.optional(),
 })
 export type ExportResponse = z.infer<typeof exportResponseSchema>
 
@@ -202,6 +209,14 @@ export const exportSnapshotRequestSchema = z.strictObject({
   mode: z.literal('snapshot'),
 })
 export type ExportSnapshotRequest = z.infer<typeof exportSnapshotRequestSchema>
+
+/** Export the node at a path of a workspace record, with all under it, as a record. */
+export const exportSubtreeRequestSchema = z.strictObject({
+  handle: handleSchema,
+  mode: z.literal('subtree'),
+  path: z.string(),
+})
+export type ExportSubtreeRequest = z.infer<typeof exportSubtreeRequestSchema>
 
 /** Merge exported bytes into an open document. */
 export const importRequestSchema = z.strictObject({
@@ -216,6 +231,7 @@ export const importSubtreeRequestSchema = z.strictObject({
   handle: handleSchema,
   bytes: bytesSchema,
   parentPath: z.string().optional(),
+  judge: writeJudgeSchema.optional(),
 })
 export type ImportSubtreeRequest = z.infer<typeof importSubtreeRequestSchema>
 
@@ -251,6 +267,7 @@ export type Query = z.infer<typeof querySchema>
 /** Redo the last undone local change of an open document. */
 export const redoRequestSchema = z.strictObject({
   handle: handleSchema,
+  judge: writeJudgeSchema.optional(),
 })
 export type RedoRequest = z.infer<typeof redoRequestSchema>
 
@@ -260,6 +277,7 @@ export const textSpliceRequestSchema = z.strictObject({
   documentId: documentIdSchema.optional(),
   text: z.string(),
   runs: z.array(textRunSchema),
+  judge: writeJudgeSchema.optional(),
 })
 export type TextSpliceRequest = z.infer<typeof textSpliceRequestSchema>
 
@@ -278,6 +296,7 @@ export type UndoClearRequest = z.infer<typeof undoClearRequestSchema>
 /** Undo the last local change of an open document. */
 export const undoRequestSchema = z.strictObject({
   handle: handleSchema,
+  judge: writeJudgeSchema.optional(),
 })
 export type UndoRequest = z.infer<typeof undoRequestSchema>
 
@@ -374,6 +393,7 @@ export type VersionResponse = z.infer<typeof versionResponseSchema>
 export const writeRequestSchema = z.strictObject({
   handle: handleSchema,
   batch: z.array(writeSchema),
+  judge: writeJudgeSchema.optional(),
 })
 export type WriteRequest = z.infer<typeof writeRequestSchema>
 
@@ -382,6 +402,7 @@ export const exportRequestSchema = z.discriminatedUnion('mode', [
   exportSnapshotRequestSchema,
   exportUpdateRequestSchema,
   exportShallowSnapshotRequestSchema,
+  exportSubtreeRequestSchema,
 ])
 export type ExportRequest = z.infer<typeof exportRequestSchema>
 

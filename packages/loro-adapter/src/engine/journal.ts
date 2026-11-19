@@ -21,6 +21,7 @@
  */
 import { documentEngine as wire } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { exportedBytes } from './answers.js'
 import type { CrdtEngine } from './types.js'
 
 const journalSchema = z
@@ -98,7 +99,7 @@ function acknowledgeUpTo(held: Records, engine: CrdtEngine, handle: number, upTo
   // The new base is the state NOW, which already holds the local updates still
   // waiting on the keeper; importing one of them again on rebuild is a no-op,
   // and they stay listed so the host knows what to resend.
-  const base = engine.export({ handle, mode: 'snapshot' }).bytes
+  const base = exportedBytes(engine.export({ handle, mode: 'snapshot' }))
   // A snapshot leaves a parked update out, so one the base lacks stays listed
   // and rebuild re-parks it where the update it builds on can still arrive.
   const parked = stillParked(engine, record.peer, base, record.pending)
@@ -144,7 +145,7 @@ function rebuild(held: Records, engine: CrdtEngine, journal: Journal): wire.Open
 function emptyBase(engine: CrdtEngine, peer: string): string {
   const { handle } = engine.open({ peer })
   try {
-    return engine.export({ handle, mode: 'snapshot' }).bytes
+    return exportedBytes(engine.export({ handle, mode: 'snapshot' }))
   } finally {
     engine.close({ handle })
   }
@@ -174,7 +175,7 @@ function forkJournaled(held: Records, engine: CrdtEngine, request: wire.ForkRequ
   const opened = engine.fork(request)
   if (request.at !== undefined) return opened
   const source = held.get(request.handle)
-  const base = source?.base ?? engine.export({ handle: opened.handle, mode: 'snapshot' }).bytes
+  const base = source?.base ?? exportedBytes(engine.export({ handle: opened.handle, mode: 'snapshot' }))
   const pending = (source?.pending ?? []).map(({ update }) => ({ update }))
   held.set(opened.handle, { peer: request.peer, base, pending, nextSeq: 1 })
   return opened

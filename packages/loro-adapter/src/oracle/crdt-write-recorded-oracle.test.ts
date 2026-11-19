@@ -98,6 +98,9 @@ const WRITER_FLOORS = {
   pruneEmptyFolders: { rows: 8, changing: 4 },
   recordTrashEntry: { rows: 6, changing: 3, refusing: 3 },
   duplicateWorkspaceDocument: { rows: 16, changing: 8 },
+  spliceText: { rows: 16, changing: 8, refusing: 4 },
+  forgetTrashEntry: { rows: 6, changing: 6 },
+  reapplyFolderNames: { rows: 10, changing: 3 },
   minimalChange: { rows: 12, changing: 0 },
 } satisfies Record<
   documentEngine.WriterName | 'minimalChange',
@@ -118,7 +121,6 @@ const OTHER_WRITES: Record<string, string> = {
   copyContainerValue: 'covered by writeWorkspaceDocumentContent (projection and restore copies)',
   applyDocumentEdit:
     'covered by writeMarkdownBody, reconcileSpatialCanvas and writeSpatialNode, the writes each arm makes',
-  spliceText: 'covered by writeMarkdownBody and minimalChange',
   openMergeableMap:
     'covered by writeCommentThread and writeProposal, which open every mergeable map',
   openMergeableMovableList: 'covered by setWorkspacePinned, the only mergeable list',
