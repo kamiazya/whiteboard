@@ -46,6 +46,16 @@ function maskPeers(value: unknown): unknown {
   return value
 }
 
+function plainObject(value: Record<string, unknown>): unknown {
+  const entries = Object.entries(value)
+  const written = Object.fromEntries(entries.map(([k, v]) => [k, plain(v)]))
+  // An application object whose one key is a marker's name would be decoded
+  // as that marker, and facet payloads are arbitrary JSON, so it is wrapped.
+  // Only those names: any other `$` key already reads back as itself.
+  const [only] = entries.length === 1 ? entries : []
+  return only !== undefined && Object.hasOwn(MARKERS, only[0]) ? { $object: written } : written
+}
+
 /**
  * JSON that keeps what JSON drops, so two answers that differ only in an
  * `undefined`, a `NaN`, a `Set` or a `Map` do not read as equal.
@@ -65,11 +75,7 @@ function plain(value: unknown): unknown {
   if (value instanceof Set) return { $set: [...value].map(plain) }
   if (value instanceof Map) return { $map: [...value].map(([k, v]) => [plain(k), plain(v)]) }
   if (Array.isArray(value)) return value.map(plain)
-  if (typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, plain(v)]),
-    )
-  }
+  if (typeof value === 'object') return plainObject(value as Record<string, unknown>)
   return { $unrepresentable: typeof value }
 }
 
@@ -99,6 +105,9 @@ function carriesBytes(marker: string): (body: unknown) => never {
 
 /** What each marker `plain` writes stands for. */
 const MARKERS: Record<string, ((body: unknown) => unknown) | undefined> = {
+  // The body is an object `plain` wrote, whose one `$` key is a name and no marker.
+  $object: (body) =>
+    Object.fromEntries(Object.entries(body as object).map(([k, v]) => [k, unplain(v)])),
   $undefined: () => undefined,
   $number: (body) => Number(body),
   $bigint: (body) => BigInt(String(body)),
@@ -113,12 +122,22 @@ const refusal = (error: unknown): Answer => ({
   err: error instanceof Error ? error.constructor.name : typeof error,
 })
 
-export function answer(read: () => unknown): Answer {
+/**
+ * A read's outcome with its value as produced. An answer that holds other
+ * outcomes builds them with this, so the one `answer` around them encodes each
+ * value once; encoding an already-encoded marker as data would wrap it.
+ */
+export function attempt(read: () => unknown): Answer {
   try {
-    return { ok: plain(read()) }
+    return { ok: read() }
   } catch (error) {
     return refusal(error)
   }
+}
+
+export function answer(read: () => unknown): Answer {
+  const outcome = attempt(read)
+  return 'ok' in outcome ? { ok: plain(outcome.ok) } : outcome
 }
 
 export async function answerLater(read: () => Promise<unknown>): Promise<Answer> {
