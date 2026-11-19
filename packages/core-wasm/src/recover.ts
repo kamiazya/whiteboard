@@ -79,7 +79,7 @@ interface ResettableGlue {
  * Matched by name, as a trap raised in another realm (a worker, a test
  * sandbox) is not an `instanceof` this realm's classes.
  */
-export function isInstanceTrap(err: unknown): boolean {
+function isInstanceTrap(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false
   const { name, message } = err as { name?: unknown; message?: unknown }
   if (name === 'RuntimeError') return true
