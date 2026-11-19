@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { LayoutRequest } from './layout-worker-protocol.js'
 
 /**
@@ -38,6 +38,7 @@ const request = (id: number): LayoutRequest => ({
 
 const posted: unknown[] = []
 const closed = vi.fn()
+const originalOnmessage = self.onmessage
 
 beforeAll(async () => {
   vi.spyOn(self, 'postMessage').mockImplementation(((message: unknown) => {
@@ -47,6 +48,13 @@ beforeAll(async () => {
   vi.spyOn(self, 'close').mockImplementation(closed)
   // lazy-import: the module installs `self.onmessage` on load, so it must follow the spies above
   await import('./layout-worker.js')
+})
+
+// The worker module installs `self.onmessage` and the spies replace two more
+// globals; the file's cleanup boundary puts all three back.
+afterAll(() => {
+  self.onmessage = originalOnmessage
+  vi.restoreAllMocks()
 })
 
 afterEach(() => {

@@ -466,6 +466,25 @@ describe('createLayoutWorkerPool', () => {
     pool.dispose()
   })
 
+  it('runs the newer request again when a cancelled one reports a fatal failure', async () => {
+    const factory = fakeWorkerFactory()
+    const pool = createLayoutWorkerPool({ size: 1, createWorker: factory.create })
+
+    void pool.run({ id: 1 })
+    const queued = pool.run({ id: 2 })
+    pool.cancel(1)
+    // The cancel handed request 2 to the same worker, which then closes on 1.
+    expect(factory.live[0].sent).toEqual([1, 2])
+    factory.live[0].reply(1, { type: 'failed', reason: 'CoreUnrecoverable', fatal: true })
+    expect(factory.live[0].terminated).toBe(true)
+
+    expect(factory.live).toHaveLength(2)
+    expect(factory.live[1].sent).toEqual([2])
+    factory.live[1].reply(2, { ok: 'wanted' })
+    await expect(queued).resolves.toEqual({ id: 2, ok: 'wanted' })
+    pool.dispose()
+  })
+
   it('rejects everything still pending when the pool is disposed', async () => {
     const factory = fakeWorkerFactory()
     const pool = createLayoutWorkerPool({ size: 1, createWorker: factory.create })

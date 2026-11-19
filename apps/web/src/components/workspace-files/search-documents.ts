@@ -117,17 +117,24 @@ export function searchDocuments<T extends WorkspaceDocumentEntry>(
 ): readonly T[] {
   if (query.trim() === '') return []
   const q = query.trim().toLowerCase()
-  const texts = documents.flatMap((entry) => [
-    entry.path,
-    ...(entry.name === undefined ? [] : [entry.name]),
-    ...(entry.tags ?? []),
-  ])
+  // The query is folded in the same call as the texts it is compared with, so
+  // the two cannot be read in different forms: a trap that degraded only the
+  // query's own fold left a folded "cafe" no raw "café" contains.
+  const texts = [
+    q,
+    query.trim(),
+    ...documents.flatMap((entry) => [
+      entry.path,
+      ...(entry.name === undefined ? [] : [entry.name]),
+      ...(entry.tags ?? []),
+    ]),
+  ]
   const foldedTexts = foldAll(texts)
   const foldOf = (text: string) => foldedTexts.get(text) ?? comparable(text)
-  const folded = comparable(q)
+  const folded = foldOf(q)
   const own = documents.filter((entry) => documentMatchesSearch(q, folded, foldOf, entry))
   const matched = new Set(own)
-  const folderQuery = comparable(query.trim())
+  const folderQuery = foldOf(query.trim())
   const inFolder = new Map<string, boolean>()
   const folderMatches = (path: string): boolean => {
     const folder = parentOfPath(path)

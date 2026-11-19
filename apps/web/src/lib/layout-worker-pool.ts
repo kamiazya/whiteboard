@@ -208,14 +208,26 @@ export function createLayoutWorkerPool<Req extends { id: number }>(options: {
     slot.worker.terminate()
   }
 
+  // A fatal reply means the worker closed itself. It leaves the pool BEFORE
+  // anything settles, since settling pumps the queue onto the dead slot. The
+  // reply can be for a request `cancel` already freed while the slot went on
+  // to a newer one; the closed worker will never answer that one, so it goes
+  // back to the head of the queue for a fresh worker.
+  const retireFatal = (slot: Held, data: { id: number }) => {
+    const pending = slot.busyWith
+    slot.busyWith = null
+    retire(slot)
+    if (pending?.id === data.id) pending.resolve(data)
+    else if (pending !== null) queue.unshift(pending)
+    pump()
+  }
+
   const spawn = (): Held => {
     const worker = options.createWorker()
     const slot: Held = { worker, busyWith: null }
-    // A fatal reply (the worker closed itself) leaves the pool BEFORE it
-    // settles: settling pumps the queue, which would reuse the dead slot.
     worker.onmessage = (event) => {
-      if ((event.data as { fatal?: unknown }).fatal === true) retire(slot)
-      settle(slot, event.data.id, event.data)
+      if ((event.data as { fatal?: unknown }).fatal === true) retireFatal(slot, event.data)
+      else settle(slot, event.data.id, event.data)
     }
     if ('onerror' in worker) {
       worker.onerror = () => {

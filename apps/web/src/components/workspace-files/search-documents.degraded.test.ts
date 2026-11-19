@@ -65,6 +65,27 @@ describe('searchDocuments without a usable search core', () => {
     expect(searchDocuments(docs, 'triage').map((d) => d.path)).toEqual(['inbox/triage'])
   })
 
+  it('compares the query and the names in one form when only a lone fold traps', () => {
+    realm = installSearchCore(undefined)
+    if (realm === undefined) throw new Error('the test realm installs a search core')
+    const fold = (text: string) => text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase()
+    installSearchCore({
+      ...realm,
+      // A call holding several texts answers; a call holding one traps.
+      foldForSearch: (text: string) => {
+        if (!text.includes('\n')) {
+          throw Object.assign(new Error('the instance was reset'), { name: 'CoreInstanceTrapped' })
+        }
+        return fold(text)
+      },
+    })
+    const cafe: WorkspaceDocumentEntry[] = [
+      { documentId: 'c1', path: 'notes/café', name: 'Café' },
+      ...docs,
+    ]
+    expect(searchDocuments(cafe, 'café').map((d) => d.path)).toEqual(['notes/café'])
+  })
+
   it('does not hide a failure that is neither', () => {
     realm = installSearchCore(undefined)
     if (realm === undefined) throw new Error('the test realm installs a search core')
