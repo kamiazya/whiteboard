@@ -253,8 +253,18 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the tag utf16Max puts on its refusal issue; production writes it in its own module, and the bounded-string probe in model/test-utils recognises a length refusal by it rather than by a copied literal',
   'packages/loro-adapter/src/content-digest.ts#stableStringify':
     "production reaches it through contentDigestOf, which hashes its output; exported so a property can hold its stack form to the recursive form it replaced, which a digest's equality cannot show",
-  'packages/loro-adapter/src/workspace-tree.ts#ensureFolderPath':
-    "production reaches it through createWorkspaceDocumentAtPath, the subtree import and the restore; exported so a property can hold which folders it reuses and creates to an oracle over the raw tree, which the placed document's path alone cannot show",
+  'packages/loro-adapter/src/engine/engine.ts#createCrdtEngine':
+    'the TypeScript CRDT document engine, the implementation the conformance suite holds to the engine contract; no consumer is migrated onto it yet (ADR-0054 step 9, M1-M6)',
+  'packages/loro-adapter/src/engine/journal.ts#journaledEngine':
+    'the host-side journal over any CRDT engine, which rebuilds a handle the wasm core lost; the web host that wraps its engine in it is a later migration, so only the conformance suite reaches it',
+  'packages/loro-adapter/src/engine/readers.ts#READERS':
+    "the engine's reader table, which the engine reads through readQuery; exported so the recorded read oracle's recorder and replay ask the same table the engine answers from",
+  'packages/loro-adapter/src/engine/readers.ts#CONTENT_QUERIES':
+    "the readers that take a document's own containers, in the order a recorded row lists them; the oracle's recorder asks each of them per document",
+  'packages/loro-adapter/src/engine/writers.ts#WRITERS':
+    "the engine's writer table, which the engine dispatches through applyWriter; exported so the recorded write oracle's recorder and the contract test hold the contract's writer names to it from both sides",
+  'packages/loro-adapter/src/engine/answers.ts#VersionPairs':
+    'the `[peer, counter]` form a recorded version is written in; the oracle tests and recorders read versions through it',
   'packages/loro-adapter/src/content-sync.ts#jsonEqual':
     'production reaches it through the content sync; exported so a property can hold the explicit-stack comparison to the recursive one it replaced, at depths no recursion survives',
   'packages/canvas-render/src/references/content-budget.ts#REFERENCE_CHARS_BUDGET':
@@ -335,12 +345,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'generates the published JSON Canvas loss table that loss-table.test.ts holds equal to the committed docs page',
   'packages/codec/src/spatial/loss-table.ts#ocifLossTable':
     'generates the published OCIF loss table that loss-table.test.ts holds equal to the committed docs page',
-  'packages/loro-adapter/src/loro-bridge.ts#deleteSpatialEdge':
-    'the single-commit form that withSpatialBatch is held byte-identical to, the sequential reference of loro-bridge.property.test.ts',
-  'packages/loro-adapter/src/workspace-tree.ts#createWorkspaceDocument':
-    'the tree raw create operation the concurrent convergence property drives, while production reaches the tree by path',
-  'packages/loro-adapter/src/workspace-tree.ts#moveWorkspaceDocument':
-    'the tree raw move operation the concurrent convergence property drives, while production reaches the tree by path',
   'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#ALL_REGISTERED_TOOLS':
     'the authoritative registered-tool ledger the smoke checkpoint and the naming and structured-content guards hold to reality',
   'packages/mcp-server/src/server/mcp/mcp-smoke-coverage.ts#COVERED_TOOLS':

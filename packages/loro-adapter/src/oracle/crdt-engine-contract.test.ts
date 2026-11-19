@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { documentEngine } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { SYNC_TEXT_BREACH_CODES } from '../sync-text-limits.js'
-import { WRITERS } from '../test-utils/crdt-write-oracle.js'
+import { ORACLE_WRITERS } from '../test-utils/crdt-write-oracle.js'
 
 /**
  * `contracts/crdt/document-engine.schema.json` is the wire the TypeScript and
@@ -69,7 +69,7 @@ describe('the CRDT document-engine contract', () => {
   })
 
   it('names every writer of the write oracle, and nothing else', () => {
-    const writers = Object.keys(WRITERS)
+    const writers = Object.keys(ORACLE_WRITERS)
     for (const excluded of Object.keys(NOT_ENGINE_WRITERS)) {
       expect(writers, `${excluded} is excluded but is no writer`).toContain(excluded)
       expect(

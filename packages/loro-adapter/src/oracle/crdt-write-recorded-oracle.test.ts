@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs'
+import type { documentEngine } from '@kamiazya/whiteboard-model'
 import { decodeImportBlobMeta, LoroDoc } from 'loro-crdt'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
@@ -7,12 +8,7 @@ import {
   type VersionPairs,
   versionPairs,
 } from '../test-utils/crdt-read-oracle.js'
-import {
-  applyWriter,
-  RECORDED_NOW,
-  WRITERS,
-  type WriterName,
-} from '../test-utils/crdt-write-oracle.js'
+import { applyOracleWriter, ORACLE_WRITERS, RECORDED_NOW } from '../test-utils/crdt-write-oracle.js'
 
 /**
  * The committed recording of what every writer of the loro cohort leaves behind
@@ -103,7 +99,10 @@ const WRITER_FLOORS = {
   recordTrashEntry: { rows: 6, changing: 3, refusing: 3 },
   duplicateWorkspaceDocument: { rows: 16, changing: 8 },
   minimalChange: { rows: 12, changing: 0 },
-} satisfies Record<WriterName, { rows: number; changing: number; refusing?: number }>
+} satisfies Record<
+  documentEngine.WriterName | 'minimalChange',
+  { rows: number; changing: number; refusing?: number }
+>
 
 /**
  * Every exported function in this package that names a write, and where it is
@@ -178,11 +177,11 @@ describe('the recorded CRDT write oracle', () => {
     const writers = exportedWriters()
     expect(writers.length, 'exported writers found').toBeGreaterThan(40)
     expect(
-      writers.filter((name) => !(name in WRITERS) && !(name in OTHER_WRITES)),
+      writers.filter((name) => !(name in ORACLE_WRITERS) && !(name in OTHER_WRITES)),
       'exported writers neither recorded nor classified',
     ).toEqual([])
     expect(
-      Object.keys(OTHER_WRITES).filter((name) => !writers.includes(name) || name in WRITERS),
+      Object.keys(OTHER_WRITES).filter((name) => !writers.includes(name) || name in ORACLE_WRITERS),
       'classified writers that are gone or are recorded after all',
     ).toEqual([])
   })
@@ -217,7 +216,9 @@ describe('the recorded CRDT write oracle', () => {
       const doc = fresh(row.before)
       doc.setPeerId(BigInt(row.peer))
       const beforeVersion = doc.oplogVersion()
-      const result = answer(() => applyWriter(doc, row.op, JSON.parse(JSON.stringify(row.args))))
+      const result = answer(() =>
+        applyOracleWriter(doc, row.op, JSON.parse(JSON.stringify(row.args))),
+      )
       doc.commit()
       expect(JSON.parse(JSON.stringify(result)), 'result').toEqual(row.result)
       const after = fresh(Buffer.from(doc.export({ mode: 'update' })).toString('base64'))

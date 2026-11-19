@@ -67,6 +67,11 @@ const BY_KEY = new Map(MEASURED.map((row) => [row.key, row.lines]))
  * ceiling it had then. Shrink-only: see the header.
  */
 const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
+  // Replay and property suites of the CRDT engine conformance: one describe each, whose cases share a fixture.
+  'packages/loro-adapter/src/test-utils/crdt-engine-conformance.ts#describeReadReplay': 54,
+  'packages/loro-adapter/src/test-utils/crdt-engine-conformance.ts#describeJournal': 68,
+  'packages/loro-adapter/src/test-utils/crdt-engine-conformance.ts#describeRefusal': 63,
+  'packages/loro-adapter/src/test-utils/crdt-engine-conformance.ts#describeConvergence': 106,
   'apps/web/src/App.tsx#App': 179,
   // The chrome row `AppShell`, the MODE choice, picks. Still over budget
   // because it is a row of controls and their rationale; the four that could

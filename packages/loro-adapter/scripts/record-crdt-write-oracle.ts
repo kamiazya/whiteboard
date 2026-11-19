@@ -21,6 +21,7 @@
 import { writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { documentEngine } from '@kamiazya/whiteboard-model'
 import {
   coreFacetsSchema,
   proposalSchema,
@@ -35,10 +36,14 @@ import {
   textNode,
 } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
+
+/** Every writer the oracle records: the engine's, and the pure `minimalChange`. */
+type RecordedWriter = documentEngine.WriterName | 'minimalChange'
+
 import { readSpatialCanvas } from '../src/loro-bridge.js'
 import { writeMarkdownBody } from '../src/markdown-body.js'
 import { answer, frontierPairs, versionPairs } from '../src/test-utils/crdt-read-oracle.js'
-import { applyWriter, type WriterName } from '../src/test-utils/crdt-write-oracle.js'
+import { applyOracleWriter } from '../src/test-utils/crdt-write-oracle.js'
 import {
   deleteWorkspaceDocument,
   documentContainers,
@@ -83,7 +88,7 @@ import {
 // ---- rows ----
 
 interface Case {
-  op: WriterName
+  op: RecordedWriter
   tag: string
   scene: Scene
   args: unknown
@@ -92,7 +97,7 @@ interface Case {
 }
 
 const cases: Case[] = []
-const add = (op: WriterName, tag: string, scene: Scene, args: unknown, writerPeer = 1) =>
+const add = (op: RecordedWriter, tag: string, scene: Scene, args: unknown, writerPeer = 1) =>
   cases.push({ op, tag, scene, args, peer: writerPeer })
 
 /** A content writer's arguments carry the tree node's id when the scene hosts one. */
@@ -100,7 +105,7 @@ const hostArgs = (scene: Scene) =>
   scene.documentId === undefined ? {} : { documentId: scene.documentId }
 
 function contentCases(
-  op: WriterName,
+  op: RecordedWriter,
   contents: readonly ContentKind[],
   argsOf: (scene: Scene, rng: Rng, i: number) => unknown[],
   seed: number,
@@ -738,7 +743,7 @@ function record(c: Case, index: number): string {
   doc.setPeerId(BigInt(writerPeer))
   const beforeVersion = doc.oplogVersion()
   const args: unknown = JSON.parse(JSON.stringify(c.args) ?? 'null')
-  const result = answer(() => applyWriter(doc, c.op, args))
+  const result = answer(() => applyOracleWriter(doc, c.op, args))
   doc.commit()
   const after = fromB64(b64(doc.export({ mode: 'update' })))
   return JSON.stringify({

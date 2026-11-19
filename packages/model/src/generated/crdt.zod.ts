@@ -237,7 +237,7 @@ export const writeSchema = z.strictObject({
 })
 export type Write = z.infer<typeof writeSchema>
 
-/** Export the state at a frontier, without the history before it. */
+/** Export the current state, keeping history only from a frontier on. */
 export const exportShallowSnapshotRequestSchema = z.strictObject({
   handle: handleSchema,
   mode: z.literal('shallow-snapshot'),
