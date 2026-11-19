@@ -1,4 +1,5 @@
 import { REGISTER_LAYOUT_FONTS_CAPS, type RefusalCode } from './generated/input-caps.js'
+import { type Finalizer, finalizerPerGeneration, generationOf } from './recover.js'
 import { wireOf } from './value-wire.js'
 
 // The faces a font-table measurer reads cross into the core once, at
@@ -31,11 +32,7 @@ interface FontsErrors {
   refused(operation: string, code: RefusalCode, detail?: string): Error
 }
 
-/** What releases a handle once the measurer naming it is collected; a `FinalizationRegistry`. */
-export interface Finalizer {
-  register(target: object, handle: number, token: object): void
-  unregister(token: object): void
-}
+export type { Finalizer }
 
 const OPERATION = 'register_layout_fonts'
 
@@ -53,13 +50,16 @@ const OUTGROWN = new Set(['held', 'handles'])
  * registered on its first layout and released when it is collected.
  */
 export class FontHandles {
-  readonly #held = new WeakMap<LayoutFaces, number>()
+  // A handle is the instance's own number, so one from a discarded instance
+  // names nothing, or another measurer's faces, in its successor: it is
+  // dropped and the faces register again on the next layout.
+  readonly #held = new WeakMap<LayoutFaces, { handle: number; generation: number }>()
   // Asking again would copy every face in again to hear the same answer, on
   // every layout a daemon with such a face installed makes.
   readonly #declined = new WeakMap<LayoutFaces, string>()
   readonly #glue: FontsGlue
   readonly #errors: FontsErrors
-  readonly #collected: Finalizer
+  readonly #collected: () => Finalizer
 
   constructor(
     glue: FontsGlue,
@@ -69,19 +69,24 @@ export class FontHandles {
   ) {
     this.#glue = glue
     this.#errors = errors
-    this.#collected = finalizer((handle) => glue.release_layout_fonts(handle))
+    this.#collected = finalizerPerGeneration(glue, finalizer, (handle) =>
+      glue.release_layout_fonts(handle),
+    )
   }
 
   /** The handle naming `faces`, registering them unless they are held. */
   handleOf(faces: LayoutFaces): Registered {
     const held = this.#held.get(faces)
-    if (held !== undefined) return { handle: held }
+    if (held !== undefined) {
+      if (held.generation === generationOf(this.#glue)) return { handle: held.handle }
+      this.#held.delete(faces)
+    }
     const declined = this.#declined.get(faces)
     if (declined !== undefined) return { declined }
     const registered = this.#register(faces)
     if ('handle' in registered) {
-      this.#held.set(faces, registered.handle)
-      this.#collected.register(faces, registered.handle, faces)
+      this.#held.set(faces, { handle: registered.handle, generation: generationOf(this.#glue) })
+      this.#collected().register(faces, registered.handle, faces)
     } else if (!OUTGROWN.has(registered.declined)) {
       this.#declined.set(faces, registered.declined)
     }
@@ -91,7 +96,7 @@ export class FontHandles {
   /** Forgets the handle naming `faces`, which the core answered it holds nothing under. */
   forget(faces: LayoutFaces): void {
     this.#held.delete(faces)
-    this.#collected.unregister(faces)
+    this.#collected().unregister(faces)
   }
 
   #register({ faces }: LayoutFaces): Registered {

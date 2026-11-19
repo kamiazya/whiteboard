@@ -1,6 +1,12 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { Finalizer } from './font-handles.js'
 import { type RefusalCode, SEARCH_OP_CAPS } from './generated/input-caps.js'
+import {
+  assertLive,
+  type Finalizer,
+  finalizerPerGeneration,
+  generationOf,
+  isRecoveryError,
+} from './recover.js'
 
 // Lexical search over the wasm artifact (`crates/bindings/wasm/src/search`):
 // one export, `search_op`, takes `[op, ...args]` as JSON and answers
@@ -159,7 +165,10 @@ class Channel {
     let answer: unknown
     try {
       answer = JSON.parse(this.glue.search_op(request))
-    } catch {
+    } catch (err) {
+      // A trap is not a malformed answer: the instance was reset, and the
+      // caller must hear that rather than a refusal of its input.
+      if (isRecoveryError(err)) throw err
       throw this.errors.refused('search_op', 'malformed', op)
     }
     if (Array.isArray(answer) && answer[0] === 'ok') return answer.slice(1) as unknown[]
@@ -190,6 +199,8 @@ class LinkLabelSet {
   readonly handle: number
   /** @internal The instance that minted it: a handle means nothing in another. */
   readonly glue: SearchGlue
+  /** @internal The instance generation that minted it. */
+  readonly generation: number
   readonly #release: () => void
   readonly #collected: Finalizer
   #released = false
@@ -203,6 +214,7 @@ class LinkLabelSet {
   ) {
     this.handle = handle
     this.glue = glue
+    this.generation = generationOf(glue)
     this.#release = () => release(handle)
     this.#collected = collected
     collected.register(this, handle, this)
@@ -213,7 +225,7 @@ class LinkLabelSet {
     if (this.#released) return
     this.#released = true
     this.#collected.unregister(this)
-    this.#release()
+    if (this.generation === generationOf(this.glue)) this.#release()
   }
 }
 
@@ -223,6 +235,7 @@ class SearchIndex {
   readonly #handle: number
   readonly #collected: Finalizer
   readonly #release: (handle: number) => void
+  readonly #generation: number
   #released = false
 
   /** @internal */
@@ -236,7 +249,13 @@ class SearchIndex {
     this.#handle = handle
     this.#release = release
     this.#collected = collected
+    this.#generation = generationOf(channel.glue)
     collected.register(this, handle, this)
+  }
+
+  /** Refuses a use after the instance that holds this corpus was reset. */
+  #live(op: string): void {
+    assertLive(this.#channel.glue, this.#generation, op)
   }
 
   /**
@@ -245,6 +264,7 @@ class SearchIndex {
    * text, as `documentTerms` applies it; folder names are indexed as written.
    */
   upsert(doc: SearchableDocument, alsoIndex?: AlsoIndex): boolean {
+    this.#live('index-upsert')
     const expand = expander(alsoIndex)
     const [replaced] = this.#channel.call(
       'index-upsert',
@@ -262,6 +282,7 @@ class SearchIndex {
 
   /** Forgets a document; false when the index held none. */
   remove(documentId: string): boolean {
+    this.#live('index-remove')
     return this.#channel.first(
       'index-remove',
       isBoolean,
@@ -275,6 +296,7 @@ class SearchIndex {
    * Throws `CoreInputRefused` for a query past `MAX_QUERY_BYTES`.
    */
   search(query: string, limit?: number): { documentId: string; score: number }[] {
+    this.#live('index-query')
     const [hits] = this.#channel.call(
       'index-query',
       this.#handle,
@@ -293,6 +315,7 @@ class SearchIndex {
 
   /** How many documents it holds and what its bags cost (`TERM_OVERHEAD` charged per term). */
   size(): { documents: number; bytes: number } {
+    this.#live('index-size')
     const [documents, bytes] = this.#channel.call('index-size', this.#handle)
     if (!isNumber(documents) || !isNumber(bytes)) {
       throw this.#channel.errors.refused('search_op', 'malformed', 'index-size')
@@ -305,7 +328,7 @@ class SearchIndex {
     if (this.#released) return
     this.#released = true
     this.#collected.unregister(this)
-    this.#release(this.#handle)
+    if (this.#generation === generationOf(this.#channel.glue)) this.#release(this.#handle)
   }
 }
 
@@ -463,6 +486,7 @@ type ExcerptCalls = Pick<SearchCore, 'linkLabels' | 'snippetAround' | 'excerpts'
 function labelsOf(channel: Channel, op: string, labels: LinkLabelSet | undefined): number | null {
   if (labels === undefined) return null
   if (labels.glue !== channel.glue) throw channel.errors.refused('search_op', 'malformed', op)
+  assertLive(channel.glue, labels.generation, op)
   return labels.handle
 }
 
@@ -509,7 +533,7 @@ function excerptsPaged(
   }
 }
 
-function excerptCalls(channel: Channel, collected: Finalizer): ExcerptCalls {
+function excerptCalls(channel: Channel, collected: () => Finalizer): ExcerptCalls {
   const release = (handle: number) => quietly(channel, 'labels-release', handle)
   return {
     linkLabels(entries) {
@@ -522,7 +546,7 @@ function excerptCalls(channel: Channel, collected: Finalizer): ExcerptCalls {
         channel.first('labels', isNumber, listed),
         channel.glue,
         release,
-        collected,
+        collected(),
       )
     },
     snippetAround: (text, index, length, labels) =>
@@ -583,11 +607,13 @@ export function searchOver(
     new FinalizationRegistry(release),
 ): SearchCore {
   const channel = new Channel(glue, errors)
-  const labelsCollected = finalizer((handle) => quietly(channel, 'labels-release', handle))
+  const labelsCollected = finalizerPerGeneration(glue, finalizer, (handle) =>
+    quietly(channel, 'labels-release', handle),
+  )
   const release = (handle: number) => quietly(channel, 'index-release', handle)
-  const indexesCollected = finalizer(release)
+  const indexesCollected = finalizerPerGeneration(glue, finalizer, release)
   const createIndex = () =>
-    new SearchIndex(channel, channel.first('index-new', isNumber), release, indexesCollected)
+    new SearchIndex(channel, channel.first('index-new', isNumber), release, indexesCollected())
   const excerpts = excerptCalls(channel, labelsCollected)
   return {
     ...textCalls(channel),

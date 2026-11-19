@@ -8,7 +8,7 @@
       "reason": "a minimal binary that exists so the hardening and reproducibility gates have a subject; it has no tests and nothing to cover"
     },
     "bindings/wasm": {
-      "lines": 91,
+      "lines": 93,
       "regions": 87,
       "reason": "first measured 2026-11-08 at 66.25% lines and 60.04% regions; the per-module test exports (edge_router, coincident_ends) are exercised by the wasm differentials, not natively. Raised to 74 lines and 68 regions when tests/survivors_budget_write_back.rs reached the budget write-back: 75.70% lines locally, 69.80% regions on CI. Raised to 82 lines and 77 regions with the OKF exports, replayed natively from okf.jsonl (tests/okf_oracle.rs) beside the exports' own tests: 82.97% lines and 77.43% regions locally. Raised to 87 lines and 82 regions with the JSON Canvas exports and their canvas wire, replayed from json-canvas.jsonl (tests/json_canvas_oracle.rs) beside the exports' and the wire's own tests: 87.99% lines and 82.47% regions, measured both locally and on CI (an earlier local reading of 89.57% and 84.13% was not reproduced, and set the floor above what the tests reach). Raised to 88 lines and 84 regions with the facet write export, replayed from facet-write.jsonl (tests/facet_write_oracle.rs) beside its own tests: 89.84% lines and 85.14% regions locally, measured over this crate's tests alone (the workspace run adds none to it). Raised to 91 lines with the font registry (spatial_layout/fonts), whose register, layout-over-handle and release paths are tested natively: 91.16% lines on CI; regions stay at 84, inside their headroom. Raised to 87 regions with the markdown entry (spatial_layout/markdown, its request and its tests) and its native replay of the layout-markdown recordings (tests/markdown_oracle.rs): 87.09% regions locally"
     },
@@ -28,8 +28,8 @@
       "reason": "first measured 2026-11-08 at 98.81% lines and 98.68% regions. Raised to 99 and 99 with the number formatter's tie rule: 99.73% lines and 99.60% regions"
     },
     "core/edge-routing": {
-      "lines": 98,
-      "regions": 97,
+      "lines": 99,
+      "regions": 98,
       "reason": "first measured 2026-11-08 at 94.47% lines and 94.57% regions, with the wasm crate's replay of the TypeScript's recorded answers (71.37% and 69.20% from the crate's own tests alone); raised with the native properties to 97.06-97.34% lines and 96.72-96.94% regions over four runs. Generated boards still move spatial_edges.rs by about nine lines, so the floor sits a point under the lowest run; the coincident-ends repair, which a board reached only sometimes and which moved the crate by 2.8 points, has a fixed example of its own. Raised again with the survivor tests (tests/survivors_*.rs) to 99.01-99.04% lines and 98.82-98.83% regions over three runs; the floor stays a point under the lowest"
     },
     "core/facet-engine": {
@@ -74,7 +74,7 @@
     },
     "xtask": {
       "lines": 78,
-      "regions": 74,
+      "regions": 77,
       "reason": "first measured 2026-11-08 at 57.43% lines and 55.14% regions; raised to 60.48% and 58.05% once the coverage command's logic was split out and tested (the mutation gate's first catch), and to 65.53% and 63.55% once a test ran the whole codegen over the repository (the mutation gate's catch on the input-caps generator).  Raised to 71 and 69 with the dialect's optional fields, references, strings and plain Rust types (71.23% and 69.76%), and to 75 and 74 with the dialect's booleans, integers, constants, unions, object checks, extension and external definitions (75.66% and 74.23%), and lines to 78 with `dist`'s argument, directory and feature choices tested (78.19%). The commands that build, run tools or need a release toolchain are exercised by running them in rust:check, not by unit tests"
     }
   }

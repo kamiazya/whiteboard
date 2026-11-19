@@ -223,10 +223,10 @@ describe('the search shim over a fake glue', () => {
   })
 
   it('releases what a collected handle names, and a refusal there is not thrown', () => {
-    const { glue, sent } = fake(['["refused","malformed"]'])
+    const { glue, sent } = fake(['["ok",9]', '["refused","malformed"]'])
     const memo = finalizer()
-    searchOver(glue, errors, memo.make)
+    searchOver(glue, errors, memo.make).createIndex()
     expect(() => memo.collect(9)).not.toThrow()
-    expect(sent).toEqual([['index-release', 9]])
+    expect(sent).toEqual([['index-new'], ['index-release', 9]])
   })
 })

@@ -331,8 +331,8 @@ steps and cache paths to the scripts.
   `cargo xtask dist`, not `.cargo/config.toml`, because any `RUSTFLAGS` in
   the environment silently replaces config rustflags.
 - **Panic policy**: wasm builds with `panic = "abort"` — the host recreates
-  the instance and rehydrates (`cargo xtask poison-recover` prints the
-  scenario and fails until the wasm shim package, `core-wasm`, gains the recovery module it names); the native
+  the instance and rehydrates (the wasm shim, `core-wasm`, owns the recovery
+  in `src/recover.ts`; `poison-recover.rust.test.ts` is the scenario); the native
   daemon builds with `panic = "unwind"` and `catch_unwind` per request, so
   one request fails rather than the process.
 
