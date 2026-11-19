@@ -49,6 +49,11 @@ import {
   WORKSPACE_DOCUMENT,
   write,
 } from './crdt-engine-conformance-kit.js'
+import {
+  describeOpenWithUpdates,
+  describeReadNow,
+  describeTrim,
+} from './crdt-engine-conformance-lifecycle.js'
 import { describeWorkspaceSyncJudging } from './crdt-engine-conformance-workspace-sync.js'
 import { fc, withDefaults } from './fast-check.js'
 
@@ -672,6 +677,9 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeDocumentKindFallback(makeEngine)
     describeSubtreeImport(makeEngine)
     describeSubtreeRoot(makeEngine)
+    describeReadNow(makeEngine)
+    describeOpenWithUpdates(makeEngine)
+    describeTrim(makeEngine)
     describeJournal(makeEngine)
     describeConvergence(makeEngine)
   })

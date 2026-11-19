@@ -230,7 +230,7 @@
       "x-wb-unknownKeys": "refuse"
     },
     "OpenRequest": {
-      "description": "Open a document: from bytes an engine exported, or empty.",
+      "description": "Open a document: from exported bytes and updates after them, or empty.",
       "type": "object",
       "properties": {
         "peer": {
@@ -241,6 +241,11 @@
           "$ref": "#/$defs/Bytes",
           "description": "The document to open; empty when absent."
         },
+        "updates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/Bytes" },
+          "description": "Updates an engine exported, applied together after the bytes as the document the handle starts from: they are no local edit, and an engine keeps them in the restore base of the document rather than its log, so opening a long log folds nothing."
+        },
         "undoMergeIntervalMs": {
           "type": "integer",
           "minimum": 0,
@@ -248,7 +253,7 @@
         }
       },
       "required": ["peer"],
-      "x-wb-order": ["peer", "bytes", "undoMergeIntervalMs"],
+      "x-wb-order": ["peer", "bytes", "updates", "undoMergeIntervalMs"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -630,6 +635,20 @@
     },
     "UndoClearRequest": {
       "description": "Forget the undo and redo history of an open document.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        }
+      },
+      "required": ["handle"],
+      "x-wb-order": ["handle"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "TrimRequest": {
+      "description": "Free what an idle open document holds only to judge its next write.",
       "type": "object",
       "properties": {
         "handle": {

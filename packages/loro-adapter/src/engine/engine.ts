@@ -32,7 +32,7 @@ import {
   WORKSPACE_TREE_KEY,
 } from '../workspace-tree.js'
 import { frontierPairs, versionOfPairs, versionPairs } from './answers.js'
-import { readQuery } from './readers.js'
+import { readQuery, readQueryNow } from './readers.js'
 import type { CrdtEngine } from './types.js'
 import { applyWriter } from './writers.js'
 
@@ -66,6 +66,8 @@ interface Held {
   shadow: LoroDoc | null
   /** What the document was made from; absent when it began empty. */
   base: Uint8Array | null
+  /** Updates applied together after `base` when the document was opened: a restore re-applies them and the log never held them. */
+  baseUpdates: Uint8Array[]
   /** Every update applied after `base`, in order. */
   log: Uint8Array[]
   logBytes: number
@@ -105,15 +107,32 @@ function touchedSince(doc: LoroDoc, before: VersionVector): string[] {
     : []
 }
 
+/**
+ * The document and its undo history hold wasm memory the garbage collector does
+ * not see, so each copy the engine lets go of is freed. The undo manager reads
+ * the document, so it goes first.
+ */
+function release(...held: Array<{ free(): void } | null>) {
+  for (const resource of held) resource?.free()
+}
+
 /** Rebuilds `entry` from what it was made from and the updates applied since; its undo history starts over. */
 function restore(entry: Held) {
   const doc = new LoroDoc()
   doc.setPeerId(entry.peer)
-  if (entry.base !== null) doc.import(entry.base)
+  const opened = [...(entry.base === null ? [] : [entry.base]), ...entry.baseUpdates]
+  if (opened.length > 0) doc.importBatch(opened)
   for (const update of entry.log) doc.import(update)
+  release(entry.undo, entry.doc)
   entry.doc = doc
   entry.undo = new UndoManager(doc, { mergeInterval: entry.mergeInterval })
   entry.judge = null
+}
+
+/** The shadow is single-use once a judgement leaves operations in it, and freed when it is let go. */
+function dropShadow(entry: Held) {
+  release(entry.shadow)
+  entry.shadow = null
 }
 
 /** Keeps `update`, which `entry.doc` now holds, so a later refusal can rebuild the document. */
@@ -124,7 +143,13 @@ function keep(entry: Held, update: Uint8Array) {
   // the compaction threshold: a large parked update would otherwise compact on every write.
   const parkedBytes = entry.parked.reduce((total, held) => total + held.byteLength, 0)
   if (entry.logBytes - parkedBytes <= Math.max(entry.base?.byteLength ?? 0, MIN_LOG_BYTES)) return
+  compact(entry)
+}
+
+/** Folds the log into a new snapshot of the document, keeping the updates it still lacks. */
+function compact(entry: Held) {
   entry.base = entry.doc.export({ mode: 'snapshot' })
+  entry.baseUpdates = []
   entry.parked = stillParkedAfter(entry.base, entry.parked)
   entry.log = [...entry.parked]
   entry.logBytes = entry.parked.reduce((total, update) => total + update.byteLength, 0)
@@ -177,12 +202,12 @@ function mutate(entry: Held, apply: (doc: LoroDoc) => void): wire.MutationResult
   try {
     breach = importWithinTextLimits(shadow, update).breach
   } catch (error) {
-    entry.shadow = null
+    dropShadow(entry)
     restore(entry)
     throw error
   }
   if (breach !== null) {
-    entry.shadow = null
+    dropShadow(entry)
     restore(entry)
     return { outcome: 'refused', breach: breachOf(breach) }
   }
@@ -207,10 +232,10 @@ function judgeOnShadow(
   const shadow = shadowAtHead(entry)
   try {
     const breach = judgeWorkspaceSyncImport(shadow, update)
-    if (breach !== null) entry.shadow = null
+    if (breach !== null) dropShadow(entry)
     return breach
   } catch (error) {
-    entry.shadow = null
+    dropShadow(entry)
     throw error
   }
 }
@@ -265,13 +290,18 @@ function applyBatch(doc: LoroDoc, batch: wire.WriteRequest['batch']) {
 }
 
 function openDocument(request: wire.OpenRequest, defaultMergeInterval: number): Held {
-  const { peer, bytes, undoMergeIntervalMs } = wire.openRequestSchema.parse(request)
+  const { peer, bytes, updates, undoMergeIntervalMs } = wire.openRequestSchema.parse(request)
   const id = peerOf(peer)
   const mergeInterval = undoMergeIntervalMs ?? defaultMergeInterval
   const doc = new LoroDoc()
   doc.setPeerId(id)
   const base = bytes === undefined ? null : decoded(bytes)
-  if (base !== null) doc.import(base)
+  const baseUpdates = (updates ?? []).map(decoded)
+  const opened = [...(base === null ? [] : [base]), ...baseUpdates]
+  // One batch, so a log of updates is applied once however many it holds.
+  const status = opened.length > 0 ? doc.importBatch(opened) : null
+  // The updates a snapshot cannot hold stay parked, as an import's would.
+  const parked = (status?.pending?.size ?? 0) > 0 ? [...baseUpdates] : []
   const undo = new UndoManager(doc, { mergeInterval })
   return {
     doc,
@@ -282,9 +312,10 @@ function openDocument(request: wire.OpenRequest, defaultMergeInterval: number): 
     view: false,
     shadow: null,
     base,
+    baseUpdates,
     log: [],
-    logBytes: 0,
-    parked: [],
+    logBytes: parked.reduce((total, update) => total + update.byteLength, 0),
+    parked,
   }
 }
 
@@ -313,6 +344,7 @@ function forkOf(source: Held, request: wire.ForkRequest): Held {
     view: at !== undefined,
     shadow: null,
     base,
+    baseUpdates: [],
     log: [...parked],
     logBytes: parked.reduce((total, update) => total + update.byteLength, 0),
     parked,
@@ -356,6 +388,10 @@ function inspections(heldBy: (handle: number) => Held) {
     async read(request: wire.ReadRequest) {
       const { handle, query } = wire.readRequestSchema.parse(request)
       return { value: await readQuery(heldBy(handle).doc, query) }
+    },
+    readNow(request: wire.ReadRequest) {
+      const { handle, query } = wire.readRequestSchema.parse(request)
+      return { value: readQueryNow(heldBy(handle).doc, query) }
     },
     version(request: wire.VersionRequest) {
       return versionOf(heldBy(wire.versionRequestSchema.parse(request).handle).doc)
@@ -434,7 +470,17 @@ export function createCrdtEngine(options: CrdtEngineOptions = {}): CrdtEngine {
     },
     close(request) {
       const { handle } = wire.closeRequestSchema.parse(request)
-      if (heldBy(handle) !== undefined) handles.delete(handle)
+      const entry = heldBy(handle)
+      handles.delete(handle)
+      dropShadow(entry)
+      release(entry.undo, entry.doc)
+    },
+    trim(request) {
+      const entry = heldBy(wire.trimRequestSchema.parse(request).handle)
+      // A view is checked out at a version and has no log to fold.
+      if (entry.view) return
+      dropShadow(entry)
+      if (entry.log.length > 0 || entry.baseUpdates.length > 0) compact(entry)
     },
   }
 }

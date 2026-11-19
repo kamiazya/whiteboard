@@ -219,10 +219,11 @@ export const importSubtreeRequestSchema = z.strictObject({
 })
 export type ImportSubtreeRequest = z.infer<typeof importSubtreeRequestSchema>
 
-/** Open a document: from bytes an engine exported, or empty. */
+/** Open a document: from exported bytes and updates after them, or empty. */
 export const openRequestSchema = z.strictObject({
   peer: peerIdSchema,
   bytes: bytesSchema.optional(),
+  updates: z.array(bytesSchema).optional(),
   undoMergeIntervalMs: z.number().int().min(0).meta({ maximum: undefined }).optional(),
 })
 export type OpenRequest = z.infer<typeof openRequestSchema>
@@ -261,6 +262,12 @@ export const textSpliceRequestSchema = z.strictObject({
   runs: z.array(textRunSchema),
 })
 export type TextSpliceRequest = z.infer<typeof textSpliceRequestSchema>
+
+/** Free what an idle open document holds only to judge its next write. */
+export const trimRequestSchema = z.strictObject({
+  handle: handleSchema,
+})
+export type TrimRequest = z.infer<typeof trimRequestSchema>
 
 /** Forget the undo and redo history of an open document. */
 export const undoClearRequestSchema = z.strictObject({

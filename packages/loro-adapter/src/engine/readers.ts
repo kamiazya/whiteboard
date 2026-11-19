@@ -44,7 +44,7 @@ import {
   resolveWorkspaceDocumentById,
   unreadableWorkspaceNodes,
 } from '../workspace-tree.js'
-import { type Answer, answerLater, attempt, versionOfPairs } from './answers.js'
+import { type Answer, answer, answerLater, attempt, versionOfPairs } from './answers.js'
 
 /**
  * The arguments a read takes. The contract leaves them any-value, so the
@@ -158,4 +158,18 @@ export function readQuery(doc: LoroDoc, query: documentEngine.Query): Promise<An
     const args = readArgsSchema.parse(query.args ?? {})
     return await READERS[query.query](doc, args)
   })
+}
+
+/**
+ * The same read answered without waiting. Every reader but the file scan
+ * answers from the document alone; that one asks the keeper for trash bytes, so
+ * a caller that needs it awaits `readQuery`.
+ */
+export function readQueryNow(doc: LoroDoc, query: documentEngine.Query): Answer {
+  if (query.query === 'fileReferences') {
+    throw new TypeError(
+      'fileReferences asks the keeper, so it answers through read and not readNow',
+    )
+  }
+  return answer(() => READERS[query.query](doc, readArgsSchema.parse(query.args ?? {})))
 }

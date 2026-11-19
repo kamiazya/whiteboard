@@ -44,6 +44,7 @@ export interface JournaledEngine {
   export(request: wire.ExportRequest): wire.ExportResponse
   write(request: wire.WriteRequest): JournaledMutation
   read(request: wire.ReadRequest): Promise<wire.ReadResponse>
+  readNow(request: wire.ReadRequest): wire.ReadResponse
   undo(request: wire.UndoRequest): JournaledMutation
   redo(request: wire.RedoRequest): JournaledMutation
   textSplice(request: wire.TextSpliceRequest): JournaledMutation
@@ -53,6 +54,7 @@ export interface JournaledEngine {
   decode(request: wire.DecodeRequest): wire.DecodeResponse
   undoState(request: wire.UndoStateRequest): wire.UndoStateResponse
   undoClear(request: wire.UndoClearRequest): void
+  trim(request: wire.TrimRequest): void
   journal(handle: wire.Handle): Journal
   /** The keeper holds every local update up to and including `upTo`. */
   acknowledge(handle: wire.Handle, upTo: number): void
@@ -113,15 +115,21 @@ function rebuild(held: Records, engine: CrdtEngine, journal: Journal): wire.Open
   return opened
 }
 
+function openJournaled(held: Records, engine: CrdtEngine, request: wire.OpenRequest) {
+  const opened = engine.open(request)
+  // Updates opened after the bytes are part of what the journal rebuilds from.
+  const base =
+    request.bytes !== undefined && request.updates === undefined
+      ? request.bytes
+      : engine.export({ handle: opened.handle, mode: 'snapshot' }).bytes
+  held.set(opened.handle, { peer: request.peer, base, pending: [], nextSeq: 1 })
+  return opened
+}
+
 export function journaledEngine(engine: CrdtEngine): JournaledEngine {
   const held: Records = new Map()
   return {
-    open(request) {
-      const opened = engine.open(request)
-      const base = request.bytes ?? engine.export({ handle: opened.handle, mode: 'snapshot' }).bytes
-      held.set(opened.handle, { peer: request.peer, base, pending: [], nextSeq: 1 })
-      return opened
-    },
+    open: (request) => openJournaled(held, engine, request),
     close(request) {
       engine.close(request)
       held.delete(request.handle)
@@ -137,6 +145,7 @@ export function journaledEngine(engine: CrdtEngine): JournaledEngine {
     export: (request) => engine.export(request),
     write: (request) => journalLocal(held, request.handle, engine.write(request)),
     read: (request) => engine.read(request),
+    readNow: (request) => engine.readNow(request),
     undo: (request) => journalLocal(held, request.handle, engine.undo(request)),
     redo: (request) => journalLocal(held, request.handle, engine.redo(request)),
     textSplice: (request) => journalLocal(held, request.handle, engine.textSplice(request)),
@@ -154,6 +163,7 @@ export function journaledEngine(engine: CrdtEngine): JournaledEngine {
     decode: (request) => engine.decode(request),
     undoState: (request) => engine.undoState(request),
     undoClear: (request) => engine.undoClear(request),
+    trim: (request) => engine.trim(request),
     journal(handle) {
       const { peer, base, pending } = recordOf(held, handle)
       return journalSchema.parse({ peer, base, pending })

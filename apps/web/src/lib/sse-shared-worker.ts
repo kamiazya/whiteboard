@@ -15,8 +15,8 @@ import { routingTransitions, SseStreamHub } from '@kamiazya/whiteboard-daemon-cl
 import { workspaceIdOfSyncKey } from '@kamiazya/whiteboard-daemon-client/sync-key'
 import { retryDelayMs, WriteChain } from '@kamiazya/whiteboard-daemon-client/write-chain'
 import { compareVersions } from '@kamiazya/whiteboard-history'
-import type { CrdtEngine } from '@kamiazya/whiteboard-loro-adapter'
-import { base64ToBytes, bytesToBase64, type documentEngine } from '@kamiazya/whiteboard-model'
+import type { CrdtEngine, LeaseVersion, RecordLease } from '@kamiazya/whiteboard-loro-adapter'
+import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { createDaemonFetch } from './daemon-fetch.js'
 import { postWorkerEvent, sseWorkerRequestSchema } from './sse-shared-worker-protocol.js'
 
@@ -46,13 +46,19 @@ import { postWorkerEvent, sseWorkerRequestSchema } from './sse-shared-worker-pro
 interface LoadedEngine {
   readonly engine: CrdtEngine
   readonly randomPeerId: () => string
+  /** The host kit over a lease, held here because the adapter is only imported dynamically. */
+  readonly kit: typeof import('@kamiazya/whiteboard-loro-adapter').lease
 }
 let loaded: LoadedEngine | undefined
 const loroReady: Promise<LoadedEngine | undefined> = import(
   '@kamiazya/whiteboard-loro-adapter'
 ).then(
   async (adapter) => {
-    loaded = { engine: await adapter.loadCrdtEngine(), randomPeerId: adapter.randomPeerId }
+    loaded = {
+      engine: await adapter.loadCrdtEngine(),
+      randomPeerId: adapter.randomPeerId,
+      kit: adapter.lease,
+    }
     return loaded
   },
   () => undefined,
@@ -104,25 +110,26 @@ const replicaKey = (baseUrl: string, doc: string) => `${baseUrl}\n${doc}`
  * workspace and stays as light as the stream multiplexer it grew from.
  */
 const replicas = new Map<string, Replica>()
-type ReplicaVersion = documentEngine.VersionResponse['version']
+type ReplicaVersion = LeaseVersion
 
 /** An engine handle, and the engine it belongs to. */
-interface Replica {
-  readonly handle: number
-}
+type Replica = RecordLease
+
+/** What a replica that was never opened holds: nothing is exported from it, so no encoding is needed. */
+const NO_VERSION: ReplicaVersion = { encoded: new Uint8Array(), entries: [], frontiers: [] }
 
 function openReplica(bytes?: Uint8Array): Replica | undefined {
   if (loaded === undefined) return undefined
-  const { engine, randomPeerId } = loaded
+  const { engine, randomPeerId, kit } = loaded
   const { handle } = engine.open({
     peer: randomPeerId(),
     ...(bytes === undefined ? {} : { bytes: bytesToBase64(bytes) }),
   })
-  return { handle }
+  return kit.ownedLease(engine, handle)
 }
 
 function versionOf(replica: Replica): ReplicaVersion {
-  return loaded?.engine.version({ handle: replica.handle }).version ?? []
+  return loaded?.kit.versionOf(replica) ?? NO_VERSION
 }
 
 /**
@@ -131,34 +138,25 @@ function versionOf(replica: Replica): ReplicaVersion {
  */
 function orderOf(a: ReplicaVersion, b: ReplicaVersion) {
   const asMap = (version: ReplicaVersion) =>
-    new Map(version.map(({ peer, counter }) => [peer, counter]))
+    new Map(version.entries.map(({ peer, counter }) => [peer, counter]))
   return compareVersions(asMap(a), asMap(b))
 }
 
 /** Merges bytes unjudged: the daemon's own frames and a tab's push are not the replica's to refuse. */
 function importInto(replica: Replica, bytes: Uint8Array): void {
-  loaded?.engine.import({ handle: replica.handle, bytes: bytesToBase64(bytes), judge: 'none' })
+  loaded?.kit.importBytes(replica, bytes, 'none')
 }
 
 function exportSince(replica: Replica, from: ReplicaVersion): Uint8Array {
-  const { bytes } = (loaded as LoadedEngine).engine.export({
-    handle: replica.handle,
-    mode: 'update',
-    from: [...from],
-  })
-  return base64ToBytes(bytes) ?? new Uint8Array()
+  return (loaded as LoadedEngine).kit.exportUpdateSince(replica, from.encoded)
 }
 
 function exportSnapshot(replica: Replica): Uint8Array {
-  const { bytes } = (loaded as LoadedEngine).engine.export({
-    handle: replica.handle,
-    mode: 'snapshot',
-  })
-  return base64ToBytes(bytes) ?? new Uint8Array()
+  return (loaded as LoadedEngine).kit.exportSnapshot(replica)
 }
 
 function closeReplica(replica: Replica): void {
-  loaded?.engine.close({ handle: replica.handle })
+  replica.release()
 }
 
 function replicaFor(baseUrl: string, doc: string): Replica | undefined {
