@@ -6,7 +6,7 @@
 //! one language's output. What is accepted: numbers with an inclusive
 //! `minimum` or an exclusive one, always finite (Zod 4's `z.number()` refuses NaN and Infinity,
 //! JSON cannot write them, and a Rust `f64` read from JSON cannot be one);
-//! booleans and integers; strings with a UTF-16 minimum, a pattern and a named
+//! booleans and integers (an integer may be `minimum: 0`); strings with a UTF-16 minimum, a pattern and a named
 //! check, a closed `enum` of values, or a `const` (a definition too, which a
 //! union may name); arrays with an inclusive
 //! length bound (and the sentence Zod refuses an overlong one with), `$ref`s
@@ -93,8 +93,11 @@ pub(super) enum Ty<'a> {
         above: Option<f64>,
     },
     Bool,
-    /// A whole number; the safe-integer bounds are not published.
-    Integer,
+    /// A whole number; the safe-integer bounds are not published. `unsigned`
+    /// is the one bound an integer takes, `minimum: 0`: Zod `.min(0)`, Rust `u64`.
+    Integer {
+        unsigned: bool,
+    },
     /// A string that is always this one value.
     Literal(&'a str),
     Str {
@@ -553,8 +556,11 @@ fn lower_form<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> O
             Some(Ty::Bool)
         }
         Some(Kind::Integer) => {
-            only(node, &[], "an integer", at, v);
-            Some(Ty::Integer)
+            only(node, &["minimum"], "an integer", at, v);
+            if node.minimum.is_some_and(|m| m != 0.0) {
+                v.push(format!("{at}.minimum: an integer's minimum is 0"));
+            }
+            Some(Ty::Integer { unsigned: node.minimum.is_some() })
         }
         Some(Kind::String) if node.constant.is_some() => Some(lower_const(node, at, v)),
         Some(Kind::String) if node.values.is_some() => lower_enum(node, at, top, v),

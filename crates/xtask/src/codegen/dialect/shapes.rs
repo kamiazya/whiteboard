@@ -24,8 +24,11 @@ pub(super) fn lower_enum<'a>(
     }
     let mut variants = BTreeSet::new();
     for value in values {
-        if !is_word(value) {
-            v.push(format!("{at}.enum: `{value}` is not lowercase letters and digits"));
+        if !is_enum_value(value) {
+            v.push(format!(
+                "{at}.enum: `{value}` is not lowercase-led letters and digits in \
+                 `-`-separated parts"
+            ));
             continue;
         }
         let variant = variant_name(value);
@@ -38,15 +41,29 @@ pub(super) fn lower_enum<'a>(
     Some(Ty::Enum(values.iter().map(String::as_str).collect()))
 }
 
-/// The Rust variant for an enum value: capitalised, and `V`-prefixed where it
-/// would begin with a digit.
+/// The Rust variant for an enum value: each `-`-separated part capitalised and
+/// joined, and `V`-prefixed where it would begin with a digit.
 pub(in super::super) fn variant_name(value: &str) -> String {
-    let mut chars = value.chars();
-    let first = chars.next().unwrap_or_default();
-    if first.is_ascii_digit() {
-        return format!("V{value}");
-    }
-    first.to_ascii_uppercase().to_string() + chars.as_str()
+    let joined: String = value
+        .split('-')
+        .map(|part| {
+            let mut chars = part.chars();
+            let first = chars.next().unwrap_or_default();
+            first.to_ascii_uppercase().to_string() + chars.as_str()
+        })
+        .collect();
+    if value.starts_with(|c: char| c.is_ascii_digit()) { format!("V{joined}") } else { joined }
+}
+
+/// An enum value as written on the wire: a lowercase letter or digit first,
+/// then letters and digits, in parts a single `-` separates (`snapshot`,
+/// `writeSpatialCanvas`, `shallow-snapshot`). Two values may not name one
+/// Rust variant, which `lower_enum` checks.
+fn is_enum_value(value: &str) -> bool {
+    value.split('-').all(|part| {
+        part.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
+            && part.bytes().all(|b| b.is_ascii_alphanumeric())
+    })
 }
 
 /// A union: `anyOf` over `$ref`s to definitions, each a Rust variant of the
@@ -121,13 +138,14 @@ fn union_members<'a>(
 }
 
 /// A string that is always one value, written as lowercase letters and digits
-/// so a Rust constant can spell it and an enum could name it. On a property it
+/// in parts a single `-` separates (`snapshot`, `shallow-snapshot`), so a Rust
+/// constant can spell it and an enum could name it. On a property it
 /// is the type's constant; as a definition it is a `String` alias a union may
 /// name as a member.
 pub(super) fn lower_const<'a>(node: &'a Node, at: &str, v: &mut Vec<String>) -> Ty<'a> {
     only(node, &["const"], "a constant", at, v);
     let value = node.constant.as_deref().unwrap_or_default();
-    if !is_word(value) {
+    if !value.split('-').all(is_word) {
         v.push(format!("{at}.const: `{value}` is not lowercase letters and digits"));
     }
     Ty::Literal(value)

@@ -36,6 +36,8 @@ export {
 export { bytesToHex } from './encoding/hex.js'
 export * from './facets.js'
 export { generateDocumentId } from './generate-document-id.js'
+// A namespace, because the engine's call names (Write, Query, Handle) are too general to sit among the model's.
+export * as documentEngine from './generated/crdt.zod.js'
 export { type OkfMarkdownFrontmatter, okfMarkdownFrontmatterSchema } from './generated/okf.zod.js'
 export * from './ids.js'
 export { integerSchema, nonnegativeIntegerSchema } from './integer.js'

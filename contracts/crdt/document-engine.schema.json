@@ -1,0 +1,562 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CRDT document engine",
+  "description": "The wire of the CRDT document engine: open, close, import, export, write, read, undo, redo and a text splice over a handle. No callback crosses it; the TypeScript and the Rust engine will both implement it.",
+  "x-wb-emit": {
+    "zod": "packages/model/src/generated/crdt.zod.ts",
+    "rust": "crates/core/model/src/generated/crdt.rs"
+  },
+  "x-wb-describe": false,
+  "x-wb-rustSerde": false,
+  "x-wb-readonlyTypes": false,
+  "$defs": {
+    "Bytes": {
+      "description": "Bytes on the wire: base64 with padding, as the recorded oracles hold them.",
+      "type": "string"
+    },
+    "PeerId": {
+      "description": "A Loro peer id: the unsigned 64-bit number in decimal.",
+      "type": "string"
+    },
+    "DocumentId": {
+      "description": "A document id: the workspace tree node hosting it.",
+      "type": "string"
+    },
+    "Handle": {
+      "description": "What open answers: an engine-held document, never reused in an engine life. A close ends it.",
+      "type": "integer"
+    },
+    "WriterName": {
+      "description": "A write by name: one per writer of the recorded write oracle.",
+      "type": "string",
+      "enum": [
+        "writeSpatialCanvas",
+        "writeSpatialNode",
+        "writeSpatialEdge",
+        "deleteSpatialNode",
+        "deleteSpatialEdge",
+        "reconcileSpatialCanvas",
+        "setNodeLock",
+        "setEdgeLock",
+        "withSpatialBatch",
+        "writeMarkdownBody",
+        "writeDocumentKind",
+        "writeFacets",
+        "writeCoreFacets",
+        "writeTrustFacets",
+        "reconcileFacets",
+        "reconcileCoreFacets",
+        "writeCanvasFacetsField",
+        "writeCommentThread",
+        "writeThreadMessage",
+        "setCommentThreadStatus",
+        "moveCommentThread",
+        "markThreadPassages",
+        "writeProposal",
+        "setProposedChangeStatus",
+        "withDocumentBatch",
+        "reconcileDocContent",
+        "writeWorkspaceDocumentContent",
+        "writeDocumentContentAndName",
+        "seedNameFromTitle",
+        "seedNamesFromTitles",
+        "stampEditedDocuments",
+        "createWorkspaceDocumentAtPath",
+        "createWorkspaceDocument",
+        "ensureFolderPath",
+        "moveWorkspaceDocument",
+        "moveWorkspaceNodeToPath",
+        "setWorkspaceDocumentName",
+        "setWorkspaceFolderName",
+        "deleteWorkspaceDocument",
+        "deleteWorkspaceNode",
+        "deleteWorkspaceNodeAtPath",
+        "setWorkspaceLastCompactedAt",
+        "setWorkspacePinned",
+        "updateWorkspaceDocumentMeta",
+        "pruneEmptyFolders",
+        "recordTrashEntry",
+        "duplicateWorkspaceDocument"
+      ]
+    },
+    "QueryName": {
+      "description": "A read by name: one per reader of the recorded read oracle.",
+      "type": "string",
+      "enum": [
+        "documentKind",
+        "documentContent",
+        "spatialCanvas",
+        "nodeLocks",
+        "edgeLocks",
+        "spatialNodeCount",
+        "markdownBody",
+        "bodyDelta",
+        "coreFacets",
+        "trustFacets",
+        "facets",
+        "annotations",
+        "commentThreads",
+        "threadMarks",
+        "proposals",
+        "imageRefIds",
+        "retiredStoredShape",
+        "stateSize",
+        "contentDigest",
+        "textLimitBreach",
+        "documents",
+        "nodes",
+        "meta",
+        "pinned",
+        "trash",
+        "folderNames",
+        "unreadableNodes",
+        "removedSince",
+        "touchedSince",
+        "organisationChangedSince",
+        "fileReferences",
+        "workspaceDocumentEntry",
+        "workspaceDocumentProjection"
+      ]
+    },
+    "BreachShape": {
+      "description": "Which limit a refused update broke, as the sync judges name it.",
+      "type": "string",
+      "enum": [
+        "run",
+        "runs",
+        "body",
+        "node-text",
+        "node-location",
+        "label",
+        "comment-message",
+        "tags",
+        "container-name",
+        "canvas-size",
+        "thread-anchor",
+        "anchor-quote",
+        "open-threads",
+        "open-changes",
+        "thread-messages",
+        "content-root",
+        "reserved-map-key",
+        "retired-shape",
+        "retired-comment-plane",
+        "unattached-container"
+      ]
+    },
+    "VersionEntry": {
+      "description": "One peer in a version or a frontier: the peer and a counter.",
+      "type": "object",
+      "properties": {
+        "peer": {
+          "$ref": "#/$defs/PeerId",
+          "description": "The peer."
+        },
+        "counter": {
+          "type": "integer",
+          "description": "The operation counter."
+        }
+      },
+      "required": ["peer", "counter"],
+      "x-wb-order": ["peer", "counter"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "Breach": {
+      "description": "The refusal of an update that breaks a text or structure limit.",
+      "type": "object",
+      "properties": {
+        "shape": {
+          "$ref": "#/$defs/BreachShape",
+          "description": "The limit broken."
+        },
+        "container": {
+          "type": "string",
+          "description": "The container that broke it, when the limit names one."
+        }
+      },
+      "required": ["shape"],
+      "x-wb-order": ["shape", "container"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "Write": {
+      "description": "One write: the writer and its arguments, any-value on purpose.",
+      "type": "object",
+      "properties": {
+        "op": {
+          "$ref": "#/$defs/WriterName",
+          "description": "The writer."
+        },
+        "args": {
+          "x-wb-any": true,
+          "description": "The writer arguments, a JSON object."
+        }
+      },
+      "required": ["op", "args"],
+      "x-wb-order": ["op", "args"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "Query": {
+      "description": "One read: the reader and its arguments, any-value on purpose.",
+      "type": "object",
+      "properties": {
+        "query": {
+          "$ref": "#/$defs/QueryName",
+          "description": "The reader."
+        },
+        "args": {
+          "x-wb-any": true,
+          "description": "The reader arguments, a JSON object; omitted when it takes none."
+        }
+      },
+      "required": ["query"],
+      "x-wb-order": ["query", "args"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "OpenRequest": {
+      "description": "Open a document: from bytes an engine exported, or empty.",
+      "type": "object",
+      "properties": {
+        "peer": {
+          "$ref": "#/$defs/PeerId",
+          "description": "The peer id this replica writes as."
+        },
+        "bytes": {
+          "$ref": "#/$defs/Bytes",
+          "description": "The document to open; empty when absent."
+        }
+      },
+      "required": ["peer"],
+      "x-wb-order": ["peer", "bytes"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "OpenResponse": {
+      "description": "The document opened.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The handle every later call names."
+        }
+      },
+      "required": ["handle"],
+      "x-wb-order": ["handle"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "CloseRequest": {
+      "description": "Release a document: its handle is then invalid and any call on it is refused.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document to release."
+        }
+      },
+      "required": ["handle"],
+      "x-wb-order": ["handle"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "ImportRequest": {
+      "description": "Merge exported bytes into an open document.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        },
+        "bytes": {
+          "$ref": "#/$defs/Bytes",
+          "description": "A snapshot, update or shallow snapshot."
+        }
+      },
+      "required": ["handle", "bytes"],
+      "x-wb-order": ["handle", "bytes"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "ExportSnapshotRequest": {
+      "description": "Export everything an open document holds.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        },
+        "mode": {
+          "type": "string",
+          "const": "snapshot",
+          "description": "Always snapshot."
+        }
+      },
+      "required": ["handle", "mode"],
+      "x-wb-order": ["handle", "mode"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "ExportUpdateRequest": {
+      "description": "Export the operations since a version.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        },
+        "mode": {
+          "type": "string",
+          "const": "update",
+          "description": "Always update."
+        },
+        "from": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "description": "The version the receiver already holds. Absent exports everything."
+        }
+      },
+      "required": ["handle", "mode"],
+      "x-wb-order": ["handle", "mode", "from"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "ExportShallowSnapshotRequest": {
+      "description": "Export the state at a frontier, without the history before it.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        },
+        "mode": {
+          "type": "string",
+          "const": "shallow-snapshot",
+          "description": "Always shallow-snapshot."
+        },
+        "frontiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "description": "The frontier it keeps the state at."
+        }
+      },
+      "required": ["handle", "mode", "frontiers"],
+      "x-wb-order": ["handle", "mode", "frontiers"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "ExportRequest": {
+      "description": "Export an open document; the mode says what it carries and what it needs.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ExportSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/ExportUpdateRequest"
+        },
+        {
+          "$ref": "#/$defs/ExportShallowSnapshotRequest"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "mode"
+      }
+    },
+    "ExportResponse": {
+      "description": "What an export produced.",
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "$ref": "#/$defs/Bytes",
+          "description": "The exported bytes."
+        }
+      },
+      "required": ["bytes"],
+      "x-wb-order": ["bytes"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "WriteRequest": {
+      "description": "Apply writes to an open document as one batch.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        },
+        "batch": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Write"
+          },
+          "description": "The writes, applied in order."
+        }
+      },
+      "required": ["handle", "batch"],
+      "x-wb-order": ["handle", "batch"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "ReadRequest": {
+      "description": "Ask an open document a question.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        },
+        "query": {
+          "$ref": "#/$defs/Query",
+          "description": "The read."
+        }
+      },
+      "required": ["handle", "query"],
+      "x-wb-order": ["handle", "query"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "ReadResponse": {
+      "description": "What a read answered, as the recorded oracle writes it.",
+      "type": "object",
+      "properties": {
+        "value": {
+          "x-wb-any": true,
+          "description": "The answer, plain JSON."
+        }
+      },
+      "required": ["value"],
+      "x-wb-order": ["value"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "UndoRequest": {
+      "description": "Undo the last local change of an open document.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        }
+      },
+      "required": ["handle"],
+      "x-wb-order": ["handle"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "RedoRequest": {
+      "description": "Redo the last undone local change of an open document.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        }
+      },
+      "required": ["handle"],
+      "x-wb-order": ["handle"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "TextSpliceRequest": {
+      "description": "Replace a run of a text container, in UTF-16 code units.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        },
+        "documentId": {
+          "$ref": "#/$defs/DocumentId",
+          "description": "The hosting tree node; absent for a document that is its own root."
+        },
+        "text": {
+          "type": "string",
+          "description": "The text container key in the document."
+        },
+        "index": {
+          "type": "integer",
+          "description": "Where the run starts, in UTF-16 code units.",
+          "minimum": 0
+        },
+        "remove": {
+          "type": "integer",
+          "description": "How many UTF-16 code units to remove.",
+          "minimum": 0
+        },
+        "insert": {
+          "type": "string",
+          "description": "The text to insert."
+        }
+      },
+      "required": ["handle", "text", "index", "remove", "insert"],
+      "x-wb-order": ["handle", "documentId", "text", "index", "remove", "insert"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "MutationApplied": {
+      "description": "A call that took effect: the documents it changed, none when it was a no-op.",
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "const": "applied",
+          "description": "Always applied."
+        },
+        "changed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DocumentId"
+          },
+          "description": "The documents the call changed."
+        },
+        "localUpdate": {
+          "$ref": "#/$defs/Bytes",
+          "description": "The update that carries the change; absent when nothing changed."
+        }
+      },
+      "required": ["outcome", "changed"],
+      "x-wb-order": ["outcome", "changed", "localUpdate"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "MutationRefused": {
+      "description": "A call refused for breaking a limit: nothing changed and there is no update.",
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "const": "refused",
+          "description": "Always refused."
+        },
+        "breach": {
+          "$ref": "#/$defs/Breach",
+          "description": "The limit broken."
+        }
+      },
+      "required": ["outcome", "breach"],
+      "x-wb-order": ["outcome", "breach"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "MutationResult": {
+      "description": "What a call that changes a document answers: it took effect, or it was refused.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/MutationApplied"
+        },
+        {
+          "$ref": "#/$defs/MutationRefused"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "outcome"
+      }
+    }
+  }
+}

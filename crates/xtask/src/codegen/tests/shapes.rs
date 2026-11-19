@@ -70,12 +70,26 @@ fn a_variant_is_the_value_capitalised_and_digit_led_ones_take_a_v() {
 }
 
 #[test]
+fn a_camel_or_kebab_enum_value_is_a_pascal_variant_and_keeps_its_wire_spelling() {
+    assert_eq!(dialect::variant_name("writeSpatialCanvas"), "WriteSpatialCanvas");
+    assert_eq!(dialect::variant_name("shallow-snapshot"), "ShallowSnapshot");
+    assert_eq!(dialect::variant_name("1-a"), "V1A");
+    let defs = swapped(SIDE, r#"["top", "right", "1"]"#, r#"["shallow-snapshot", "writeNode"]"#);
+    let (zod, rust) = emitted(&defs);
+    assert!(zod.contains("z.enum(['shallow-snapshot', 'writeNode'])"), "{zod}");
+    assert!(rust.contains("Self::ShallowSnapshot => \"shallow-snapshot\","), "{rust}");
+    assert!(rust.contains("\"writeNode\" => Some(Self::WriteNode),"), "{rust}");
+}
+
+#[test]
 fn an_enum_rule_the_dialect_states_is_refused_by_name() {
     for (from, to, expect) in [
         (r#"["top", "right", "1"]"#, "[]", "declares no value"),
-        (r#"["top", "right", "1"]"#, r#"["top", ""]"#, "is not lowercase"),
-        (r#"["top", "right", "1"]"#, r#"["top", "Right"]"#, "is not lowercase"),
-        (r#"["top", "right", "1"]"#, r#"["top", "a-b"]"#, "is not lowercase"),
+        (r#"["top", "right", "1"]"#, r#"["top", ""]"#, "is not lowercase-led"),
+        (r#"["top", "right", "1"]"#, r#"["top", "Right"]"#, "is not lowercase-led"),
+        (r#"["top", "right", "1"]"#, r#"["top", "a--b"]"#, "is not lowercase-led"),
+        (r#"["top", "right", "1"]"#, r#"["top", "a-"]"#, "is not lowercase-led"),
+        (r#"["top", "right", "1"]"#, r#"["top", "a_b"]"#, "is not lowercase-led"),
         (r#"["top", "right", "1"]"#, r#"["top", "top"]"#, "name the Rust variant `Top`"),
         (r#"["top", "right", "1"]"#, r#"["top", "self"]"#, "not a name a Rust variant takes"),
         (r#""enum": ["top""#, r#""pattern": "^a$", "enum": ["top""#, "does not apply to an enum"),

@@ -34,6 +34,17 @@ fn a_boolean_and_an_integer_reach_both_languages() {
 }
 
 #[test]
+fn an_integer_with_a_minimum_of_zero_is_unsigned_in_both_languages() {
+    let (zod, rust) =
+        emitted(&swapped(HOLDER, r#""type": "integer""#, r#""type": "integer", "minimum": 0"#));
+    assert!(
+        zod.contains("\n  count: z.number().int().min(0).meta({ maximum: undefined }),\n"),
+        "{zod}"
+    );
+    assert!(rust.contains("    pub count: u64,\n"), "{rust}");
+}
+
+#[test]
 fn a_list_that_defaults_to_empty_is_a_default_in_zod_and_not_an_option_in_rust() {
     let (zod, rust) = emitted(HOLDER);
     assert!(zod.contains("\n  items: z.array(z.string()).default([]),\n"), "{zod}");
@@ -57,11 +68,7 @@ fn a_scalar_rule_the_dialect_states_is_refused_by_name() {
             r#""type": "boolean", "minimum": 0"#,
             "does not apply to a boolean",
         ),
-        (
-            r#""type": "integer""#,
-            r#""type": "integer", "minimum": 0"#,
-            "does not apply to an integer",
-        ),
+        (r#""type": "integer""#, r#""type": "integer", "minimum": 1"#, "an integer's minimum is 0"),
         (
             r#""type": "integer""#,
             r#""type": "integer", "pattern": "^a$""#,
@@ -121,8 +128,25 @@ fn a_constant_is_a_zod_literal_and_a_rust_constant_that_is_not_a_field() {
 }
 
 #[test]
+fn a_constant_may_join_lowercase_words_with_a_hyphen() {
+    let (zod, rust) = emitted(&swapped(KINDED, r#""const": "node""#, r#""const": "shallow-node""#));
+    assert!(zod.contains("kind: z.literal('shallow-node'),"), "{zod}");
+    assert!(rust.contains("pub const KIND: &str = \"shallow-node\";"), "{rust}");
+}
+
+#[test]
 fn a_constant_rule_the_dialect_states_is_refused_by_name() {
     for (from, to, expect) in [
+        (
+            r#""const": "node""#,
+            r#""const": "no--de""#,
+            "`no--de` is not lowercase letters and digits",
+        ),
+        (
+            r#""const": "node""#,
+            r#""const": "no-De""#,
+            "`no-De` is not lowercase letters and digits",
+        ),
         (r#""const": "node""#, r#""const": "Node""#, "`Node` is not lowercase letters and digits"),
         (r#""const": "node""#, r#""const": """#, "`` is not lowercase letters and digits"),
         (

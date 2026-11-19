@@ -696,6 +696,11 @@ const RUST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // nested comments, strings, raw and byte strings, chars against
   // lifetimes). A function per literal form is the next shrink.
   'crates/xtask/src/unsafe_ledger.rs#count_unsafe': 80,
+  // Generated: a match arm per value of the contract's WriterName enum, which
+  // grows with the writers of the CRDT write oracle. The emitter writes one arm
+  // per value, so the next shrink is a table the emitter emits instead.
+  'crates/core/model/src/generated/crdt.rs#WriterName.as_str': 52,
+  'crates/core/model/src/generated/crdt.rs#WriterName.from_wire': 53,
   // The vendored markdown-rs (crates/core/markdown/src/vendored): the upstream
   // tokenizer's states, resolvers and tree builder, each one long because it
   // walks a stream of events by position in one pass, and `state::call` one
