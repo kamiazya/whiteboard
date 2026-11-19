@@ -312,24 +312,25 @@ export function describeDocumentKindFallback(makeEngine: () => CrdtEngine) {
   })
 }
 
+/** Exported subtree bytes of a markdown document with a body, as base64. */
+function subtreeSource(engine: CrdtEngine): string {
+  const { handle } = engine.open({ peer: '3' })
+  write(engine, handle, 'createWorkspaceDocumentAtPath', {
+    path: 'notes/kept',
+    documentId: FIRST,
+    kind: 'markdown',
+  })
+  splice(engine, handle, 0, 0, 'inside', FIRST)
+  const bytes = exportWorkspaceSubtree(held(engine, handle, 'snapshot'), 'notes/kept')
+  if (bytes === null) throw new Error('the fixture holds no such document')
+  return Buffer.from(bytes).toString('base64')
+}
+
 export function describeSubtreeImport(makeEngine: () => CrdtEngine) {
   describe('a document placed from exported subtree bytes', () => {
-    function source(engine: CrdtEngine): string {
-      const { handle } = engine.open({ peer: '3' })
-      write(engine, handle, 'createWorkspaceDocumentAtPath', {
-        path: 'notes/kept',
-        documentId: FIRST,
-        kind: 'markdown',
-      })
-      splice(engine, handle, 0, 0, 'inside', FIRST)
-      const bytes = exportWorkspaceSubtree(held(engine, handle, 'snapshot'), 'notes/kept')
-      if (bytes === null) throw new Error('the fixture holds no such document')
-      return Buffer.from(bytes).toString('base64')
-    }
-
     it('places the document under the folder it is given, and names it as changed', async () => {
       const engine = makeEngine()
-      const bytes = source(engine)
+      const bytes = subtreeSource(engine)
       const { handle } = engine.open({ peer: '1' })
       const result = applied(engine.importSubtree({ handle, bytes, parentPath: 'restored' }))
       expect(result.changed).toContain(FIRST)
