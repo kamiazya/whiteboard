@@ -80,13 +80,19 @@ import {
   ensureFolderPath,
   moveWorkspaceDocument,
   moveWorkspaceNodeToPath,
+  pruneEmptyFolders,
   reconcileDocContent,
   setWorkspaceDocumentName,
   setWorkspaceLastCompactedAt,
   setWorkspacePinned,
+  updateWorkspaceDocumentMeta,
+  type WorkspaceDocumentMetaPatch,
   writeWorkspaceDocumentContent,
 } from '../workspace-tree.js'
 import { versionOfPairs } from './crdt-read-oracle.js'
+
+/** The clock every recorded write ran under; a replay pins `Date.now` to it. */
+export const RECORDED_NOW = 1_700_000_000_000
 
 interface HostArgs {
   /** Absent for a document that is the root of its own LoroDoc. */
@@ -266,6 +272,10 @@ export const WRITERS = {
   setWorkspacePinned: workspace<{ documentId: string; pinned: boolean }>((doc, a) =>
     setWorkspacePinned(doc, a.documentId, a.pinned),
   ),
+  updateWorkspaceDocumentMeta: workspace<{ documentId: string; patch: WorkspaceDocumentMetaPatch }>(
+    (doc, a) => updateWorkspaceDocumentMeta(doc, a.documentId, a.patch),
+  ),
+  pruneEmptyFolders: workspace<Record<string, never>>((doc) => pruneEmptyFolders(doc)),
   recordTrashEntry: workspace<{ entry: TrashEntry }>((doc, a) => recordTrashEntry(doc, a.entry)),
   duplicateWorkspaceDocument: workspace<Parameters<typeof duplicateWorkspaceDocument>[1]>(
     (doc, a) => duplicateWorkspaceDocument(doc, a),

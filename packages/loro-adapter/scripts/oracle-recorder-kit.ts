@@ -5,8 +5,9 @@
  */
 import { fc } from '@kamiazya/whiteboard-model/test-utils'
 import type { LoroDoc } from 'loro-crdt'
+import { RECORDED_NOW } from '../src/test-utils/crdt-write-oracle.js'
 
-export const NOW = 1_700_000_000_000
+export const NOW = RECORDED_NOW
 Date.now = () => NOW
 
 export function rngOf(seed: number): () => number {

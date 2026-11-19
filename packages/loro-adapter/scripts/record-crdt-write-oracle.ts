@@ -40,7 +40,6 @@ import {
   textNode,
 } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
-import { readAnnotations } from '../src/annotations.js'
 import { writeCommentThread, writeThreadMessage } from '../src/comment-threads.js'
 import { writeCoreFacets, writeDocumentKind, writeTrustFacets } from '../src/document-envelope.js'
 import { readSpatialCanvas, writeSpatialCanvas } from '../src/loro-bridge.js'
@@ -53,7 +52,6 @@ import {
 } from '../src/test-utils/crdt-read-oracle.js'
 import { applyWriter, type WriterName } from '../src/test-utils/crdt-write-oracle.js'
 import { markThreadPassages } from '../src/thread-marks.js'
-import { recordTrashEntry } from '../src/workspace-trash.js'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceDocument,
@@ -65,7 +63,6 @@ import {
   attempt,
   body,
   int,
-  NOW,
   peer,
   pick,
   type Rng,
@@ -121,16 +118,14 @@ function fillContent(
     const [drawn] = sample(spatialCanvasArbitrary, rng, 1)
     const lines: CanvasLine[] = sample(canvasLineArbitrary, rng, 1)
     const base = drawn ?? { nodes: [], edges: [] }
-    const [first, second] = base.nodes
+    // The two nodes added last always exist, so an edge between them is never absent.
     const edges: CanvasEdge[] =
-      first !== undefined && second !== undefined && base.edges.length === 0
-        ? [{ id: 'e1', from: { node: first.id }, to: { node: second.id } }]
-        : base.edges
+      base.edges.length === 0 ? [{ id: 'e1', from: { node: 'g1' }, to: { node: 't1' } }] : base.edges
     const canvas = {
       ...base,
       edges,
       nodes: [
-        ...base.nodes,
+        ...base.nodes.filter((n) => n.id !== 'g1' && n.id !== 't1'),
         groupNode({ id: 'g1', x: 0, y: 0, width: 400, height: 300, label: sentence(rng, 2) }),
         textNode({ id: 't1', x: 10, y: 10, width: 120, height: 60, text: pick(rng, WIDE) }),
       ],
@@ -496,6 +491,10 @@ for (let i = 0; i < 4; i++) {
       blob: { algorithm: 'sha-256', digestHex: 'ab'.repeat(32) },
     },
   })
+  add('updateWorkspaceDocumentMeta', `patch-${i}`, scene, { documentId: a?.id ?? 'absent', patch: { updatedAt: 9000 + i, ...(i % 2 === 0 ? { kind: 'spatial' } : {}) } })
+  add('updateWorkspaceDocumentMeta', `absent-${i}`, scene, { documentId: 'absent', patch: { updatedAt: 1 } })
+  add('updateWorkspaceDocumentMeta', `refused-${i}`, scene, { documentId: a?.id ?? 'absent', patch: { documentId: 'x' } })
+  add('pruneEmptyFolders', `populated-${i}`, scene, {})
   add('recordTrashEntry', `invalid-${i}`, scene, { entry: { documentId: a?.id ?? 'absent', path: '' } })
 }
 
@@ -511,6 +510,13 @@ function seedTreeIds(scene: Scene): Array<{ id: string; path: string }> {
       }
       return data.documentId === undefined ? [] : [{ id: data.documentId, path: segments.join('/') }]
     })
+}
+
+for (let i = 0; i < 4; i++) {
+  const rng = rngOf(5500 + i)
+  const scene = workspaceScene('empty', rng)
+  for (const { id } of seedTreeIds(scene)) deleteWorkspaceDocument(scene.doc, { documentId: id })
+  add('pruneEmptyFolders', `emptied-${i}`, scene, {})
 }
 
 // ---- duplicate, touched, stamp ----
@@ -541,7 +547,6 @@ for (let i = 0; i < 4; i++) {
   add('seedNamesFromTitles', `nothing-${i}`, scene, { since: versionPairs(doc.oplogVersion()) })
   add('stampEditedDocuments', `touched-${i}`, scene, { since, at: 777000 + i })
   add('stampEditedDocuments', `nothing-${i}`, scene, { since: versionPairs(doc.oplogVersion()), at: 1 })
-  void recordTrashEntry
 }
 
 // ---- pure ----
@@ -597,7 +602,6 @@ function record(c: Case, index: number): string {
   })
 }
 
-void NOW
 const lines = cases.map(record)
 writeFileSync(OUT, `${lines.join('\n')}\n`)
 console.log(`wrote ${lines.length} rows to ${OUT}`)
