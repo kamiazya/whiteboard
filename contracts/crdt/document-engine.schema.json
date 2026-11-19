@@ -29,11 +29,7 @@
     "ExportMode": {
       "description": "What an export carries: all of it, the operations since a version, or a shallow state.",
       "type": "string",
-      "enum": [
-        "snapshot",
-        "update",
-        "shallow-snapshot"
-      ]
+      "enum": ["snapshot", "update", "shallow-snapshot"]
     },
     "WriterName": {
       "description": "A write by name: one per writer of the recorded write oracle.",
@@ -167,14 +163,8 @@
           "description": "The operation counter."
         }
       },
-      "required": [
-        "peer",
-        "counter"
-      ],
-      "x-wb-order": [
-        "peer",
-        "counter"
-      ],
+      "required": ["peer", "counter"],
+      "x-wb-order": ["peer", "counter"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -191,13 +181,8 @@
           "description": "The container that broke it, when the limit names one."
         }
       },
-      "required": [
-        "shape"
-      ],
-      "x-wb-order": [
-        "shape",
-        "container"
-      ],
+      "required": ["shape"],
+      "x-wb-order": ["shape", "container"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -214,14 +199,8 @@
           "description": "The writer arguments, a JSON object."
         }
       },
-      "required": [
-        "op",
-        "args"
-      ],
-      "x-wb-order": [
-        "op",
-        "args"
-      ],
+      "required": ["op", "args"],
+      "x-wb-order": ["op", "args"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -238,13 +217,8 @@
           "description": "The reader arguments, a JSON object; omitted when it takes none."
         }
       },
-      "required": [
-        "query"
-      ],
-      "x-wb-order": [
-        "query",
-        "args"
-      ],
+      "required": ["query"],
+      "x-wb-order": ["query", "args"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -261,13 +235,8 @@
           "description": "The document to open; empty when absent."
         }
       },
-      "required": [
-        "peer"
-      ],
-      "x-wb-order": [
-        "peer",
-        "bytes"
-      ],
+      "required": ["peer"],
+      "x-wb-order": ["peer", "bytes"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -280,12 +249,8 @@
           "description": "The handle every later call names."
         }
       },
-      "required": [
-        "handle"
-      ],
-      "x-wb-order": [
-        "handle"
-      ],
+      "required": ["handle"],
+      "x-wb-order": ["handle"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -302,14 +267,8 @@
           "description": "A snapshot, update or shallow snapshot."
         }
       },
-      "required": [
-        "handle",
-        "bytes"
-      ],
-      "x-wb-order": [
-        "handle",
-        "bytes"
-      ],
+      "required": ["handle", "bytes"],
+      "x-wb-order": ["handle", "bytes"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -340,16 +299,8 @@
           "description": "For a shallow snapshot: the frontier it keeps the state at."
         }
       },
-      "required": [
-        "handle",
-        "mode"
-      ],
-      "x-wb-order": [
-        "handle",
-        "mode",
-        "from",
-        "frontiers"
-      ],
+      "required": ["handle", "mode"],
+      "x-wb-order": ["handle", "mode", "from", "frontiers"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -362,12 +313,8 @@
           "description": "The exported bytes."
         }
       },
-      "required": [
-        "bytes"
-      ],
-      "x-wb-order": [
-        "bytes"
-      ],
+      "required": ["bytes"],
+      "x-wb-order": ["bytes"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -387,14 +334,8 @@
           "description": "The writes, applied in order."
         }
       },
-      "required": [
-        "handle",
-        "batch"
-      ],
-      "x-wb-order": [
-        "handle",
-        "batch"
-      ],
+      "required": ["handle", "batch"],
+      "x-wb-order": ["handle", "batch"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -411,14 +352,8 @@
           "description": "The read."
         }
       },
-      "required": [
-        "handle",
-        "query"
-      ],
-      "x-wb-order": [
-        "handle",
-        "query"
-      ],
+      "required": ["handle", "query"],
+      "x-wb-order": ["handle", "query"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -431,12 +366,8 @@
           "description": "The answer, plain JSON."
         }
       },
-      "required": [
-        "value"
-      ],
-      "x-wb-order": [
-        "value"
-      ],
+      "required": ["value"],
+      "x-wb-order": ["value"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -449,12 +380,8 @@
           "description": "The document."
         }
       },
-      "required": [
-        "handle"
-      ],
-      "x-wb-order": [
-        "handle"
-      ],
+      "required": ["handle"],
+      "x-wb-order": ["handle"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -467,12 +394,8 @@
           "description": "The document."
         }
       },
-      "required": [
-        "handle"
-      ],
-      "x-wb-order": [
-        "handle"
-      ],
+      "required": ["handle"],
+      "x-wb-order": ["handle"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -505,21 +428,8 @@
           "description": "The text to insert."
         }
       },
-      "required": [
-        "handle",
-        "text",
-        "index",
-        "remove",
-        "insert"
-      ],
-      "x-wb-order": [
-        "handle",
-        "documentId",
-        "text",
-        "index",
-        "remove",
-        "insert"
-      ],
+      "required": ["handle", "text", "index", "remove", "insert"],
+      "x-wb-order": ["handle", "documentId", "text", "index", "remove", "insert"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -543,14 +453,8 @@
           "description": "Set when the call was refused; nothing changed then."
         }
       },
-      "required": [
-        "changed"
-      ],
-      "x-wb-order": [
-        "changed",
-        "localUpdate",
-        "breach"
-      ],
+      "required": ["changed"],
+      "x-wb-order": ["changed", "localUpdate", "breach"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     }

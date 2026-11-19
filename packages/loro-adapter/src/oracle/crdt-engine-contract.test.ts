@@ -86,9 +86,9 @@ describe('the CRDT document-engine contract', () => {
   it('refuses a write no writer backs and an unknown key on a call', () => {
     const write = { handle: 0, batch: [{ op: 'noSuchWriter', args: {} }] }
     expect(documentEngine.writeRequestSchema.safeParse(write).success).toBe(false)
-    expect(
-      documentEngine.undoRequestSchema.safeParse({ handle: 0, callback: 'x' }).success,
-    ).toBe(false)
+    expect(documentEngine.undoRequestSchema.safeParse({ handle: 0, callback: 'x' }).success).toBe(
+      false,
+    )
   })
 
   it('answers a mutation with what changed, the update, and a breach', () => {
