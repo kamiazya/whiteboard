@@ -599,6 +599,18 @@ function describeJournalOfParkedUpdates(makeEngine: () => CrdtEngine) {
   })
 }
 
+function describeJournalOfViewCopy(makeEngine: () => CrdtEngine) {
+  it('journals a copy of a view, which has no record of its own', async () => {
+    const journaled = journaledEngine(makeEngine())
+    const { handle } = journaled.open({ peer: '1' })
+    write(journaled, handle, 'writeMarkdownBody', { body: 'then' })
+    const at = journaled.version({ handle }).frontiers
+    const view = journaled.fork({ handle, peer: '2', at })
+    const copy = journaled.fork({ handle: view.handle, peer: '3' })
+    expect(await rebuiltBody(makeEngine, journaled.journal(copy.handle))).toBe('then')
+  })
+}
+
 function describeConvergence(makeEngine: () => CrdtEngine) {
   describe('two engines that trade their local updates converge', () => {
     // A boundary between code points, in UTF-16 units: an edit that cut an
@@ -738,6 +750,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeTrim(makeEngine)
     describeJournal(makeEngine)
     describeJournalOfParkedUpdates(makeEngine)
+    describeJournalOfViewCopy(makeEngine)
     describeConvergence(makeEngine)
   })
 }

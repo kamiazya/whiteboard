@@ -161,6 +161,25 @@ function openJournaled(held: Records, engine: CrdtEngine, request: wire.OpenRequ
   return opened
 }
 
+/**
+ * A view at a version has nothing to rebuild from, so only a copy of the head
+ * is journalled.
+ *
+ * The copy takes its source's own record, not a snapshot of itself: a snapshot
+ * leaves out an update still parked, which the copy carries. To the copy every
+ * update is one somebody else made, so none keeps a seq. A view has no record
+ * and parks nothing, so a copy of one starts from a snapshot.
+ */
+function forkJournaled(held: Records, engine: CrdtEngine, request: wire.ForkRequest) {
+  const opened = engine.fork(request)
+  if (request.at !== undefined) return opened
+  const source = held.get(request.handle)
+  const base = source?.base ?? engine.export({ handle: opened.handle, mode: 'snapshot' }).bytes
+  const pending = (source?.pending ?? []).map(({ update }) => ({ update }))
+  held.set(opened.handle, { peer: request.peer, base, pending, nextSeq: 1 })
+  return opened
+}
+
 export function journaledEngine(engine: CrdtEngine): JournaledEngine {
   const held: Records = new Map()
   return {
@@ -185,19 +204,7 @@ export function journaledEngine(engine: CrdtEngine): JournaledEngine {
     redo: (request) => journalLocal(held, request.handle, engine.redo(request)),
     textSplice: (request) => journalLocal(held, request.handle, engine.textSplice(request)),
     importSubtree: (request) => journalLocal(held, request.handle, engine.importSubtree(request)),
-    // A view at a version has nothing to rebuild from, so only a copy of the head is journalled.
-    fork(request) {
-      const opened = engine.fork(request)
-      if (request.at === undefined) {
-        // The source's own record, not a snapshot of the copy: a snapshot
-        // leaves out an update still parked, which the copy carries. To the
-        // copy every update is one somebody else made, so none keeps a seq.
-        const source = recordOf(held, request.handle)
-        const pending = source.pending.map(({ update }) => ({ update }))
-        held.set(opened.handle, { peer: request.peer, base: source.base, pending, nextSeq: 1 })
-      }
-      return opened
-    },
+    fork: (request) => forkJournaled(held, engine, request),
     version: (request) => engine.version(request),
     decode: (request) => engine.decode(request),
     undoState: (request) => engine.undoState(request),
