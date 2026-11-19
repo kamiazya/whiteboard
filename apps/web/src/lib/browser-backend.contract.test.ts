@@ -64,6 +64,10 @@ class InMemoryWorkspaceDocs implements WorkspaceDocs {
   async catchUp(): Promise<never> {
     throw new Error('not implemented')
   }
+
+  async storedVersion(): Promise<never> {
+    throw new Error('not implemented')
+  }
 }
 
 function createStores() {

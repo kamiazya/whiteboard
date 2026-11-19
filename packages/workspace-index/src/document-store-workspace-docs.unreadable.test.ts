@@ -32,9 +32,9 @@ import type {
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-ports'
 import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
-import { LoroDoc } from 'loro-crdt'
-import { expect, it } from 'vitest'
-import { DocumentStoreWorkspaceDocs } from './document-store-workspace-docs.js'
+import { describe, expect, it } from 'vitest'
+import { RecordStoreWorkspaceDocs } from './document-store-workspace-docs.js'
+import { RECORD_SUBJECTS } from './test-utils/record-subjects.js'
 
 /**
  * A store that answers a manifest and chunks which AGREE with each other —
@@ -76,30 +76,47 @@ function storeHolding(bytes: Uint8Array<ArrayBuffer>): DocumentStore {
   } as unknown as DocumentStore
 }
 
-it('raises a typed unreadable error when the stored snapshot is not a document', async () => {
-  const docs = new DocumentStoreWorkspaceDocs(storeHolding(new Uint8Array([1, 2, 3, 4, 5])))
+describe.each(RECORD_SUBJECTS)('an unreadable record held as $name', (subject) => {
+  it('raises a typed unreadable error when the stored snapshot is not a document', async () => {
+    const docs = new RecordStoreWorkspaceDocs(
+      storeHolding(new Uint8Array([1, 2, 3, 4, 5])),
+      subject.kind,
+    )
 
-  await expect(docs.open('ws')).rejects.toSatisfy(isStoredDocumentUnreadableError)
-})
-
-it('raises the same when a stored DELTA is not importable', async () => {
-  // A snapshot that reads and a log entry that does not: the record is still
-  // the thing at fault, and the second import is as much part of reading it
-  // as the first.
-  const sound = new LoroDoc()
-  sound.getMap('meta').set('title', 'readable')
-  sound.commit()
-  const store = storeHolding(new Uint8Array(sound.export({ mode: 'snapshot' })))
-  store.loadDeltas = async () => ({
-    updates: [new Uint8Array([9, 9, 9])],
-    lastSeq: 1,
-    generation: 1,
-    frontier: new Uint8Array(),
+    await expect(docs.open('ws')).rejects.toSatisfy(isStoredDocumentUnreadableError)
   })
 
-  await expect(docs_open(store)).rejects.toSatisfy(isStoredDocumentUnreadableError)
-})
+  it('raises the same when a stored DELTA is not importable', async () => {
+    // A snapshot that reads and a log entry that does not: the record is still
+    // the thing at fault, and the second import is as much part of reading it
+    // as the first.
+    const sound = await subject.fresh()
+    subject.put(sound, 'title', 'readable')
+    const store = storeHolding(new Uint8Array(subject.kind.exportSnapshot(sound)))
+    store.loadDeltas = async () => ({
+      updates: [new Uint8Array([9, 9, 9])],
+      lastSeq: 1,
+      generation: 1,
+      frontier: new Uint8Array(),
+    })
 
-function docs_open(store: DocumentStore): Promise<unknown> {
-  return new DocumentStoreWorkspaceDocs(store).open('ws')
-}
+    await expect(docsOpen(store)).rejects.toSatisfy(isStoredDocumentUnreadableError)
+  })
+
+  it('lets a kind failure that is not a refusal of the bytes through untyped', async () => {
+    const sound = await subject.fresh()
+    subject.put(sound, 'title', 'readable')
+    const store = storeHolding(new Uint8Array(subject.kind.exportSnapshot(sound)))
+    const unavailable = new Error('engine unavailable')
+    const kind = {
+      ...subject.kind,
+      load: () => Promise.reject(unavailable),
+    }
+
+    await expect(new RecordStoreWorkspaceDocs(store, kind).open('ws')).rejects.toBe(unavailable)
+  })
+
+  function docsOpen(store: DocumentStore): Promise<unknown> {
+    return new RecordStoreWorkspaceDocs(store, subject.kind).open('ws')
+  }
+})

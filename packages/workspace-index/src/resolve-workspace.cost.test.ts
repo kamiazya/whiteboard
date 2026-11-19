@@ -21,6 +21,7 @@ const unusedDocs: WorkspaceDocs = {
   save: refuse,
   readCursor: refuse,
   catchUp: refuse,
+  storedVersion: refuse,
 }
 
 describe('resolving a workspace address over a large registry', () => {

@@ -89,6 +89,7 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & { peek: (id: string) => LoroDo
     // against a double that cannot tail.
     readCursor: () => Promise.reject(new Error('not implemented')),
     catchUp: () => Promise.reject(new Error('not implemented')),
+    storedVersion: () => Promise.reject(new Error('not implemented')),
     peek: (id) => docs.get(id) as LoroDoc,
   }
 }

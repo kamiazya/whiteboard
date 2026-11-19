@@ -133,7 +133,14 @@
       "project": ["src/**/*.ts"]
     },
     "packages/workspace-index": {
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      "ignoreIssues": {
+        // The record seam consumers move onto one at a time: the generic
+        // store and the lease-held alias are named by no consumer until the
+        // first of them holds an engine lease.
+        "src/index.ts": ["exports", "types"],
+        "src/workspace-docs.ts": ["types"]
+      }
     },
     "packages/canvas-render": {
       "project": ["src/**/*.ts"]

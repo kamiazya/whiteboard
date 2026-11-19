@@ -68,6 +68,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'thrown for layout options no core request can carry (a function seam), which only a test passes: every root, /api/v1 included, builds its options from data, so it is a wiring defect and never an input the caller can fix',
   FacetWriteCoreNotInstalled:
     'a wiring defect of the realm (no Rust core was installed, which the daemon refuses to boot without), never an input the caller can fix; it is the 500 it is, and the tool tests hold the named failure',
+  RecordBytesRejectedError:
+    "a record kind refusing stored bytes; the record store catches it and raises ports' StoredDocumentUnreadableError, which carries the answer, so it never leaves the store",
   WriteRefusedError:
     'thrown by the host kit over an engine lease when a batch breaks a sync limit; no /api/v1 route writes through a lease yet, and the route that does maps the breach it carries',
   CausalGapError:

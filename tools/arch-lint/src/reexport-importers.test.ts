@@ -33,7 +33,12 @@ import { isShippedPath, isTestPath } from './source-scan.js'
  * Forwarded names with no importer, as `<entry path>#<name>`, each with why.
  * Shrink-only: an entry that gains an importer or goes away fails as stale.
  */
-const UNIMPORTED: Readonly<Record<string, string>> = {}
+const UNIMPORTED: Readonly<Record<string, string>> = {
+  'packages/workspace-index/src/index.ts#RecordStoreWorkspaceDocs':
+    'the generic record store, whose consumers move from the LoroDoc-typed `DocumentStoreWorkspaceDocs` onto an engine lease one at a time; the first of them imports it here',
+  'packages/workspace-index/src/index.ts#WorkspaceRecords':
+    'the workspace record seam held as an engine lease, named by the consumers that move off a LoroDoc; none has yet',
+}
 
 /**
  * Forwards from a RUNTIME entry that only tests import through it, as

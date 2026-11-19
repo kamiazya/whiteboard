@@ -203,6 +203,8 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/workspace-index/src/document-store-workspace-docs.ts#RecordStoreWorkspaceDocs':
+    'the record store written once over a record kind, which only its tests construct until the consumers move from the LoroDoc-typed subclass onto engine leases and name it with `leaseKind`',
   'packages/canvas-render/src/edge-arrows.ts#edgeArrowEnds':
     "which ends of an edge carry an arrowhead, the TypeScript statement of the rule the core's routing is checked against: its shipped consumers left with the TypeScript SVG backend (ADR-0054 A3.6), and edge-touching-boxes.rust.test.ts asks it, independently of the core, whether the router's touching-box path ends in a head",
   'packages/scene/src/scene-graph.ts#ShapeSceneNode':

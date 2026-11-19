@@ -9,9 +9,12 @@
  */
 import type { DocRef, DocumentStore } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
-import { LoroDoc } from 'loro-crdt'
-import { expect, it } from 'vitest'
-import { DocumentStoreWorkspaceDocs } from './document-store-workspace-docs.js'
+import { describe, expect, it } from 'vitest'
+import {
+  type DocumentStoreWorkspaceDocsOptions,
+  RecordStoreWorkspaceDocs,
+} from './document-store-workspace-docs.js'
+import { RECORD_SUBJECTS } from './test-utils/record-subjects.js'
 
 const WORKSPACE = '01NZKY725TZFCN2YEYKGKE55D5'
 const REF: DocRef = { kind: 'workspace-tree', workspaceId: WORKSPACE }
@@ -47,67 +50,73 @@ function pausedAtAppend(inner: DocumentStore): {
   return { store, reached, release }
 }
 
-async function seededEdit(docs: DocumentStoreWorkspaceDocs): Promise<LoroDoc> {
-  const doc = new LoroDoc()
-  doc.getText('t').insert(0, 'first')
-  await docs.save(WORKSPACE, doc)
-  doc.getText('t').insert(5, ' and an edit')
-  return doc
-}
+describe.each(RECORD_SUBJECTS)('a save racing a delete, record held as $name', (subject) => {
+  const docsOver = (store: DocumentStore, options?: DocumentStoreWorkspaceDocsOptions) =>
+    new RecordStoreWorkspaceDocs(store, subject.kind, options)
 
-it('a save racing a delete writes nothing once the keeper refuses the mint', async () => {
-  const inner = new InMemoryDocumentStore()
-  const paused = pausedAtAppend(inner)
-  const removed = new Set<string>()
-  const refusal = new Error('workspace removed')
-  const docs = new DocumentStoreWorkspaceDocs(paused.store, {
-    beforeMint: async (id) => {
-      if (removed.has(id)) throw refusal
-    },
+  async function seededEdit(docs: ReturnType<typeof docsOver>): Promise<unknown> {
+    const doc = await subject.fresh()
+    subject.put(doc, 't', 'first')
+    await docs.save(WORKSPACE, doc)
+    subject.put(doc, 'edit', 'and an edit')
+    return doc
+  }
+
+  it('a save racing a delete writes nothing once the keeper refuses the mint', async () => {
+    const inner = new InMemoryDocumentStore()
+    const paused = pausedAtAppend(inner)
+    const removed = new Set<string>()
+    const refusal = new Error('workspace removed')
+    const docs = docsOver(paused.store, {
+      beforeMint: async (id) => {
+        if (removed.has(id)) throw refusal
+      },
+    })
+    const doc = await seededEdit(docs)
+
+    const saving = docs.save(WORKSPACE, doc)
+    await paused.reached
+    removed.add(WORKSPACE)
+    await inner.deleteDoc({ docRef: REF })
+    paused.release()
+
+    await expect(saving).rejects.toBe(refusal)
+    expect((await inner.loadDeltas({ docRef: REF, afterSeq: null })).updates).toEqual([])
+    expect(await inner.readFrontier({ docRef: REF })).toBeNull()
+    expect(await inner.readSnapshotManifest({ docRef: REF })).toBeNull()
   })
-  const doc = await seededEdit(docs)
 
-  const saving = docs.save(WORKSPACE, doc)
-  await paused.reached
-  removed.add(WORKSPACE)
-  await inner.deleteDoc({ docRef: REF })
-  paused.release()
+  it('a save racing a delete of an id still held mints the record again, whole', async () => {
+    const inner = new InMemoryDocumentStore()
+    const paused = pausedAtAppend(inner)
+    const docs = docsOver(paused.store)
+    const doc = await seededEdit(docs)
 
-  await expect(saving).rejects.toBe(refusal)
-  expect((await inner.loadDeltas({ docRef: REF, afterSeq: null })).updates).toEqual([])
-  expect(await inner.readFrontier({ docRef: REF })).toBeNull()
-  expect(await inner.readSnapshotManifest({ docRef: REF })).toBeNull()
-})
+    const saving = docs.save(WORKSPACE, doc)
+    await paused.reached
+    await inner.deleteDoc({ docRef: REF })
+    paused.release()
 
-it('a save racing a delete of an id still held mints the record again, whole', async () => {
-  const inner = new InMemoryDocumentStore()
-  const paused = pausedAtAppend(inner)
-  const docs = new DocumentStoreWorkspaceDocs(paused.store)
-  const doc = await seededEdit(docs)
-
-  const saving = docs.save(WORKSPACE, doc)
-  await paused.reached
-  await inner.deleteDoc({ docRef: REF })
-  paused.release()
-
-  expect(await saving).not.toBeNull()
-  expect((await docs.open(WORKSPACE))?.getText('t').toString()).toBe('first and an edit')
-})
-
-it('a mint over a log with nothing behind it reads back what it minted', async () => {
-  const inner = new InMemoryDocumentStore()
-  // What a write racing a delete used to leave: a delta no snapshot stands
-  // behind, and not a CRDT update this document can import.
-  await inner.appendDeltas({
-    docRef: REF,
-    deltaBatch: { updates: [new Uint8Array([1, 2, 3])], newFrontier: new Uint8Array([1]) },
-    requireSnapshot: false,
+    expect(await saving).not.toBeNull()
+    const reopened = (await docs.open(WORKSPACE))!
+    expect(subject.entries(reopened)).toEqual({ t: 'first', edit: 'and an edit' })
   })
-  const docs = new DocumentStoreWorkspaceDocs(inner)
-  const pulled = new LoroDoc()
-  pulled.getText('t').insert(0, 'pulled again')
 
-  await docs.save(WORKSPACE, pulled)
+  it('a mint over a log with nothing behind it reads back what it minted', async () => {
+    const inner = new InMemoryDocumentStore()
+    // What a write racing a delete used to leave: a delta no snapshot stands
+    // behind, and not a CRDT update this document can import.
+    await inner.appendDeltas({
+      docRef: REF,
+      deltaBatch: { updates: [new Uint8Array([1, 2, 3])], newFrontier: new Uint8Array([1]) },
+      requireSnapshot: false,
+    })
+    const docs = docsOver(inner)
+    const pulled = await subject.fresh()
+    subject.put(pulled, 't', 'pulled again')
 
-  expect((await docs.open(WORKSPACE))?.getText('t').toString()).toBe('pulled again')
+    await docs.save(WORKSPACE, pulled)
+
+    expect(subject.entries((await docs.open(WORKSPACE))!)).toEqual({ t: 'pulled again' })
+  })
 })
