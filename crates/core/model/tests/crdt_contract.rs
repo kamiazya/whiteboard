@@ -9,10 +9,10 @@ use whiteboard_model::crdt::{
     Breach, BreachShape, CloseRequest, DecodeKind, DecodeRequest, DecodeResponse, ExportRequest,
     ExportResponse, ExportShallowSnapshotRequest, ExportSnapshotRequest, ExportUpdateRequest,
     ForkRequest, ImportJudge, ImportRequest, ImportSubtreeRequest, MutationApplied,
-    MutationRefused, MutationResult, OpenRequest, OpenResponse, Query, QueryName, ReadRequest,
-    ReadResponse, RedoRequest, TextRun, TextSpliceRequest, UndoClearRequest, UndoRequest,
-    UndoStateRequest, UndoStateResponse, VersionEntry, VersionRequest, VersionResponse, Write,
-    WriteRequest, WriterName,
+    MutationRefused, MutationResult, OpenRequest, OpenResponse, PlacedRoot, Query, QueryName,
+    ReadRequest, ReadResponse, RedoRequest, TextRun, TextSpliceRequest, UndoClearRequest,
+    UndoRequest, UndoStateRequest, UndoStateResponse, VersionEntry, VersionRequest,
+    VersionResponse, Write, WriteRequest, WriterName,
 };
 use whiteboard_model::json::parse;
 
@@ -126,6 +126,7 @@ fn results_requests_and_opening_messages_carry_their_fields() {
         changed: vec!["d".into()],
         local_update: Some("AA==".into()),
         pending: Some(true),
+        root: Some(PlacedRoot { document_id: "d".into(), path: "a/b".into() }),
     };
     assert_eq!(
         MutationResult::MutationApplied(applied.clone()),

@@ -211,15 +211,6 @@ export const importSubtreeRequestSchema = z.strictObject({
 })
 export type ImportSubtreeRequest = z.infer<typeof importSubtreeRequestSchema>
 
-/** A call that took effect: the documents it changed, none when it was a no-op. */
-export const mutationAppliedSchema = z.strictObject({
-  outcome: z.literal('applied'),
-  changed: z.array(documentIdSchema),
-  localUpdate: bytesSchema.optional(),
-  pending: z.boolean().optional(),
-})
-export type MutationApplied = z.infer<typeof mutationAppliedSchema>
-
 /** Open a document: from bytes an engine exported, or empty. */
 export const openRequestSchema = z.strictObject({
   peer: peerIdSchema,
@@ -233,6 +224,13 @@ export const openResponseSchema = z.strictObject({
   handle: handleSchema,
 })
 export type OpenResponse = z.infer<typeof openResponseSchema>
+
+/** The document an import-subtree call placed at the top of the bytes, and where. */
+export const placedRootSchema = z.strictObject({
+  documentId: documentIdSchema,
+  path: z.string(),
+})
+export type PlacedRoot = z.infer<typeof placedRootSchema>
 
 /** One read: the reader and its arguments, any-value on purpose. */
 export const querySchema = z.strictObject({
@@ -323,6 +321,16 @@ export const forkRequestSchema = z.strictObject({
   at: z.array(versionEntrySchema).optional(),
 })
 export type ForkRequest = z.infer<typeof forkRequestSchema>
+
+/** A call that took effect: the documents it changed, none when it was a no-op. */
+export const mutationAppliedSchema = z.strictObject({
+  outcome: z.literal('applied'),
+  changed: z.array(documentIdSchema),
+  localUpdate: bytesSchema.optional(),
+  pending: z.boolean().optional(),
+  root: placedRootSchema.optional(),
+})
+export type MutationApplied = z.infer<typeof mutationAppliedSchema>
 
 /** A call refused for breaking a limit: nothing changed and there is no update. */
 export const mutationRefusedSchema = z.strictObject({

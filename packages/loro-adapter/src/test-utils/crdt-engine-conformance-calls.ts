@@ -19,6 +19,7 @@ import {
   held,
   mutation,
   openWith,
+  SECOND,
   splice,
   write,
 } from './crdt-engine-conformance-kit.js'
@@ -332,6 +333,7 @@ export function describeSubtreeImport(makeEngine: () => CrdtEngine) {
       const { handle } = engine.open({ peer: '1' })
       const result = applied(engine.importSubtree({ handle, bytes, parentPath: 'restored' }))
       expect(result.changed).toContain(FIRST)
+      expect(result.root).toEqual({ documentId: FIRST, path: 'restored/kept' })
       const entry = (await ask(engine, handle, 'workspaceDocumentEntry', {
         documentId: FIRST,
       })) as {
@@ -339,6 +341,28 @@ export function describeSubtreeImport(makeEngine: () => CrdtEngine) {
       }
       expect(entry.ok?.path).toBe('restored/kept')
       expect(await bodyOf(engine, handle, FIRST)).toBe('inside')
+    })
+
+    it('names the top of the bytes as the root, not a document beneath it', () => {
+      const engine = makeEngine()
+      const { handle: from } = engine.open({ peer: '3' })
+      write(engine, from, 'createWorkspaceDocumentAtPath', {
+        path: 'top',
+        documentId: FIRST,
+        kind: 'markdown',
+      })
+      write(engine, from, 'createWorkspaceDocumentAtPath', {
+        path: 'top/inner',
+        documentId: SECOND,
+        kind: 'markdown',
+      })
+      const exported = exportWorkspaceSubtree(held(engine, from, 'snapshot'), 'top')
+      if (exported === null) throw new Error('the fixture holds no such document')
+      const { handle } = engine.open({ peer: '1' })
+      const result = applied(
+        engine.importSubtree({ handle, bytes: Buffer.from(exported).toString('base64') }),
+      )
+      expect(result.root).toEqual({ documentId: FIRST, path: 'top' })
     })
 
     it('answers nothing changed for bytes that hold no document', () => {

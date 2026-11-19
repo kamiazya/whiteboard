@@ -630,22 +630,6 @@ pub struct ImportSubtreeRequest {
     pub parent_path: Option<String>,
 }
 
-/// A call that took effect: the documents it changed, none when it was a no-op.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct MutationApplied {
-    /// The documents the call changed.
-    pub changed: Vec<DocumentId>,
-    /// The update that carries the change; absent when nothing changed.
-    pub local_update: Option<Bytes>,
-    /// An import answers whether the bytes build on operations the document lacks, so some stay parked; absent on every other call.
-    pub pending: Option<bool>,
-}
-
-impl MutationApplied {
-    /// What `outcome` is always written as.
-    pub const OUTCOME: &str = "applied";
-}
-
 /// Open a document: from bytes an engine exported, or empty.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct OpenRequest {
@@ -662,6 +646,15 @@ pub struct OpenRequest {
 pub struct OpenResponse {
     /// The handle every later call names.
     pub handle: Handle,
+}
+
+/// The document an import-subtree call placed at the top of the bytes, and where.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct PlacedRoot {
+    /// The document at the root of the bytes.
+    pub document_id: DocumentId,
+    /// The path it now holds in the record, under the parent path the call was given.
+    pub path: String,
 }
 
 /// One read: the reader and its arguments, any-value on purpose.
@@ -783,6 +776,24 @@ pub struct ForkRequest {
     pub peer: PeerId,
     /// The frontiers to check the copy out at, which leaves it detached and read-only; absent copies the head.
     pub at: Option<Vec<VersionEntry>>,
+}
+
+/// A call that took effect: the documents it changed, none when it was a no-op.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct MutationApplied {
+    /// The documents the call changed.
+    pub changed: Vec<DocumentId>,
+    /// The update that carries the change; absent when nothing changed.
+    pub local_update: Option<Bytes>,
+    /// An import answers whether the bytes build on operations the document lacks, so some stay parked; absent on every other call.
+    pub pending: Option<bool>,
+    /// An import-subtree call answers the document it placed at the root of the bytes; absent on every other call and when the bytes hold no document.
+    pub root: Option<PlacedRoot>,
+}
+
+impl MutationApplied {
+    /// What `outcome` is always written as.
+    pub const OUTCOME: &str = "applied";
 }
 
 /// A call refused for breaking a limit: nothing changed and there is no update.

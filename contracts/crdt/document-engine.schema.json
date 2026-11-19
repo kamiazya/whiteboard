@@ -709,6 +709,24 @@
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
+    "PlacedRoot": {
+      "description": "The document an import-subtree call placed at the top of the bytes, and where.",
+      "type": "object",
+      "properties": {
+        "documentId": {
+          "$ref": "#/$defs/DocumentId",
+          "description": "The document at the root of the bytes."
+        },
+        "path": {
+          "type": "string",
+          "description": "The path it now holds in the record, under the parent path the call was given."
+        }
+      },
+      "required": ["documentId", "path"],
+      "x-wb-order": ["documentId", "path"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
     "MutationApplied": {
       "description": "A call that took effect: the documents it changed, none when it was a no-op.",
       "type": "object",
@@ -732,10 +750,14 @@
         "pending": {
           "type": "boolean",
           "description": "An import answers whether the bytes build on operations the document lacks, so some stay parked; absent on every other call."
+        },
+        "root": {
+          "$ref": "#/$defs/PlacedRoot",
+          "description": "An import-subtree call answers the document it placed at the root of the bytes; absent on every other call and when the bytes hold no document."
         }
       },
       "required": ["outcome", "changed"],
-      "x-wb-order": ["outcome", "changed", "localUpdate", "pending"],
+      "x-wb-order": ["outcome", "changed", "localUpdate", "pending", "root"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },

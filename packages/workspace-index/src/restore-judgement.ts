@@ -75,15 +75,11 @@ async function placementOf(
     ...(input.parentPath === undefined ? {} : { parentPath: input.parentPath }),
   })
   if (placed.outcome === 'refused') return null
-  const restored = await readValue(
-    engine,
-    handle,
-    { query: 'workspaceDocumentEntry', args: { documentId: input.documentId } },
-    assertedAs<{ readonly path: string } | null>(),
-  )
-  // Bytes holding some other document — another row's, say — are refused, so
-  // a row can only bring back the document it is for.
-  if (restored === null) return null
+  // The bytes' root must be the row's document — one that merely sits inside
+  // them is not, and restoring them would bring back its ancestor — so a row
+  // can only bring back the document it is for.
+  const { root } = placed
+  if (root === undefined || root.documentId !== input.documentId) return null
   const unreadable = await readValue(
     engine,
     handle,
@@ -97,7 +93,7 @@ async function placementOf(
     { query: 'nodes' },
     assertedAs<readonly WorkspaceNode[]>(),
   )
-  return placeableNodes(nodes, restored.path)
+  return placeableNodes(nodes, root.path)
 }
 
 /**

@@ -349,9 +349,15 @@ function mutations(heldBy: (handle: number) => Held) {
     },
     importSubtree(request: wire.ImportSubtreeRequest) {
       const { handle, bytes, parentPath } = wire.importSubtreeRequestSchema.parse(request)
-      return mutate(heldBy(handle), (doc) => {
-        importWorkspaceSubtree(doc, decoded(bytes), parentPath)
+      let placed: ReturnType<typeof importWorkspaceSubtree> = null
+      const result = mutate(heldBy(handle), (doc) => {
+        placed = importWorkspaceSubtree(doc, decoded(bytes), parentPath)
       })
+      // `placed` is the closure's own record of the root, so TypeScript narrows it to null.
+      const root = placed as ReturnType<typeof importWorkspaceSubtree>
+      return result.outcome === 'applied' && root !== null
+        ? { ...result, root: { documentId: root.documentId, path: root.path } }
+        : result
     },
   }
 }
