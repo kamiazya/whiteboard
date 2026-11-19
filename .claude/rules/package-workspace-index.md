@@ -24,6 +24,12 @@ for the duplication to exist.
 - `LoroWorkspaceDocumentIndex`: the port's ordering promise
   (`compareDocumentPaths`), its error taxonomy, and the collision rules a CRDT
   does not enforce on its own.
+- `IndexRecordKind<R>`: a `RecordKind` plus the reads, writes and subtree
+  moves the index makes of a record, so `LoroWorkspaceDocumentIndex<R>` holds a
+  `LoroDoc` (`loroIndexKind`, the default) or an engine lease (`leaseIndexKind`)
+  without learning which. Reads are asynchronous (the index can wait, so it does
+  not need `readNow`); every write is a batch of engine writer names, and a lease
+  is written unjudged. The index releases every record it opens.
 - `WorkspaceDocs`: the seam for where a workspace's document comes from and
   where a change to it goes.
 - `firstFreeSegment`: the one suffix scheme for a workspace's address, taking
@@ -80,7 +86,7 @@ for the duplication to exist.
 
 ## Tests
 
-- Vitest project: `workspace-index-node`.
+- Vitest project: `workspace-index-node`. The index suites run over both record kinds (`packages/workspace-index/src/test-utils/index-subjects.ts`), and `packages/workspace-index/src/loro-workspace-document-index.stored-bytes.test.ts` holds the stored bytes equal between them.
 - Held to `describeDocumentIndexConformance` — the same cases the in-memory,
   libSQL and IndexedDB indexes pass. That is the evidence that a tree can keep
   the port's promises, as opposed to a comment claiming it.

@@ -9,31 +9,22 @@
  * path gets an error to act on (resolve by id, or rename one), never a
  * silent pick of whichever sibling tree order favors.
  */
-import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
-import type { BlobStore } from '@kamiazya/whiteboard-ports'
-import { DocumentPathContestedError } from '@kamiazya/whiteboard-ports'
-import { LoroDoc } from 'loro-crdt'
+import { type BlobStore, DocumentPathContestedError } from '@kamiazya/whiteboard-ports'
 import { describe, expect, it } from 'vitest'
-import { LoroWorkspaceDocumentIndex } from './loro-workspace-document-index.js'
+import type { LoroWorkspaceDocumentIndex } from './loro-workspace-document-index.js'
+import { INDEX_SUBJECTS, type IndexSubject, indexOver } from './test-utils/index-subjects.js'
 import type { WorkspaceDocs } from './workspace-docs.js'
-
-/**
- * A registry double for a test that never renames. Rejects rather than
- * answering: a silent no-op would let a rename test pass against a double
- * that cannot rename.
- */
-const notRenamed = (): Promise<never> => Promise.reject(new Error('not implemented'))
 
 const OWNER_ID = '01ARZ3NDEKTSV4RRFFQ69G5FA1'
 const RIVAL_ID = '01ARZ3NDEKTSV4RRFFQ69G5FA2'
 
-function singleDocWorkspaceDocs(doc: LoroDoc): WorkspaceDocs {
+function singleRecordWorkspaceDocs(subject: IndexSubject, record: unknown): WorkspaceDocs<unknown> {
   return {
     async open() {
-      return doc
+      return subject.borrow(record)
     },
     async create() {
-      return doc
+      return subject.borrow(record)
     },
     async save() {
       return null
@@ -49,31 +40,31 @@ function singleDocWorkspaceDocs(doc: LoroDoc): WorkspaceDocs {
 
 const unusedBlobStore = {} as BlobStore
 
-async function contestedIndex(): Promise<LoroWorkspaceDocumentIndex> {
+async function contestedIndex(subject: IndexSubject): Promise<LoroWorkspaceDocumentIndex<unknown>> {
   // Two replicas each create 'design' concurrently; both survive the merge
   // — the arrangement no local uniqueness check can prevent.
-  const doc = new LoroDoc()
-  doc.setPeerId(1n)
-  const replica = new LoroDoc()
-  replica.setPeerId(2n)
-  createWorkspaceDocumentAtPath(doc, { path: 'design', documentId: OWNER_ID, kind: 'spatial' })
-  createWorkspaceDocumentAtPath(replica, {
-    path: 'design',
-    documentId: RIVAL_ID,
-    kind: 'markdown',
-  })
-  doc.import(replica.export({ mode: 'update' }))
+  const record = await subject.kind.empty()
+  const replica = subject.replica(record, 2)
+  subject.kind.write(record, [
+    {
+      op: 'createWorkspaceDocumentAtPath',
+      args: { path: 'design', documentId: OWNER_ID, kind: 'spatial' },
+    },
+  ])
+  subject.kind.write(replica, [
+    {
+      op: 'createWorkspaceDocumentAtPath',
+      args: { path: 'design', documentId: RIVAL_ID, kind: 'markdown' },
+    },
+  ])
+  subject.merge(record, replica)
 
-  return new LoroWorkspaceDocumentIndex(singleDocWorkspaceDocs(doc), unusedBlobStore, {
-    listWorkspaces: async () => [],
-    findWorkspace: async () => null,
-    renameWorkspace: notRenamed,
-  })
+  return indexOver(subject, singleRecordWorkspaceDocs(subject, record), unusedBlobStore)
 }
 
-describe('contested paths', () => {
+describe.each(INDEX_SUBJECTS)('contested paths over $name', (subject) => {
   it('lists BOTH documents, the later sibling marked shadowed', async () => {
-    const index = await contestedIndex()
+    const index = await contestedIndex(subject)
     const listing = await index.listDocuments({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })
     const atPath = listing.filter((entry) => entry.path === 'design')
     expect(atPath).toHaveLength(2)
@@ -81,14 +72,14 @@ describe('contested paths', () => {
   })
 
   it('refuses to resolve a contested path instead of silently picking the owner', async () => {
-    const index = await contestedIndex()
+    const index = await contestedIndex(subject)
     await expect(
       index.resolveDocument({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN', path: 'design' }),
     ).rejects.toThrow(DocumentPathContestedError)
   })
 
   it('refuses to duplicate a contested path instead of copying whichever sibling', async () => {
-    const index = await contestedIndex()
+    const index = await contestedIndex(subject)
     await expect(
       index.duplicateDocument({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN', path: 'design' }),
     ).rejects.toThrow(DocumentPathContestedError)
@@ -97,7 +88,7 @@ describe('contested paths', () => {
   })
 
   it('still resolves each contestant by id', async () => {
-    const index = await contestedIndex()
+    const index = await contestedIndex(subject)
     const owner = await index.resolveDocumentById({
       workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
       documentId: OWNER_ID,
@@ -111,13 +102,14 @@ describe('contested paths', () => {
   })
 
   it('an uncontested path still resolves normally', async () => {
-    const doc = new LoroDoc()
-    createWorkspaceDocumentAtPath(doc, { path: 'solo', documentId: OWNER_ID, kind: 'spatial' })
-    const index = new LoroWorkspaceDocumentIndex(singleDocWorkspaceDocs(doc), unusedBlobStore, {
-      listWorkspaces: async () => [],
-      findWorkspace: async () => null,
-      renameWorkspace: notRenamed,
-    })
+    const record = await subject.kind.empty()
+    subject.kind.write(record, [
+      {
+        op: 'createWorkspaceDocumentAtPath',
+        args: { path: 'solo', documentId: OWNER_ID, kind: 'spatial' },
+      },
+    ])
+    const index = indexOver(subject, singleRecordWorkspaceDocs(subject, record), unusedBlobStore)
     const entry = await index.resolveDocument({
       workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
       path: 'solo',

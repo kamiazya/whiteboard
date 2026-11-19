@@ -113,6 +113,14 @@ describe('the host kit over a lease', () => {
     expect(await read(lease, BODY, text)).toBe('kept')
   })
 
+  it('applies a write the host names unjudged, where an unnamed write is refused', () => {
+    const { lease } = leased()
+    const tooLong = body('y'.repeat(MARKDOWN_MAX_CHARS + 1))
+    expect(write(lease, tooLong, { refusal: 'return' })).toMatchObject({ outcome: 'refused' })
+    expect(write(lease, tooLong, { judge: 'none' }).outcome).toBe('applied')
+    expect(readNow(lease, BODY, text)).toHaveLength(MARKDOWN_MAX_CHARS + 1)
+  })
+
   it('refuses a read the answer of which does not fit the shape asked for', () => {
     const { lease } = leased()
     write(lease, body('hello'))
