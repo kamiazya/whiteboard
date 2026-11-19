@@ -47,6 +47,12 @@ const TEST_ONLY_FORWARDS: Readonly<Record<string, string>> = {
     "decision: the icon-name catalogue is part of the plugin's data surface; catalog.test.ts holds it to LUCIDE_ICONS",
   'packages/server-core/src/index.ts#apiErrorBodySchema':
     'decision: the strict refusal-body contract a daemon emits, published from the package root; the route fuzz holds every refusal to it',
+  'packages/core-wasm/src/index.ts#CoreHandleLost':
+    "decision: the refusal a root answers a trapped, lost or unrecoverable wasm instance with, published from the package entry; recover.test.ts holds it, and the daemon's mapping of it is the next slice of ADR-0054 decision 20",
+  'packages/core-wasm/src/index.ts#CoreInstanceTrapped':
+    "decision: the refusal a root answers a trapped, lost or unrecoverable wasm instance with, published from the package entry; recover.test.ts holds it, and the daemon's mapping of it is the next slice of ADR-0054 decision 20",
+  'packages/core-wasm/src/index.ts#CoreUnrecoverable':
+    "decision: the refusal a root answers a trapped, lost or unrecoverable wasm instance with, published from the package entry; recover.test.ts holds it, and the daemon's mapping of it is the next slice of ADR-0054 decision 20",
 }
 
 /** The names a module forwards from another: `export { a, b as c } from`, and `export { x }` of an import of any form. */
@@ -192,7 +198,7 @@ describe('package entries forward only names someone imports through them', () =
   })
 
   it('holds the test-only ledger at its size, so it only shrinks', () => {
-    expect(Object.keys(TEST_ONLY_FORWARDS)).toHaveLength(2)
+    expect(Object.keys(TEST_ONLY_FORWARDS)).toHaveLength(5)
     for (const reason of Object.values(TEST_ONLY_FORWARDS)) {
       expect(reason).toMatch(/^(?:decision|debt): \S/)
     }
