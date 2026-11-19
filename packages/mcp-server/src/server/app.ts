@@ -12,6 +12,7 @@ import { answerNotFound, setBaselineSecurityHeaders, shouldLogMcpHttpDebug } fro
 import type { AppOptions } from './app-types.js'
 import { DIST_WEB_APP_DIR } from './config.js'
 import { armContentSlots, CONTENT_REQUEST_CAPS, createContentSlots } from './content-slots.js'
+import { coreTrapAsEngineTrap } from './core-trap.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createMcpServer } from './mcp/server.js'
 import { mcpBatchSlots, mcpContentSlot } from './mcp-content-slots.js'
@@ -426,10 +427,12 @@ export function createApp(options: AppOptions) {
   // Sub-apps with no handler of their own inherit this one; without it Hono's
   // default answers `text/plain` and prints the raw error with `console.error`.
   app.onError(
-    answerUnhandled(({ busy, ...request }) =>
-      busy
-        ? requestLog.warning(request, 'request refused: database busy')
-        : requestLog.error(request, 'unhandled error'),
+    answerUnhandled(
+      ({ busy, ...request }) =>
+        busy
+          ? requestLog.warning(request, 'request refused: database busy')
+          : requestLog.error(request, 'unhandled error'),
+      coreTrapAsEngineTrap,
     ),
   )
 

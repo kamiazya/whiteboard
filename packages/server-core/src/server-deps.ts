@@ -5,6 +5,7 @@ import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboa
 import type { HonoRequest } from 'hono'
 import type { Frontiers, LoroDoc } from 'loro-crdt'
 import type { AgentActivityTouched } from './agent-activity-touched.js'
+import type { DocumentEngineTrapError } from './document-io.js'
 import type { Embedder } from './search/embedder.js'
 import type { ThemeFontSource } from './theme-font.js'
 import type { OperatorInfo, PromotedVersion, VersionEntry } from './versions/version-entry.js'
@@ -112,6 +113,13 @@ export interface ServerDeps {
    * it; a load that fails rejects, since nothing answers in its place.
    */
   layoutCore: () => Promise<LayoutCore>
+  /**
+   * Names an abort of the Rust core as `DocumentEngineTrapError`. Optional
+   * because the core's error classes live in a package this shared layer does
+   * not import; the composition root that loads the core supplies it, and
+   * absent means such a throw answers as any unhandled one.
+   */
+  asEngineTrap?: (err: unknown) => DocumentEngineTrapError | undefined
   /**
    * Turns document search from lexical-only into lexical fused with
    * semantic. Optional for the same reason `measure` is: server-core is a

@@ -13,6 +13,7 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Container, type ContainerModule } from 'inversify'
+import { coreTrapAsEngineTrap } from '../server/core-trap.js'
 import {
   coreLoaders,
   layoutCoreSettingsFrom,
@@ -111,6 +112,7 @@ export function resolveServerDeps(
     // the instance the OKF envelope, the JSON Canvas codec and the facet
     // write are installed from at boot.
     layoutCore: core.layoutCore,
+    asEngineTrap: coreTrapAsEngineTrap,
     // Where a family a theme names can be downloaded. The catalogue is the
     // daemon's — the same one the font installer takes an id from — and
     // server-core cannot import it (daemon-client depends on server-core, so

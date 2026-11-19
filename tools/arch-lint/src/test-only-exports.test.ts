@@ -231,12 +231,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "the answer a composition root sees when the strict JSON Canvas writer's validation refuses what it wrote; codec's serializeSpatial throws it as a ZodError from the issues it carries, and spatial-core.test.ts holds that mapping",
   'packages/core-wasm/src/index.ts#CoreInputRefused':
     "the refusal a composition root sees, with its registry refusal code, when a wire is past its input caps or the artifact's answer cannot be accounted for; the roots load the core in ADR-0054 step 5's next slice, and the shim's own tests hold the refusal",
-  'packages/core-wasm/src/recover.ts#CoreHandleLost':
-    "foundation: the refusal a root answers a trapped, lost or unrecoverable wasm instance with, forwarded from the package entry; recover.test.ts holds each, and the daemon's mapping of it is the next slice of ADR-0054 decision 20",
-  'packages/core-wasm/src/recover.ts#CoreInstanceTrapped':
-    "foundation: the refusal a root answers a trapped, lost or unrecoverable wasm instance with, forwarded from the package entry; recover.test.ts holds each, and the daemon's mapping of it is the next slice of ADR-0054 decision 20",
-  'packages/core-wasm/src/recover.ts#CoreUnrecoverable':
-    "foundation: the refusal a root answers a trapped, lost or unrecoverable wasm instance with, forwarded from the package entry; recover.test.ts holds each, and the daemon's mapping of it is the next slice of ADR-0054 decision 20",
   'packages/core-wasm/src/recover.ts#MAX_RESET_ATTEMPTS':
     'the bound on consecutive failed resets; exported so recover.test.ts counts resets against it rather than a second copy of the number',
   'packages/core-wasm/src/layout-caches.ts#LayoutCaches':

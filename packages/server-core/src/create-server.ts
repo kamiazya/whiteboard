@@ -243,9 +243,20 @@ function refusingIn(deps: ServerDeps) {
  */
 export function answerUnhandled(
   report: (request: { err: unknown; method: string; path: string; busy: boolean }) => void,
+  /**
+   * Names an engine abort a composition root's own engine raised, which this
+   * shared layer cannot recognise by class: answered as the same refusal a
+   * CRDT abort is, and reported like any other server fault.
+   */
+  asEngineTrap?: (err: unknown) => DocumentEngineTrapError | undefined,
 ): ErrorHandler {
   return (err: unknown, c: Context) => {
     if (err instanceof HTTPException) return err.getResponse()
+    const trap = asEngineTrap?.(err)
+    if (trap !== undefined) {
+      report({ err, method: c.req.method, path: c.req.path, busy: false })
+      return c.json(errorBody(DOCUMENT_ENGINE_TRAP_CODE, trap.message), 500)
+    }
     const busy = isDatabaseBusy(err)
     report({ err, method: c.req.method, path: c.req.path, busy })
     if (busy) {
@@ -260,14 +271,19 @@ export function answerUnhandled(
 const log = getLogger('http')
 
 /** This server may be hosted without the daemon's app around it, so it answers its own uncaught throws. */
-const answerAndLogUnhandled = answerUnhandled(({ busy, ...request }) =>
-  busy
-    ? log.warning('request refused: database busy', request)
-    : log.error('unhandled error', request),
-)
+const answerAndLogUnhandled = (deps: ServerDeps) =>
+  answerUnhandled(
+    ({ busy, ...request }) =>
+      busy
+        ? log.warning('request refused: database busy', request)
+        : log.error('unhandled error', request),
+    deps.asEngineTrap,
+  )
 
 export function createServer(deps: ServerDeps) {
-  const app = new Hono<{ Variables: { workspaceId: string } }>().onError(answerAndLogUnhandled)
+  const app = new Hono<{ Variables: { workspaceId: string } }>().onError(
+    answerAndLogUnhandled(deps),
+  )
   // The stamp-validated facts cache is held by the deps, not this server: /mcp
   // builds a server per request, which would otherwise search from an empty
   // cache. Backlinks, tags and search share it, whichever write path changed a document.

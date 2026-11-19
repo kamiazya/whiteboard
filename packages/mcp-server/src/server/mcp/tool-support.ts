@@ -7,6 +7,7 @@ import type {
   ToolAnnotations,
 } from '@modelcontextprotocol/server'
 import type { z } from 'zod'
+import { coreTrapAsEngineTrap } from '../core-trap.js'
 import { getLogger } from '../log.js'
 import { getTracer, MCP_ATTR } from '../observability/tracing.js'
 import { callerReadsServerLog, toolErrorText } from '../security/mcp-caller.js'
@@ -196,7 +197,7 @@ export function registerToolWithAnnotations<
     try {
       return await tracedHandler(args as InferToolArgs<I>, extra)
     } catch (err) {
-      const message = toolErrorText(name, err)
+      const message = toolErrorText(name, coreTrapAsEngineTrap(err) ?? err)
       return {
         isError: true,
         content: [{ type: 'text' as const, text: message }],
