@@ -2,6 +2,8 @@
 //! generated from: every enum value the schema lists must name a variant both
 //! ways, so a value added to the contract is covered without a line here.
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_model::Value;
 use whiteboard_model::crdt::{
     Breach, BreachShape, CloseRequest, ExportRequest, ExportResponse, ExportShallowSnapshotRequest,
