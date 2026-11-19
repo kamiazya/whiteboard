@@ -11,7 +11,12 @@
  */
 
 import type { LoadedReference } from '@kamiazya/whiteboard-canvas-render'
-import { readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  readCoreFacets,
+  readDocumentContent,
+  readMarkdownBody,
+  readSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
@@ -25,7 +30,7 @@ import {
 } from './document-file-contract.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { imageRefusal } from './image-upload-policy.js'
-import { readLoadedFileDocument } from './read-loaded-file-document.js'
+import { loadedFileDocument } from './read-loaded-file-document.js'
 import { loadDocumentContent } from './workspace-content.js'
 
 const log = getAppLogger('document-embed-content')
@@ -87,7 +92,10 @@ async function loadEmbeddedDocument(documentId: string): Promise<LoadedFileDocum
   try {
     const doc = await loadDocumentContent(documentId)
     if (doc === null) return undefined
-    return readLoadedFileDocument(doc, await loadDocumentName(documentId))
+    return loadedFileDocument(
+      { canvas: readSpatialCanvas(doc), facets: readCoreFacets(doc), body: readMarkdownBody(doc) },
+      await loadDocumentName(documentId),
+    )
   } catch (err) {
     log.warn('embedded document load failed', { documentId, err })
     throw err

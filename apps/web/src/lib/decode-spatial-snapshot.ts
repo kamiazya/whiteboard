@@ -1,11 +1,19 @@
+import type { CrdtEngine } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { bytesToBase64 } from '@kamiazya/whiteboard-model'
+import { z } from 'zod'
 
-let loroBundle:
+let engineBundle:
   | Promise<{
-      readonly LoroDoc: typeof import('loro-crdt').LoroDoc
-      readonly readSpatialCanvas: typeof import('@kamiazya/whiteboard-loro-adapter').readSpatialCanvas
+      readonly engine: CrdtEngine
+      readonly randomPeerId: () => string
+      readonly readValue: typeof import('@kamiazya/whiteboard-loro-adapter').readValue
     }>
   | undefined
+
+// The answer is any-value by contract; the reader is the adapter's own
+// readSpatialCanvas, which already yields the model's shape.
+const canvasAnswer = z.object({ canvas: z.custom<SpatialCanvas>() })
 
 /**
  * Decodes a stored snapshot into a canvas, in whichever realm asks — the
@@ -19,22 +27,22 @@ let loroBundle:
  * first decode pays it once per realm.
  */
 export async function decodeSpatialSnapshot(bytes: Uint8Array): Promise<SpatialCanvas> {
-  loroBundle ??= Promise.all([
-    import('loro-crdt'),
-    import('@kamiazya/whiteboard-loro-adapter'),
-  ]).then(
-    ([loro, adapter]) => ({
-      LoroDoc: loro.LoroDoc,
-      readSpatialCanvas: adapter.readSpatialCanvas,
-    }),
-    (error: unknown) => {
-      // A chunk that failed to load once is asked for again by the next decode.
-      loroBundle = undefined
+  engineBundle ??= import('@kamiazya/whiteboard-loro-adapter')
+    .then(async (adapter) => ({
+      engine: await adapter.loadCrdtEngine(),
+      randomPeerId: adapter.randomPeerId,
+      readValue: adapter.readValue,
+    }))
+    .catch((error: unknown) => {
+      // A chunk or engine that failed to load once is asked for again by the next decode.
+      engineBundle = undefined
       throw error
-    },
-  )
-  const { LoroDoc, readSpatialCanvas } = await loroBundle
-  const doc = new LoroDoc()
-  doc.import(bytes)
-  return readSpatialCanvas(doc)
+    })
+  const { engine, randomPeerId, readValue } = await engineBundle
+  const { handle } = engine.open({ peer: randomPeerId(), bytes: bytesToBase64(bytes) })
+  try {
+    return (await readValue(engine, handle, { query: 'spatialCanvas' }, canvasAnswer)).canvas
+  } finally {
+    engine.close({ handle })
+  }
 }

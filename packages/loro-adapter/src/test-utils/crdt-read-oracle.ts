@@ -12,7 +12,11 @@
  * thing a port words differently.
  */
 import type { LoroDoc, VersionVector } from 'loro-crdt'
-import {
+import { type Answer, answer, attempt, versionPairs } from '../engine/answers.js'
+import { CONTENT_QUERIES, READERS, readQuery } from '../engine/readers.js'
+import { documentContainers } from '../workspace-tree.js'
+
+export {
   type Answer,
   answer,
   frontierPairs,
@@ -20,16 +24,16 @@ import {
   versionOfPairs,
   versionPairs,
 } from '../engine/answers.js'
-import { CONTENT_QUERIES, READERS, readQuery } from '../engine/readers.js'
-import { documentContainers } from '../workspace-tree.js'
-
-export { type Answer, answer, frontierPairs, type VersionPairs, versionOfPairs, versionPairs }
 
 /** Every read a document's own containers answer, hosted on a root or on a tree node. */
-function contentReaders(doc: LoroDoc, documentId?: string): Record<string, Answer> {
+function contentReaders(
+  doc: LoroDoc,
+  documentId?: string,
+  run: (read: () => unknown) => Answer = answer,
+): Record<string, Answer> {
   const args = documentId === undefined ? {} : { documentId }
   return Object.fromEntries(
-    CONTENT_QUERIES.map((name) => [name, answer(() => READERS[name](doc, args))]),
+    CONTENT_QUERIES.map((name) => [name, run(() => READERS[name](doc, args))]),
   )
 }
 
@@ -61,7 +65,7 @@ export async function workspaceReaders(
     const named = { documentId: id }
     perDocument[id] = answer(() => {
       documentContainers(doc, id)
-      return contentReaders(doc, id)
+      return contentReaders(doc, id, attempt)
     })
     perDocument[`${id}#entry`] = read('workspaceDocumentEntry', named)
     perDocument[`${id}#projection`] = read('workspaceDocumentProjection', named)

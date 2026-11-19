@@ -253,8 +253,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the tag utf16Max puts on its refusal issue; production writes it in its own module, and the bounded-string probe in model/test-utils recognises a length refusal by it rather than by a copied literal',
   'packages/loro-adapter/src/content-digest.ts#stableStringify':
     "production reaches it through contentDigestOf, which hashes its output; exported so a property can hold its stack form to the recursive form it replaced, which a digest's equality cannot show",
-  'packages/loro-adapter/src/engine/engine.ts#createCrdtEngine':
-    'the TypeScript CRDT document engine, the implementation the conformance suite holds to the engine contract; no consumer is migrated onto it yet (ADR-0054 step 9, M1-M6)',
   'packages/loro-adapter/src/engine/journal.ts#journaledEngine':
     'the host-side journal over any CRDT engine, which rebuilds a handle the wasm core lost; the web host that wraps its engine in it is a later migration, so only the conformance suite reaches it',
   'packages/loro-adapter/src/engine/readers.ts#READERS':

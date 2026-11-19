@@ -29,11 +29,8 @@
  * session's, in words about the wrong thing.
  */
 import type { PromoteWorkspaceRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
-import {
-  collectImageRefIds,
-  documentContainers,
-  readWorkspaceDocuments,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { type CrdtEngine, readValue } from '@kamiazya/whiteboard-loro-adapter'
+import { z } from 'zod'
 import {
   CROSS_ORIGIN_TRANSFER_PROTOCOL,
   parseTransferWindowUrl,
@@ -129,17 +126,28 @@ export function readOfferedTransfer(
  * window is at another origin and cannot read that store.
  *
  * So the honest thing a receiver can do is COUNT them and say so. The walk
- * is `collectImageRefIds`, shared with the daemon-side GC's live-state pass,
+ * is the `imageRefIds` read, `collectImageRefIds`, shared with the daemon-side GC's live-state pass,
  * so the two sides cannot disagree about what counts as a live reference.
  */
-export function imagesTheRecordReferences(
-  record: Parameters<typeof readWorkspaceDocuments>[0],
-): string[] {
+export async function imagesTheRecordReferences(
+  engine: CrdtEngine,
+  handle: number,
+): Promise<string[]> {
+  const documents = await readValue(
+    engine,
+    handle,
+    { query: 'documents' },
+    z.array(z.object({ documentId: z.string() })),
+  )
   const refs = new Set<string>()
-  for (const entry of readWorkspaceDocuments(record)) {
-    for (const fileId of collectImageRefIds(documentContainers(record, entry.documentId))) {
-      refs.add(fileId)
-    }
+  for (const { documentId } of documents) {
+    const fileIds = await readValue(
+      engine,
+      handle,
+      { query: 'imageRefIds', args: { documentId } },
+      z.array(z.string()),
+    )
+    for (const fileId of fileIds) refs.add(fileId)
   }
   return [...refs]
 }

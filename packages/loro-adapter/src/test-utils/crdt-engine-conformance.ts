@@ -75,6 +75,8 @@ const decode = (b64: string): LoroDoc => {
   doc.import(bytesOf(b64))
   return doc
 }
+// A JSON round trip rather than structuredClone: it drops `undefined` members
+// the way the wire does, which structuredClone keeps.
 const jsonOf = (value: unknown): unknown => JSON.parse(JSON.stringify(value))
 
 /**
@@ -157,6 +159,29 @@ const versionEntries = (doc: LoroDoc) =>
 const SINCE_READERS = new Set(['removedSince', 'touchedSince', 'organisationChangedSince'])
 const ROOT_ONLY_READERS = new Set(['stateSize', 'contentDigest', 'textLimitBreach'])
 
+async function expectPerDocument(
+  engine: CrdtEngine,
+  handle: number,
+  key: string,
+  expected: { ok?: unknown },
+  label: string,
+  contentNames: readonly string[],
+) {
+  const hashed = /^(.*)#(entry|projection)$/.exec(key)
+  if (hashed !== null) {
+    const query = hashed[2] === 'entry' ? 'workspaceDocumentEntry' : 'workspaceDocumentProjection'
+    expect(await ask(engine, handle, query, { documentId: hashed[1] as string }), label).toEqual(
+      expected,
+    )
+    return
+  }
+  const record = 'ok' in expected ? (expected.ok as Record<string, unknown>) : null
+  for (const name of record === null ? contentNames : Object.keys(record)) {
+    const answer = await ask(engine, handle, name, { documentId: key })
+    expect(answer, `${label} ${name}`).toEqual(record === null ? expected : record[name])
+  }
+}
+
 function describeReadReplay(makeEngine: () => CrdtEngine) {
   const rows = recorded('crdt-read.jsonl') as ReadRow[]
   const contentNames = Object.keys(
@@ -171,21 +196,7 @@ function describeReadReplay(makeEngine: () => CrdtEngine) {
     }
     const perDocument = (row.readers.perDocument ?? {}) as Record<string, { ok?: unknown }>
     for (const [key, expected] of Object.entries(perDocument)) {
-      const hashed = /^(.*)#(entry|projection)$/.exec(key)
-      if (hashed !== null) {
-        const query =
-          hashed[2] === 'entry' ? 'workspaceDocumentEntry' : 'workspaceDocumentProjection'
-        expect(
-          await ask(engine, handle, query, { documentId: hashed[1] as string }),
-          `${label} ${key}`,
-        ).toEqual(expected)
-        continue
-      }
-      const record = 'ok' in expected ? (expected.ok as Record<string, unknown>) : null
-      for (const name of record === null ? contentNames : Object.keys(record)) {
-        const answer = await ask(engine, handle, name, { documentId: key })
-        expect(answer, `${label} ${key} ${name}`).toEqual(record === null ? expected : record[name])
-      }
+      await expectPerDocument(engine, handle, key, expected, `${label} ${key}`, contentNames)
     }
   }
 
@@ -535,7 +546,7 @@ function describeRefusal(makeEngine: () => CrdtEngine) {
 
 function describeJournal(makeEngine: () => CrdtEngine) {
   describe('a journal rebuilds a lost handle', () => {
-    it('rebuilds a document from its base and the updates since', async () => {
+    it('rebuilds a document from its base and the updates since', () => {
       const journaled = journaledEngine(makeEngine())
       const { handle } = journaled.open({ peer: '1' })
       write(journaled, handle, 'writeMarkdownBody', { body: 'first' })

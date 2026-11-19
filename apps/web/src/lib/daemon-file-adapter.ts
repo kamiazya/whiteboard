@@ -15,13 +15,21 @@ import {
   documentByIdApiUrl,
   documentFileByIdApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
-import { imageRefId, isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
-import { Loro } from 'loro-crdt'
+import { loadCrdtEngine, randomPeerId, readValue } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  bytesToBase64,
+  imageRefId,
+  isImageRef,
+  newImageRef,
+  type SpatialCanvas,
+  type StoredCoreFacets,
+} from '@kamiazya/whiteboard-model'
+import { z } from 'zod'
 import { getAppLogger } from './app-logger.js'
 import { readDaemonImage } from './daemon-image-read.js'
 import type { DocumentFileAdapter, LoadedFileDocument } from './document-file-contract.js'
 import { uploadRefusalReason } from './image-upload-policy.js'
-import { readLoadedFileDocument } from './read-loaded-file-document.js'
+import { loadedFileDocument } from './read-loaded-file-document.js'
 
 const log = getAppLogger('daemon-file-adapter')
 
@@ -50,6 +58,27 @@ export interface DaemonFileAdapterOptions {
 const objectUrlOf = (blob: Blob | undefined) =>
   blob === undefined ? undefined : URL.createObjectURL(blob)
 
+// The engine's answers are any-value by contract; each is a reader of the
+// adapter that already produced the model's own shape.
+const canvasShape = z.custom<SpatialCanvas>()
+const facetsShape = z.custom<StoredCoreFacets | undefined>()
+
+/** Every half of the document the bytes hold, read through the engine. */
+async function readSnapshotDocument(bytes: Uint8Array): Promise<LoadedFileDocument> {
+  const engine = await loadCrdtEngine()
+  const { handle } = engine.open({ peer: randomPeerId(), bytes: bytesToBase64(bytes) })
+  try {
+    const [canvas, facets, body] = await Promise.all([
+      readValue(engine, handle, { query: 'spatialCanvas' }, z.object({ canvas: canvasShape })),
+      readValue(engine, handle, { query: 'coreFacets' }, facetsShape),
+      readValue(engine, handle, { query: 'markdownBody' }, z.string()),
+    ])
+    return loadedFileDocument({ canvas: canvas.canvas, facets, body })
+  } finally {
+    engine.close({ handle })
+  }
+}
+
 /**
  * One referenced document off the daemon's snapshot route. Only a 404 is
  * "absent": the contract caches that answer as terminal, so a busy database,
@@ -64,9 +93,7 @@ async function loadSnapshotDocument(
     const res = await daemonFetch(url)
     if (res.status === 404) return undefined
     if (!res.ok) throw new Error(`snapshot read answered ${res.status}`)
-    const doc = new Loro()
-    doc.import(new Uint8Array(await res.arrayBuffer()))
-    return readLoadedFileDocument(doc)
+    return await readSnapshotDocument(new Uint8Array(await res.arrayBuffer()))
   } catch (err) {
     log.warn('referenced document load failed', { ref, err })
     throw err
