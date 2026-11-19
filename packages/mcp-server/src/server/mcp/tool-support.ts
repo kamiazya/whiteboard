@@ -7,7 +7,7 @@ import type {
   ToolAnnotations,
 } from '@modelcontextprotocol/server'
 import type { z } from 'zod'
-import { coreTrapAsEngineTrap } from '../core-trap.js'
+import { coreTrapAsEngineTrap } from '../../shared/core-trap.js'
 import { getLogger } from '../log.js'
 import { getTracer, MCP_ATTR } from '../observability/tracing.js'
 import { callerReadsServerLog, toolErrorText } from '../security/mcp-caller.js'

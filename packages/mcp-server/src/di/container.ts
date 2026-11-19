@@ -13,7 +13,6 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Container, type ContainerModule } from 'inversify'
-import { coreTrapAsEngineTrap } from '../server/core-trap.js'
 import {
   coreLoaders,
   layoutCoreSettingsFrom,
@@ -28,6 +27,7 @@ import { liveDocuments, workspaceDocuments } from '../server/store/live-document
 import { globalStoreScope, type StoreScope } from '../server/store/store-scope.js'
 import { FileVersionStore } from '../server/store/version-store.js'
 import { callerNamespaceOfRequest } from '../server/workspace-handle.js'
+import { coreTrapAsEngineTrap } from '../shared/core-trap.js'
 import { agentVersionHistory } from './agent-version-history.js'
 import { STORE_SCOPE } from './store-scope-token.js'
 
