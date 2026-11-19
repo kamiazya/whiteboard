@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { CoreInstanceTrapped } from '@kamiazya/whiteboard-core-wasm'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer, type RequestId } from '@modelcontextprotocol/server'
 import { trace } from '@opentelemetry/api'
@@ -268,5 +269,18 @@ describe('tool error text on server mode', () => {
     for (const thrown of [new Error(`failed at ${STORED}`), enoent]) {
       expect((await asServerMode(throwingHandler(thrown))).content[0]?.text).not.toContain('/')
     }
+  })
+})
+
+describe('tool error text when the Rust core aborts', () => {
+  it('names the core operation the call was running, as the engine abort it is', async () => {
+    const call = throwingHandler(
+      new CoreInstanceTrapped('layout_spatial', 1, { cause: new Error('unreachable') }),
+    )
+
+    const result = await call()
+
+    expect(result.isError).toBe(true)
+    expect(result.content[0]?.text).toContain('The Rust core aborted while running layout_spatial')
   })
 })

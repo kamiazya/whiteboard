@@ -39,7 +39,7 @@ export class LayoutCaches {
   surfaceOf(cache: object): number | undefined {
     const generation = generationOf(this.#glue)
     const held = this.#ids.get(cache)
-    if (held !== undefined && held.generation === generation) return held.surface
+    if (held?.generation === generation) return held.surface
     if (this.#next > MAX_SURFACE) return undefined
     const surface = this.#next
     this.#next += 1

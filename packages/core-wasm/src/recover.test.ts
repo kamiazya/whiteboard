@@ -226,6 +226,22 @@ describe('a handle from before a reset', () => {
     expect(fresh.size()).toEqual({ documents: 0, bytes: 0 })
   })
 
+  it('refuses an upsert whose own callback reset the instance, rather than writing into the index that took its handle number', () => {
+    const { glue, state } = fakeGlue()
+    const core = coreFrom(glue, new Uint8Array())
+    const old = core.search.createIndex()
+    const alsoIndex = () => {
+      state.nextThrow = trap()
+      expect(() => core.search.foldForSearch('a')).toThrow(CoreInstanceTrapped)
+      core.search.createIndex()
+      return ''
+    }
+
+    const doc = { documentId: 'a', path: 'p', name: 'n', texts: ['t'] }
+    expect(() => old.upsert(doc, alsoIndex)).toThrow(CoreHandleLost)
+    expect(state.searchCalls.filter((call) => call[0] === 'index-upsert')).toEqual([])
+  })
+
   it('is never released into the fresh instance, by release() or by collection', () => {
     const { glue, state } = fakeGlue()
     const memo = finalizerOf()

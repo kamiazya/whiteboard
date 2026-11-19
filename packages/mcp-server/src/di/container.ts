@@ -27,6 +27,7 @@ import { liveDocuments, workspaceDocuments } from '../server/store/live-document
 import { globalStoreScope, type StoreScope } from '../server/store/store-scope.js'
 import { FileVersionStore } from '../server/store/version-store.js'
 import { callerNamespaceOfRequest } from '../server/workspace-handle.js'
+import { coreTrapAsEngineTrap } from '../shared/core-trap.js'
 import { agentVersionHistory } from './agent-version-history.js'
 import { STORE_SCOPE } from './store-scope-token.js'
 
@@ -111,6 +112,7 @@ export function resolveServerDeps(
     // the instance the OKF envelope, the JSON Canvas codec and the facet
     // write are installed from at boot.
     layoutCore: core.layoutCore,
+    asEngineTrap: coreTrapAsEngineTrap,
     // Where a family a theme names can be downloaded. The catalogue is the
     // daemon's — the same one the font installer takes an id from — and
     // server-core cannot import it (daemon-client depends on server-core, so

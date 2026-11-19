@@ -113,6 +113,13 @@ export interface ServerDeps {
    */
   layoutCore: () => Promise<LayoutCore>
   /**
+   * Names an abort of the Rust core as a `DocumentEngineTrapError` (typed `Error`, since document-io imports this module's types). Optional
+   * because the core's error classes live in a package this shared layer does
+   * not import; the composition root that loads the core supplies it, and
+   * absent means such a throw answers as any unhandled one.
+   */
+  asEngineTrap?: (err: unknown) => Error | undefined
+  /**
    * Turns document search from lexical-only into lexical fused with
    * semantic. Optional for the same reason `measure` is: server-core is a
    * shared layer and cannot load a model itself, and absent means search

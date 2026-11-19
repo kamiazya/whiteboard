@@ -8,6 +8,7 @@ import { createMcpHandler } from '@modelcontextprotocol/server'
 import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { getCookie } from 'hono/cookie'
+import { coreTrapAsEngineTrap } from '../shared/core-trap.js'
 import { answerNotFound, setBaselineSecurityHeaders, shouldLogMcpHttpDebug } from './app-helpers.js'
 import type { AppOptions } from './app-types.js'
 import { DIST_WEB_APP_DIR } from './config.js'
@@ -426,10 +427,12 @@ export function createApp(options: AppOptions) {
   // Sub-apps with no handler of their own inherit this one; without it Hono's
   // default answers `text/plain` and prints the raw error with `console.error`.
   app.onError(
-    answerUnhandled(({ busy, ...request }) =>
-      busy
-        ? requestLog.warning(request, 'request refused: database busy')
-        : requestLog.error(request, 'unhandled error'),
+    answerUnhandled(
+      ({ busy, ...request }) =>
+        busy
+          ? requestLog.warning(request, 'request refused: database busy')
+          : requestLog.error(request, 'unhandled error'),
+      coreTrapAsEngineTrap,
     ),
   )
 

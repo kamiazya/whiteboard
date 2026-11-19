@@ -44,7 +44,11 @@ export class SnapshotNotFoundError extends Error {
  * later call on it traps again — so repeating the same call is not a retry.
  *
  * `subject` names what the engine was working on in words a caller can act
- * on: a document, a document's path, or a whole workspace record.
+ * on: a document, a document's path, or a whole workspace record. For `doing:
+ * 'running'` it is the core's operation (laying out, searching, parsing,
+ * writing a facet), and the engine is the Rust core: one error and one
+ * refusal code serve both engines, since a caller can do the same about
+ * either (nothing).
  *
  * It lives beside the loader that raises it, for the reason
  * `SnapshotNotFoundError` does.
@@ -52,17 +56,29 @@ export class SnapshotNotFoundError extends Error {
 export class DocumentEngineTrapError extends Error {
   constructor(
     public readonly subject: string,
-    public readonly doing: 'loading' | 'saving' | 'importing an update into',
+    public readonly doing: 'loading' | 'saving' | 'importing an update into' | 'running',
     cause: unknown,
+    /** Whether the engine that trapped is usable again; only a core operation can say it is not. */
+    recovered = true,
   ) {
     super(
-      `The CRDT engine aborted while ${doing} ${subject}; nothing from this write was stored. ` +
-        `A very large document is the usual trigger. ${DOCUMENT_ENGINE_TRAP_ADVICE[doing]}`,
+      doing === 'running'
+        ? `The Rust core aborted while running ${subject}; nothing from this request was stored. ${
+            recovered ? CORE_TRAP_RECOVERED : CORE_TRAP_UNRECOVERABLE
+          }`
+        : `The CRDT engine aborted while ${doing} ${subject}; nothing from this write was stored. ` +
+            `A very large document is the usual trigger. ${DOCUMENT_ENGINE_TRAP_ADVICE[doing]}`,
       { cause },
     )
     this.name = 'DocumentEngineTrapError'
   }
 }
+
+const CORE_TRAP_RECOVERED =
+  'The core was reset, so the next request runs on a fresh instance; sending the same input again may abort the same way.'
+
+const CORE_TRAP_UNRECOVERABLE =
+  'The core could not be reset and answers every request with this until the daemon restarts.'
 
 /**
  * The code every surface answers `DocumentEngineTrapError` with — `/api/v1`'s
@@ -74,7 +90,9 @@ export const DOCUMENT_ENGINE_TRAP_CODE = 'document_engine_trap'
 const STUCK_UNTIL_RESTART =
   'If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted.'
 
-const DOCUMENT_ENGINE_TRAP_ADVICE: Readonly<Record<DocumentEngineTrapError['doing'], string>> = {
+const DOCUMENT_ENGINE_TRAP_ADVICE: Readonly<
+  Record<Exclude<DocumentEngineTrapError['doing'], 'running'>, string>
+> = {
   loading: STUCK_UNTIL_RESTART,
   saving: STUCK_UNTIL_RESTART,
   // Measured on loro-crdt 1.13.6: after one trap, fresh instances in the same
@@ -140,7 +158,7 @@ export interface CachedTarget {
  */
 export function runEvictingOnEngineTrap<T>(
   target: CachedTarget,
-  doing: DocumentEngineTrapError['doing'],
+  doing: Exclude<DocumentEngineTrapError['doing'], 'running'>,
   work: () => T,
 ): T {
   try {
