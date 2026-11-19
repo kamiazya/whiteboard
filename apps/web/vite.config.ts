@@ -10,7 +10,6 @@ import { cloudflareDevHeadersPlugin } from './vite-dev-headers.js'
 import { coreSourcePlugin } from './vite-plugin-core-source.js'
 import { stripWasmSourceMapPlugin } from './vite-plugin-strip-wasm-sourcemap.js'
 import { pwaOptions } from './vite-pwa-options.js'
-import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
 
 export default defineConfig({
   define: { ...rendererBuildDefine },
@@ -34,7 +33,6 @@ export default defineConfig({
       'loro-crdt': 'loro-crdt/bundler',
       // Without these, importing remark in a worker throws
       // `document is not defined` at chunk evaluation — see the module.
-      ...workerSafeDepsAlias,
     },
   },
   build: {

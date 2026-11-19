@@ -147,7 +147,7 @@ const PARTLY_UNCHECKED: Readonly<
   Record<string, { readonly files: number; readonly reason: string }>
 > = {
   'apps/web': {
-    files: 16,
+    files: 15,
     reason:
       'tsconfig.json includes src/ and the two vite configs; the root-level *.test.ts and ' +
       'scripts/*.test.ts beside them are outside it. Including them surfaces 9 errors: four ' +

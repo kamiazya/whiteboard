@@ -7,9 +7,9 @@
  *
  * This is jsdom on purpose: the failure under test is the event wiring, not
  * browser layout, and a stub Worker is the only way to fire the event
- * deterministically. The real-eval-failure case (the
- * decode-named-character-reference alias) is covered by the parity browser
- * test; this covers what the EDITOR does if that class of failure ever ships.
+ * deterministically. The real-eval-failure case is covered by the parity
+ * browser test; this covers what the EDITOR does if that class of failure
+ * ever ships.
  */
 
 import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'

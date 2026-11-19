@@ -18,10 +18,7 @@
  * main thread too.
  *
  * Markdown text crosses as part of the canvas and the WORKER parses it, so
- * parse and layout leave the main thread together. The old blocker was never
- * remark itself: decode-named-character-reference's `browser` entry touches
- * `document` at module top level, and vite.config.ts now pins the DOM-free
- * build (`workerSafeDepsAlias`, from worker-safe-deps-alias.ts).
+ * parse and layout leave the main thread together.
  *
  * Transport is plain postMessage, i.e. structuredClone. That was measured
  * rather than assumed: 0.90ms to clone the scene of a 60-node/200-edge canvas

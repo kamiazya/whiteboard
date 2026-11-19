@@ -49,6 +49,13 @@ leaves an unresolved id as literal `[[ID]]` so the pass is idempotent, and is
 tested but called from nowhere in this repo. Bundle-relative output is
 therefore only a question of what the resolver returns.
 
+**2026-11-18 — correction: the seam above no longer exists.** The TypeScript
+`resolveReferencesForExport` was deleted with the TypeScript markdown parser
+in ADR-0054 A5 (#2353), because it still had no caller. When bundle export is
+built, the wikilink-to-relative-link rewrite belongs in the Rust core, not in
+a revived TypeScript pass. The paragraph above is kept as the state at the
+time of the decision.
+
 The asymmetry this creates must be closed on the import side or a whiteboard
 bundle re-imported into a whiteboard silently loses every backlink: ADR-0014's
 extraction learns bundle-relative markdown links as a third `via` alongside

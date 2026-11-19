@@ -58,6 +58,8 @@ export const RUST_SCOPE = {
     'apps/web/src/test-utils/markdown-model.ts',
     'apps/web/src/lib/link-target.ts',
     'apps/web/src/lib/link-entries.ts',
+    // The web-rust alias table is built with scanReferences.
+    'packages/codec/src/references/scan.ts',
     'apps/web/src/lib/link-target.roundtrip.rust.test.ts',
     'apps/web/src/lib/reference-survival.rust.test.ts',
   ],
