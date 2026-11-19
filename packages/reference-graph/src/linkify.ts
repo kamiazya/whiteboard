@@ -12,7 +12,7 @@ import { unlinkedNameSpans } from './reference-aggregate.js'
 import { ReferenceRewriteTooLargeError } from './text-limit.js'
 
 /** The document a mention names, as a listing knows it. */
-export interface LinkifyTarget {
+interface LinkifyTarget {
   readonly documentId: string
   readonly path: string
   /** Required: a document with no display name is named nowhere in prose. */

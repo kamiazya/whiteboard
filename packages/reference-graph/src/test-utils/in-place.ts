@@ -7,7 +7,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { extractContentFacts } from '../extract.js'
-import { type LinkifyTarget, planLinkifyMentions } from '../linkify.js'
+import { planLinkifyMentions } from '../linkify.js'
 import { planDocumentReferenceRewrite } from '../rewrite.js'
 
 /**
@@ -18,7 +18,7 @@ import { planDocumentReferenceRewrite } from '../rewrite.js'
 export function linkifyInPlace(
   doc: DocumentContainers,
   kind: DocumentKind | undefined,
-  target: LinkifyTarget,
+  target: Parameters<typeof planLinkifyMentions>[1],
 ): number {
   const { linked, edit } = planLinkifyMentions(readDocumentContent(doc, kind), target)
   if (edit !== null) applyDocumentEdit(doc, edit)

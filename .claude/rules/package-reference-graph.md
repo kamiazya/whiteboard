@@ -9,8 +9,9 @@ paths:
 
 - **What one document contributes** (`extractContentFacts`): the references
   its content writes (`[[path]]`, `![[path]]`, a file node's target), the
-  texts search and mention-finding read, and its tag bearers. Pure over a
-  listing entry and a `LoroDoc`. `tagBearersOf` and `splitBearerTags` are
+  texts search and mention-finding read, and its tag bearers. Pure over plain
+  values (`ContentWithTags`: the content a keeper read, plus a note's own tags);
+  no CRDT engine reaches this package, so a keeper reads, and this derives. `tagBearersOf` and `splitBearerTags` are
   exported on their own, so the daemon's projection and the browser keeper
   count the same bearers rather than each walking a canvas by hand.
 - **What the graph answers** (`ReferenceAggregate`, `mentionsOfIn`,
@@ -22,18 +23,20 @@ paths:
   moved. The digest is a hash of the MERGED content, computed at read time by
   the same function on both keepers, so correctness depends neither on
   hooking every write path nor on any replica's word about when it wrote.
-- **What a rename does to a referring document** (`rewriteDocumentReferences`):
-  codec's plan applied in place over `DocumentContainers`, so both keepers
-  repoint a reference with one function. Saving stays the keeper's.
-- **What Link does to a source** (`linkifyMentionsIn`, `linkMarkupFor`):
-  turning a document's unlinked mentions of another into links, over
-  `DocumentContentSource`'s sibling seam `DocumentContainers`, so the same
-  code edits a standalone document on the daemon and a node of the browser's
-  workspace record. Saving stays the keeper's. A board is written back WHOLE
-  with only its nodes replaced: the canvas write is a full resync, and
-  handing it `{ nodes, edges }` once deleted every line and tag on the board.
+- **What a rename does to a referring document**
+  (`planDocumentReferenceRewrite`): codec's plan turned into a `DocumentEdit`
+  from the document's content, so both keepers repoint a reference with one
+  function. Applying (`applyDocumentEdit`, loro-adapter's) and saving stay the
+  keeper's.
+- **What Link does to a source** (`planLinkifyMentions`, `linkMarkupFor`):
+  turning a document's unlinked mentions of another into a `DocumentEdit`,
+  so the same planner serves a standalone document on the daemon and a node of
+  the browser's workspace record. Applying and saving stay the keeper's. A
+  markdown body is planned as descending splices so a concurrent edit
+  elsewhere merges; a board as a diff of `after` against the canvas read, since
+  handing a full resync `{ nodes, edges }` once deleted every line and tag.
 - **One port, `DocumentContentSource`** — what the listing cannot give the
-  cache: the document itself (`loadDocument`, null when nothing is stored),
+  cache: the document's content (`loadContent`, null when nothing is stored),
   and OPTIONALLY a version per document for a listing entry with no digest.
   The daemon supplies both (`server-core`'s `factsCacheFor(deps)`, whose
   fallback is a live document's frontier — its in-memory test index lists no
@@ -54,7 +57,7 @@ paths:
 - **Applying a rename's rewrite** (`followReferencesAfterRename`). Finding
   candidates, loading and saving are an operation of whoever keeps the
   documents, so that stays in `server-core` (and in the browser files
-  source); the rewrite itself is `rewriteDocumentReferences`, above.
+  source); the rewrite itself is `planDocumentReferenceRewrite`, above.
 - **Tool surfaces and routes** (`computeBacklinks`, `wb_document_search`).
   They are the daemon's answers to a request and compose what is here.
 
