@@ -59,6 +59,7 @@ import {
 } from './okf.js'
 import type { UnwritableIssue } from './okf-unsafe.js'
 import { type LayoutQueryAnswer, type LayoutQueryRequest, layoutQuery } from './query.js'
+import { type RecoveryLog, recoverable } from './recover.js'
 import { type SearchCore, searchOver } from './search.js'
 import type { AnchorPair, LabelRect, RoutingBudget, SideOverride } from './types.js'
 import { encodeLayout, sideAt } from './wire.js'
@@ -76,6 +77,14 @@ export const EXPECTED_ABI = '46'
  * since their exports are absent from a shipped artifact.
  */
 export const ORACLE_ABI = `${EXPECTED_ABI}+oracle-surface`
+
+export {
+  CoreHandleLost,
+  CoreInstanceTrapped,
+  CoreUnrecoverable,
+  MAX_RESET_ATTEMPTS,
+  type RecoveryLog,
+} from './recover.js'
 
 /** The artifact speaks another ABI than this shim: the two came from different commits. */
 export class CoreAbiMismatch extends Error {
@@ -409,11 +418,24 @@ function layoutCalls(
  * A core over glue that is already loaded, initialised from `source` (the
  * artifact's bytes or a compiled module the composition root holds).
  * Synchronous, for a root that has the glue in hand, such as a worker.
+ *
+ * A call that traps the instance is refused with `CoreInstanceTrapped`, never
+ * retried, and the instance is replaced behind this same `Core`: the next
+ * call runs on a fresh one. What the old one held is gone, so a search index
+ * or label set from before throws `CoreHandleLost` (its owner builds it again),
+ * while fonts and content caches register again on the next layout. An
+ * instance that cannot be reset answers `CoreUnrecoverable` from then on.
+ * `log` receives one record per trap, naming the export and nothing it was sent.
  */
-export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Module): Core {
-  glue.initSync({ module: source })
-  const abi = glue.abi_version()
+export function coreFrom(
+  raw: CoreGlue,
+  source: BufferSource | WebAssembly.Module,
+  options: { readonly log?: RecoveryLog } = {},
+): Core {
+  raw.initSync({ module: source })
+  const abi = raw.abi_version()
   if (abi !== EXPECTED_ABI && abi !== ORACLE_ABI) throw new CoreAbiMismatch(abi)
+  const glue = recoverable(raw, abi, options.log)
   const okf: OkfGlue = glue
   const spatial: SpatialGlue = glue
   const facets: FacetGlue = glue
