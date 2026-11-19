@@ -27,13 +27,13 @@ export {
   writeTrustFacets,
 } from './document-envelope.js'
 export { reconcileCoreFacets, reconcileFacets } from './document-envelope-reconcile.js'
-export { isEngineTrap } from './engine-trap.js'
 export { type CrdtEngineOptions, createCrdtEngine } from './engine/engine.js'
 export { type JournaledEngine, journaledEngine } from './engine/journal.js'
 export { loadCrdtEngine } from './engine/load.js'
 export { randomPeerId } from './engine/peer.js'
 export { readValue } from './engine/read-value.js'
 export type { CrdtEngine } from './engine/types.js'
+export { isEngineTrap } from './engine-trap.js'
 export { type EnvelopeKindBreach, envelopeKindBreach, statedKindSplit } from './envelope-kind.js'
 export {
   DEFAULT_FILE_GRACE_MS,
