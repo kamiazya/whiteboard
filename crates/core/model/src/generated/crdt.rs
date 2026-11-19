@@ -618,12 +618,12 @@ pub struct Write {
     pub args: Value,
 }
 
-/// Export the state at a frontier, without the history before it.
+/// Export the current state, keeping history only from a frontier on.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExportShallowSnapshotRequest {
     /// The document.
     pub handle: Handle,
-    /// The frontier it keeps the state at.
+    /// Where the kept history starts; the state exported is still the current one.
     pub frontiers: Vec<VersionEntry>,
 }
 

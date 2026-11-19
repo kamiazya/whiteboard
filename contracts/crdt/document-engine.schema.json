@@ -326,7 +326,7 @@
       "x-wb-unknownKeys": "refuse"
     },
     "ExportShallowSnapshotRequest": {
-      "description": "Export the state at a frontier, without the history before it.",
+      "description": "Export the current state, keeping history only from a frontier on.",
       "type": "object",
       "properties": {
         "handle": {
@@ -343,7 +343,7 @@
           "items": {
             "$ref": "#/$defs/VersionEntry"
           },
-          "description": "The frontier it keeps the state at."
+          "description": "Where the kept history starts; the state exported is still the current one."
         }
       },
       "required": ["handle", "mode", "frontiers"],
