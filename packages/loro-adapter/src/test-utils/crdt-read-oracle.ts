@@ -52,10 +52,18 @@ export type Answer = { ok: unknown } | { err: string }
 /** `[peer, counter]` pairs, peers as decimal strings: JSON has no bigint. */
 export type VersionPairs = Array<[string, number]>
 
+/** Peers are u64 decimal strings, so they compare as numbers, not as text. */
+function comparePeers(a: string, b: string): number {
+  const left = BigInt(a)
+  const right = BigInt(b)
+  if (left === right) return 0
+  return left < right ? -1 : 1
+}
+
 export function versionPairs(version: VersionVector): VersionPairs {
   return [...version.toJSON().entries()]
     .map(([peer, counter]) => [String(peer), counter] as [string, number])
-    .sort(([a], [b]) => (BigInt(a) < BigInt(b) ? -1 : BigInt(a) > BigInt(b) ? 1 : 0))
+    .sort(([a], [b]) => comparePeers(a, b))
 }
 
 export function versionOfPairs(pairs: VersionPairs): VersionVector {
@@ -65,7 +73,7 @@ export function versionOfPairs(pairs: VersionPairs): VersionVector {
 export function frontierPairs(frontiers: Frontiers): Array<[string, number]> {
   return frontiers
     .map(({ peer, counter }) => [String(peer), counter] as [string, number])
-    .sort(([a, x], [b, y]) => (a === b ? x - y : BigInt(a) < BigInt(b) ? -1 : 1))
+    .sort(([a, x], [b, y]) => comparePeers(a, b) || x - y)
 }
 
 /** A tree id is `counter@peer`; the peer of a replica made on the way is random. */

@@ -265,7 +265,6 @@ for (let i = 0; i < 18; i++) {
   const text = markdownContent(a, rng, i % 2 === 0)
   spatialContent(a, rng, false)
   threadsContent(a, a, rng, text)
-  const base = a.oplogVersion()
   const b = peer(new LoroDoc(), 12)
   b.import(a.export({ mode: 'snapshot' }))
   // the same thread id created on both sides, the case a mergeable container exists for
@@ -291,7 +290,6 @@ for (let i = 0; i < 18; i++) {
   )
   a.import(b.export({ mode: 'update', from: a.oplogVersion() }))
   b.import(a.export({ mode: 'update', from: b.oplogVersion() }))
-  void base
   add('doc-concurrent', 'document', a)
 }
 for (let i = 0; i < 14; i++) {
@@ -332,12 +330,11 @@ for (let i = 0; i < 14; i++) {
     },
     (d) => d.getMovableList('elements').insert(0, 'x'),
   ]
-  retired.forEach((write, i) => {
+  retired.forEach((write) => {
     const doc = peer(new LoroDoc(), 1)
     write(doc)
     doc.commit()
     add('doc-retired', 'document', doc)
-    void i
   })
 }
 
@@ -351,7 +348,8 @@ function seedTree(doc: LoroDoc, rng: Rng, count: number, hosted: boolean): strin
   const made: string[] = []
   const folders = ['notes', 'boards', 'archive', 'a/b', 'x/y/z']
   for (let k = 0; k < count; k++) {
-    const path = `${rng() < 0.6 ? `${pick(rng, folders)}/` : ''}${pick(rng, WORDS)}${k}`
+    const folder = rng() < 0.6 ? `${pick(rng, folders)}/` : ''
+    const path = `${folder}${pick(rng, WORDS)}${k}`
     const documentId = nextId()
     const kind = pick(rng, KINDS)
     const created = createWorkspaceDocumentAtPath(doc, {

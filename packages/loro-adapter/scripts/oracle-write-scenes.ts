@@ -164,7 +164,8 @@ export function seedTree(
   for (let k = 0; k < count; k++) {
     // The first two sit at the path a new-document flow generates, the only one a heading may name.
     const leaf = k === 0 ? 'untitled' : k === 1 ? 'untitled-2' : `${pick(rng, WORDS)}${k}`
-    const path = `${k === 0 ? 'notes/' : `${pick(rng, FOLDERS)}/`}${leaf}`
+    const folder = k === 0 ? 'notes' : pick(rng, FOLDERS)
+    const path = `${folder}/${leaf}`
     const id = nextId()
     const kind = pick(rng, KINDS)
     const created = createWorkspaceDocumentAtPath(doc, {
