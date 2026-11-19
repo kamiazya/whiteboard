@@ -189,9 +189,11 @@ describe('browser list landing (browser — real IndexedDB)', () => {
     )
     // The NOTE's row, so the restored document can be read back below: its
     // name was seeded from the heading typed above.
-    const noteRow = (await within(trash).findByText('From the list', undefined, {
-      timeout: 15_000,
-    })).closest('li') as HTMLElement
+    const noteRow = (
+      await within(trash).findByText('From the list', undefined, {
+        timeout: 15_000,
+      })
+    ).closest('li') as HTMLElement
     await userEvent.click(within(noteRow).getByRole('button', { name: 'Restore' }))
     await waitFor(() => expect(screen.queryAllByTestId('card-title')).toHaveLength(1), {
       timeout: 15_000,
