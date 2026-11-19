@@ -26,6 +26,7 @@ import {
   TAG_MAX_CHARS,
   TEXT_ANCHOR_QUOTE_MAX_CHARS,
   THREAD_MAX_MESSAGES,
+  WORKSPACE_MAX_DOCUMENTS,
 } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap, LoroText, type LoroTreeNode } from 'loro-crdt'
@@ -38,11 +39,7 @@ import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
 import { TooManyVersionsError } from '../versions/version-refusal.js'
 import { promoteWorkspace } from './promote-workspace.js'
-import {
-  OffGrammarPathError,
-  syncWriteAnswer,
-  WORKSPACE_MAX_DOCUMENTS,
-} from './sync-write-refusals.js'
+import { OffGrammarPathError, syncWriteAnswer } from './sync-write-refusals.js'
 
 const WS = 'ws-1'
 const ROADMAP_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'

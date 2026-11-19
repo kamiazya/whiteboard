@@ -24,6 +24,14 @@ export const breachShapeSchema = z.enum([
   'retired-shape',
   'retired-comment-plane',
   'unattached-container',
+  'causal-gap',
+  'too-many-documents',
+  'too-many-folders',
+  'unreadable-document-meta',
+  'invalid-path',
+  'document-name-too-long',
+  'folder-name-refused',
+  'document-kind-changed',
 ])
 export type BreachShape = z.infer<typeof breachShapeSchema>
 
@@ -43,8 +51,8 @@ export type DocumentId = z.infer<typeof documentIdSchema>
 export const handleSchema = z.number().int().meta({ minimum: undefined, maximum: undefined })
 export type Handle = z.infer<typeof handleSchema>
 
-/** What judges imported bytes: the text limits, or nothing for trusted bytes. */
-export const importJudgeSchema = z.enum(['text', 'none'])
+/** What judges imported bytes: text limits, workspace-sync checks too, or none. */
+export const importJudgeSchema = z.enum(['text', 'workspace-sync', 'none'])
 export type ImportJudge = z.infer<typeof importJudgeSchema>
 
 /** A Loro peer id: the unsigned 64-bit number in decimal. */

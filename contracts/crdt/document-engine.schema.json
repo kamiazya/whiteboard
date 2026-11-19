@@ -141,7 +141,15 @@
         "reserved-map-key",
         "retired-shape",
         "retired-comment-plane",
-        "unattached-container"
+        "unattached-container",
+        "causal-gap",
+        "too-many-documents",
+        "too-many-folders",
+        "unreadable-document-meta",
+        "invalid-path",
+        "document-name-too-long",
+        "folder-name-refused",
+        "document-kind-changed"
       ]
     },
     "VersionEntry": {
@@ -181,9 +189,9 @@
       "x-wb-unknownKeys": "refuse"
     },
     "ImportJudge": {
-      "description": "What judges imported bytes: the text limits, or nothing for trusted bytes.",
+      "description": "What judges imported bytes: text limits, workspace-sync checks too, or none.",
       "type": "string",
-      "enum": ["text", "none"]
+      "enum": ["text", "workspace-sync", "none"]
     },
     "Write": {
       "description": "One write: the writer and its arguments, any-value on purpose.",

@@ -41,9 +41,9 @@ import {
   LABEL_MAX_CHARS,
   MARKDOWN_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
+  WORKSPACE_MAX_DOCUMENTS,
 } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { WORKSPACE_MAX_DOCUMENTS } from '@kamiazya/whiteboard-ports'
 import { apiErrorBodySchema, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type * as versionEntry from '@kamiazya/whiteboard-server-core/versions/version-entry'
 import { PROMOTE_MAX_JUDGED_SIZE } from '@kamiazya/whiteboard-server-core/versions/version-entry'

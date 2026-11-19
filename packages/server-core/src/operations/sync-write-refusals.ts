@@ -2,7 +2,11 @@
 // Every surface that runs a sync write — a document's update, the workspace
 // document's update and promote — answers them through `syncWriteAnswer`, so
 // a refusal added here reaches each surface with the same code and status.
-import { SYNC_TEXT_BREACH_CODES, type SyncTextBreach } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  SYNC_TEXT_BREACH_CODES,
+  SYNC_WORKSPACE_BREACH_CODES,
+  type SyncTextBreach,
+} from '@kamiazya/whiteboard-loro-adapter'
 import {
   ANCHOR_NODES_LIMIT_PHRASE,
   CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
@@ -32,8 +36,6 @@ export {
   SyncWriteRefusalError,
   TooManyDocumentsError,
   TooManyFoldersError,
-  WORKSPACE_MAX_DOCUMENTS,
-  WORKSPACE_MAX_FOLDERS,
 } from '@kamiazya/whiteboard-ports'
 
 /** The document a refused text belongs to, once the caller could tell. */
@@ -565,7 +567,7 @@ function shortened(path: string): string {
  * The message names both rules, since a path can break either.
  */
 export class OffGrammarPathError extends SyncWriteRefusalError {
-  readonly code = 'invalid_path'
+  readonly code = SYNC_WORKSPACE_BREACH_CODES['invalid-path']
   readonly status = 400
 
   constructor(public readonly paths: readonly string[]) {
@@ -590,7 +592,7 @@ export class OffGrammarPathError extends SyncWriteRefusalError {
  * was kept; a node already unreadable before the write is left as it was.
  */
 export class UnreadableDocumentMetaError extends SyncWriteRefusalError {
-  readonly code = 'unreadable_document_meta'
+  readonly code = SYNC_WORKSPACE_BREACH_CODES['unreadable-document-meta']
   readonly status = 400
 
   constructor(public readonly nodes: readonly string[]) {
@@ -610,7 +612,7 @@ export class UnreadableDocumentMetaError extends SyncWriteRefusalError {
  * board's nodes. Nothing of the write was kept.
  */
 export class DocumentKindChangedError extends SyncWriteRefusalError {
-  readonly code = 'document_kind_changed'
+  readonly code = SYNC_WORKSPACE_BREACH_CODES['document-kind-changed']
   readonly status = 400
 
   constructor(
@@ -633,7 +635,7 @@ export class DocumentKindChangedError extends SyncWriteRefusalError {
  * stored longer before the bound, left or shortened, is let through.
  */
 export class DocumentNameTooLongError extends SyncWriteRefusalError {
-  readonly code = 'document_name_too_long'
+  readonly code = SYNC_WORKSPACE_BREACH_CODES['document-name-too-long']
   readonly status = 400
 
   constructor(public readonly paths: readonly string[]) {
@@ -651,7 +653,7 @@ export class DocumentNameTooLongError extends SyncWriteRefusalError {
  * or repaired, is let through.
  */
 export class FolderNameRefusedError extends SyncWriteRefusalError {
-  readonly code = 'folder_name_refused'
+  readonly code = SYNC_WORKSPACE_BREACH_CODES['folder-name-refused']
   readonly status = 400
 
   constructor(
@@ -675,7 +677,7 @@ export class FolderNameRefusedError extends SyncWriteRefusalError {
  * behind its own record.
  */
 export class CausalGapError extends SyncWriteRefusalError {
-  readonly code = 'causal_gap'
+  readonly code = SYNC_WORKSPACE_BREACH_CODES['causal-gap']
   readonly status = 409
 
   constructor() {

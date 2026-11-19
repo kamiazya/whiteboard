@@ -49,6 +49,7 @@ import {
   WORKSPACE_DOCUMENT,
   write,
 } from './crdt-engine-conformance-kit.js'
+import { describeWorkspaceSyncJudging } from './crdt-engine-conformance-workspace-sync.js'
 import { fc, withDefaults } from './fast-check.js'
 
 const recorded = (name: string) =>
@@ -664,6 +665,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeFork(makeEngine)
     describeImportJudging(makeEngine)
     describeImportPending(makeEngine)
+    describeWorkspaceSyncJudging(makeEngine)
     describeUndoHistory(makeEngine)
     describeSpliceRuns(makeEngine)
     describeSpliceRunsRefused(makeEngine)

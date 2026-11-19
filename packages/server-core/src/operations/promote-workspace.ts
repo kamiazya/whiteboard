@@ -4,6 +4,7 @@ import {
   readWorkspaceDocuments,
   WORKSPACE_TREE_KEY,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { WORKSPACE_MAX_DOCUMENTS } from '@kamiazya/whiteboard-model'
 import { type ContainerID, LoroDoc, LoroText, type TreeID } from 'loro-crdt'
 import { DocumentEngineTrapError, runEvictingOnEngineTrap } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -16,11 +17,7 @@ import {
   judgeCarried,
   storeCarriedTrash,
 } from './promote-carried.js'
-import {
-  TextBreachRefusalError,
-  textBreachRefusal,
-  WORKSPACE_MAX_DOCUMENTS,
-} from './sync-write-refusals.js'
+import { TextBreachRefusalError, textBreachRefusal } from './sync-write-refusals.js'
 
 export interface PromoteWorkspaceInput {
   readonly workspaceId: string

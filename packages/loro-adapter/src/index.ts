@@ -114,6 +114,12 @@ export {
   setWorkspaceFolderName,
 } from './workspace-folder-name.js'
 export {
+  isWorkspaceSyncBreach,
+  judgeWorkspaceSyncImport,
+  SYNC_WORKSPACE_BREACH_CODES,
+  type WorkspaceSyncBreach,
+} from './workspace-sync-limits.js'
+export {
   forgetTrashEntry,
   readTrashEntries,
   recordTrashEntry,

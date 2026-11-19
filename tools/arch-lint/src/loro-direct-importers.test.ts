@@ -82,7 +82,6 @@ const LORO_DIRECT: Readonly<Record<string, string>> = {
   'packages/server-core/src/operations/promote-carried.ts': 'M7: server-core',
   'packages/server-core/src/operations/promote-workspace.ts': 'M7: server-core',
   'packages/server-core/src/operations/restore-version.ts': 'M7: server-core',
-  'packages/server-core/src/operations/sync-update-limit.ts': 'M7: server-core',
   'packages/server-core/src/render/assert-spatial-document.ts': 'M7: server-core',
   'packages/server-core/src/server-deps.ts': 'M7: server-core',
   'packages/server-core/src/tools/body-edit.ts': 'M7: server-core',
