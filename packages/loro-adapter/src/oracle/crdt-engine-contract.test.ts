@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { documentEngine } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
+import { WRITERS } from '../engine/writers.js'
 import { SYNC_TEXT_BREACH_CODES } from '../sync-text-limits.js'
-import { WRITERS } from '../test-utils/crdt-write-oracle.js'
 
 /**
  * `contracts/crdt/document-engine.schema.json` is the wire the TypeScript and

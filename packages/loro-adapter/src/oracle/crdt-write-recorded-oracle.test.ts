@@ -1,18 +1,15 @@
 import { readdirSync, readFileSync } from 'node:fs'
+import type { documentEngine } from '@kamiazya/whiteboard-model'
 import { decodeImportBlobMeta, LoroDoc } from 'loro-crdt'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { applyWriter, WRITERS } from '../engine/writers.js'
 import {
   answer,
   frontierPairs,
   type VersionPairs,
   versionPairs,
 } from '../test-utils/crdt-read-oracle.js'
-import {
-  applyWriter,
-  RECORDED_NOW,
-  WRITERS,
-  type WriterName,
-} from '../test-utils/crdt-write-oracle.js'
+import { RECORDED_NOW } from '../test-utils/crdt-write-oracle.js'
 
 /**
  * The committed recording of what every writer of the loro cohort leaves behind
@@ -103,7 +100,7 @@ const WRITER_FLOORS = {
   recordTrashEntry: { rows: 6, changing: 3, refusing: 3 },
   duplicateWorkspaceDocument: { rows: 16, changing: 8 },
   minimalChange: { rows: 12, changing: 0 },
-} satisfies Record<WriterName, { rows: number; changing: number; refusing?: number }>
+} satisfies Record<documentEngine.WriterName, { rows: number; changing: number; refusing?: number }>
 
 /**
  * Every exported function in this package that names a write, and where it is

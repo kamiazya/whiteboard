@@ -21,6 +21,7 @@
 import { writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { documentEngine } from '@kamiazya/whiteboard-model'
 import {
   coreFacetsSchema,
   proposalSchema,
@@ -35,10 +36,10 @@ import {
   textNode,
 } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
+import { applyWriter } from '../src/engine/writers.js'
 import { readSpatialCanvas } from '../src/loro-bridge.js'
 import { writeMarkdownBody } from '../src/markdown-body.js'
 import { answer, frontierPairs, versionPairs } from '../src/test-utils/crdt-read-oracle.js'
-import { applyWriter, type WriterName } from '../src/test-utils/crdt-write-oracle.js'
 import {
   deleteWorkspaceDocument,
   documentContainers,
@@ -83,7 +84,7 @@ import {
 // ---- rows ----
 
 interface Case {
-  op: WriterName
+  op: documentEngine.WriterName
   tag: string
   scene: Scene
   args: unknown
@@ -92,15 +93,20 @@ interface Case {
 }
 
 const cases: Case[] = []
-const add = (op: WriterName, tag: string, scene: Scene, args: unknown, writerPeer = 1) =>
-  cases.push({ op, tag, scene, args, peer: writerPeer })
+const add = (
+  op: documentEngine.WriterName,
+  tag: string,
+  scene: Scene,
+  args: unknown,
+  writerPeer = 1,
+) => cases.push({ op, tag, scene, args, peer: writerPeer })
 
 /** A content writer's arguments carry the tree node's id when the scene hosts one. */
 const hostArgs = (scene: Scene) =>
   scene.documentId === undefined ? {} : { documentId: scene.documentId }
 
 function contentCases(
-  op: WriterName,
+  op: documentEngine.WriterName,
   contents: readonly ContentKind[],
   argsOf: (scene: Scene, rng: Rng, i: number) => unknown[],
   seed: number,
