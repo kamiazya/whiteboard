@@ -83,6 +83,10 @@ describe('unplain', () => {
     })
   })
 
+  it('keeps a lone key that only shares a name with an object method', () => {
+    expect(unplain({ constructor: 1 })).toEqual({ constructor: 1 })
+  })
+
   it('refuses a marker that names bytes, which an answer cannot carry back', () => {
     expect(() => unplain({ $loroState: {} })).toThrow(TypeError)
   })

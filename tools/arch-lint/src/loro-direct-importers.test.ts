@@ -32,7 +32,6 @@ const LORO_SHAPED_SURFACE = /\b(?:DocumentContainers|documentContainers|projectW
  * contract). Shrink-only.
  */
 const LORO_DIRECT: Readonly<Record<string, string>> = {
-  'apps/web/src/lib/accept-transferred-record.ts': 'M1: leaf migration',
   'apps/web/src/lib/browser-backend.ts': 'M5: browser keeper',
   'apps/web/src/lib/browser-file-sweep.ts': 'M5: browser keeper',
   'apps/web/src/lib/browser-files-source-tags.ts': 'M5: browser keeper',
@@ -42,12 +41,9 @@ const LORO_DIRECT: Readonly<Record<string, string>> = {
   'apps/web/src/lib/browser-workspace-docs.ts': 'M5: browser keeper',
   'apps/web/src/lib/carried-planes.ts': 'M5: browser keeper',
   'apps/web/src/lib/command-writes.ts': 'M5: browser keeper',
-  'apps/web/src/lib/daemon-file-adapter.ts': 'M1: leaf migration',
-  'apps/web/src/lib/decode-spatial-snapshot.ts': 'M1: leaf migration',
   'apps/web/src/lib/document-sync-session.ts': 'M6: editor session',
   'apps/web/src/lib/loro-codemirror-sync.ts': 'M6: editor session',
   'apps/web/src/lib/promote-workspace.ts': 'M5: browser keeper',
-  'apps/web/src/lib/read-loaded-file-document.ts': 'M1: leaf migration',
   'apps/web/src/lib/replica-cache.ts': 'M4: replica',
   'apps/web/src/lib/replica-images.ts': 'M4: replica',
   'apps/web/src/lib/replica-push.ts': 'M4: replica',
@@ -103,7 +99,6 @@ const LORO_SHAPED: Readonly<Record<string, string>> = {
   'apps/web/src/lib/browser-import-content.ts': 'M5: browser keeper',
   'apps/web/src/lib/browser-linkify.ts': 'M5: browser keeper',
   'apps/web/src/lib/browser-tag-library-write.ts': 'M5: browser keeper',
-  'apps/web/src/lib/receive-transfer.ts': 'M1: leaf migration',
   'packages/reference-graph/src/linkify.ts': 'M3: reference-graph takes plain values',
   'packages/reference-graph/src/rewrite.ts': 'M3: reference-graph takes plain values',
 }
@@ -178,7 +173,7 @@ describe('the scan reads every form of the import', () => {
     "import type { LoroDoc } from 'loro-crdt'",
     "export { LoroDoc } from 'loro-crdt'",
     "import 'loro-crdt'",
-    "const loro = await import('loro-crdt')",
+    ['const loro = await import', "('loro-crdt')"].join(''),
     'import { LoroDoc } from "loro-crdt/nodejs"',
   ])('finds %s', (text) => {
     expect(found(at, text)).toEqual([at])

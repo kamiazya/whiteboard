@@ -28,9 +28,9 @@
  * increment.
  */
 import type { PromoteWorkspaceRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
-import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
-import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
-import { LoroDoc } from 'loro-crdt'
+import { loadCrdtEngine, randomPeerId, readValue } from '@kamiazya/whiteboard-loro-adapter'
+import { bytesToBase64, bytesToBase64Url } from '@kamiazya/whiteboard-model'
+import { z } from 'zod'
 import { getAppLogger } from './app-logger.js'
 import { describeTransferFailure, type FailureCopy } from './keeper-transfer-failure.js'
 import { type PromoteWording, requestPromote } from './promote-request.js'
@@ -106,7 +106,7 @@ const KEEPER_WORDING: PromoteWording = {
 async function acceptUnsafe(options: AcceptTransferOptions): Promise<AcceptTransferResult> {
   const { fetch, workspaceId, snapshot, trash = [], versions = [] } = options
 
-  const arriving = readArrivingRecord(snapshot)
+  const arriving = await readArrivingRecord(snapshot)
   if (arriving === null) {
     return { ok: false, reason: 'That does not look like a workspace record.' }
   }
@@ -136,17 +136,28 @@ async function acceptUnsafe(options: AcceptTransferOptions): Promise<AcceptTrans
  * sender's claims or echoed back from the merge, because identity
  * preservation means these exact ids resolve here afterwards.
  */
-function readArrivingRecord(
+async function readArrivingRecord(
   snapshot: Uint8Array,
-): { promotedDocumentIds: string[]; imagesMissing: string[] } | null {
-  const record = new LoroDoc()
+): Promise<{ promotedDocumentIds: string[]; imagesMissing: string[] } | null> {
+  const engine = await loadCrdtEngine()
+  let handle: number
   try {
-    record.import(snapshot)
+    handle = engine.open({ peer: randomPeerId(), bytes: bytesToBase64(snapshot) }).handle
   } catch {
     return null
   }
-  return {
-    promotedDocumentIds: readWorkspaceDocuments(record).map((entry) => entry.documentId),
-    imagesMissing: imagesTheRecordReferences(record),
+  try {
+    const documents = await readValue(
+      engine,
+      handle,
+      { query: 'documents' },
+      z.array(z.object({ documentId: z.string() })),
+    )
+    return {
+      promotedDocumentIds: documents.map((entry) => entry.documentId),
+      imagesMissing: await imagesTheRecordReferences(engine, handle),
+    }
+  } finally {
+    engine.close({ handle })
   }
 }

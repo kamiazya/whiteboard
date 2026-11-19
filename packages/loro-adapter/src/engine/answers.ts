@@ -84,20 +84,29 @@ export function unplain(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(unplain)
   if (typeof value !== 'object' || value === null) return value
   const entries = Object.entries(value)
-  const [marker, body] = entries[0] ?? []
-  if (entries.length === 1 && marker !== undefined) {
-    if (marker === '$undefined') return undefined
-    if (marker === '$number') return Number(body)
-    if (marker === '$bigint') return BigInt(String(body))
-    if (marker === '$set') return new Set((body as unknown[]).map(unplain))
-    if (marker === '$map') {
-      return new Map((body as Array<[unknown, unknown]>).map(([k, v]) => [unplain(k), unplain(v)]))
-    }
-    if (marker === '$loroState' || marker === '$unrepresentable') {
-      throw new TypeError(`an answer cannot carry back ${marker}`)
-    }
-  }
+  const [marker, body] = entries.length === 1 ? (entries[0] ?? []) : []
+  const decode =
+    marker !== undefined && Object.hasOwn(MARKERS, marker) ? MARKERS[marker] : undefined
+  if (decode !== undefined) return decode(body)
   return Object.fromEntries(entries.map(([key, member]) => [key, unplain(member)]))
+}
+
+function carriesBytes(marker: string): (body: unknown) => never {
+  return () => {
+    throw new TypeError(`an answer cannot carry back ${marker}`)
+  }
+}
+
+/** What each marker `plain` writes stands for. */
+const MARKERS: Record<string, ((body: unknown) => unknown) | undefined> = {
+  $undefined: () => undefined,
+  $number: (body) => Number(body),
+  $bigint: (body) => BigInt(String(body)),
+  $set: (body) => new Set((body as unknown[]).map(unplain)),
+  $map: (body) =>
+    new Map((body as Array<[unknown, unknown]>).map(([k, v]) => [unplain(k), unplain(v)])),
+  $loroState: carriesBytes('$loroState'),
+  $unrepresentable: carriesBytes('$unrepresentable'),
 }
 
 const refusal = (error: unknown): Answer => ({
