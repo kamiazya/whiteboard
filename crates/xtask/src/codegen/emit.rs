@@ -232,7 +232,11 @@ fn zod_chain(ty: &Ty<'_>) -> Chain {
 fn zod_plain_chain(ty: &Ty<'_>) -> Chain {
     match ty {
         Ty::Bool => Chain::new("boolean", vec![]),
-        Ty::Integer => Chain::new("number", vec![])
+        Ty::Integer { unsigned: true } => Chain::new("number", vec![])
+            .then("int", vec![])
+            .then("min", vec!["0".to_owned()])
+            .then("meta", vec!["{ maximum: undefined }".to_owned()]),
+        Ty::Integer { unsigned: false } => Chain::new("number", vec![])
             .then("int", vec![])
             .then("meta", vec!["{ minimum: undefined, maximum: undefined }".to_owned()]),
         Ty::Literal(value) => Chain::new("literal", vec![js_string(value)]),
@@ -514,7 +518,8 @@ fn rust_ty(ty: &Ty<'_>) -> String {
     match ty {
         Ty::Number { .. } => "f64".to_owned(),
         Ty::Bool => "bool".to_owned(),
-        Ty::Integer => "i64".to_owned(),
+        Ty::Integer { unsigned: true } => "u64".to_owned(),
+        Ty::Integer { unsigned: false } => "i64".to_owned(),
         Ty::Str { .. } | Ty::Literal(_) => "String".to_owned(),
         Ty::Array { item, .. } => format!("Vec<{}>", rust_ty(item)),
         Ty::Ref(name) => (*name).to_owned(),

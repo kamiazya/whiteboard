@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CRDT document engine",
-  "description": "The wire of the CRDT document engine: open, import, export, write, read, undo, redo and a text splice over a handle. No callback crosses it; the TypeScript and the Rust engine both implement it.",
+  "description": "The wire of the CRDT document engine: open, close, import, export, write, read, undo, redo and a text splice over a handle. No callback crosses it; the TypeScript and the Rust engine will both implement it.",
   "x-wb-emit": {
     "zod": "packages/model/src/generated/crdt.zod.ts",
     "rust": "crates/core/model/src/generated/crdt.rs"
@@ -23,13 +23,8 @@
       "type": "string"
     },
     "Handle": {
-      "description": "What open answers: an engine-held document, never reused in an engine life.",
+      "description": "What open answers: an engine-held document, never reused in an engine life. A close ends it.",
       "type": "integer"
-    },
-    "ExportMode": {
-      "description": "What an export carries: all of it, the operations since a version, or a shallow state.",
-      "type": "string",
-      "enum": ["snapshot", "update", "shallow-snapshot"]
     },
     "WriterName": {
       "description": "A write by name: one per writer of the recorded write oracle.",
@@ -81,8 +76,7 @@
         "updateWorkspaceDocumentMeta",
         "pruneEmptyFolders",
         "recordTrashEntry",
-        "duplicateWorkspaceDocument",
-        "minimalChange"
+        "duplicateWorkspaceDocument"
       ]
     },
     "QueryName": {
@@ -254,6 +248,20 @@
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
+    "CloseRequest": {
+      "description": "Release a document: its handle is then invalid and any call on it is refused.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document to release."
+        }
+      },
+      "required": ["handle"],
+      "x-wb-order": ["handle"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
     "ImportRequest": {
       "description": "Merge exported bytes into an open document.",
       "type": "object",
@@ -272,8 +280,8 @@
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
-    "ExportRequest": {
-      "description": "Export an open document.",
+    "ExportSnapshotRequest": {
+      "description": "Export everything an open document holds.",
       "type": "object",
       "properties": {
         "handle": {
@@ -281,28 +289,84 @@
           "description": "The document."
         },
         "mode": {
-          "$ref": "#/$defs/ExportMode",
-          "description": "What to export."
+          "type": "string",
+          "const": "snapshot",
+          "description": "Always snapshot."
+        }
+      },
+      "required": ["handle", "mode"],
+      "x-wb-order": ["handle", "mode"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "ExportUpdateRequest": {
+      "description": "Export the operations since a version.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        },
+        "mode": {
+          "type": "string",
+          "const": "update",
+          "description": "Always update."
         },
         "from": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/VersionEntry"
           },
-          "description": "For an update: the version the receiver already holds. Absent exports everything."
+          "description": "The version the receiver already holds. Absent exports everything."
+        }
+      },
+      "required": ["handle", "mode"],
+      "x-wb-order": ["handle", "mode", "from"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "ExportShallowSnapshotRequest": {
+      "description": "Export the state at a frontier, without the history before it.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        },
+        "mode": {
+          "type": "string",
+          "const": "shallow-snapshot",
+          "description": "Always shallow-snapshot."
         },
         "frontiers": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/VersionEntry"
           },
-          "description": "For a shallow snapshot: the frontier it keeps the state at."
+          "description": "The frontier it keeps the state at."
         }
       },
-      "required": ["handle", "mode"],
-      "x-wb-order": ["handle", "mode", "from", "frontiers"],
+      "required": ["handle", "mode", "frontiers"],
+      "x-wb-order": ["handle", "mode", "frontiers"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
+    },
+    "ExportRequest": {
+      "description": "Export an open document; the mode says what it carries and what it needs.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ExportSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/ExportUpdateRequest"
+        },
+        {
+          "$ref": "#/$defs/ExportShallowSnapshotRequest"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "mode"
+      }
     },
     "ExportResponse": {
       "description": "What an export produced.",
@@ -417,11 +481,13 @@
         },
         "index": {
           "type": "integer",
-          "description": "Where the run starts, in UTF-16 code units."
+          "description": "Where the run starts, in UTF-16 code units.",
+          "minimum": 0
         },
         "remove": {
           "type": "integer",
-          "description": "How many UTF-16 code units to remove."
+          "description": "How many UTF-16 code units to remove.",
+          "minimum": 0
         },
         "insert": {
           "type": "string",
@@ -433,10 +499,15 @@
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
-    "MutationResult": {
-      "description": "What a call that changes a document answers: what changed, the update, a refusal.",
+    "MutationApplied": {
+      "description": "A call that took effect: the documents it changed, none when it was a no-op.",
       "type": "object",
       "properties": {
+        "outcome": {
+          "type": "string",
+          "const": "applied",
+          "description": "Always applied."
+        },
         "changed": {
           "type": "array",
           "items": {
@@ -447,16 +518,45 @@
         "localUpdate": {
           "$ref": "#/$defs/Bytes",
           "description": "The update that carries the change; absent when nothing changed."
+        }
+      },
+      "required": ["outcome", "changed"],
+      "x-wb-order": ["outcome", "changed", "localUpdate"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "MutationRefused": {
+      "description": "A call refused for breaking a limit: nothing changed and there is no update.",
+      "type": "object",
+      "properties": {
+        "outcome": {
+          "type": "string",
+          "const": "refused",
+          "description": "Always refused."
         },
         "breach": {
           "$ref": "#/$defs/Breach",
-          "description": "Set when the call was refused; nothing changed then."
+          "description": "The limit broken."
         }
       },
-      "required": ["changed"],
-      "x-wb-order": ["changed", "localUpdate", "breach"],
+      "required": ["outcome", "breach"],
+      "x-wb-order": ["outcome", "breach"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
+    },
+    "MutationResult": {
+      "description": "What a call that changes a document answers: it took effect, or it was refused.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/MutationApplied"
+        },
+        {
+          "$ref": "#/$defs/MutationRefused"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "outcome"
+      }
     }
   }
 }

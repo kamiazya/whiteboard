@@ -154,6 +154,8 @@ export function workspaceScene(content: ContentKind, rng: Rng): Scene {
 }
 
 const FOLDERS = ['notes', 'boards', 'archive', 'a/b']
+/** The first two leaves sit at the paths a new-document flow generates, the only ones a heading may name. */
+const UNTITLED_LEAVES: readonly string[] = ['untitled', 'untitled-2']
 
 export function seedTree(
   doc: LoroDoc,
@@ -162,8 +164,7 @@ export function seedTree(
 ): Array<{ id: string; path: string; kind: 'markdown' | 'spatial' }> {
   const made: Array<{ id: string; path: string; kind: 'markdown' | 'spatial' }> = []
   for (let k = 0; k < count; k++) {
-    // The first two sit at the path a new-document flow generates, the only one a heading may name.
-    const leaf = k === 0 ? 'untitled' : k === 1 ? 'untitled-2' : `${pick(rng, WORDS)}${k}`
+    const leaf = UNTITLED_LEAVES[k] ?? `${pick(rng, WORDS)}${k}`
     const folder = k === 0 ? 'notes' : pick(rng, FOLDERS)
     const path = `${folder}/${leaf}`
     const id = nextId()

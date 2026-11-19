@@ -132,12 +132,11 @@ const firstNodeId = (s: Scene) => s.facts.canvas?.nodes[0]?.id ?? 'missing'
 const firstEdgeId = (s: Scene) => s.facts.canvas?.edges[0]?.id ?? 'missing'
 const freshCanvas = (rng: Rng): SpatialCanvas =>
   sample(spatialCanvasArbitrary, rng, 1)[0] ?? { nodes: [], edges: [] }
-const currentCanvas = (s: Scene): SpatialCanvas =>
-  s.facts.canvas === undefined
-    ? { nodes: [], edges: [] }
-    : readSpatialCanvas(
-        s.documentId === undefined ? s.doc : documentContainers(s.doc, s.documentId),
-      )
+const currentCanvas = (s: Scene): SpatialCanvas => {
+  if (s.facts.canvas === undefined) return { nodes: [], edges: [] }
+  const host = s.documentId === undefined ? s.doc : documentContainers(s.doc, s.documentId)
+  return readSpatialCanvas(host)
+}
 const reserved = JSON.parse('{"visual.style/v1":{"__proto__":{"x":1}}}') as Record<string, unknown>
 
 const SPATIAL: ContentKind[] = ['empty', 'spatial']
@@ -765,6 +764,6 @@ function record(c: Case, index: number): string {
   })
 }
 
-const lines = cases.map(record)
+const lines = cases.map((c, index) => record(c, index))
 writeFileSync(OUT, `${lines.join('\n')}\n`)
 console.log(`wrote ${lines.length} rows to ${OUT}`)

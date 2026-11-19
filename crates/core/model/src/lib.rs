@@ -115,10 +115,8 @@ mod tests {
 
     #[test]
     fn the_crdt_engine_enums_keep_their_camel_and_kebab_wire_spellings() {
-        use super::crdt::{BreachShape, ExportMode, QueryName, WriterName};
-        assert_eq!(ExportMode::from_wire("shallow-snapshot"), Some(ExportMode::ShallowSnapshot));
-        assert_eq!(ExportMode::ShallowSnapshot.as_str(), "shallow-snapshot");
-        assert_eq!(ExportMode::default().as_str(), "snapshot");
+        use super::crdt::{BreachShape, ExportShallowSnapshotRequest, QueryName, WriterName};
+        assert_eq!(ExportShallowSnapshotRequest::MODE, "shallow-snapshot");
         assert_eq!(
             WriterName::from_wire("writeSpatialCanvas"),
             Some(WriterName::WriteSpatialCanvas)

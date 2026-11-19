@@ -138,13 +138,14 @@ fn union_members<'a>(
 }
 
 /// A string that is always one value, written as lowercase letters and digits
-/// so a Rust constant can spell it and an enum could name it. On a property it
+/// in parts a single `-` separates (`snapshot`, `shallow-snapshot`), so a Rust
+/// constant can spell it and an enum could name it. On a property it
 /// is the type's constant; as a definition it is a `String` alias a union may
 /// name as a member.
 pub(super) fn lower_const<'a>(node: &'a Node, at: &str, v: &mut Vec<String>) -> Ty<'a> {
     only(node, &["const"], "a constant", at, v);
     let value = node.constant.as_deref().unwrap_or_default();
-    if !is_word(value) {
+    if !value.split('-').all(is_word) {
         v.push(format!("{at}.const: `{value}` is not lowercase letters and digits"));
     }
     Ty::Literal(value)

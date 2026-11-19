@@ -24,13 +24,15 @@ cut once there is more than one crate worth distinguishing.
 engine a root drives as a contract, `contracts/crdt/document-engine.schema.json`:
 open, import, export (snapshot, update or shallow snapshot), a batch of writes
 by writer name, a read by reader name, undo, redo and a UTF-16 text splice, all
-over a handle, with every mutating call answering `{changed, localUpdate?,
-breach?}` and no callback crossing it. `cargo xtask codegen` generates its Zod
-(`packages/model/src/generated/crdt.zod.ts`, read as the `documentEngine`
-namespace) and its Rust (`crates/core/model/src/generated/crdt.rs`); it sits in
-`model` because `loro-adapter`, where the TypeScript engine lands, may not
-depend on `ports`. The TypeScript engine and the Rust engine implement it, and
-the writer, reader and breach-shape enums are held to the recorded write and
+over a handle that a close releases, with every mutating call answering
+applied (`{changed, localUpdate?}`) or refused (`{breach}`), as a tagged union
+that cannot carry both, and no callback crossing it. `cargo xtask codegen`
+generates its Zod (`packages/model/src/generated/crdt.zod.ts`, read as the
+`documentEngine` namespace) and its Rust
+(`crates/core/model/src/generated/crdt.rs`); it sits in `model` because
+`loro-adapter`, where the TypeScript engine lands, may not depend on `ports`.
+This change ships only the contract and the generated types: the TypeScript
+engine and the Rust engine will implement it, and the writer, reader and breach-shape enums are held to the recorded write and
 read oracles and the sync judges by `crdt-engine-contract.test.ts`. A writer's
 arguments stay any-value in the contract until the model contract types them.
 
