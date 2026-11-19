@@ -18,6 +18,7 @@ function fakeGlue(abi: string, out: number[]) {
   const glue: CoreGlue = {
     initSync: () => undefined,
     abi_version: () => abi,
+    __wbg_reset_state: () => undefined,
     layout_spatial_canvas: () => '[]',
     register_layout_fonts: () => '[]',
     release_layout_fonts: () => false,

@@ -377,6 +377,7 @@ describe('the fence tokens a core keeps', () => {
     const glue: CoreGlue = {
       initSync: () => undefined,
       abi_version: () => EXPECTED_ABI,
+      __wbg_reset_state: () => undefined,
       edge_route_layout: () => new Float64Array(),
       okf_parse: () => '',
       okf_serialize: () => '',
