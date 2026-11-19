@@ -101,4 +101,13 @@ describe('compactionCut over plain version vectors', () => {
   it('is no cut concurrent with the root, which no record can check out', () => {
     expect(compactionCutOfVectors([at(['2', 3])], at(['1', 4]))).toBeNull()
   })
+
+  it('is no cut for a lone point that has seen no op, however it is spelled', () => {
+    expect(compactionCutOfVectors([at()], noRoot)).toBeNull()
+    expect(compactionCutOfVectors([at(['1', 0])], noRoot)).toBeNull()
+  })
+
+  it('is a lone point itself when it has seen an op', () => {
+    expect(compactionCutOfVectors([at(['1', 3])], noRoot)).toEqual(at(['1', 3]))
+  })
 })

@@ -30,7 +30,9 @@ export function compactionCut(
 ): VersionVector | null {
   const [first, ...rest] = points
   if (first === undefined) return null
-  const common = rest.reduce(intersectVersions, first)
+  // Meeting `first` with itself drops zero counters, as every other meet does:
+  // a lone point is otherwise returned as spelled, and `{peer: 0}` is not empty.
+  const common = rest.reduce(intersectVersions, intersectVersions(first, first))
   if (common.size === 0) return null
   const order = compareVersions(common, root)
   return order === 'before' || order === 'concurrent' ? null : common
