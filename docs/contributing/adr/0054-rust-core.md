@@ -20,6 +20,20 @@ jobs by PATH (`PATH_JOBS` in `tools/checks/src/affected.mjs`) rather than
 through `cargo metadata` (decision 10) — the per-crate graph is the next
 cut once there is more than one crate worth distinguishing.
 
+**Seam note (2026-11-19, the CRDT document engine's wire).** Step 9 fixes the
+engine a root drives as a contract, `contracts/crdt/document-engine.schema.json`:
+open, import, export (snapshot, update or shallow snapshot), a batch of writes
+by writer name, a read by reader name, undo, redo and a UTF-16 text splice, all
+over a handle, with every mutating call answering `{changed, localUpdate?,
+breach?}` and no callback crossing it. `cargo xtask codegen` generates its Zod
+(`packages/model/src/generated/crdt.zod.ts`, read as the `documentEngine`
+namespace) and its Rust (`crates/core/model/src/generated/crdt.rs`); it sits in
+`model` because `loro-adapter`, where the TypeScript engine lands, may not
+depend on `ports`. The TypeScript engine and the Rust engine implement it, and
+the writer, reader and breach-shape enums are held to the recorded write and
+read oracles and the sync judges by `crdt-engine-contract.test.ts`. A writer's
+arguments stay any-value in the contract until the model contract types them.
+
 **Status note (2026-11-08, the first module is ported).** Edge routing
 (`packages/canvas-render/src/layout/edges`, Rust in `crates/core/edge-routing`,
 one wasm export `edge_route_layout` reached through
