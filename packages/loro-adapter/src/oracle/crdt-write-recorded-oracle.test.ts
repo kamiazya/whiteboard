@@ -118,13 +118,15 @@ const OTHER_WRITES: Record<string, string> = {
   clearRootContainer: 'covered by writeWorkspaceDocumentContent and reconcileDocContent',
   copyContainerValue: 'covered by writeWorkspaceDocumentContent (projection and restore copies)',
   spliceText: 'covered by writeMarkdownBody and minimalChange',
-  openMergeableMap: 'covered by writeCommentThread and writeProposal, which open every mergeable map',
+  openMergeableMap:
+    'covered by writeCommentThread and writeProposal, which open every mergeable map',
   openMergeableMovableList: 'covered by setWorkspacePinned, the only mergeable list',
   openThreadCount: 'a read of a thread map',
   openProposedChangeCount: 'a read of a proposal map',
   importWorkspaceSubtree:
     'not recorded: its input is bytes exportWorkspaceSubtree makes under a random peer, so no argument is repeatable',
-  importWithinTextLimits: 'not recorded: the judge of an incoming update, not a writer of this slice',
+  importWithinTextLimits:
+    'not recorded: the judge of an incoming update, not a writer of this slice',
   syncTextLimitJudge: 'not recorded: the judge of an incoming update, not a writer of this slice',
 }
 
@@ -156,9 +158,10 @@ describe('the recorded CRDT write oracle', () => {
       const held = byOp.get(op) ?? []
       const refusing = floor as { refusing?: number }
       expect(held.length, `rows of ${op}`).toBeGreaterThanOrEqual(floor.rows)
-      expect(held.filter(changed).length, `rows of ${op} that changed the document`).toBeGreaterThanOrEqual(
-        floor.changing,
-      )
+      expect(
+        held.filter(changed).length,
+        `rows of ${op} that changed the document`,
+      ).toBeGreaterThanOrEqual(floor.changing)
       expect(
         held.filter((row) => 'err' in (row.result as object)).length,
         `rows of ${op} that were refused`,
@@ -187,8 +190,13 @@ describe('the recorded CRDT write oracle', () => {
   it('reaches both hosts, refusals, and writes by a second peer', () => {
     expect(rows.filter((r) => r.host === 'workspace').length, 'workspace rows').toBeGreaterThan(150)
     expect(rows.filter((r) => r.host === 'document').length, 'document rows').toBeGreaterThan(150)
-    expect(rows.filter((r) => 'err' in (r.result as object)).length, 'refused rows').toBeGreaterThan(30)
-    expect(rows.filter((r) => r.peer !== 1).length, 'rows written by another peer').toBeGreaterThan(100)
+    expect(
+      rows.filter((r) => 'err' in (r.result as object)).length,
+      'refused rows',
+    ).toBeGreaterThan(30)
+    expect(rows.filter((r) => r.peer !== 1).length, 'rows written by another peer').toBeGreaterThan(
+      100,
+    )
     expect(
       rows.filter((r) => /[\u{10000}-\u{10ffff}]/u.test(JSON.stringify(r.deep))).length,
       'rows holding a surrogate pair',

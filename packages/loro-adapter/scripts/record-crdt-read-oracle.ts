@@ -32,20 +32,6 @@ import {
 } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import {
-  attempt,
-  body,
-  int,
-  peer,
-  pick,
-  rngOf,
-  type Rng,
-  sample,
-  sentence,
-  ulid,
-  WIDE,
-  WORDS,
-} from './oracle-recorder-kit.js'
-import {
   setCommentThreadStatus,
   writeCommentThread,
   writeThreadMessage,
@@ -84,6 +70,20 @@ import {
   setWorkspaceLastCompactedAt,
   setWorkspacePinned,
 } from '../src/workspace-tree.js'
+import {
+  attempt,
+  body,
+  int,
+  peer,
+  pick,
+  type Rng,
+  rngOf,
+  sample,
+  sentence,
+  ulid,
+  WIDE,
+  WORDS,
+} from './oracle-recorder-kit.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const OUT = join(here, '..', 'src', 'oracle', 'crdt-read.jsonl')

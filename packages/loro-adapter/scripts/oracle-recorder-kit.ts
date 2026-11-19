@@ -25,11 +25,22 @@ const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 export const ulid = (n: number): string =>
   `01ARZ3NDEKTSV4RRFFQ69G5F${CROCKFORD[(n >> 5) & 31]}${CROCKFORD[n & 31]}`.slice(0, 26)
 
-export const WORDS = ['plan', 'draft', 'report', 'Friday', 'review', 'ship', 'weekly', 'notes', 'idea']
+export const WORDS = [
+  'plan',
+  'draft',
+  'report',
+  'Friday',
+  'review',
+  'ship',
+  'weekly',
+  'notes',
+  'idea',
+]
 export const WIDE = ['😀', '👩‍👩‍👧', '𝒳', '日本語', 'é', 'é', '🇯🇵', '\u{10FFFF}', '\u0000']
 
 export type Rng = () => number
-export const pick = <T>(rng: Rng, items: readonly T[]): T => items[Math.floor(rng() * items.length)] as T
+export const pick = <T>(rng: Rng, items: readonly T[]): T =>
+  items[Math.floor(rng() * items.length)] as T
 export const int = (rng: Rng, lo: number, hi: number) => lo + Math.floor(rng() * (hi - lo + 1))
 export const sentence = (rng: Rng, n = int(rng, 3, 12)) =>
   Array.from({ length: n }, () => pick(rng, WORDS)).join(' ')
@@ -68,4 +79,3 @@ export const peer = (doc: LoroDoc, id: number): LoroDoc => {
   doc.setPeerId(BigInt(id))
   return doc
 }
-
