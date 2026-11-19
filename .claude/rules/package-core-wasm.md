@@ -120,8 +120,9 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   this package loads (`SpatialLayoutOptions.core`), so the dependency points
   from the roots to both, never from here to canvas-render. Its input types are
   declared structurally in `types.ts` for that reason.
-- Recovery from a trapped instance: `cargo xtask poison-recover` names the
-  module that will own it and fails until it exists.
+- Nothing here retries a trapped call, and nothing rebuilds what a discarded
+  instance held: `recover.ts` resets the instance and refuses the call, and
+  an owner of a handle (a search index) rebuilds it on `CoreHandleLost`.
 
 ## The artifact
 

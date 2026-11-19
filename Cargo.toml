@@ -117,8 +117,8 @@ codegen-units = 1
 # wasm32-unknown-unknown needs nightly `-Zbuild-std`, and catching would
 # leave whatever state the panic interrupted. Panics are prevented by the
 # lints above (no unwrap/expect/panic, totality lints in core); abort is the
-# safety net, and the poison-and-recover scenario that proves the net is
-# `cargo xtask poison-recover`'s plan.
+# safety net, and the poison-and-recover scenario that proves the net is the
+# shim's `poison-recover.rust.test.ts`.
 panic = "abort"
 # Debug info only: a full strip also drops the `target_features` section
 # wasm-bindgen reads to decide which wasm features it may assume. The name
