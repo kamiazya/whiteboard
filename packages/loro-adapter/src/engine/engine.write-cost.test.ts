@@ -114,6 +114,8 @@ describe('what a handle holds while it is open', () => {
     const undos = vi.spyOn(UndoManager.prototype, 'free')
     engine.close({ handle })
     expect(docs).toHaveBeenCalledTimes(2)
+    // Two documents, not one freed twice.
+    expect(new Set(docs.mock.contexts).size).toBe(2)
     expect(undos).toHaveBeenCalledTimes(1)
   })
 
@@ -152,5 +154,6 @@ describe('what a handle holds while it is open', () => {
     expect(refused.outcome).toBe('refused')
     // The document before the rebuild and the copy the judge spent.
     expect(docs).toHaveBeenCalledTimes(2)
+    expect(new Set(docs.mock.contexts).size).toBe(2)
   })
 })
