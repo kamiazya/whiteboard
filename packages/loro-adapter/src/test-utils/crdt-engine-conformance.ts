@@ -115,8 +115,17 @@ const mutation = (result: object) => {
   return wire.mutationResultSchema.parse(wireFields)
 }
 
+/** A mutation the test expects the engine to have applied. */
+function applied(result: object): wire.MutationApplied {
+  const parsed = mutation(result)
+  if (parsed.outcome !== 'applied') {
+    throw new Error(`the engine refused the call as ${parsed.breach.shape}`)
+  }
+  return parsed
+}
+
 function write(engine: CrdtEngine, handle: number, op: string, args: unknown) {
-  return mutation(engine.write(wire.writeRequestSchema.parse({ handle, batch: [{ op, args }] })))
+  return applied(engine.write(wire.writeRequestSchema.parse({ handle, batch: [{ op, args }] })))
 }
 
 function splice(
@@ -127,7 +136,7 @@ function splice(
   insert: string,
   documentId?: string,
 ) {
-  return mutation(
+  return applied(
     engine.textSplice(
       wire.textSpliceRequestSchema.parse({
         handle,
@@ -203,8 +212,17 @@ function describeReadReplay(makeEngine: () => CrdtEngine) {
   })
 }
 
+/** `minimalChange` is recorded for the helper's own parity and is no document write. */
+function replayedWriteRows(): WriteRow[] {
+  const rows = (recorded('crdt-write.jsonl') as WriteRow[]).filter(
+    (row) => row.op !== 'minimalChange',
+  )
+  expect(rows.length, 'replayed write rows').toBeGreaterThan(400)
+  return rows
+}
+
 function describeWriteReplay(makeEngine: () => CrdtEngine) {
-  const rows = recorded('crdt-write.jsonl') as WriteRow[]
+  const rows = replayedWriteRows()
   /** Whether the write left an operation for a peer to import. */
   const changed = (row: WriteRow) => decodeImportBlobMeta(bytesOf(row.update), false).changeNum > 0
 
@@ -242,8 +260,7 @@ function describeWriteReplay(makeEngine: () => CrdtEngine) {
         )
         return
       }
-      const result = mutation(engine.write(request))
-      expect(result.breach, 'breach').toBeUndefined()
+      const result = applied(engine.write(request))
       const after = held(engine, handle)
       expect(after.toJSON(), 'deep value').toEqual(row.deep)
       expect(after.getDeepValueWithID(), 'container ids').toEqual(row.ids)
@@ -285,8 +302,7 @@ function describeExportAndImport(makeEngine: () => CrdtEngine) {
       const from = versionEntries(held(a, handle))
       write(a, handle, 'writeMarkdownBody', { body: 'one two' })
       const { bytes } = a.export({ handle, mode: 'update', from })
-      const merged = mutation(b.import({ handle: opened.handle, bytes }))
-      expect(merged.breach).toBeUndefined()
+      expect(mutation(b.import({ handle: opened.handle, bytes })).outcome).toBe('applied')
       expect(await bodyOf(b, opened.handle)).toBe('one two')
     })
 
@@ -307,8 +323,39 @@ function describeExportAndImport(makeEngine: () => CrdtEngine) {
     it('answers an update with nothing to say as no update', () => {
       const engine = makeEngine()
       const { handle } = engine.open({ peer: '1' })
-      const result = write(engine, handle, 'minimalChange', { current: 'a', next: 'b' })
-      expect(result).toEqual({ changed: [] })
+      const result = write(engine, handle, 'writeMarkdownBody', { body: '' })
+      expect(result).toEqual({ outcome: 'applied', changed: [] })
+    })
+  })
+}
+
+function describeClose(makeEngine: () => CrdtEngine) {
+  describe('close', () => {
+    it('refuses every call on a closed handle and leaves the others open', async () => {
+      const engine = makeEngine()
+      const closed = openWith(engine, 'gone')
+      const open = openWith(engine, 'kept')
+      engine.close(wire.closeRequestSchema.parse({ handle: closed }))
+      expect(() => engine.export({ handle: closed, mode: 'snapshot' })).toThrow(/closed/)
+      expect(() => engine.undo({ handle: closed })).toThrow(/closed/)
+      expect(() => splice(engine, closed, 0, 0, 'x')).toThrow(/closed/)
+      await expect(bodyOf(engine, closed)).rejects.toThrow(/closed/)
+      expect(() => engine.close({ handle: closed })).toThrow(/closed/)
+      expect(await bodyOf(engine, open)).toBe('kept')
+    })
+
+    it('never gives a closed handle number to a later document', () => {
+      const engine = makeEngine()
+      const closed = engine.open({ peer: '1' }).handle
+      engine.close({ handle: closed })
+      expect(engine.open({ peer: '1' }).handle).not.toBe(closed)
+    })
+
+    it('drops the journal of a closed handle', () => {
+      const journaled = journaledEngine(makeEngine())
+      const { handle } = journaled.open({ peer: '1' })
+      journaled.close({ handle })
+      expect(() => journaled.journal(handle)).toThrow()
     })
   })
 }
@@ -322,13 +369,13 @@ function describeUndoAndRedo(makeEngine: () => CrdtEngine) {
       const first = a.export({ handle, mode: 'snapshot' }).bytes
       const there = peer.open({ peer: '2', bytes: first })
 
-      const undone = mutation(a.undo({ handle }))
+      const undone = applied(a.undo({ handle }))
       expect(await bodyOf(a, handle)).toBe('')
       expect(undone.localUpdate, 'undo is a local change').toBeDefined()
       peer.import({ handle: there.handle, bytes: undone.localUpdate as string })
       expect(await bodyOf(peer, there.handle)).toBe('')
 
-      const redone = mutation(a.redo({ handle }))
+      const redone = applied(a.redo({ handle }))
       expect(await bodyOf(a, handle)).toBe('typed')
       expect(redone.localUpdate, 'redo is a local change').toBeDefined()
       peer.import({ handle: there.handle, bytes: redone.localUpdate as string })
@@ -338,8 +385,8 @@ function describeUndoAndRedo(makeEngine: () => CrdtEngine) {
     it('answers nothing changed when there is nothing to undo or redo', () => {
       const engine = makeEngine()
       const { handle } = engine.open({ peer: '1' })
-      expect(mutation(engine.undo({ handle }))).toEqual({ changed: [] })
-      expect(mutation(engine.redo({ handle }))).toEqual({ changed: [] })
+      expect(mutation(engine.undo({ handle }))).toEqual({ outcome: 'applied', changed: [] })
+      expect(mutation(engine.redo({ handle }))).toEqual({ outcome: 'applied', changed: [] })
     })
 
     it('does not undo what a peer wrote', async () => {
@@ -349,9 +396,9 @@ function describeUndoAndRedo(makeEngine: () => CrdtEngine) {
       const there = b.open({ peer: '2', bytes: a.export({ handle, mode: 'snapshot' }).bytes })
       const theirs = splice(b, there.handle, 4, 0, ' and theirs')
       a.import({ handle, bytes: theirs.localUpdate as string })
-      expect(mutation(a.undo({ handle })).localUpdate).toBeDefined()
+      expect(applied(a.undo({ handle })).localUpdate).toBeDefined()
       expect(await bodyOf(a, handle)).toBe(' and theirs')
-      expect(mutation(a.undo({ handle }))).toEqual({ changed: [] })
+      expect(mutation(a.undo({ handle }))).toEqual({ outcome: 'applied', changed: [] })
     })
   })
 }
@@ -417,7 +464,7 @@ function describeChanged(makeEngine: () => CrdtEngine) {
       const edit = splice(a, handle, 0, 0, 'x', FIRST)
       expect(
         mutation(b.import({ handle: there.handle, bytes: edit.localUpdate as string })),
-      ).toEqual({ changed: [FIRST] })
+      ).toEqual({ outcome: 'applied', changed: [FIRST] })
     })
   })
 }
@@ -437,16 +484,33 @@ function describeRefusal(makeEngine: () => CrdtEngine) {
       expect(await bodyOf(engine, handle)).toBe('kept')
     })
 
+    it('refuses a pure helper as a write and a negative splice, changing nothing', async () => {
+      const engine = makeEngine()
+      const handle = openWith(engine, 'kept')
+      const helper = { handle, batch: [{ op: 'minimalChange', args: { current: 'a', next: 'b' } }] }
+      expect(() => engine.write(helper as never)).toThrow()
+      expect(() => splice(engine, handle, -1, 0, 'x')).toThrow()
+      expect(() => splice(engine, handle, 0, -1, 'x')).toThrow()
+      expect(await bodyOf(engine, handle)).toBe('kept')
+    })
+
     it('refuses a local update past a sync limit, naming the container', async () => {
       const engine = makeEngine()
       const handle = openWith(engine, 'kept')
-      const refused = write(engine, handle, 'writeMarkdownBody', {
-        body: 'x'.repeat(MARKDOWN_MAX_CHARS + 1),
-      })
-      expect(refused.breach?.shape).toBe('run')
-      expect(refused.breach?.container).toMatch(/^cid:/)
-      expect(refused.changed).toEqual([])
-      expect(refused.localUpdate).toBeUndefined()
+      const refused = mutation(
+        engine.write(
+          wire.writeRequestSchema.parse({
+            handle,
+            batch: [
+              { op: 'writeMarkdownBody', args: { body: 'x'.repeat(MARKDOWN_MAX_CHARS + 1) } },
+            ],
+          }),
+        ),
+      )
+      expect(refused).toMatchObject({ outcome: 'refused', breach: { shape: 'run' } })
+      expect(JSON.stringify(refused)).toMatch(/cid:/)
+      expect(refused).not.toHaveProperty('localUpdate')
+      expect(refused).not.toHaveProperty('changed')
       expect(await bodyOf(engine, handle)).toBe('kept')
       write(engine, handle, 'writeMarkdownBody', { body: 'still works' })
       expect(await bodyOf(engine, handle)).toBe('still works')
@@ -463,8 +527,7 @@ function describeRefusal(makeEngine: () => CrdtEngine) {
       peer.commit()
       const bytes = Buffer.from(peer.export({ mode: 'update', from })).toString('base64')
       const refused = mutation(engine.import({ handle, bytes }))
-      expect(refused.breach?.shape).toBe('run')
-      expect(refused.changed).toEqual([])
+      expect(refused).toMatchObject({ outcome: 'refused', breach: { shape: 'run' } })
       expect(await bodyOf(engine, handle)).toBe('kept')
     })
   })
@@ -656,6 +719,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeReadReplay(makeEngine)
     describeWriteReplay(makeEngine)
     describeExportAndImport(makeEngine)
+    describeClose(makeEngine)
     describeUndoAndRedo(makeEngine)
     describeTextSpliceUtf16(makeEngine)
     describeChanged(makeEngine)

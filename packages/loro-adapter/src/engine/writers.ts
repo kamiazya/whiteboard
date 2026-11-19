@@ -57,7 +57,6 @@ import {
   writeSpatialNode,
 } from '../loro-bridge.js'
 import { writeMarkdownBody } from '../markdown-body.js'
-import { minimalChange } from '../minimal-change.js'
 import {
   seedNameFromTitle,
   seedNamesFromTitles,
@@ -276,10 +275,6 @@ export const WRITERS = {
   recordTrashEntry: workspace<{ entry: TrashEntry }>((doc, a) => recordTrashEntry(doc, a.entry)),
   duplicateWorkspaceDocument: workspace<Parameters<typeof duplicateWorkspaceDocument>[1]>(
     (doc, a) => duplicateWorkspaceDocument(doc, a),
-  ),
-  // ---- pure ----
-  minimalChange: workspace<{ current: string; next: string }>((_doc, a) =>
-    minimalChange(a.current, a.next),
   ),
 } satisfies Record<documentEngine.WriterName, Writer>
 

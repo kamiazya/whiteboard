@@ -95,7 +95,7 @@ function mutate(entry: Held, apply: (doc: LoroDoc) => void): wire.MutationResult
     restore(entry, frontiers)
     throw error
   }
-  if (doc.oplogVersion().compare(before) === 0) return { changed: [] }
+  if (doc.oplogVersion().compare(before) === 0) return { outcome: 'applied', changed: [] }
   const update = doc.export({ mode: 'update', from: before })
   // ponytail: the judgement imports the update into a copy of the document
   // from before the write, so every write costs a fork of it; a long-lived
@@ -112,35 +112,38 @@ function mutate(entry: Held, apply: (doc: LoroDoc) => void): wire.MutationResult
   }
   if (breach !== null) {
     restore(entry, frontiers)
-    return { changed: [], breach: breachOf(breach) }
+    return { outcome: 'refused', breach: breachOf(breach) }
   }
-  return { changed: touchedSince(doc, before), localUpdate: bytesToBase64(update) }
+  return {
+    outcome: 'applied',
+    changed: touchedSince(doc, before),
+    localUpdate: bytesToBase64(update),
+  }
 }
 
 function importInto(entry: Held, bytes: string): wire.MutationResult {
   entry.judge ??= syncTextLimitJudge(entry.doc)
   const incoming = decoded(bytes)
   const breach = entry.judge(incoming)
-  if (breach !== null) return { changed: [], breach: breachOf(breach) }
+  if (breach !== null) return { outcome: 'refused', breach: breachOf(breach) }
   const before = entry.doc.oplogVersion()
   entry.doc.import(incoming)
-  return { changed: touchedSince(entry.doc, before) }
+  return { outcome: 'applied', changed: touchedSince(entry.doc, before) }
 }
 
 function exportFrom(doc: LoroDoc, request: wire.ExportRequest): wire.ExportResponse {
-  const { mode, from, frontiers } = request
-  if (mode === 'snapshot') return { bytes: bytesToBase64(doc.export({ mode: 'snapshot' })) }
-  if (mode === 'update') {
+  if (request.mode === 'snapshot') return { bytes: bytesToBase64(doc.export({ mode: 'snapshot' })) }
+  if (request.mode === 'update') {
     const since =
-      from === undefined
+      request.from === undefined
         ? undefined
-        : versionOfPairs(from.map(({ peer, counter }) => [peer, counter]))
+        : versionOfPairs(request.from.map(({ peer, counter }) => [peer, counter]))
     return { bytes: bytesToBase64(doc.export({ mode: 'update', from: since })) }
   }
-  const kept =
-    frontiers === undefined
-      ? doc.frontiers()
-      : frontiers.map(({ peer, counter }) => ({ peer: peer as `${number}`, counter }))
+  const kept = request.frontiers.map(({ peer, counter }) => ({
+    peer: peer as `${number}`,
+    counter,
+  }))
   return { bytes: bytesToBase64(doc.export({ mode: 'shallow-snapshot', frontiers: kept })) }
 }
 
@@ -150,6 +153,10 @@ function spliceText(doc: LoroDoc, request: wire.TextSpliceRequest) {
   // Loro's text takes UTF-16 code unit offsets from JavaScript, which is the
   // unit this contract counts in.
   host.getText(text).splice(index, remove, insert)
+}
+
+function applyBatch(doc: LoroDoc, batch: wire.WriteRequest['batch']) {
+  for (const { op, args } of batch) applyWriter(doc, op, args)
 }
 
 function openDocument(request: wire.OpenRequest, mergeInterval: number): Held {
@@ -164,20 +171,26 @@ function openDocument(request: wire.OpenRequest, mergeInterval: number): Held {
 
 function heldIn(handles: Map<number, Held>, handle: number): Held {
   const found = handles.get(handle)
-  if (found === undefined) throw new RangeError(`no document is open as handle ${handle}`)
+  if (found === undefined)
+    throw new RangeError(`handle ${handle} is not open: it was never opened or has been closed`)
   return found
 }
 
 export function createCrdtEngine(options: CrdtEngineOptions = {}): CrdtEngine {
   const mergeInterval = options.undoMergeIntervalMs ?? DEFAULT_UNDO_MERGE_MS
   const handles = new Map<number, Held>()
+  let opened = 0
   const heldBy = (handle: number) => heldIn(handles, handle)
 
   return {
     open(request) {
-      const handle = handles.size
-      handles.set(handle, openDocument(request, mergeInterval))
-      return { handle }
+      handles.set(opened, openDocument(request, mergeInterval))
+      opened += 1
+      return { handle: opened - 1 }
+    },
+    close(request) {
+      const { handle } = wire.closeRequestSchema.parse(request)
+      if (heldBy(handle) !== undefined) handles.delete(handle)
     },
     import(request) {
       const { handle, bytes } = wire.importRequestSchema.parse(request)
@@ -189,9 +202,7 @@ export function createCrdtEngine(options: CrdtEngineOptions = {}): CrdtEngine {
     },
     write(request) {
       const { handle, batch } = wire.writeRequestSchema.parse(request)
-      return mutate(heldBy(handle), (doc) => {
-        for (const { op, args } of batch) applyWriter(doc, op, args)
-      })
+      return mutate(heldBy(handle), (doc) => applyBatch(doc, batch))
     },
     async read(request) {
       const { handle, query } = wire.readRequestSchema.parse(request)

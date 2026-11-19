@@ -39,6 +39,7 @@ type JournaledMutation = wire.MutationResult & { seq?: number }
 
 export interface JournaledEngine {
   open(request: wire.OpenRequest): wire.OpenResponse
+  close(request: wire.CloseRequest): void
   import(request: wire.ImportRequest): wire.MutationResult
   export(request: wire.ExportRequest): wire.ExportResponse
   write(request: wire.WriteRequest): JournaledMutation
@@ -73,7 +74,7 @@ function journalLocal(
   handle: number,
   result: wire.MutationResult,
 ): JournaledMutation {
-  if (result.localUpdate === undefined) return result
+  if (result.outcome === 'refused' || result.localUpdate === undefined) return result
   const record = recordOf(held, handle)
   const seq = record.nextSeq
   record.nextSeq += 1
@@ -97,7 +98,7 @@ function rebuild(held: Records, engine: CrdtEngine, journal: Journal): wire.Open
   const opened = engine.open({ peer, bytes: base })
   for (const { update } of pending) {
     const result = engine.import({ handle: opened.handle, bytes: update })
-    if (result.breach !== undefined) {
+    if (result.outcome === 'refused') {
       throw new Error(`a journalled update was refused as ${result.breach.shape}`)
     }
   }
@@ -115,10 +116,14 @@ export function journaledEngine(engine: CrdtEngine): JournaledEngine {
       held.set(opened.handle, { peer: request.peer, base, pending: [], nextSeq: 1 })
       return opened
     },
+    close(request) {
+      engine.close(request)
+      held.delete(request.handle)
+    },
     import(request) {
       const result = engine.import(request)
       // A refused import changed nothing, so it is nothing to rebuild.
-      if (result.breach === undefined) {
+      if (result.outcome === 'applied') {
         recordOf(held, request.handle).pending.push({ update: request.bytes })
       }
       return result

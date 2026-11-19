@@ -11,6 +11,8 @@ import type { documentEngine as wire } from '@kamiazya/whiteboard-model'
 
 export interface CrdtEngine {
   open(request: wire.OpenRequest): wire.OpenResponse
+  /** Frees the document; every later call naming the handle is refused. */
+  close(request: wire.CloseRequest): void
   /** Merges bytes an engine exported; a breach refuses them and changes nothing. */
   import(request: wire.ImportRequest): wire.MutationResult
   export(request: wire.ExportRequest): wire.ExportResponse
