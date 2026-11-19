@@ -1,8 +1,16 @@
-export { DocumentStoreWorkspaceDocs } from './document-store-workspace-docs.js'
+export {
+  DocumentStoreWorkspaceDocs,
+  RecordStoreWorkspaceDocs,
+} from './document-store-workspace-docs.js'
 export { firstFreeSegment } from './first-free-segment.js'
 export type {
   TrashBlobNamedElsewhere,
   WorkspaceRegistry,
 } from './loro-workspace-document-index.js'
 export { LoroWorkspaceDocumentIndex } from './loro-workspace-document-index.js'
-export type { CaughtUp, WorkspaceDocCursor, WorkspaceDocs } from './workspace-docs.js'
+export type {
+  CaughtUp,
+  WorkspaceDocCursor,
+  WorkspaceDocs,
+  WorkspaceRecords,
+} from './workspace-docs.js'

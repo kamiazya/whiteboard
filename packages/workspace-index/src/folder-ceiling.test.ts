@@ -63,6 +63,7 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & { peek: (id: string) => LoroDo
     },
     readCursor: notImplemented,
     catchUp: notImplemented,
+    storedVersion: notImplemented,
     peek: (id) => docs.get(id) as LoroDoc,
   }
 }

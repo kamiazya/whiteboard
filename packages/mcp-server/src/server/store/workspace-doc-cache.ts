@@ -451,6 +451,8 @@ export function cacheBackedWorkspaceDocs(scope: StoreScope = globalStoreScope): 
     // the only thing this wrapper adds is which doc gets caught up.
     readCursor: async (workspaceId) =>
       new DocumentStoreWorkspaceDocs(await documentStoreReady(scope)).readCursor(workspaceId),
+    storedVersion: async (workspaceId) =>
+      new DocumentStoreWorkspaceDocs(await documentStoreReady(scope)).storedVersion(workspaceId),
     // Under the workspace write barrier, because this MUTATES the live cached
     // document that every in-process writer is diffing against. Importing
     // another instance's ops into it while a local save is computing its own

@@ -1,6 +1,6 @@
 /**
  * `WorkspaceDocs` over any `DocumentStore` — which is to say, over both
- * keepers.
+ * keepers — for any record kind.
  *
  * No new storage anywhere. `docRefKey({ kind: 'workspace-tree', workspaceId })`
  * keys into the same store every document already uses, and every
@@ -11,6 +11,12 @@
  * port methods — a second copy against libSQL would have differed in the
  * constructor argument and nothing else.
  */
+import {
+  type LegacyRecord,
+  loroDocKind,
+  RecordBytesRejectedError,
+  type RecordKind,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type {
   DeltaSeq,
   DocRef,
@@ -24,7 +30,6 @@ import {
   StoredDocumentUnreadableError,
   shouldCompact,
 } from '@kamiazya/whiteboard-ports'
-import { LoroDoc, VersionVector } from 'loro-crdt'
 import type { CaughtUp, WorkspaceDocCursor, WorkspaceDocs } from './workspace-docs.js'
 
 /** How many times `readRecord` will re-read past a fold that landed mid-read. */
@@ -35,14 +40,14 @@ function refOf(workspaceId: string): DocRef {
 }
 
 /**
- * Import bytes that came OUT of the record, and say so when the CRDT refuses
- * them.
+ * Load the record from bytes that came OUT of the store, and say so when the
+ * CRDT refuses them.
  *
  * `open` can fail two ways and a caller has to tell them apart before it can
  * say anything true to a person: the store did not answer (a transaction
  * aborted, a connection blocked behind another tab), or the bytes it DID
  * answer are not a document. Only this layer knows both halves at once —
- * that these bytes are the record, and that loro-crdt rejected them — so the
+ * that these bytes are the record, and that the kind rejected them — so the
  * typing belongs here rather than at any call site.
  *
  * Untyped, the second arrived as whatever loro threw ("Decode error: (Invalid
@@ -50,13 +55,18 @@ function refOf(workspaceId: string): DocRef {
  * `apps/web` came to classify every failed read as damage and show a healthy
  * document behind "This canvas’s data could not be read."
  */
-function importStored(doc: LoroDoc, bytes: Uint8Array, workspaceId: string): void {
+async function loadStored<R>(
+  kind: RecordKind<R>,
+  record: { snapshot: Uint8Array; updates: readonly Uint8Array[] },
+  workspaceId: string,
+): Promise<R> {
   try {
-    doc.import(bytes)
+    return await kind.load(record.snapshot, record.updates)
   } catch (cause) {
+    if (!(cause instanceof RecordBytesRejectedError)) throw cause
     throw new StoredDocumentUnreadableError(
       'malformed',
-      `stored workspace document ${workspaceId} could not be imported: ${String(cause)}`,
+      `stored workspace document ${workspaceId} could not be imported: ${String(cause.cause)}`,
     )
   }
 }
@@ -76,19 +86,22 @@ export interface DocumentStoreWorkspaceDocsOptions {
   readonly beforeMint?: (workspaceId: string) => Promise<void>
 }
 
-export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
+export class RecordStoreWorkspaceDocs<R> implements WorkspaceDocs<R> {
   constructor(
     private readonly store: DocumentStore,
+    private readonly kind: RecordKind<R>,
     private readonly options: DocumentStoreWorkspaceDocsOptions = {},
   ) {}
 
-  async open(workspaceId: string): Promise<LoroDoc | null> {
+  async open(workspaceId: string): Promise<R | null> {
     const record = await this.readRecord(refOf(workspaceId))
     if (record === null) return null
-    const doc = new LoroDoc()
-    importStored(doc, record.snapshot, workspaceId)
-    for (const update of record.updates) importStored(doc, update, workspaceId)
-    return doc
+    return loadStored(this.kind, record, workspaceId)
+  }
+
+  async storedVersion(workspaceId: string): Promise<Uint8Array | null> {
+    const stored = await this.store.readFrontier({ docRef: refOf(workspaceId) })
+    return stored === null ? null : stored.frontier
   }
 
   /**
@@ -134,10 +147,10 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     }
   }
 
-  async create(workspaceId: string): Promise<LoroDoc> {
+  async create(workspaceId: string): Promise<R> {
     const existing = await this.open(workspaceId)
     if (existing !== null) return existing
-    const doc = new LoroDoc()
+    const doc = await this.kind.empty()
     await this.save(workspaceId, doc)
     return doc
   }
@@ -153,7 +166,7 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
    * method knows the frontier the store held BEFORE the write; exporting
    * "since the stored frontier" afterwards yields an empty envelope.
    */
-  async save(workspaceId: string, doc: LoroDoc): Promise<Uint8Array | null> {
+  async save(workspaceId: string, doc: R): Promise<Uint8Array | null> {
     const docRef = refOf(workspaceId)
     const header = await this.store.readSnapshotManifest({ docRef })
     if (header === null) return this.mint(workspaceId, doc)
@@ -162,12 +175,9 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     if (stored === null) return null
     // A VERSION comparison, not a byte count: an update carrying no ops is
     // still 22 bytes of envelope, so an idle save would grow the log forever.
-    const comparison = doc.oplogVersion().compare(VersionVector.decode(stored.frontier))
-    if (comparison === 0) return null
+    if (this.kind.atVersion(doc, stored.frontier)) return null
 
-    const update = new Uint8Array(
-      doc.export({ mode: 'update', from: VersionVector.decode(stored.frontier) }),
-    )
+    const update = this.kind.exportUpdateSince(doc, stored.frontier)
     const { updates: existing } = await this.store.loadDeltas({
       docRef,
       afterSeq: null,
@@ -188,26 +198,32 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
       // The stored bytes are read only here, on the path that already decided
       // to fold — once per COMPACT_DELTA_BYTES written, not once per save.
       const base = await this.store.loadSnapshot({ docRef })
-      const merged = new LoroDoc()
-      if (base !== null) merged.import(reassembleSnapshot(base.manifest, base.chunks))
-      for (const stale of existing) merged.import(stale)
-      merged.import(update)
-      const snapshot = merged.export({ mode: 'snapshot' })
-      const { manifest: fresh, chunks } = chunkSnapshot(
-        new Uint8Array(snapshot),
-        DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
-      )
-      const folded = await this.store.saveCompactedSnapshot({
-        docRef,
-        manifest: fresh,
-        chunks,
-        // The MERGED version, not `doc`'s: the snapshot being written holds
-        // every op above, so reporting the writer's own narrower vector would
-        // under-claim the record's state.
-        frontier: new Uint8Array(merged.oplogVersion().encode()),
-        supersededDeltaCount: existing.length,
-        expectedGeneration: header.generation,
-      })
+      const merged = await this.kind.empty()
+      let folded: Awaited<ReturnType<DocumentStore['saveCompactedSnapshot']>>
+      try {
+        if (base !== null) {
+          this.kind.importInto(merged, reassembleSnapshot(base.manifest, base.chunks))
+        }
+        for (const stale of existing) this.kind.importInto(merged, stale)
+        this.kind.importInto(merged, update)
+        const { manifest: fresh, chunks } = chunkSnapshot(
+          this.kind.exportSnapshot(merged),
+          DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
+        )
+        folded = await this.store.saveCompactedSnapshot({
+          docRef,
+          manifest: fresh,
+          chunks,
+          // The MERGED version, not `doc`'s: the snapshot being written holds
+          // every op above, so reporting the writer's own narrower vector would
+          // under-claim the record's state.
+          frontier: this.kind.encodedVersion(merged),
+          supersededDeltaCount: existing.length,
+          expectedGeneration: header.generation,
+        })
+      } finally {
+        this.kind.release(merged)
+      }
       if (folded.ok) return update
       // Refused: someone else folded first, and this doc's new ops are in the
       // snapshot we did NOT write. Appending them is what makes losing the
@@ -242,12 +258,12 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
    * lasts only as long as real concurrent churn on this one id does, and a
    * bound would turn that churn into a lost edit instead.
    */
-  private async append(workspaceId: string, doc: LoroDoc, update: Uint8Array): Promise<Uint8Array> {
+  private async append(workspaceId: string, doc: R, update: Uint8Array): Promise<Uint8Array> {
     const appended = await this.store.appendDeltas({
       docRef: refOf(workspaceId),
       deltaBatch: {
         updates: [new Uint8Array(update)],
-        newFrontier: new Uint8Array(doc.oplogVersion().encode()),
+        newFrontier: this.kind.encodedVersion(doc),
       },
       requireSnapshot: true,
     })
@@ -255,22 +271,21 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
   }
 
   /** The first save under an id: the whole document as its snapshot. */
-  private async mint(workspaceId: string, doc: LoroDoc): Promise<Uint8Array> {
+  private async mint(workspaceId: string, doc: R): Promise<Uint8Array> {
     await this.options.beforeMint?.(workspaceId)
     const docRef = refOf(workspaceId)
-    const snapshot = doc.export({ mode: 'snapshot' })
     const { manifest: fresh, chunks } = chunkSnapshot(
-      new Uint8Array(snapshot),
+      this.kind.exportSnapshot(doc),
       DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
     )
     // The whole history as one update: what an empty peer needs, and also
     // what this call appends if it loses the race below.
-    const update = new Uint8Array(doc.export({ mode: 'update' }))
+    const update = this.kind.exportUpdateSince(doc, null)
     const created = await this.store.saveCompactedSnapshot({
       docRef,
       manifest: fresh,
       chunks,
-      frontier: new Uint8Array(doc.oplogVersion().encode()),
+      frontier: this.kind.encodedVersion(doc),
       // Nothing to supersede: there is no log this snapshot folded.
       supersededDeltaCount: 0,
       expectedGeneration: null,
@@ -297,13 +312,13 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     return { generation, afterSeq: lastSeq }
   }
 
-  async catchUp(workspaceId: string, doc: LoroDoc, cursor: WorkspaceDocCursor): Promise<CaughtUp> {
+  async catchUp(workspaceId: string, doc: R, cursor: WorkspaceDocCursor): Promise<CaughtUp> {
     const docRef = refOf(workspaceId)
     const tail = await this.store.loadDeltas({ docRef, afterSeq: cursor.afterSeq })
     if (tail.generation === cursor.generation) {
       // Same generation, so the seqs this cursor points past are still the
       // ones it consumed: the tail alone is the whole difference.
-      for (const update of tail.updates) doc.import(update)
+      for (const update of tail.updates) this.kind.importInto(doc, update)
       return {
         cursor: { generation: tail.generation, afterSeq: tail.lastSeq ?? cursor.afterSeq },
         updates: tail.updates,
@@ -324,11 +339,23 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
       // the cursor says what a log with no snapshot reports.
       return { cursor: { generation: null, afterSeq: null }, updates: [] }
     }
-    doc.import(record.snapshot)
-    for (const update of record.updates) doc.import(update)
+    this.kind.importInto(doc, record.snapshot)
+    for (const update of record.updates) this.kind.importInto(doc, update)
     return {
       cursor: { generation: record.generation, afterSeq: record.lastSeq },
       updates: [record.snapshot, ...record.updates],
     }
+  }
+}
+
+/**
+ * The keepers' record store while every consumer still holds a `LoroDoc`.
+ *
+ * ponytail: deleted, with `loroDocKind`, once the last consumer holds an
+ * engine lease; callers then name `RecordStoreWorkspaceDocs` and a kind.
+ */
+export class DocumentStoreWorkspaceDocs extends RecordStoreWorkspaceDocs<LegacyRecord> {
+  constructor(store: DocumentStore, options: DocumentStoreWorkspaceDocsOptions = {}) {
+    super(store, loroDocKind, options)
   }
 }

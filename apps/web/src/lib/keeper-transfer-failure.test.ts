@@ -42,6 +42,7 @@ function workspaceDocs(overrides: Partial<WorkspaceDocs>): WorkspaceDocs {
     save: async () => null,
     readCursor: unused,
     catchUp: unused,
+    storedVersion: unused,
     ...overrides,
   }
 }

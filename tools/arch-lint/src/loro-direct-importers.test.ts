@@ -92,9 +92,7 @@ const LORO_DIRECT: Readonly<Record<string, string>> = {
   'packages/server-core/src/tools/document-set.ts': 'M7: server-core',
   'packages/server-core/src/tools/facet-set.ts': 'M7: server-core',
   'packages/server-core/src/tools/thread-edit.ts': 'M7: server-core',
-  'packages/workspace-index/src/document-store-workspace-docs.ts': 'M8: workspace-index storage',
   'packages/workspace-index/src/loro-workspace-document-index.ts': 'M8: workspace-index storage',
-  'packages/workspace-index/src/workspace-docs.ts': 'M8: workspace-index storage',
 }
 
 /** Shipped files outside loro-adapter that hold a LoroDoc without importing `loro-crdt`. Shrink-only. */

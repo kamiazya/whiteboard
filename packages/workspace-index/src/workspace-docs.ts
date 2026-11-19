@@ -1,4 +1,4 @@
-import type { LoroDoc } from 'loro-crdt'
+import type { LegacyRecord, RecordLease } from '@kamiazya/whiteboard-loro-adapter'
 
 /**
  * A position in a workspace record, as a tailing reader holds it.
@@ -45,22 +45,26 @@ export interface CaughtUp {
  * because Loro commits into memory: nothing reaches a store until somebody
  * exports and writes. Making that a step the seam names keeps a caller from
  * assuming a mutation persisted when it only converged locally.
+ *
+ * `R` is what holds the record in memory. It defaults to the `LoroDoc` every
+ * consumer still takes, and is the engine lease for those that have moved.
+ * ponytail: the default goes when the last consumer holds a lease.
  */
-export interface WorkspaceDocs {
+export interface WorkspaceDocs<R = LegacyRecord> {
   /**
    * The workspace's document, or `null` when it does not exist.
    *
    * `null` rather than an empty document, because "no such workspace" is an
    * error the port has to raise and an empty workspace is not.
    */
-  open(workspaceId: string): Promise<LoroDoc | null>
+  open(workspaceId: string): Promise<R | null>
   /**
    * Creates the workspace's document, or answers the existing one.
    *
    * Idempotent, matching `createWorkspace`: a caller that wants the workspace
    * to be there is served either way.
    */
-  create(workspaceId: string): Promise<LoroDoc>
+  create(workspaceId: string): Promise<R>
   /**
    * Persists whatever the index just changed, answering the update bytes it
    * wrote — what a sync fan-out hands to the workspace's other subscribers —
@@ -68,7 +72,7 @@ export interface WorkspaceDocs {
    * the caller because only the save knows the frontier the store held BEFORE
    * the write.
    */
-  save(workspaceId: string, doc: LoroDoc): Promise<Uint8Array | null>
+  save(workspaceId: string, doc: R): Promise<Uint8Array | null>
   /**
    * Where the record stands right now, for a caller that has just opened it
    * and wants to follow along from here.
@@ -87,5 +91,14 @@ export interface WorkspaceDocs {
    * Merges rather than replaces: `doc` may carry local edits that are not
    * saved yet, and a catch-up must not be a way to lose them.
    */
-  catchUp(workspaceId: string, doc: LoroDoc, cursor: WorkspaceDocCursor): Promise<CaughtUp>
+  catchUp(workspaceId: string, doc: R, cursor: WorkspaceDocCursor): Promise<CaughtUp>
+  /**
+   * The version vector the store holds for the record, or `null` when it holds
+   * none. One store read and no snapshot, for a caller that wants to know
+   * whether its copy is behind before it pays to open one.
+   */
+  storedVersion(workspaceId: string): Promise<Uint8Array | null>
 }
+
+/** A workspace record held as an engine lease: the caller releases what it opens. */
+export type WorkspaceRecords = WorkspaceDocs<RecordLease>

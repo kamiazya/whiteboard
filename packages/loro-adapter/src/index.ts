@@ -37,6 +37,7 @@ export { type CrdtEngineOptions, createCrdtEngine } from './engine/engine.js'
 export { type JournaledEngine, journaledEngine } from './engine/journal.js'
 export type { LeaseVersion, RecordLease } from './engine/lease.js'
 export * as lease from './engine/lease.js'
+export { type LeaseKindOptions, leaseKind } from './engine/lease-kind.js'
 export { loadCrdtEngine } from './engine/load.js'
 export { randomPeerId } from './engine/peer.js'
 export { readValue } from './engine/read-value.js'
@@ -51,6 +52,7 @@ export {
   type UnjudgedFileHolder,
 } from './file-references.js'
 export { collectImageRefIds } from './image-refs.js'
+export { type LegacyRecord, loroDocKind } from './legacy-record-kind.js'
 export {
   CONTENT_CONTAINER_KEYS,
   deleteSpatialEdge,
@@ -81,6 +83,7 @@ export {
   setProposedChangeStatus,
   writeProposal,
 } from './proposals.js'
+export { RecordBytesRejectedError, type RecordKind } from './record-kind.js'
 export { documentsRemovedSince, type RemovedDocument } from './removed-documents.js'
 export { ReservedKeyWriteError } from './reserved-key-write.js'
 export { RetiredStoredShapeError, retiredStoredShapeIn } from './retired-stored-shape.js'
