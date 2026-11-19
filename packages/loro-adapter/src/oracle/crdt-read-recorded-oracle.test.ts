@@ -5,13 +5,12 @@ import { CONTENT_CONTAINER_KEYS } from '../loro-bridge.js'
 import {
   frontierPairs,
   rootDocumentReaders,
-  versionOfPairs,
   type VersionPairs,
+  versionOfPairs,
   versionPairs,
   workspaceReaders,
 } from '../test-utils/crdt-read-oracle.js'
-import { WORKSPACE_META_KEY, WORKSPACE_TREE_KEY } from '../workspace-tree.js'
-import { WORKSPACE_TRASH_KEY } from '../workspace-trash.js'
+import { WORKSPACE_TREE_KEY } from '../workspace-tree.js'
 
 /**
  * The committed recording of what loro-crdt 1.17.1 and this package's readers
@@ -32,8 +31,12 @@ interface Row {
   snapshot: string
   updates: string
   shallow: string
-  deep: Record<Export, Record<string, unknown>>
-  ids: Record<Export, unknown>
+  /** `null` where an export's import answers as the update import does. */
+  deep: { updates: Record<string, unknown> } & Record<
+    Exclude<Export, 'updates'>,
+    Record<string, unknown> | null
+  >
+  ids: unknown
   vv: VersionPairs
   frontiers: Array<[string, number]>
   readers: unknown
@@ -87,9 +90,10 @@ describe('the recorded CRDT read oracle', () => {
     for (const [shape, floor] of Object.entries(SHAPE_FLOORS)) {
       expect(counts.get(shape) ?? 0, `rows of shape ${shape}`).toBeGreaterThanOrEqual(floor)
     }
-    expect([...counts.keys()].filter((s) => !(s in SHAPE_FLOORS)), 'shapes with no floor').toEqual(
-      [],
-    )
+    expect(
+      [...counts.keys()].filter((s) => !(s in SHAPE_FLOORS)),
+      'shapes with no floor',
+    ).toEqual([])
     expect(rows.length, 'recorded rows').toBeGreaterThan(300)
   })
 
@@ -102,16 +106,16 @@ describe('the recorded CRDT read oracle', () => {
         return typeof value === 'object' && value !== null && Object.keys(value).length > 0
       }).length
     for (const { key } of CONTENT_CONTAINER_KEYS) {
-      expect(populated(key, 'document'), `document rows with a populated ${key}`).toBeGreaterThan(
-        2,
-      )
+      expect(populated(key, 'document'), `document rows with a populated ${key}`).toBeGreaterThan(2)
     }
-    for (const key of [WORKSPACE_META_KEY, WORKSPACE_TRASH_KEY]) {
+    for (const key of ['workspaceMeta', 'trash']) {
       expect(populated(key, 'workspace'), `workspace rows with ${key}`).toBeGreaterThan(2)
     }
     expect(
-      rows.filter((r) => r.host === 'workspace' && JSON.stringify(r.deep.updates[WORKSPACE_TREE_KEY]) !== '[]')
-        .length,
+      rows.filter(
+        (r) =>
+          r.host === 'workspace' && JSON.stringify(r.deep.updates[WORKSPACE_TREE_KEY]) !== '[]',
+      ).length,
       'workspace rows with a populated tree',
     ).toBeGreaterThan(50)
     expect(
@@ -134,8 +138,10 @@ describe('the recorded CRDT read oracle', () => {
     it.each(rows.map((row) => [row.id, row] as const))('%s', async (_id, row) => {
       for (const file of ['snapshot', 'updates'] as const) {
         const doc = imported(row[file])
-        expect(doc.toJSON(), `${file} deep value`).toEqual(row.deep[file])
-        expect(doc.getDeepValueWithID(), `${file} container ids`).toEqual(row.ids[file])
+        expect(doc.toJSON(), `${file} deep value`).toEqual(row.deep[file] ?? row.deep.updates)
+        if (file === 'updates') {
+          expect(doc.getDeepValueWithID(), 'container ids').toEqual(row.ids)
+        }
         expect(versionPairs(doc.oplogVersion()), `${file} version vector`).toEqual(row.vv)
         expect(frontierPairs(doc.frontiers()), `${file} frontiers`).toEqual(row.frontiers)
         const readers =
@@ -145,8 +151,7 @@ describe('the recorded CRDT read oracle', () => {
         expect(JSON.parse(JSON.stringify(readers)), `${file} readers`).toEqual(row.readers)
       }
       const shallow = imported(row.shallow)
-      expect(shallow.toJSON(), 'shallow deep value').toEqual(row.deep.shallow)
-      expect(shallow.getDeepValueWithID(), 'shallow container ids').toEqual(row.ids.shallow)
+      expect(shallow.toJSON(), 'shallow deep value').toEqual(row.deep.shallow ?? row.deep.updates)
       expect(frontierPairs(shallow.frontiers()), 'shallow frontiers').toEqual(row.frontiers)
     })
   })

@@ -12,7 +12,9 @@
  */
 import { type Frontiers, LoroDoc, VersionVector } from 'loro-crdt'
 import { readAnnotations } from '../annotations.js'
-import { readSpatialCanvasWithSkipped } from '../loro-bridge.js'
+import { readCommentThreads } from '../comment-threads.js'
+import type { DocumentContainers } from '../containers.js'
+import { contentDigestOfDocument } from '../content-digest.js'
 import { readDocumentContent } from '../document-content.js'
 import {
   readCoreFacets,
@@ -20,23 +22,20 @@ import {
   readFacets,
   readTrustFacets,
 } from '../document-envelope.js'
+import { scanFileReferences } from '../file-references.js'
+import { collectImageRefIds } from '../image-refs.js'
+import { readEdgeLocks, readNodeLocks, readSpatialCanvasWithSkipped } from '../loro-bridge.js'
 import { readMarkdownBody } from '../markdown-body.js'
 import { readProposals } from '../proposals.js'
-import { readThreadMarks } from '../thread-marks.js'
-import { readCommentThreads } from '../comment-threads.js'
-import type { DocumentContainers } from '../containers.js'
-import { collectImageRefIds } from '../image-refs.js'
+import { documentsRemovedSince } from '../removed-documents.js'
 import { retiredStoredShapeIn } from '../retired-stored-shape.js'
 import { countSpatialNodes } from '../spatial-node-count.js'
-import { readEdgeLocks, readNodeLocks } from '../loro-bridge.js'
-import { contentDigestOfDocument } from '../content-digest.js'
 import { stateSize } from '../state-size.js'
 import { judgeStateWithinTextLimits } from '../sync-text-limits.js'
-import { scanFileReferences } from '../file-references.js'
-import { readTrashEntries } from '../workspace-trash.js'
-import { readWorkspaceFolderNames } from '../workspace-folder-name.js'
-import { documentsRemovedSince } from '../removed-documents.js'
+import { readThreadMarks } from '../thread-marks.js'
 import { documentsTouchedSince, organisationChangedSince } from '../touched-documents.js'
+import { readWorkspaceFolderNames } from '../workspace-folder-name.js'
+import { readTrashEntries } from '../workspace-trash.js'
 import {
   documentContainers,
   projectWorkspaceDocument,
@@ -83,7 +82,7 @@ function maskPeers(value: unknown): unknown {
  * JSON that keeps what JSON drops, so two answers that differ only in an
  * `undefined`, a `NaN`, a `Set` or a `Map` do not read as equal.
  */
-export function plain(value: unknown): unknown {
+function plain(value: unknown): unknown {
   if (value === undefined) return { $undefined: true }
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
   if (typeof value === 'number') return Number.isFinite(value) ? value : { $number: String(value) }
@@ -123,7 +122,7 @@ async function answerLater(read: () => Promise<unknown>): Promise<Answer> {
 }
 
 /** Every read a document's own containers answer, hosted on a root or on a tree node. */
-export function contentReaders(host: DocumentContainers): Record<string, Answer> {
+function contentReaders(host: DocumentContainers): Record<string, Answer> {
   return {
     documentKind: answer(() => readDocumentKind(host)),
     documentContent: answer(() => readDocumentContent(host)),
@@ -159,13 +158,13 @@ export function rootDocumentReaders(doc: LoroDoc): Record<string, Answer> {
 export async function workspaceReaders(
   doc: LoroDoc,
   since: VersionVector,
-): Promise<Record<string, Answer>> {
+): Promise<Record<string, unknown>> {
   const documents = answer(() => readWorkspaceDocuments(doc))
   const ids =
     'ok' in documents
       ? (documents.ok as Array<{ documentId: string }>).map((entry) => entry.documentId)
       : []
-  const perDocument: Record<string, Answer> = {}
+  const perDocument: Record<string, unknown> = {}
   for (const id of ids) {
     const hosted = answer(() => contentReaders(documentContainers(doc, id)))
     perDocument[id] = hosted

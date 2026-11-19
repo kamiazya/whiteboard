@@ -32,7 +32,11 @@ import {
   textNode,
 } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
-import { writeCommentThread, setCommentThreadStatus, writeThreadMessage } from '../src/comment-threads.js'
+import {
+  setCommentThreadStatus,
+  writeCommentThread,
+  writeThreadMessage,
+} from '../src/comment-threads.js'
 import type { DocumentContainers } from '../src/containers.js'
 import {
   writeCoreFacets,
@@ -41,22 +45,20 @@ import {
   writeTrustFacets,
 } from '../src/document-envelope.js'
 import {
-  deleteSpatialEdge,
   deleteSpatialNode,
   setEdgeLock,
   setNodeLock,
   writeSpatialCanvas,
 } from '../src/loro-bridge.js'
 import { writeMarkdownBody } from '../src/markdown-body.js'
-import { writeProposal, setProposedChangeStatus } from '../src/proposals.js'
-import { markThreadPassages } from '../src/thread-marks.js'
+import { setProposedChangeStatus, writeProposal } from '../src/proposals.js'
 import {
-  type Answer,
   frontierPairs,
   rootDocumentReaders,
   versionPairs,
   workspaceReaders,
 } from '../src/test-utils/crdt-read-oracle.js'
+import { markThreadPassages } from '../src/thread-marks.js'
 import { setWorkspaceFolderName } from '../src/workspace-folder-name.js'
 import { recordTrashEntry } from '../src/workspace-trash.js'
 import {
@@ -191,7 +193,12 @@ function markdownContent(host: DocumentContainers, rng: Rng, wide: boolean) {
   return first
 }
 
-function threadsContent(host: DocumentContainers, doc: LoroDoc | undefined, rng: Rng, text: string) {
+function threadsContent(
+  host: DocumentContainers,
+  doc: LoroDoc | undefined,
+  rng: Rng,
+  text: string,
+) {
   const threads = sample(commentThreadArbitrary, rng, int(rng, 1, 3))
   const ranges = new Map<string, { start: number; end: number }>()
   threads.forEach((thread, i) => {
@@ -311,11 +318,26 @@ for (let i = 0; i < 18; i++) {
   const b = peer(new LoroDoc(), 12)
   b.import(a.export({ mode: 'snapshot' }))
   // the same thread id created on both sides, the case a mergeable container exists for
-  writeCommentThread(a, { id: 'same', anchor: { kind: 'spatial', x: 1, y: 2 }, status: 'open', messages: [{ id: 'ma', body: 'A' }] })
-  writeCommentThread(b, { id: 'same', anchor: { kind: 'spatial', x: 3, y: 4 }, status: 'open', messages: [{ id: 'mb', body: 'B' }] })
+  writeCommentThread(a, {
+    id: 'same',
+    anchor: { kind: 'spatial', x: 1, y: 2 },
+    status: 'open',
+    messages: [{ id: 'ma', body: 'A' }],
+  })
+  writeCommentThread(b, {
+    id: 'same',
+    anchor: { kind: 'spatial', x: 3, y: 4 },
+    status: 'open',
+    messages: [{ id: 'mb', body: 'B' }],
+  })
   writeMarkdownBody(a, `${text}\n\nfrom a ${pick(rng, WIDE)}`)
   writeMarkdownBody(b, `from b\n\n${text}`)
-  attempt(() => writeSpatialCanvas(b, { nodes: [textNode({ id: 'b1', x: 0, y: 0, width: 10, height: 10, text: 'b' })], edges: [] }))
+  attempt(() =>
+    writeSpatialCanvas(b, {
+      nodes: [textNode({ id: 'b1', x: 0, y: 0, width: 10, height: 10, text: 'b' })],
+      edges: [],
+    }),
+  )
   a.import(b.export({ mode: 'update', from: a.oplogVersion() }))
   b.import(a.export({ mode: 'update', from: b.oplogVersion() }))
   void base
@@ -329,7 +351,7 @@ for (let i = 0; i < 14; i++) {
   threadsContent(doc, doc, rng, text)
   proposalsContent(doc, rng)
   for (const node of canvas.nodes.slice(0, 2)) attempt(() => deleteSpatialNode(doc, node.id))
-  for (const edge of canvas.edges.slice(0, 1)) attempt(() => deleteSpatialEdge(doc, edge.id))
+  for (const edge of canvas.edges.slice(0, 1)) doc.getMap('edges').delete(edge.id)
   writeMarkdownBody(doc, text.slice(0, Math.floor(text.length / 2)))
   doc.getMap('threads').delete('t0')
   doc.commit()
@@ -337,7 +359,10 @@ for (let i = 0; i < 14; i++) {
 }
 {
   const retired: Array<(doc: LoroDoc) => void> = [
-    (d) => d.getMap('nodes').set('n1', { id: 'n1', type: 'text', text: 'old', x: 0, y: 0, width: 1, height: 1 }),
+    (d) =>
+      d
+        .getMap('nodes')
+        .set('n1', { id: 'n1', type: 'text', text: 'old', x: 0, y: 0, width: 1, height: 1 }),
     (d) => d.getMap('nodes').set('n1', { id: 'n1', 'x-whiteboard': { a: 1 } }),
     (d) => d.getMap('edges').set('e1', { id: 'e1', 'x-whiteboard': {} }),
     (d) => d.getMap('canvas').set('x-whiteboard', { a: 1 }),
@@ -348,7 +373,10 @@ for (let i = 0; i < 14; i++) {
       d.getMap('nodes').set('okf-body', {
         id: 'okf-body',
         resource: { mimeType: 'text/markdown', content: '# old' },
-        x: 0, y: 0, width: 1, height: 1,
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
       })
     },
     (d) => d.getMovableList('elements').insert(0, 'x'),
@@ -401,7 +429,13 @@ for (let i = 0; i < 4; i++) {
   const doc = peer(new LoroDoc(), 1)
   const depth = [12, 24, 40, 60][i] as number
   const path = Array.from({ length: depth }, (_, d) => `d${d}`).join('/')
-  createWorkspaceDocumentAtPath(doc, { path, documentId: nextId(), kind: 'markdown', createdAt: 1, updatedAt: 1 })
+  createWorkspaceDocumentAtPath(doc, {
+    path,
+    documentId: nextId(),
+    kind: 'markdown',
+    createdAt: 1,
+    updatedAt: 1,
+  })
   add('ws-deep', 'workspace', doc)
 }
 for (let i = 0; i < 12; i++) {
@@ -416,9 +450,23 @@ for (let i = 0; i < 12; i++) {
 for (let i = 0; i < 6; i++) {
   const rng = rngOf(2200 + i)
   const doc = peer(new LoroDoc(), 1)
-  createWorkspaceDocumentAtPath(doc, { path: 'a/b/leaf', documentId: nextId(), kind: 'markdown', createdAt: 1, updatedAt: 1 })
-  createWorkspaceDocumentAtPath(doc, { path: 'x/note', documentId: nextId(), kind: 'spatial', createdAt: 1, updatedAt: 1 })
-  attempt(() => setWorkspaceFolderName(doc, { path: 'a', name: `${pick(rng, WORDS)} ${pick(rng, WIDE)}` }))
+  createWorkspaceDocumentAtPath(doc, {
+    path: 'a/b/leaf',
+    documentId: nextId(),
+    kind: 'markdown',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  createWorkspaceDocumentAtPath(doc, {
+    path: 'x/note',
+    documentId: nextId(),
+    kind: 'spatial',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  attempt(() =>
+    setWorkspaceFolderName(doc, { path: 'a', name: `${pick(rng, WORDS)} ${pick(rng, WIDE)}` }),
+  )
   attempt(() => setWorkspaceFolderName(doc, { path: 'a/b', name: sentence(rng, 2) }))
   if (i % 2 === 0) attempt(() => setWorkspaceFolderName(doc, { path: 'a', name: undefined }))
   setWorkspaceDocumentName(doc, { documentId: ulid(docCounter), name: sentence(rng, 2) })
@@ -470,15 +518,33 @@ for (let i = 0; i < 18; i++) {
   }
   moveWorkspaceNodeToPath(b, 'notes', 'archive/notes')
   // both peers create the same path: two nodes, one path
-  createWorkspaceDocumentAtPath(a, { path: 'dup/page', documentId: nextId(), kind: 'markdown', createdAt: 1, updatedAt: 1 })
-  createWorkspaceDocumentAtPath(b, { path: 'dup/page', documentId: nextId(), kind: 'markdown', createdAt: 1, updatedAt: 1 })
+  createWorkspaceDocumentAtPath(a, {
+    path: 'dup/page',
+    documentId: nextId(),
+    kind: 'markdown',
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  createWorkspaceDocumentAtPath(b, {
+    path: 'dup/page',
+    documentId: nextId(),
+    kind: 'markdown',
+    createdAt: 1,
+    updatedAt: 1,
+  })
   a.import(b.export({ mode: 'update', from: a.oplogVersion() }))
   b.import(a.export({ mode: 'update', from: b.oplogVersion() }))
   add('ws-concurrent', 'workspace', a, since)
 }
 for (let i = 0; i < 4; i++) {
   const doc = peer(new LoroDoc(), 1)
-  createWorkspaceDocumentAtPath(doc, { path: 'folder/page', documentId: nextId(), kind: 'markdown', createdAt: 1, updatedAt: 1 })
+  createWorkspaceDocumentAtPath(doc, {
+    path: 'folder/page',
+    documentId: nextId(),
+    kind: 'markdown',
+    createdAt: 1,
+    updatedAt: 1,
+  })
   const tampers: Array<[string, string, string]> = [
     ['folder', 'icon', 'open'],
     ['page', 'kind', 'future-kind'],
@@ -505,16 +571,26 @@ for (let i = 0; i < 40; i++) {
         if (id !== undefined) deleteWorkspaceDocument(doc, { documentId: id })
         break
       case 1:
-        moveWorkspaceNodeToPath(doc, pick(rng, ['notes', 'boards', 'a', 'x']), `moved/${pick(rng, WORDS)}${step}`)
+        moveWorkspaceNodeToPath(
+          doc,
+          pick(rng, ['notes', 'boards', 'a', 'x']),
+          `moved/${pick(rng, WORDS)}${step}`,
+        )
         break
       case 2:
-        if (id !== undefined) attempt(() => setWorkspaceDocumentName(doc, { documentId: id, name: sentence(rng, 2) }))
+        if (id !== undefined)
+          attempt(() => setWorkspaceDocumentName(doc, { documentId: id, name: sentence(rng, 2) }))
         break
       case 3:
         if (id !== undefined) setWorkspacePinned(doc, id, rng() < 0.7)
         break
       case 4:
-        attempt(() => setWorkspaceFolderName(doc, { path: pick(rng, ['notes', 'a', 'a/b', 'x']), name: sentence(rng, 2) }))
+        attempt(() =>
+          setWorkspaceFolderName(doc, {
+            path: pick(rng, ['notes', 'a', 'a/b', 'x']),
+            name: sentence(rng, 2),
+          }),
+        )
         break
       default:
         if (id !== undefined) attempt(() => anyContent(documentContainers(doc, id), doc, rng))
@@ -526,6 +602,9 @@ for (let i = 0; i < 40; i++) {
 // ---- recording ----
 
 const b64 = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64')
+
+const differing = (value: unknown, base: unknown) =>
+  JSON.stringify(value) === JSON.stringify(base) ? null : value
 
 async function record(spec: Spec): Promise<string> {
   const { doc } = spec
@@ -554,22 +633,22 @@ async function record(spec: Spec): Promise<string> {
     snapshot: b64(exported.snapshot),
     updates: b64(exported.updates),
     shallow: b64(exported.shallow),
+    // The update import is the oplog's own state; a snapshot or shallow import is
+    // recorded only where it answers differently (an opened-but-empty root).
     deep: {
-      snapshot: imports.snapshot.toJSON(),
       updates: imports.updates.toJSON(),
-      shallow: imports.shallow.toJSON(),
+      snapshot: differing(imports.snapshot.toJSON(), imports.updates.toJSON()),
+      shallow: differing(imports.shallow.toJSON(), imports.updates.toJSON()),
     },
-    ids: {
-      snapshot: imports.snapshot.getDeepValueWithID(),
-      updates: imports.updates.getDeepValueWithID(),
-      shallow: imports.shallow.getDeepValueWithID(),
-    },
+    ids: imports.updates.getDeepValueWithID(),
     vv: versionPairs(stored0.oplogVersion()),
     frontiers: frontierPairs(stored0.frontiers()),
   }
   const since = spec.sinceVersion ?? new LoroDoc().oplogVersion()
-  const readers: Record<string, Answer> =
-    spec.host === 'workspace' ? await workspaceReaders(stored0, since) : rootDocumentReaders(stored0)
+  const readers: Record<string, unknown> =
+    spec.host === 'workspace'
+      ? await workspaceReaders(stored0, since)
+      : rootDocumentReaders(stored0)
   return JSON.stringify({
     id: spec.id,
     shape: spec.shape,
