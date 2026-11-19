@@ -119,6 +119,8 @@ const OTHER_WRITES: Record<string, string> = {
   applyDocumentEdit:
     'covered by writeMarkdownBody, reconcileSpatialCanvas and writeSpatialNode, the writes each arm makes',
   spliceText: 'covered by writeMarkdownBody and minimalChange',
+  applyDocumentEdit:
+    'covered by writeMarkdownBody, writeSpatialNode and reconcileSpatialCanvas, which it dispatches to; its splice-run arm is document-edit.test.ts',
   openMergeableMap:
     'covered by writeCommentThread and writeProposal, which open every mergeable map',
   openMergeableMovableList: 'covered by setWorkspacePinned, the only mergeable list',
