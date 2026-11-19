@@ -29,6 +29,7 @@ import {
   describeSpliceRuns,
   describeSpliceRunsRefused,
   describeSubtreeImport,
+  describeSubtreeRoot,
   describeUndoHistory,
   describeVersion,
   describeVersionDecoding,
@@ -668,6 +669,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeSpliceRunsRefused(makeEngine)
     describeDocumentKindFallback(makeEngine)
     describeSubtreeImport(makeEngine)
+    describeSubtreeRoot(makeEngine)
     describeJournal(makeEngine)
     describeConvergence(makeEngine)
   })

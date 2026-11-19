@@ -68,6 +68,12 @@ interface Held {
   /** Every update applied after `base`, in order. */
   log: Uint8Array[]
   logBytes: number
+  /**
+   * Imported updates that built on operations the document lacked, so the
+   * document holds them parked. A snapshot leaves a parked update out, so
+   * compaction keeps the ones still parked in `log` rather than lose them.
+   */
+  parked: Uint8Array[]
 }
 
 const PEER_ID = /^\d{1,20}$/
@@ -111,10 +117,22 @@ function restore(entry: Held) {
 function keep(entry: Held, update: Uint8Array) {
   entry.log.push(update)
   entry.logBytes += update.byteLength
-  if (entry.logBytes <= Math.max(entry.base?.byteLength ?? 0, MIN_LOG_BYTES)) return
+  // Parked updates stay in the log whatever happens, so they do not count toward
+  // the compaction threshold: a large parked update would otherwise compact on every write.
+  const parkedBytes = entry.parked.reduce((total, held) => total + held.byteLength, 0)
+  if (entry.logBytes - parkedBytes <= Math.max(entry.base?.byteLength ?? 0, MIN_LOG_BYTES)) return
   entry.base = entry.doc.export({ mode: 'snapshot' })
-  entry.log = []
-  entry.logBytes = 0
+  entry.parked = stillParkedAfter(entry.base, entry.parked)
+  entry.log = [...entry.parked]
+  entry.logBytes = entry.parked.reduce((total, update) => total + update.byteLength, 0)
+}
+
+/** The parked updates `base` does not hold: each is checked alone, since a parked update never applies. */
+function stillParkedAfter(base: Uint8Array, parked: readonly Uint8Array[]): Uint8Array[] {
+  if (parked.length === 0) return []
+  const probe = new LoroDoc()
+  probe.import(base)
+  return parked.filter((update) => (probe.import(update).pending?.size ?? 0) > 0)
 }
 
 function editable(entry: Held): void {
@@ -183,12 +201,10 @@ function importInto(entry: Held, request: wire.ImportRequest): wire.MutationResu
   }
   const before = entry.doc.oplogVersion()
   const status = entry.doc.import(incoming)
+  const pending = (status.pending?.size ?? 0) > 0
+  if (pending) entry.parked.push(incoming)
   keep(entry, incoming)
-  return {
-    outcome: 'applied',
-    changed: touchedSince(entry.doc, before),
-    pending: (status.pending?.size ?? 0) > 0,
-  }
+  return { outcome: 'applied', changed: touchedSince(entry.doc, before), pending }
 }
 
 function exportFrom(doc: LoroDoc, request: wire.ExportRequest): wire.ExportResponse {
@@ -240,6 +256,7 @@ function openDocument(request: wire.OpenRequest, defaultMergeInterval: number): 
     base,
     log: [],
     logBytes: 0,
+    parked: [],
   }
 }
 
@@ -265,6 +282,7 @@ function forkOf(source: Held, request: wire.ForkRequest): Held {
     base,
     log: [],
     logBytes: 0,
+    parked: [],
   }
 }
 

@@ -343,6 +343,20 @@ export function describeSubtreeImport(makeEngine: () => CrdtEngine) {
       expect(await bodyOf(engine, handle, FIRST)).toBe('inside')
     })
 
+    it('answers nothing changed for bytes that hold no document', () => {
+      const engine = makeEngine()
+      const { handle } = engine.open({ peer: '1' })
+      const empty = Buffer.from(new LoroDoc().export({ mode: 'snapshot' })).toString('base64')
+      expect(mutation(engine.importSubtree({ handle, bytes: empty }))).toEqual({
+        outcome: 'applied',
+        changed: [],
+      })
+    })
+  })
+}
+
+export function describeSubtreeRoot(makeEngine: () => CrdtEngine) {
+  describe('the root a subtree import names', () => {
     it('names the top of the bytes as the root, not a document beneath it', () => {
       const engine = makeEngine()
       const { handle: from } = engine.open({ peer: '3' })
@@ -363,16 +377,6 @@ export function describeSubtreeImport(makeEngine: () => CrdtEngine) {
         engine.importSubtree({ handle, bytes: Buffer.from(exported).toString('base64') }),
       )
       expect(result.root).toEqual({ documentId: FIRST, path: 'top' })
-    })
-
-    it('answers nothing changed for bytes that hold no document', () => {
-      const engine = makeEngine()
-      const { handle } = engine.open({ peer: '1' })
-      const empty = Buffer.from(new LoroDoc().export({ mode: 'snapshot' })).toString('base64')
-      expect(mutation(engine.importSubtree({ handle, bytes: empty }))).toEqual({
-        outcome: 'applied',
-        changed: [],
-      })
     })
   })
 }
