@@ -117,7 +117,7 @@ const DOCUMENT_ENGINE_TRAP_ADVICE: Readonly<
  * engine's own panic text goes to stderr with no document in it, and the bare
  * `unreachable` that would otherwise reach a caller names nothing.
  */
-async function withEngineTrapReported<T>(
+export async function withEngineTrapReported<T>(
   workspaceId: string,
   documentId: string,
   doing: 'loading' | 'saving',
