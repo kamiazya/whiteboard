@@ -8,7 +8,7 @@
  * timing — which is the whole point of the suites that use them.
  */
 
-import { projectWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
+import { projectWorkspaceDocument, readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
@@ -237,6 +237,15 @@ export async function persistedNodeIds(documentId: string): Promise<string[]> {
   const projected = workspace === null ? null : projectWorkspaceDocument(workspace, documentId)
   if (projected === null) return []
   return Object.keys(projected.getMap('nodes').toJSON() as Record<string, unknown>)
+}
+
+/** The markdown body the stored record holds for `documentId`, read the way a reload would. */
+export async function persistedMarkdownBody(documentId: string): Promise<string> {
+  const workspace = await new BrowserWorkspaceDocs(whiteboardDbName())
+    .open(getBrowserWorkspaceId())
+    .catch(() => null)
+  const projected = workspace === null ? null : projectWorkspaceDocument(workspace, documentId)
+  return projected === null ? '' : readMarkdownBody(projected)
 }
 
 /** A canvas holding one text node — the minimal edit these suites drive. */
