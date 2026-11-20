@@ -46,6 +46,52 @@ type State =
   | 'e-corrupt'
   | 'f-no-snapshot'
   | 'g-no-index'
+/** A healthy canvas of three nodes, or a note. */
+async function seedContent(state: State, path: string): Promise<void> {
+  if (state === 'b-note') {
+    const d = new LoroDoc()
+    writeMarkdownBody(d, 'hello')
+    d.commit()
+    await saveDocument(WS, path, d, { kind: 'markdown', overwrite: true })
+    return
+  }
+  const nodes = [1, 2, 3].map((i) =>
+    textNode({ id: `n${i}`, text: 'a', x: 0, y: 0, width: 10, height: 10 }),
+  )
+  const edges = [{ id: 'e1', from: { node: 'n1' }, to: { node: 'n2' } }]
+  await saveDocument(WS, path, makeSpatialDoc({ nodes, edges }), {
+    kind: 'spatial',
+    overwrite: true,
+  })
+}
+
+/** Writes a stored shape this build no longer reads straight into the record. */
+function plantRetired(rec: LoroDoc, id: string, state: State): void {
+  if (state === 'c1-elements') {
+    const node = rec
+      .getTree('tree')
+      .getNodes()
+      .find((n) => n.data.get('documentId') === id)
+    node?.data.setContainer('elements', new LoroMovableList()).push({ id: 'old' })
+  }
+  const content = documentContainers(rec, id)
+  if (state === 'c2-xwhiteboard') {
+    content.getMap('nodes').set('old', { id: 'old', 'x-whiteboard': { a: 1 } })
+  }
+  if (state === 'd-comments') content.getMap('comments').set('c1', { id: 'c1' })
+  rec.commit()
+}
+
+async function corruptRecord(): Promise<void> {
+  const db = await getDb(tmp.dir)
+  await db
+    .updateTable('documentSnapshotChunks')
+    .set({ bytes: new Uint8Array([222, 173, 190, 239, 0, 255]) as never })
+    .where('docKey', 'like', '%workspace-tree%')
+    .execute()
+  await db.deleteFrom('documentDeltas').where('docKey', 'like', '%workspace-tree%').execute()
+}
+
 async function plant(deps: ServerDeps, state: State): Promise<{ id: string; path: string }> {
   const path = 'doc'
   await seedWorkspaceRow(tmp.dir, WS)
@@ -58,55 +104,14 @@ async function plant(deps: ServerDeps, state: State): Promise<{ id: string; path
     const e = await deps.documentIndex.createDocument({ workspaceId: WS, path, kind: 'spatial' })
     return { id: e.documentId, path }
   }
-  if (state === 'b-note') {
-    const d = new LoroDoc()
-    writeMarkdownBody(d, 'hello')
-    d.commit()
-    await saveDocument(WS, path, d, { kind: 'markdown', overwrite: true })
-  } else {
-    await saveDocument(
-      WS,
-      path,
-      makeSpatialDoc({
-        nodes: [1, 2, 3].map((i) =>
-          textNode({ id: `n${i}`, text: 'a', x: 0, y: 0, width: 10, height: 10 }),
-        ),
-        edges: [{ id: 'e1', from: { node: 'n1' }, to: { node: 'n2' } }],
-      }),
-      { kind: 'spatial', overwrite: true },
-    )
-  }
+  await seedContent(state, path)
   const id = await documentIdAt(deps, WS, path)
-  const rec = await getWorkspaceDoc(WS)
-  if (state === 'c1-elements') {
-    const node = rec
-      .getTree('tree')
-      .getNodes()
-      .find((n) => n.data.get('documentId') === id)
-    const list = node!.data.setContainer('elements', new LoroMovableList())
-    list.push({ id: 'old' })
-    rec.commit()
+  if (/^[cd]/.test(state)) {
+    const rec = await getWorkspaceDoc(WS)
+    plantRetired(rec, id, state)
+    await saveWorkspaceDoc(WS, rec)
   }
-  if (state === 'c2-xwhiteboard') {
-    documentContainers(rec, id)
-      .getMap('nodes')
-      .set('old', { id: 'old', 'x-whiteboard': { a: 1 } })
-    rec.commit()
-  }
-  if (state === 'd-comments') {
-    documentContainers(rec, id).getMap('comments').set('c1', { id: 'c1' })
-    rec.commit()
-  }
-  if (state.startsWith('c') || state.startsWith('d')) await saveWorkspaceDoc(WS, rec)
-  if (state === 'e-corrupt') {
-    const db = await getDb(tmp.dir)
-    await db
-      .updateTable('documentSnapshotChunks')
-      .set({ bytes: new Uint8Array([222, 173, 190, 239, 0, 255]) as never })
-      .where('docKey', 'like', '%workspace-tree%')
-      .execute()
-    await db.deleteFrom('documentDeltas').where('docKey', 'like', '%workspace-tree%').execute()
-  }
+  if (state === 'e-corrupt') await corruptRecord()
   clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   return { id, path }
