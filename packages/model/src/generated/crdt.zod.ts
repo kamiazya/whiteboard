@@ -75,6 +75,7 @@ export const queryNameSchema = z.enum([
   'facets',
   'annotations',
   'commentThreads',
+  'threadMessageCounts',
   'threadMarks',
   'proposals',
   'imageRefIds',

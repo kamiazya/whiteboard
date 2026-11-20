@@ -11,7 +11,6 @@
 
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { DOCUMENT_ID, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { applyCanvasOp } from './canvas-edit-handlers.js'
@@ -47,7 +46,7 @@ describe('node.patch cost', () => {
     const board = countingBoard(BOARD)
     const session = new CanvasEditSession(
       { nodes: board.nodes, edges: [] },
-      new LoroDoc(),
+      { nodes: [], edges: [] },
       undefined,
     )
     const { ops } = canvasEditInputSchema.parse({

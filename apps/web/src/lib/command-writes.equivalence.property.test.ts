@@ -12,6 +12,7 @@
 import {
   type DocumentContainers,
   deleteSpatialNode,
+  lease,
   markThreadPassages,
   moveCommentThread,
   readCoreFacets,
@@ -544,11 +545,11 @@ const loaded = (bytes: Uint8Array): LoroDoc => {
 
 function engineTarget(handle: number): WriteTarget {
   const engine = sharedCrdtEngine()
-  const read = (query: 'markdownBody' | 'coreFacets') => {
-    const answer = engine.readNow({ handle, query: { query } }).value as { ok: unknown }
-    const value = answer.ok
-    return typeof value === 'object' && value !== null && '$undefined' in value ? undefined : value
-  }
+  // The read the editing session makes: a reader's refusal throws, so the planner
+  // falls back as it does there instead of planning over a body that was never read.
+  const record = lease.ownedLease(engine, handle)
+  const read = (query: 'markdownBody' | 'coreFacets') =>
+    lease.readNow(record, { query }, { parse: (value: unknown) => value })
   return {
     documentId: undefined,
     body: () => read('markdownBody') as string,
@@ -560,6 +561,46 @@ function engineTarget(handle: number): WriteTarget {
   }
 }
 
+/** One sequence of commands through both documents, compared after each. */
+function replayAgainstReference(commands: readonly EditorCommand[]): void {
+  const engine = sharedCrdtEngine()
+  const seed = seedDoc().export({ mode: 'snapshot' })
+  const ref = loaded(seed)
+  const { handle } = engine.open({ peer: '7', bytes: bytesToBase64(seed) })
+  try {
+    if (commands.length > 1) reach.multiCommand++
+    for (const command of commands) {
+      const prev = readSpatialCanvas(ref)
+      const next = applyCommand(prev, command)
+      const before = snapshotOf(ref)
+      const outcome = oracle(ref, prev, next, command)
+      if (outcome.fellBack) reach.fellBack++
+      reach.commands++
+      if (snapshotOf(ref) !== before) {
+        reach.effective++
+        effective[command.kind]++
+      }
+      warnings.length = 0
+      commitToDoc(engineTarget(handle), prev, next, command)
+      const expected: readonly string[] = outcome.fellBack ? WARNING_OF[outcome.warns] : []
+      expect(
+        warnings.every((w) => expected.some((fragment) => w.includes(fragment))),
+        `${command.kind}: unexpected warning ${JSON.stringify(warnings)}`,
+      ).toBe(true)
+      if (outcome.fellBack && outcome.warns === 'target-missing') {
+        expect(warnings, `${command.kind}: a missing target warns`).toHaveLength(1)
+        reach.missingWarned++
+      }
+      const wire = engine.export({ handle, mode: 'snapshot' }).bytes ?? ''
+      const wireDoc = new LoroDoc()
+      wireDoc.import(base64ToBytes(wire) ?? new Uint8Array())
+      expect(snapshotOf(wireDoc), command.kind).toBe(snapshotOf(ref))
+    }
+  } finally {
+    engine.close({ handle })
+  }
+}
+
 describe('a command as engine writes', () => {
   // About 2 s alone (measured 1.8 to 2.0 s): one engine document opened, written
   // and exported per command. A loaded parallel run has taken properties of
@@ -567,47 +608,21 @@ describe('a command as engine writes', () => {
   it('leaves the document where the direct writers leave it, command after command', {
     timeout: 20_000,
   }, () => {
-    const engine = sharedCrdtEngine()
     fc.assert(
-      fc.property(fc.array(commandArb, { minLength: 2, maxLength: 12 }), (commands) => {
-        const seed = seedDoc().export({ mode: 'snapshot' })
-        const ref = loaded(seed)
-        const { handle } = engine.open({ peer: '7', bytes: bytesToBase64(seed) })
-        try {
-          if (commands.length > 1) reach.multiCommand++
-          for (const command of commands) {
-            const prev = readSpatialCanvas(ref)
-            const next = applyCommand(prev, command)
-            const before = snapshotOf(ref)
-            const outcome = oracle(ref, prev, next, command)
-            if (outcome.fellBack) reach.fellBack++
-            reach.commands++
-            if (snapshotOf(ref) !== before) {
-              reach.effective++
-              effective[command.kind]++
-            }
-            warnings.length = 0
-            commitToDoc(engineTarget(handle), prev, next, command)
-            const expected: readonly string[] = outcome.fellBack ? WARNING_OF[outcome.warns] : []
-            expect(
-              warnings.every((w) => expected.some((fragment) => w.includes(fragment))),
-              `${command.kind}: unexpected warning ${JSON.stringify(warnings)}`,
-            ).toBe(true)
-            if (outcome.fellBack && outcome.warns === 'target-missing') {
-              expect(warnings, `${command.kind}: a missing target warns`).toHaveLength(1)
-              reach.missingWarned++
-            }
-            const wire = engine.export({ handle, mode: 'snapshot' }).bytes ?? ''
-            const wireDoc = new LoroDoc()
-            wireDoc.import(base64ToBytes(wire) ?? new Uint8Array())
-            expect(snapshotOf(wireDoc), command.kind).toBe(snapshotOf(ref))
-          }
-        } finally {
-          engine.close({ handle })
-        }
-      }),
+      fc.property(fc.array(commandArb, { minLength: 2, maxLength: 12 }), replayAgainstReference),
       withDefaults({ numRuns: 100 }),
     )
+  })
+
+  // An emptied body beside canvas text nodes is a retired stored shape, which
+  // the body read refuses. The decision is then planned as the whole-canvas
+  // fallback on both sides, so the change stays open rather than adopted.
+  it('closes no change when the body read is refused, on either side', () => {
+    replayAgainstReference([
+      { kind: 'set-body', text: '' },
+      { kind: 'set-node-color', id: 'n0', color: '1' },
+      { kind: 'decide-proposal', proposalId: 'p1', decision: 'adopted', changes: [MOVE_N0] },
+    ])
   })
 })
 

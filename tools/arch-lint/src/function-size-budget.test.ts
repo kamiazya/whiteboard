@@ -573,8 +573,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The tool bodies left `execute` for module functions when the write
   // lock became the operation's own: `execute` takes the lock and calls
   // them. Moved, not grown — recorded at the measurement.
-  'packages/server-core/src/tools/body-edit.ts#editBody': 61,
-  'packages/server-core/src/tools/canvas-edit.ts#editCanvas': 72,
   // Arrow-valued class properties: bound to the session so they can be passed as callbacks.
   'packages/server-core/src/tools/canvas-edit-session.ts#growToHold': 59,
   'packages/server-core/src/tools/canvas-edit-session.ts#placeAround': 56,

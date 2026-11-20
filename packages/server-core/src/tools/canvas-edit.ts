@@ -1,10 +1,5 @@
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
-import {
-  readDocumentKind,
-  setEdgeLock,
-  setNodeLock,
-  writeDocumentKind,
-} from '@kamiazya/whiteboard-loro-adapter'
+import type { documentEngine as wire } from '@kamiazya/whiteboard-model'
 import {
   CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
   CANVAS_MAX_EDGES_AND_LINES,
@@ -16,8 +11,8 @@ import {
   type SpatialCanvas,
   spatialCanvasSchema,
 } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
-import { loadDocument, saveDocumentBodySnapshot } from '../document-io.js'
+import { type DocumentSession, withDocument } from '../document-session.js'
+import { canvasOf, edgeLocksOf, kindOf, nodeLocksOf } from '../document-session-reads.js'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
 import type { ServerDeps } from '../server-deps.js'
 import { announceAgentActivity, notificationFailed } from './agent-activity.js'
@@ -125,10 +120,10 @@ function decideProposing(input: CanvasEditInput): boolean {
  * keeps its OKF body in a text node, so spatial ops on it would not fail, they
  * would land beside the body and corrupt it.
  */
-function claimSpatialDocument(doc: LoroDoc, documentId: string): void {
-  const kind = readDocumentKind(doc)
+async function claimSpatialDocument(session: DocumentSession, documentId: string): Promise<void> {
+  const kind = await kindOf(session)
   if (kind === undefined) {
-    writeDocumentKind(doc, 'spatial')
+    session.write([{ op: 'writeDocumentKind', args: { kind: 'spatial' } }])
     return
   }
   if (kind !== 'spatial') {
@@ -179,24 +174,21 @@ async function resolveMeasurerFor(
  * announcement, and it needs no toast.
  */
 async function commitAsProposal({
-  deps,
   input,
-  doc,
+  session,
   canvas,
   after,
   s,
 }: {
-  deps: ServerDeps
   input: CanvasEditInput
-  doc: LoroDoc
+  session: DocumentSession
   canvas: SpatialCanvas
   after: SpatialCanvas
   s: CanvasEditSession
 }): Promise<CanvasEditOutput> {
   const proposal = await storeCanvasProposal({
-    deps,
+    session,
     input,
-    doc,
     before: canvas,
     after,
   })
@@ -405,8 +397,28 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
   const facetWriter = await resolveEditWriter(deps, input)
   const proposing = decideProposing(input)
   await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-  const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
-  claimSpatialDocument(doc, input.documentId)
+  return withDocument(deps, input.workspaceId, input.documentId, async (session) => {
+    const canvas = await canvasOf(session)
+    await claimSpatialDocument(session, input.documentId)
+    const s = await sessionFor(deps, session, input, canvas)
+    const after = resolveBatch(s, facetWriter, input, canvas)
+    if (proposing) return await commitAsProposal({ input, session, canvas, after, s })
+    return await commitBatch({ deps, input, session, canvas, after, s })
+  })
+}
+
+/**
+ * The working copy every op of the batch runs against. Nothing reaches the
+ * document until the last op has applied — that is what makes the batch
+ * all-or-nothing — including the lock ops, which would otherwise write
+ * through to the document's lock sets as they were applied.
+ */
+async function sessionFor(
+  deps: ServerDeps,
+  session: DocumentSession,
+  input: CanvasEditInput,
+  canvas: SpatialCanvas,
+): Promise<CanvasEditSession> {
   const measure = await resolveMeasurerFor(deps, input.ops)
   // The core sizes what the measurer would and arranges a tidy, so it is asked
   // for only when a batch needs one of them.
@@ -414,13 +426,17 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
     measure === undefined && !input.ops.some((op) => op.op === 'tidy')
       ? undefined
       : await deps.layoutCore()
+  const locks = { nodes: await nodeLocksOf(session), edges: await edgeLocksOf(session) }
+  return new CanvasEditSession(canvas, locks, measure, core)
+}
 
-  // Every op runs against this session; nothing reaches the doc until
-  // the last op has applied. That is what makes the batch all-or-nothing
-  // — including the lock ops, which would otherwise write through to the
-  // doc's sidecar map as they were applied.
-  const s = new CanvasEditSession(canvas, doc, measure, core)
-
+/** Runs every op on `s` and answers the canvas that results, or the op that refused. */
+function resolveBatch(
+  s: CanvasEditSession,
+  facetWriter: Awaited<ReturnType<typeof resolveEditWriter>>,
+  input: CanvasEditInput,
+  canvas: SpatialCanvas,
+): SpatialCanvas {
   // One handler per verb, keyed by the schema (canvas-edit-handlers.ts).
   // A verb added to the schema and not to the table does not compile, where
   // an inline switch would simply fall through and report a batch applied
@@ -431,8 +447,7 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
     refuseCanvasGrowth(canvas, s, index, op.op)
   })
 
-  const candidate = editedCanvas(canvas, s)
-  const parsed = spatialCanvasSchema.safeParse(candidate)
+  const parsed = spatialCanvasSchema.safeParse(editedCanvas(canvas, s))
   if (!parsed.success) {
     throw new CanvasEditError(
       input.ops.length - 1,
@@ -440,23 +455,42 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
       `the resulting canvas is not valid: ${describeIssues(parsed.error)}`,
     )
   }
+  return parsed.data
+}
 
-  if (proposing) {
-    return await commitAsProposal({ deps, input, doc, canvas, after: parsed.data, s })
-  }
-
-  // Locks are written only now, after every op has applied — see the
-  // working-copy comment above.
-  for (const node of parsed.data.nodes) setNodeLock(doc, node.id, s.nodeLocks.has(node.id))
-  for (const edge of parsed.data.edges) setEdgeLock(doc, edge.id, s.edgeLocks.has(edge.id))
-  await saveDocumentBodySnapshot(
-    deps,
-    input.workspaceId,
-    input.documentId,
-    doc,
-    canvas,
-    parsed.data,
-  )
+async function commitBatch({
+  deps,
+  input,
+  session,
+  canvas,
+  after,
+  s,
+}: {
+  deps: ServerDeps
+  input: CanvasEditInput
+  session: DocumentSession
+  canvas: SpatialCanvas
+  after: SpatialCanvas
+  s: CanvasEditSession
+}): Promise<CanvasEditOutput> {
+  // The diff against what was loaded, never a resync from `after` alone: the
+  // canvas read skips every stored record its schema refuses — typically one a
+  // newer client wrote — and a resync would delete each of them as an op that
+  // ships to every replica. Locks are written first, then the canvas.
+  //
+  // This is a read-modify-write with no optimistic-concurrency check: two
+  // concurrent patches against the same canvas race, and the later save wins
+  // outright. An accepted limitation, not an oversight.
+  //
+  // ponytail: last-write-wins on the whole canvas; a per-element compare-and-set
+  // if concurrent patching turns out to be a real pattern rather than a race
+  // two agents hit occasionally.
+  session.write([
+    ...after.nodes.map(({ id }) => lockWrite('setNodeLock', id, s.nodeLocks.has(id))),
+    ...after.edges.map(({ id }) => lockWrite('setEdgeLock', id, s.edgeLocks.has(id))),
+    { op: 'reconcileSpatialCanvas', args: { prev: canvas, next: after } },
+  ])
+  await session.save()
 
   const touched = sortedTouched(s)
 
@@ -467,6 +501,10 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
     applied: input.ops.length,
     touched,
     geometry: [...s.geometry.values()].sort((a, b) => compareCodeUnit(a.id, b.id)),
-    snapshot: projectCanvasSnapshot(input.documentId, parsed.data, s.nodeLocks, s.edgeLocks),
+    snapshot: projectCanvasSnapshot(input.documentId, after, s.nodeLocks, s.edgeLocks),
   }
+}
+
+function lockWrite(op: 'setNodeLock' | 'setEdgeLock', id: string, locked: boolean): wire.Write {
+  return { op, args: { id, locked } }
 }

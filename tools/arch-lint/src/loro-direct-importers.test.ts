@@ -63,14 +63,9 @@ const LORO_DIRECT: Readonly<Record<string, string>> = {
   'packages/server-core/src/operations/promote-workspace.ts': 'M7: server-core',
   'packages/server-core/src/operations/restore-version.ts': 'M7: server-core',
   'packages/server-core/src/server-deps.ts': 'M7: server-core',
-  'packages/server-core/src/tools/body-edit.ts': 'M7: server-core',
-  'packages/server-core/src/tools/canvas-edit-session.ts': 'M7: server-core',
-  'packages/server-core/src/tools/canvas-edit.ts': 'M7: server-core',
-  'packages/server-core/src/tools/canvas-propose.ts': 'M7: server-core',
   'packages/server-core/src/tools/document-crud.ts': 'M7: server-core',
   'packages/server-core/src/tools/document-set.ts': 'M7: server-core',
   'packages/server-core/src/tools/facet-set.ts': 'M7: server-core',
-  'packages/server-core/src/tools/thread-edit.ts': 'M7: server-core',
 }
 
 /** Shipped files outside loro-adapter that hold a LoroDoc without importing `loro-crdt`. Shrink-only. */

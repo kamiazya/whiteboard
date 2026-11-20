@@ -1,12 +1,4 @@
-import {
-  type DocumentContent,
-  readAnnotations,
-  readDocumentContent,
-  setCommentThreadStatus,
-  storedThreadMessageCount,
-  writeCommentThread,
-  writeThreadMessage,
-} from '@kamiazya/whiteboard-loro-adapter'
+import type { DocumentContent } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type AnnotationAnchor,
   annotationAnchorInputSchema,
@@ -28,10 +20,15 @@ import {
   type TextAnchor,
   THREAD_MAX_MESSAGES,
   THREAD_MESSAGES_LIMIT_PHRASE,
+  type documentEngine as wire,
 } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
-import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
+import { withDocument } from '../document-session.js'
+import {
+  annotationsOf,
+  documentContentOf,
+  threadMessageCountsOf,
+} from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
 import {
   announceAgentActivity,
@@ -45,9 +42,9 @@ import { withWorkspaceWrite } from './write-lock.js'
 
 /**
  * "Nothing was written" is literal here, not a formula copied from
- * `wb_canvas_edit`: every op mutates the in-memory `LoroDoc` and the snapshot
- * is saved once, after the last op. A throw leaves the stored document
- * exactly as it was.
+ * `wb_canvas_edit`: the ops gather their writes, which reach the document's
+ * working copy only after the last op has passed, and the snapshot is saved
+ * once after that. A throw leaves the stored document exactly as it was.
  */
 class ThreadEditError extends Error {
   constructor(
@@ -228,7 +225,8 @@ function blankRefusal(body: string): string | undefined {
 
 /** What one op of a `wb_thread_edit` batch is applied against. */
 interface ThreadEditContext {
-  readonly doc: LoroDoc
+  /** What the batch writes, in op order; applied as one batch once every op has passed. */
+  readonly writes: wire.Write[]
   /** What the document held before the batch; no op here changes it. */
   readonly content: DocumentContent
   /** `content`'s board ids, or `undefined` for a markdown document. */
@@ -257,9 +255,12 @@ interface ThreadTally {
   open: number
 }
 
-function tallyOf(doc: LoroDoc, threads: readonly CommentThread[]): ThreadTally {
+function tallyOf(
+  threads: readonly CommentThread[],
+  storedCounts: Readonly<Record<string, number>>,
+): ThreadTally {
   return {
-    stored: new Map(threads.map((thread) => [thread.id, storedThreadMessageCount(doc, thread.id)])),
+    stored: new Map(threads.map((thread) => [thread.id, storedCounts[thread.id] ?? 0])),
     status: new Map(threads.map((thread) => [thread.id, thread.status])),
     messageIds: new Map(
       threads.map((thread) => [thread.id, new Set(thread.messages.map((message) => message.id))]),
@@ -295,7 +296,7 @@ const THREAD_EDIT_HANDLERS: {
   [K in ThreadOp['op']]: (ctx: ThreadEditContext, op: OpNamed<K>) => void
 } = {
   'thread.add': (ctx, op) => {
-    const { doc, held, now, index } = ctx
+    const { writes, held, now, index } = ctx
     const id = op.threadId ?? mintThreadId(held)
     if (held.has(id)) {
       throw new ThreadEditError(index, op.op, `thread "${id}" is already on this document`)
@@ -304,19 +305,24 @@ const THREAD_EDIT_HANDLERS: {
     if (blank !== undefined) throw new ThreadEditError(index, op.op, blank)
     const stored = storedAnchor(op.anchor, ctx.content, ctx.board)
     if ('refusal' in stored) throw new ThreadEditError(index, op.op, stored.refusal)
-    writeCommentThread(doc, {
-      id,
-      anchor: stored.anchor,
-      status: 'open',
-      createdAt: now,
-      messages: [
-        {
-          id: `${id}-m1`,
-          body: op.body,
+    writes.push({
+      op: 'writeCommentThread',
+      args: {
+        thread: {
+          id,
+          anchor: stored.anchor,
+          status: 'open',
           createdAt: now,
-          ...(op.author === undefined ? {} : { author: op.author }),
+          messages: [
+            {
+              id: `${id}-m1`,
+              body: op.body,
+              createdAt: now,
+              ...(op.author === undefined ? {} : { author: op.author }),
+            },
+          ],
         },
-      ],
+      },
     })
     held.add(id)
     setTalliedStatus(ctx.tally, id, 'open')
@@ -326,7 +332,7 @@ const THREAD_EDIT_HANDLERS: {
   },
 
   'message.add': (ctx, op) => {
-    const { doc, held, now, index } = ctx
+    const { writes, held, now, index } = ctx
     const blank = blankRefusal(op.body)
     if (blank !== undefined) throw new ThreadEditError(index, op.op, blank)
     // Refused rather than silently accepted: `writeThreadMessage` is a
@@ -358,23 +364,30 @@ const THREAD_EDIT_HANDLERS: {
     // the whole thread again on every op, under the workspace write lock.
     taken.add(id)
     ctx.tally.messageIds.set(op.threadId, taken)
-    writeThreadMessage(doc, op.threadId, {
-      id,
-      body: op.body,
-      createdAt: now,
-      ...(op.author === undefined ? {} : { author: op.author }),
+    writes.push({
+      op: 'writeThreadMessage',
+      args: {
+        threadId: op.threadId,
+        message: {
+          id,
+          body: op.body,
+          createdAt: now,
+          ...(op.author === undefined ? {} : { author: op.author }),
+        },
+      },
     })
     ctx.touched.add(op.threadId)
   },
 
   'thread.resolve': (ctx, op) => {
-    const { doc, held, index } = ctx
+    const { writes, held, index } = ctx
     if (!held.has(op.threadId)) {
       throw new ThreadEditError(index, op.op, `thread "${op.threadId}" is not on this document`)
     }
     const next = op.resolved === false ? 'open' : 'resolved'
-    if (setCommentThreadStatus(doc, op.threadId, next))
-      setTalliedStatus(ctx.tally, op.threadId, next)
+    // A held thread has its container, so the write always lands and is always tallied.
+    writes.push({ op: 'setCommentThreadStatus', args: { threadId: op.threadId, status: next } })
+    setTalliedStatus(ctx.tally, op.threadId, next)
     ctx.touched.add(op.threadId)
   },
 }
@@ -425,42 +438,44 @@ export function createThreadEditTool(deps: ServerDeps) {
 
 async function editThreads(deps: ServerDeps, input: ThreadEditInput): Promise<ThreadEditOutput> {
   await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-  const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
+  return withDocument(deps, input.workspaceId, input.documentId, async (session) => {
+    // The layer is the same plane on every format (ADR-0026 decision 6), so no
+    // op is refused for the document's KIND as such; what varies is the anchor,
+    // and `storedAnchor` holds each arm to the surface it points at.
+    const indexed = await deps.documentIndex.resolveDocumentById({
+      workspaceId: input.workspaceId,
+      documentId: input.documentId,
+    })
+    const content = await documentContentOf(session, indexed?.kind)
+    const board = boardIndexOf(content)
+    const atLoad = await annotationsOf(session)
+    const held = new Set(atLoad.map((thread) => thread.id))
+    const tally = tallyOf(atLoad, await threadMessageCountsOf(session))
+    const openAtLoad = tally.open
+    const now = new Date().toISOString()
+    const touched = new Set<string>()
+    const writes: wire.Write[] = []
+    for (const [index, op] of input.ops.entries()) {
+      applyThreadOp({ writes, content, board, held, tally, touched, now, index }, op)
+      // A reply opens nothing, so only the two ops that can are counted.
+      if (op.op === 'message.add') continue
+      const refusal = openThreadsRefusal(openAtLoad, tally.open)
+      if (refusal !== undefined) throw new ThreadEditError(index, op.op, refusal)
+    }
 
-  // The layer is the same plane on every format (ADR-0026 decision 6), so no
-  // op is refused for the document's KIND as such; what varies is the anchor,
-  // and `storedAnchor` holds each arm to the surface it points at.
-  const indexed = await deps.documentIndex.resolveDocumentById({
-    workspaceId: input.workspaceId,
-    documentId: input.documentId,
+    session.write(writes)
+    await session.save()
+    // Only a board has a presence surface to show it on; a note has no chip.
+    if (content.kind === 'spatial') {
+      const { workspaceId, documentId } = input
+      const comments = [...touched].sort()
+      announceAgentActivity(
+        deps,
+        { workspaceId, documentId, comments },
+        summarizeThreadOps(input.ops),
+      )
+    }
+
+    return { threads: await annotationsOf(session) }
   })
-  const content = readDocumentContent(doc, indexed?.kind)
-  const board = boardIndexOf(content)
-  const atLoad = readAnnotations(doc)
-  const held = new Set(atLoad.map((thread) => thread.id))
-  const tally = tallyOf(doc, atLoad)
-  const openAtLoad = tally.open
-  const now = new Date().toISOString()
-  const touched = new Set<string>()
-  for (const [index, op] of input.ops.entries()) {
-    applyThreadOp({ doc, content, board, held, tally, touched, now, index }, op)
-    // A reply opens nothing, so only the two ops that can are counted.
-    if (op.op === 'message.add') continue
-    const refusal = openThreadsRefusal(openAtLoad, tally.open)
-    if (refusal !== undefined) throw new ThreadEditError(index, op.op, refusal)
-  }
-
-  await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
-  // Only a board has a presence surface to show it on; a note has no chip.
-  if (content.kind === 'spatial') {
-    const { workspaceId, documentId } = input
-    const comments = [...touched].sort()
-    announceAgentActivity(
-      deps,
-      { workspaceId, documentId, comments },
-      summarizeThreadOps(input.ops),
-    )
-  }
-
-  return { threads: readAnnotations(doc) }
 }

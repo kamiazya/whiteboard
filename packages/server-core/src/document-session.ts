@@ -14,7 +14,12 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
-import { SnapshotNotFoundError, withEngineTrapReported } from './document-io.js'
+import {
+  announceSavedSnapshot,
+  SnapshotNotFoundError,
+  storeSnapshot,
+  withEngineTrapReported,
+} from './document-io.js'
 import type { ServerDeps } from './server-deps.js'
 
 /** What a parser must offer to type an engine answer; the engine's own `AnswerShape`. */
@@ -30,11 +35,25 @@ export interface DocumentSession {
   readonly documentId: DocumentId
   /** One named read, answered as the value the reader produced. */
   read<T>(query: wire.Query, shape: Shape<T>): Promise<T>
+  /**
+   * Applies the batch to the engine's copy as one commit, unjudged: the store
+   * a save reaches judges what it is handed, as it did the direct writes. A
+   * writer that throws leaves the copy as it was and the error is the
+   * writer's own. Nothing reaches the store until `save`.
+   */
+  write(batch: wire.Write[]): void
+  /**
+   * Stores the copy as it now stands and tells the document-written observer.
+   * The store has the whole document or nothing; the observer's failure is
+   * logged and never undoes the save.
+   */
+  save(): Promise<void>
   /** Gives the engine's copy back. Releasing twice is one release. */
   release(): void
 }
 
 function sessionOver(
+  deps: ServerDeps,
   held: RecordLease,
   workspaceId: WorkspaceId,
   documentId: DocumentId,
@@ -43,6 +62,23 @@ function sessionOver(
     workspaceId,
     documentId,
     read: (query, shape) => readRestoringRefusal(held, query, shape),
+    write(batch) {
+      if (batch.length > 0) lease.write(held, batch, { judge: 'none' })
+    },
+    async save() {
+      let snapshot: Uint8Array | undefined
+      await withEngineTrapReported(workspaceId, documentId, 'saving', async () => {
+        snapshot = lease.exportSnapshot(held)
+        await storeSnapshot(
+          deps,
+          { workspaceId, documentId },
+          snapshot,
+          lease.versionOf(held).encoded,
+        )
+      })
+      if (snapshot !== undefined)
+        await announceSavedSnapshot(deps, workspaceId, documentId, snapshot)
+    },
     release: () => held.release(),
   }
 }
@@ -104,6 +140,7 @@ async function storedBytes(
 }
 
 function openOver(
+  deps: ServerDeps,
   workspaceId: WorkspaceId,
   documentId: DocumentId,
   bytes: Uint8Array | null,
@@ -114,7 +151,7 @@ function openOver(
       peer: randomPeerId(),
       ...(bytes === null ? {} : { bytes: bytesToBase64(bytes) }),
     })
-    return sessionOver(lease.ownedLease(engine, handle), workspaceId, documentId)
+    return sessionOver(deps, lease.ownedLease(engine, handle), workspaceId, documentId)
   })
 }
 
@@ -130,7 +167,7 @@ export async function openDocument(
 ): Promise<DocumentSession> {
   const bytes = await storedBytes(deps, workspaceId, documentId)
   if (bytes === null) throw new SnapshotNotFoundError(documentId)
-  return openOver(workspaceId, documentId, bytes)
+  return openOver(deps, workspaceId, documentId, bytes)
 }
 
 /** Opens a saved document, or an empty one when none was saved yet. */
@@ -139,7 +176,7 @@ async function openOrCreateDocument(
   workspaceId: WorkspaceId,
   documentId: DocumentId,
 ): Promise<DocumentSession> {
-  return openOver(workspaceId, documentId, await storedBytes(deps, workspaceId, documentId))
+  return openOver(deps, workspaceId, documentId, await storedBytes(deps, workspaceId, documentId))
 }
 
 /**

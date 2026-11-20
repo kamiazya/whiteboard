@@ -1,11 +1,4 @@
 import {
-  readDocumentKind,
-  readMarkdownBody,
-  readProposals,
-  writeMarkdownBody,
-  writeProposal,
-} from '@kamiazya/whiteboard-loro-adapter'
-import {
   annotationIdInputSchema,
   applyPassages,
   type BodyProposedChange,
@@ -26,9 +19,9 @@ import {
   proposalSchema,
   resolveTextAnchor,
 } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
-import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
+import { type DocumentSession, withDocument } from '../document-session.js'
+import { kindOf, markdownBodyOf, proposalsOf } from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { DocumentKindMismatchError, PassageNotApplicableError } from './errors.js'
@@ -257,13 +250,13 @@ function assertAssumptionsHold(placed: readonly PlacedPassage[], body: string): 
  * absence of a translation that could disagree with itself.
  */
 async function storeBodyProposal(args: {
-  readonly deps: ServerDeps
-  readonly input: Pick<BodyEditInput, 'workspaceId' | 'documentId' | 'proposalId' | 'author'>
-  readonly doc: LoroDoc
+  readonly session: DocumentSession
+  readonly input: Pick<BodyEditInput, 'proposalId' | 'author'>
+  /** The proposals the document holds, as `session` answered them. */
+  readonly open: readonly Proposal[]
   readonly changes: readonly BodyProposedChange[]
 }): Promise<Proposal> {
-  const { deps, input, doc } = args
-  const open = readProposals(doc)
+  const { session, input, open } = args
   const continuing = open.find((existing) => existing.id === input.proposalId)
   const proposal: Proposal = {
     id: input.proposalId ?? mintProposalId(new Set(open.map((existing) => existing.id))),
@@ -278,13 +271,13 @@ async function storeBodyProposal(args: {
     changes: [...args.changes],
   }
   refuseOpenChangeGrowth(open, proposal)
-  writeProposal(doc, proposal)
-  await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
+  session.write([{ op: 'writeProposal', args: { proposal } }])
+  await session.save()
   // Read back rather than answering with the changes this call contributed.
   // The result is typed as a whole proposal, so it has to be one — and the
   // merge that produced it belongs to the container, so recomputing it here
   // would be a second implementation free to disagree with the first.
-  return readProposals(doc).find((stored) => stored.id === proposal.id) ?? proposal
+  return (await proposalsOf(session)).find((stored) => stored.id === proposal.id) ?? proposal
 }
 
 export function createBodyEditTool(deps: ServerDeps) {
@@ -301,9 +294,49 @@ export function createBodyEditTool(deps: ServerDeps) {
 
 async function editBody(deps: ServerDeps, input: BodyEditInput): Promise<BodyEditOutput> {
   await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-  const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
+  return withDocument(deps, input.workspaceId, input.documentId, (session) =>
+    editBodyOf(session, input),
+  )
+}
 
-  const kind = readDocumentKind(doc)
+async function proposeBody(
+  session: DocumentSession,
+  input: BodyEditInput,
+  body: string,
+): Promise<BodyEditOutput> {
+  // The rules are about the proposal, not about the call. A
+  // continuation merges into a stored proposal — the container keys
+  // changes by id, so an unrefused reuse REPLACES a passage the agent
+  // proposed, and a whole-proposal Adopt applies every open change at
+  // once, so an overlap spread across two calls corrupts the body just
+  // as one inside a single call would. The overlap and the limit
+  // checks therefore see what the proposal already holds; the refusal
+  // still names a change from THIS call, the one the caller can shrink.
+  //
+  // This call's own passages are placed first: a refusal of one of them
+  // then costs nothing for what the proposal holds, which can be up to
+  // `DOCUMENT_MAX_OPEN_CHANGES` passages, each a search of the body.
+  const open = await proposalsOf(session)
+  const continuing = open.find((existing) => existing.id === input.proposalId)
+  const placed = placeAll(
+    body,
+    input.ops,
+    new Set(continuing?.changes.map((change) => change.id) ?? []),
+  )
+  const existing = placeExisting(body, continuing)
+  assertDisjoint([...existing, ...placed])
+  assertWithinLimit(body, placed, applyPlaced(body, [...existing, ...placed]))
+  const proposed = await storeBodyProposal({
+    session,
+    input,
+    open,
+    changes: placed.map((entry) => entry.change),
+  })
+  return { documentId: input.documentId, applied: 0, proposed, body }
+}
+
+async function editBodyOf(session: DocumentSession, input: BodyEditInput): Promise<BodyEditOutput> {
+  const kind = await kindOf(session)
   if (kind !== undefined && kind !== 'markdown') {
     throw new DocumentKindMismatchError(
       input.documentId,
@@ -312,38 +345,9 @@ async function editBody(deps: ServerDeps, input: BodyEditInput): Promise<BodyEdi
     )
   }
 
-  const body = readMarkdownBody(doc)
+  const body = await markdownBodyOf(session)
 
-  if (input.mode !== 'apply') {
-    // The rules are about the proposal, not about the call. A
-    // continuation merges into a stored proposal — the container keys
-    // changes by id, so an unrefused reuse REPLACES a passage the agent
-    // proposed, and a whole-proposal Adopt applies every open change at
-    // once, so an overlap spread across two calls corrupts the body just
-    // as one inside a single call would. The overlap and the limit
-    // checks therefore see what the proposal already holds; the refusal
-    // still names a change from THIS call, the one the caller can shrink.
-    //
-    // This call's own passages are placed first: a refusal of one of them
-    // then costs nothing for what the proposal holds, which can be up to
-    // `DOCUMENT_MAX_OPEN_CHANGES` passages, each a search of the body.
-    const continuing = readProposals(doc).find((existing) => existing.id === input.proposalId)
-    const placed = placeAll(
-      body,
-      input.ops,
-      new Set(continuing?.changes.map((change) => change.id) ?? []),
-    )
-    const existing = placeExisting(body, continuing)
-    assertDisjoint([...existing, ...placed])
-    assertWithinLimit(body, placed, applyPlaced(body, [...existing, ...placed]))
-    const proposed = await storeBodyProposal({
-      deps,
-      input,
-      doc,
-      changes: placed.map((entry) => entry.change),
-    })
-    return { documentId: input.documentId, applied: 0, proposed, body }
-  }
+  if (input.mode !== 'apply') return await proposeBody(session, input, body)
 
   const placed = placeAll(body, input.ops)
   assertDisjoint(placed)
@@ -353,8 +357,8 @@ async function editBody(deps: ServerDeps, input: BodyEditInput): Promise<BodyEdi
   const next = applyPlaced(body, placed)
   assertWithinLimit(body, placed, next)
 
-  writeMarkdownBody(doc, next)
-  await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
+  session.write([{ op: 'writeMarkdownBody', args: { body: next } }])
+  await session.save()
 
   return { documentId: input.documentId, applied: placed.length, body: next }
 }

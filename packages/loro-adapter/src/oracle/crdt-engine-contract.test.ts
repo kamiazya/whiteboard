@@ -61,6 +61,8 @@ const NOT_ENGINE_WRITERS: Record<string, string> = {
  */
 const DERIVED_READERS: Record<string, string> = {
   documentContentWithTags: 'the answers of documentContent and coreFacets, in one read',
+  threadMessageCounts:
+    'how many messages each thread stores, readable or not, which the commentThreads answer cannot say',
   retiredCommentRows:
     'how many rows the retired plane holds: the annotations read throws exactly when that is above zero',
 }

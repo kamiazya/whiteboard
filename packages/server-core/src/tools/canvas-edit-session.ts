@@ -3,7 +3,6 @@ import {
   type LayoutCore,
   type MeasureText,
 } from '@kamiazya/whiteboard-canvas-render'
-import { readEdgeLocks, readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   applyNodePatch,
   boundsOf,
@@ -20,7 +19,6 @@ import {
   type SpatialNode,
   spatialNodeSchema,
 } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import { MCP_SCENE_APPEARANCE } from '../render/compose-canvas-scene.js'
 import { describeIssues, fail } from './canvas-edit-error.js'
@@ -209,7 +207,7 @@ export class CanvasEditSession {
 
   constructor(
     canvas: SpatialCanvas,
-    doc: LoroDoc,
+    locks: { readonly nodes: Iterable<string>; readonly edges: Iterable<string> },
     measure: MeasureText | undefined,
     core?: LayoutCore,
   ) {
@@ -217,8 +215,8 @@ export class CanvasEditSession {
     this.boardWidth = prevailingWidth(canvas.nodes)
     this.edges = [...canvas.edges]
     this.lines = [...(canvas.lines ?? [])]
-    this.nodeLocks = new Set(readNodeLocks(doc))
-    this.edgeLocks = new Set(readEdgeLocks(doc))
+    this.nodeLocks = new Set(locks.nodes)
+    this.edgeLocks = new Set(locks.edges)
     this.measure = measure
     this.core = core
   }

@@ -1,0 +1,288 @@
+{
+  "content": {
+    "kind": "spatial",
+    "canvas": {
+      "nodes": [
+        {
+          "id": "a",
+          "x": 0,
+          "y": 0,
+          "width": 200,
+          "height": 60,
+          "resource": {
+            "mimeType": "text/markdown",
+            "content": "Alpha beta"
+          }
+        },
+        {
+          "id": "b",
+          "x": 300,
+          "y": 0,
+          "width": 200,
+          "height": 60,
+          "resource": {
+            "mimeType": "text/markdown",
+            "content": "Gamma"
+          }
+        },
+        {
+          "id": "c",
+          "x": 600,
+          "y": 0,
+          "width": 200,
+          "height": 60,
+          "resource": {
+            "mimeType": "text/markdown",
+            "content": "Delta"
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e1",
+          "from": {
+            "node": "a"
+          },
+          "to": {
+            "node": "b"
+          }
+        }
+      ],
+      "tags": [
+        "kept"
+      ]
+    },
+    "skipped": 0,
+    "body": "",
+    "threads": [
+      {
+        "id": "doc",
+        "anchor": {
+          "kind": "document"
+        },
+        "status": "open",
+        "createdAt": "2026-01-02T03:04:05.000Z",
+        "messages": [
+          {
+            "id": "doc-m1",
+            "body": "whole",
+            "createdAt": "2026-01-02T03:04:05.000Z"
+          }
+        ]
+      },
+      {
+        "id": "t1",
+        "anchor": {
+          "kind": "spatial",
+          "nodeId": "a",
+          "x": 10,
+          "y": 20
+        },
+        "status": "open",
+        "createdAt": "2026-01-02T03:04:05.000Z",
+        "messages": [
+          {
+            "id": "t1-m1",
+            "body": "first",
+            "author": "agent",
+            "createdAt": "2026-01-02T03:04:05.000Z"
+          },
+          {
+            "id": "t1-m2",
+            "body": "reply one",
+            "createdAt": "2026-01-02T03:04:05.000Z"
+          },
+          {
+            "id": "t1-m3",
+            "body": "reply two",
+            "createdAt": "2026-01-02T03:04:05.000Z"
+          }
+        ]
+      },
+      {
+        "id": "t2",
+        "anchor": {
+          "kind": "text",
+          "nodeId": "a",
+          "quote": {
+            "exact": "beta"
+          },
+          "start": 6,
+          "end": 10
+        },
+        "status": "open",
+        "createdAt": "2026-01-02T03:04:05.000Z",
+        "messages": [
+          {
+            "id": "t2-m1",
+            "body": "passage",
+            "createdAt": "2026-01-02T03:04:05.000Z"
+          }
+        ]
+      }
+    ],
+    "proposals": [],
+    "nodeLocks": [],
+    "edgeLocks": [],
+    "facets": {
+      "example.sample/v1": {
+        "status": "open"
+      }
+    }
+  },
+  "saves": [
+    {
+      "chunks": 1,
+      "frontierIsTheOplogVersion": true,
+      "docRef": {
+        "kind": "document",
+        "workspaceId": "ws-1",
+        "documentId": "01H8XJZ9K5N4M3P2Q1R0S9T8V7"
+      }
+    }
+  ],
+  "events": [
+    {
+      "workspaceId": "ws-1",
+      "documentId": "01H8XJZ9K5N4M3P2Q1R0S9T8V7",
+      "path": "doc",
+      "keys": [
+        "doc",
+        "documentId",
+        "path",
+        "workspaceId"
+      ],
+      "contentOfDoc": {
+        "kind": "spatial",
+        "canvas": {
+          "nodes": [
+            {
+              "id": "a",
+              "x": 0,
+              "y": 0,
+              "width": 200,
+              "height": 60,
+              "resource": {
+                "mimeType": "text/markdown",
+                "content": "Alpha beta"
+              }
+            },
+            {
+              "id": "b",
+              "x": 300,
+              "y": 0,
+              "width": 200,
+              "height": 60,
+              "resource": {
+                "mimeType": "text/markdown",
+                "content": "Gamma"
+              }
+            },
+            {
+              "id": "c",
+              "x": 600,
+              "y": 0,
+              "width": 200,
+              "height": 60,
+              "resource": {
+                "mimeType": "text/markdown",
+                "content": "Delta"
+              }
+            }
+          ],
+          "edges": [
+            {
+              "id": "e1",
+              "from": {
+                "node": "a"
+              },
+              "to": {
+                "node": "b"
+              }
+            }
+          ],
+          "tags": [
+            "kept"
+          ]
+        },
+        "skipped": 0,
+        "body": "",
+        "threads": [
+          {
+            "id": "doc",
+            "anchor": {
+              "kind": "document"
+            },
+            "status": "open",
+            "createdAt": "2026-01-02T03:04:05.000Z",
+            "messages": [
+              {
+                "id": "doc-m1",
+                "body": "whole",
+                "createdAt": "2026-01-02T03:04:05.000Z"
+              }
+            ]
+          },
+          {
+            "id": "t1",
+            "anchor": {
+              "kind": "spatial",
+              "nodeId": "a",
+              "x": 10,
+              "y": 20
+            },
+            "status": "open",
+            "createdAt": "2026-01-02T03:04:05.000Z",
+            "messages": [
+              {
+                "id": "t1-m1",
+                "body": "first",
+                "author": "agent",
+                "createdAt": "2026-01-02T03:04:05.000Z"
+              },
+              {
+                "id": "t1-m2",
+                "body": "reply one",
+                "createdAt": "2026-01-02T03:04:05.000Z"
+              },
+              {
+                "id": "t1-m3",
+                "body": "reply two",
+                "createdAt": "2026-01-02T03:04:05.000Z"
+              }
+            ]
+          },
+          {
+            "id": "t2",
+            "anchor": {
+              "kind": "text",
+              "nodeId": "a",
+              "quote": {
+                "exact": "beta"
+              },
+              "start": 6,
+              "end": 10
+            },
+            "status": "open",
+            "createdAt": "2026-01-02T03:04:05.000Z",
+            "messages": [
+              {
+                "id": "t2-m1",
+                "body": "passage",
+                "createdAt": "2026-01-02T03:04:05.000Z"
+              }
+            ]
+          }
+        ],
+        "proposals": [],
+        "nodeLocks": [],
+        "edgeLocks": [],
+        "facets": {
+          "example.sample/v1": {
+            "status": "open"
+          }
+        }
+      }
+    }
+  ]
+}
