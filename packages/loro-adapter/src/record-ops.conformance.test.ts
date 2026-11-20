@@ -13,7 +13,7 @@ import { loroDocKind } from './legacy-record-kind.js'
 import { legacyRecordOps } from './legacy-record-ops.js'
 import { writeMarkdownBody } from './markdown-body.js'
 import type { RecordKind } from './record-kind.js'
-import type { RecordOps } from './record-ops.js'
+import { bindRecordOps, type RecordOps } from './record-ops.js'
 import {
   BOARD,
   documentNode,
@@ -163,6 +163,14 @@ describe('a judged workspace-sync import through RecordOps', () => {
         { parse: (value) => value as Array<{ documentId: string }> },
       )
       expect(touched.map(({ documentId }) => documentId)).toEqual([NOTE])
+      const now = held.ops.readNow(
+        record,
+        { query: 'touchedSince', args: { since } } as wire.Query,
+        {
+          parse: (value) => value as typeof touched,
+        },
+      )
+      expect(now).toEqual(touched)
     })
   })
 })
@@ -363,5 +371,28 @@ describe('the documents removed since a version, through RecordOps', () => {
       const ids = readWorkspaceDocuments(live).map((entry) => entry.documentId)
       expect(ids.sort()).toEqual([D1, D2])
     }
+
+describe('a record bound to its operations and its save', () => {
+  it('saves the record the session wrote to, and answers its own version and reads', async () => {
+    await onEachKind(async (held, record) => {
+      const saved: unknown[] = []
+      const session = bindRecordOps(held.ops, record, async (each) => {
+        saved.push(each)
+      })
+      const before = session.version().encoded
+      session.write([
+        { op: 'setWorkspaceDocumentName', args: { documentId: BOARD, name: 'Board' } },
+      ])
+      await session.save()
+      expect(saved).toEqual([record])
+      expect(session.version().encoded).not.toEqual(before)
+      const documents = session.readNow(
+        { query: 'documents' },
+        {
+          parse: (value) => value as Array<{ documentId: string; name?: string }>,
+        },
+      )
+      expect(documents.find((entry) => entry.documentId === BOARD)?.name).toBe('Board')
+    })
   })
 })

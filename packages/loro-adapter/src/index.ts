@@ -94,7 +94,12 @@ export {
   writeProposal,
 } from './proposals.js'
 export { RecordBytesRejectedError, type RecordKind } from './record-kind.js'
-export type { RecordOps, RecordVersion } from './record-ops.js'
+export {
+  bindRecordOps,
+  type RecordOps,
+  type RecordSession,
+  type RecordVersion,
+} from './record-ops.js'
 export { documentsRemovedSince, type RemovedDocument } from './removed-documents.js'
 export { ReservedKeyWriteError } from './reserved-key-write.js'
 export { RetiredStoredShapeError, retiredStoredShapeIn } from './retired-stored-shape.js'

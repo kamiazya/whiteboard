@@ -5,6 +5,7 @@ import {
   moveView,
   type RecordLease,
   read,
+  readNow,
   removedSince,
   versionOf,
   viewAt,
@@ -14,6 +15,7 @@ import {
 /** `RecordOps` over an engine lease: every operation is the engine's own call. */
 export const leaseOps: RecordOps<RecordLease> = {
   read,
+  readNow,
   write: (record, batch) => write(record, batch, { judge: 'none' }),
   importJudged: importBytes,
   versionOf,

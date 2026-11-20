@@ -27,6 +27,8 @@ export interface RecordVersion {
  */
 export interface RecordOps<R> {
   read<T>(record: R, query: wire.Query, shape: AnswerShape<T>): Promise<T>
+  /** `read` answered at once, for every query but `fileReferences`, which asks the keeper. */
+  readNow<T>(record: R, query: wire.Query, shape: AnswerShape<T>): T
   /** Applies the batch as one change, unjudged: the keeper judges what it is pushed. */
   write(record: R, batch: wire.Write[]): wire.MutationApplied
   importJudged(record: R, bytes: Uint8Array, judge: wire.ImportJudge): wire.MutationResult
@@ -43,4 +45,36 @@ export interface RecordOps<R> {
   moveView(view: R, frontiers: Uint8Array): void
   /** One document as a document of its own, or `null` when the record holds none. */
   exportProjection(record: R, documentId: string): Uint8Array | null
+}
+
+/**
+ * One record bound to the operations that read and write it and to the save
+ * that persists it, with the holder's own type hidden. A caller that must stay
+ * ignorant of whether the record is a `LoroDoc` or a lease (an operation in
+ * `server-core`, which sees the daemon only through its seams) holds this.
+ */
+export interface RecordSession {
+  version(): RecordVersion
+  importJudged(bytes: Uint8Array, judge: wire.ImportJudge): wire.MutationResult
+  read<T>(query: wire.Query, shape: AnswerShape<T>): Promise<T>
+  readNow<T>(query: wire.Query, shape: AnswerShape<T>): T
+  write(batch: wire.Write[]): wire.MutationApplied
+  /** Persists what the session changed, announcing it as every save does. */
+  save(): Promise<void>
+}
+
+/** Binds `record` to `ops` and the `save` that persists it. */
+export function bindRecordOps<R>(
+  ops: RecordOps<R>,
+  record: R,
+  save: (record: R) => Promise<void>,
+): RecordSession {
+  return {
+    version: () => ops.versionOf(record),
+    importJudged: (bytes, judge) => ops.importJudged(record, bytes, judge),
+    read: (query, shape) => ops.read(record, query, shape),
+    readNow: (query, shape) => ops.readNow(record, query, shape),
+    write: (batch) => ops.write(record, batch),
+    save: () => save(record),
+  }
 }
