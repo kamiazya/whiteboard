@@ -1,12 +1,13 @@
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { reconcileSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, onTestFinished, test } from 'vitest'
-import { loadDocument, SnapshotNotFoundError, saveDocumentBodySnapshot } from './document-io.js'
+import { loadDocument, SnapshotNotFoundError, saveDocumentSnapshot } from './document-io.js'
 import { setLogSink } from './log.js'
+import type { ServerDeps } from './server-deps.js'
 import { FakeDocumentStore, seedDoc } from './test-utils/fake-document-store.js'
 import { makeTestDeps } from './test-utils/make-test-deps.js'
 import { unusedDocumentIndex } from './test-utils/unused-document-index.js'
@@ -18,6 +19,19 @@ const EMPTY: SpatialCanvas = { nodes: [], edges: [] }
 
 const canvasDeps = (documentStore: FakeDocumentStore) =>
   makeTestDeps({ documentStore, documentIndex: unusedDocumentIndex() })
+
+/** The save a patched canvas takes: the visible diff of the two canvases, then the snapshot. */
+async function saveDocumentBodySnapshot(
+  deps: ServerDeps,
+  workspaceId: string,
+  documentId: string,
+  doc: LoroDoc,
+  prev: SpatialCanvas,
+  next: SpatialCanvas,
+): Promise<void> {
+  reconcileSpatialCanvas(doc, prev, next)
+  await saveDocumentSnapshot(deps, workspaceId, documentId, doc)
+}
 
 describe('document-io', () => {
   test('loadDocument throws SnapshotNotFoundError when no snapshot exists', async () => {

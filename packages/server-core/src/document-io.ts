@@ -1,8 +1,4 @@
-import {
-  isEngineTrap,
-  readSpatialCanvasWithSkipped,
-  reconcileSpatialCanvas,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { isEngineTrap, readSpatialCanvasWithSkipped } from '@kamiazya/whiteboard-loro-adapter'
 import { type DocumentId, messageOf, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   chunkSnapshot,
@@ -338,34 +334,4 @@ async function placementOf(
   } catch {
     return undefined
   }
-}
-
-/**
- * Saves a patched canvas doc. `prev` is the canvas the patch started from
- * (what `loadDocument` answered) and `next` the whole canvas after it.
- *
- * The write is a visible diff of the two (`reconcileSpatialCanvas`), never a
- * resync from `next` alone: `readSpatialCanvas` skips every stored record its
- * strict schema refuses — typically one a newer client wrote — and a resync
- * would delete each of them as an op that ships to every replica.
- *
- * This is a read-modify-write with no optimistic-concurrency check: two
- * concurrent patches against the same canvas race, and the later
- * `saveSnapshot` call wins outright — the earlier patch is silently lost
- * rather than merged. An accepted limitation, not an oversight.
- *
- * ponytail: last-write-wins on the whole canvas; a per-element compare-and-set
- * if concurrent patching turns out to be a real pattern rather than a race
- * two agents hit occasionally.
- */
-export async function saveDocumentBodySnapshot(
-  deps: ServerDeps,
-  workspaceId: string,
-  documentId: DocumentId,
-  doc: LoroDoc,
-  prev: SpatialCanvas,
-  next: SpatialCanvas,
-): Promise<void> {
-  reconcileSpatialCanvas(doc, prev, next)
-  await saveDocumentSnapshot(deps, workspaceId, documentId, doc)
 }

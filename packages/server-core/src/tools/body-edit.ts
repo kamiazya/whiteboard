@@ -299,6 +299,42 @@ async function editBody(deps: ServerDeps, input: BodyEditInput): Promise<BodyEdi
   )
 }
 
+async function proposeBody(
+  session: DocumentSession,
+  input: BodyEditInput,
+  body: string,
+): Promise<BodyEditOutput> {
+  // The rules are about the proposal, not about the call. A
+  // continuation merges into a stored proposal — the container keys
+  // changes by id, so an unrefused reuse REPLACES a passage the agent
+  // proposed, and a whole-proposal Adopt applies every open change at
+  // once, so an overlap spread across two calls corrupts the body just
+  // as one inside a single call would. The overlap and the limit
+  // checks therefore see what the proposal already holds; the refusal
+  // still names a change from THIS call, the one the caller can shrink.
+  //
+  // This call's own passages are placed first: a refusal of one of them
+  // then costs nothing for what the proposal holds, which can be up to
+  // `DOCUMENT_MAX_OPEN_CHANGES` passages, each a search of the body.
+  const open = await proposalsOf(session)
+  const continuing = open.find((existing) => existing.id === input.proposalId)
+  const placed = placeAll(
+    body,
+    input.ops,
+    new Set(continuing?.changes.map((change) => change.id) ?? []),
+  )
+  const existing = placeExisting(body, continuing)
+  assertDisjoint([...existing, ...placed])
+  assertWithinLimit(body, placed, applyPlaced(body, [...existing, ...placed]))
+  const proposed = await storeBodyProposal({
+    session,
+    input,
+    open,
+    changes: placed.map((entry) => entry.change),
+  })
+  return { documentId: input.documentId, applied: 0, proposed, body }
+}
+
 async function editBodyOf(session: DocumentSession, input: BodyEditInput): Promise<BodyEditOutput> {
   const kind = await kindOf(session)
   if (kind !== undefined && kind !== 'markdown') {
@@ -311,37 +347,7 @@ async function editBodyOf(session: DocumentSession, input: BodyEditInput): Promi
 
   const body = await markdownBodyOf(session)
 
-  if (input.mode !== 'apply') {
-    // The rules are about the proposal, not about the call. A
-    // continuation merges into a stored proposal — the container keys
-    // changes by id, so an unrefused reuse REPLACES a passage the agent
-    // proposed, and a whole-proposal Adopt applies every open change at
-    // once, so an overlap spread across two calls corrupts the body just
-    // as one inside a single call would. The overlap and the limit
-    // checks therefore see what the proposal already holds; the refusal
-    // still names a change from THIS call, the one the caller can shrink.
-    //
-    // This call's own passages are placed first: a refusal of one of them
-    // then costs nothing for what the proposal holds, which can be up to
-    // `DOCUMENT_MAX_OPEN_CHANGES` passages, each a search of the body.
-    const open = await proposalsOf(session)
-    const continuing = open.find((existing) => existing.id === input.proposalId)
-    const placed = placeAll(
-      body,
-      input.ops,
-      new Set(continuing?.changes.map((change) => change.id) ?? []),
-    )
-    const existing = placeExisting(body, continuing)
-    assertDisjoint([...existing, ...placed])
-    assertWithinLimit(body, placed, applyPlaced(body, [...existing, ...placed]))
-    const proposed = await storeBodyProposal({
-      session,
-      input,
-      open,
-      changes: placed.map((entry) => entry.change),
-    })
-    return { documentId: input.documentId, applied: 0, proposed, body }
-  }
+  if (input.mode !== 'apply') return await proposeBody(session, input, body)
 
   const placed = placeAll(body, input.ops)
   assertDisjoint(placed)
