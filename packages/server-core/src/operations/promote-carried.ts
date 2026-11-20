@@ -9,20 +9,14 @@
  * keeps nothing; written after the merge, and read back, so the answer says
  * what the daemon holds rather than what was asked for.
  */
-import {
-  contentDigestOfDocument,
-  countSpatialNodes,
-  judgeStateWithinTextLimits,
-  projectWorkspaceDocument,
+import type {
+  RecordSession,
+  RecordView,
   readTrashEntries,
-  readWorkspaceDocuments,
-  resolveWorkspaceDocumentById,
-  statedKindSplit,
-  stateSize,
+  SyncTextBreach,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { compareCodeUnit } from '@kamiazya/whiteboard-model'
+import { bytesToBase64, compareCodeUnit, type DocumentKind } from '@kamiazya/whiteboard-model'
 import type { BlobStore } from '@kamiazya/whiteboard-ports'
-import { decodeFrontiers, type LoroDoc } from 'loro-crdt'
 import type { AdoptedVersion } from '../server-deps.js'
 import {
   PROMOTE_MAX_JUDGED_SIZE,
@@ -71,16 +65,23 @@ async function sha256Hex(bytes: Uint8Array): Promise<string> {
   return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
+// The engine answers in the shapes the loro-adapter readers return; this
+// package asserts the type and holds no schema of its own for it.
+const assertedAs = <T>() => ({ parse: (value: unknown) => value as T })
+
+type TrashEntries = ReturnType<typeof readTrashEntries>
+
 /**
  * Bytes are admitted only under the digest the record's own entry names, so
  * a carried blob can bring back exactly the document that was deleted and
  * never stand in for another.
  */
 async function judgeTrash(
-  incoming: LoroDoc,
+  incoming: RecordSession,
   trash: readonly CarriedTrashBytes[],
 ): Promise<string | null> {
-  const entries = new Map(readTrashEntries(incoming).map((entry) => [entry.documentId, entry]))
+  const held = await incoming.read({ query: 'trash' }, assertedAs<TrashEntries>())
+  const entries = new Map(held.map((entry) => [entry.documentId, entry]))
   for (const carried of trash) {
     const entry = entries.get(carried.documentId)
     if (entry === undefined) {
@@ -93,82 +94,86 @@ async function judgeTrash(
   return null
 }
 
-/** One spelling per point: a frontier's ids in a fixed order, whatever order its bytes listed them in. */
-function pointKey(frontiers: ReturnType<typeof decodeFrontiers>): string {
-  return frontiers
-    .map(({ peer, counter }) => `${peer}:${counter}`)
-    .sort()
-    .join(',')
-}
-
 /** What judging one document at one point answers, which every row naming both shares. */
 type PointJudgement = Pick<AdoptedVersion, 'elementCount' | 'contentDigest'>
 
-/** The frontier a row names, or `undefined` for bytes that are not one. */
-function decodedPoint(frontiers: Uint8Array): ReturnType<typeof decodeFrontiers> | undefined {
-  try {
-    return decodeFrontiers(frontiers)
-  } catch {
-    return undefined
-  }
-}
-
-/** One fork of the incoming record, moved only when asked for a point it is not already at. */
-function pastReader(incoming: LoroDoc) {
-  const past = incoming.fork()
+/** One view of the incoming record, moved only when asked for a point it is not already at. */
+function pastReader(incoming: RecordSession) {
+  let view: RecordView | undefined
   let at: string | undefined
   return {
-    past,
-    /** Whether the record holds `point`; the fork is at it when it does. */
-    moveTo(point: string, frontiers: ReturnType<typeof decodeFrontiers>): boolean {
+    /** Whether the record holds `point`; the view is at it when it does. */
+    moveTo(point: string, frontiers: Uint8Array): boolean {
       if (at === point) return true
       try {
-        past.checkout(frontiers)
+        if (view === undefined) view = incoming.view(frontiers)
+        else view.moveTo(frontiers)
       } catch {
         return false
       }
       at = point
       return true
     },
+    read: <T>(query: Parameters<RecordView['read']>[0], shape: { parse(value: unknown): T }) => {
+      if (view === undefined) throw new TypeError('the view is at no point yet')
+      return view.read(query, shape)
+    },
+    release() {
+      view?.release()
+    },
   }
+}
+
+/** The index row one document has in the record, as the node records it. */
+interface PastEntry {
+  readonly path: string
+  readonly kind: DocumentKind
 }
 
 /**
  * The document a row names, judged as the sync surface would judge it
- * written whole at the point `past` is checked out at: a state past a limit
- * is thrown as the same `TextBreachRefusalError` the merge raises, naming
- * the document.
+ * written whole at the point `past` is at: a state past a limit is thrown as
+ * the same `TextBreachRefusalError` the merge raises, naming the document.
  *
  * `charge` is told the projection's size BEFORE the size judgement, the
  * dearer half, and answers whether the budget still holds it.
  */
-function judgeDocumentAt(
-  past: LoroDoc,
+async function judgeDocumentAt(
+  past: ReturnType<typeof pastReader>,
   version: Pick<CarriedVersion, 'id' | 'documentId'>,
   charge: (size: number) => boolean,
-): PointJudgement | { readonly reason: string } | 'over-budget' {
-  const content = projectWorkspaceDocument(past, version.documentId)
-  if (content === null) {
+): Promise<PointJudgement | { readonly reason: string } | 'over-budget'> {
+  const { documentId } = version
+  const at = { args: { documentId } }
+  const entry = await past.read(
+    { query: 'workspaceDocumentEntry', ...at },
+    assertedAs<PastEntry | null>(),
+  )
+  if (entry === null) {
     return {
       reason: `Version "${version.id}" names a document the record did not hold at that point.`,
     }
   }
-  if (!charge(stateSize(content))) return 'over-budget'
-  const breach = judgeStateWithinTextLimits(content)
-  if (breach !== null) {
-    const at = readWorkspaceDocuments(past).find((entry) => entry.documentId === version.documentId)
-    throw textBreachRefusal(breach, at === undefined ? undefined : { path: at.path })
+  if (!charge(await past.read({ query: 'stateSize', ...at }, assertedAs<number>()))) {
+    return 'over-budget'
   }
+  const breach = await past.read(
+    { query: 'textLimitBreach', ...at },
+    assertedAs<SyncTextBreach | null>(),
+  )
+  if (breach !== null) throw textBreachRefusal(breach, { path: entry.path })
   // A restore writes the envelope back, so one stating another kind than its
   // node records at that point would bring the split with it.
-  const recorded = resolveWorkspaceDocumentById(past, version.documentId)?.kind
-  const split = statedKindSplit(content, recorded)
-  if (split !== null) {
-    throw new DocumentKindChangedError(split.recorded, split.kind, version.documentId)
+  const stated = await past.read(
+    { query: 'documentKind', ...at },
+    assertedAs<DocumentKind | undefined>(),
+  )
+  if (stated !== undefined && stated !== entry.kind) {
+    throw new DocumentKindChangedError(entry.kind, stated, documentId)
   }
   return {
-    elementCount: countSpatialNodes(content),
-    contentDigest: contentDigestOfDocument(content),
+    elementCount: await past.read({ query: 'spatialNodeCount', ...at }, assertedAs<number>()),
+    contentDigest: await past.read({ query: 'contentDigest', ...at }, assertedAs<string>()),
   }
 }
 
@@ -185,47 +190,50 @@ function yieldToLoop(): Promise<void> {
   })
 }
 
-/** A carried row with its point decoded, and where that point sits in the record's history. */
+/** A carried row with its point placed in the record's history. */
 interface PlacedRow {
   readonly index: number
-  readonly version: Omit<CarriedVersion, 'frontiers'>
-  readonly decoded: ReturnType<typeof decodeFrontiers>
+  readonly version: CarriedVersion
+  /** The point in one spelling, whatever order or form its bytes listed it in. */
   readonly point: string
   /** Ops the record holds up to the point: a linear extension of causal order. */
   readonly position: number
 }
 
 /**
- * Each row's point, decoded and placed, in the caller's order — so the row
- * a refusal names is the first unheld one the caller sent.
+ * Each row's point, placed in the caller's order — so the row a refusal names
+ * is the first unheld one the caller sent. The record itself says what a
+ * point is (`versionAt`): bytes that are no frontier and a point it does not
+ * hold are both "not held".
  */
 function placeRows(
-  incoming: LoroDoc,
+  incoming: RecordSession,
   versions: readonly CarriedVersion[],
 ): { readonly id: string } | readonly PlacedRow[] {
-  const positions = new Map<string, number>()
-  const placed: PlacedRow[] = []
-  for (const [index, { frontiers, ...version }] of versions.entries()) {
-    const decoded = decodedPoint(frontiers)
-    if (decoded === undefined) return { id: version.id }
-    const point = pointKey(decoded)
-    let position = positions.get(point)
-    if (position === undefined) {
+  const placed = new Map<string, { point: string; position: number }>()
+  const rows: PlacedRow[] = []
+  for (const [index, version] of versions.entries()) {
+    const spelled = bytesToBase64(version.frontiers)
+    let at = placed.get(spelled)
+    if (at === undefined) {
       try {
-        position = 0
-        for (const count of incoming.frontiersToVV(decoded).toJSON().values()) position += count
+        const held = incoming.versionAt(version.frontiers)
+        at = {
+          point: bytesToBase64(held.encodedFrontiers),
+          position: held.entries.reduce((sum, { counter }) => sum + counter, 0),
+        }
       } catch {
         return { id: version.id }
       }
-      positions.set(point, position)
+      placed.set(spelled, at)
     }
-    placed.push({ index, version, decoded, point, position })
+    rows.push({ index, version, ...at })
   }
-  return placed
+  return rows
 }
 
 /**
- * Each frontier checked out of ONE fork of the incoming record — a fork
+ * Each frontier checked out of ONE view of the incoming record — a view
  * copies the whole workspace, a checkout moves the one it has. The count and
  * digest come from that state, so a row cannot describe content it does not
  * point at.
@@ -235,42 +243,55 @@ function placeRows(
  * surface would judge it written whole (`judgeDocumentAt`).
  *
  * A document at a point is judged once, however many rows name it, and rows
- * are judged in history order, so the fork crosses the history once however
+ * are judged in history order, so the view crosses the history once however
  * the caller ordered them; the answer keeps the caller's order. Every
  * distinct judgement is charged to `budget`, in `stateSize` of each projection, so rows
  * naming distinct points cannot buy a projection each without bound.
  *
- * Within the budget a move may still hold hundreds of judgements, each
- * synchronous, so the loop is handed back once a slice of
- * `JUDGE_SLICE_MS` has been spent: the stall another request waits behind
- * is one judgement, not the move. Nothing shared is read across the yield —
- * the fork is this call's own, and `incoming` is the request's record,
- * merged only after this returns.
+ * Within the budget a move may still hold hundreds of judgements, so the loop
+ * is handed back once a slice of `JUDGE_SLICE_MS` has been spent: the stall
+ * another request waits behind is one judgement, not the move. Nothing shared
+ * is read across the yield — the view is this call's own, and `incoming` is
+ * the request's record, merged only after this returns.
  */
 async function judgeVersions(
-  incoming: LoroDoc,
+  incoming: RecordSession,
   versions: readonly CarriedVersion[],
   budget: number,
 ): Promise<{ readonly reason: string } | 'over-budget' | { readonly rows: AdoptedVersion[] }> {
   if (versions.length === 0) return { rows: [] }
-  const unheld = (id: string) => ({
-    reason: `Version "${id}" names a point the record does not hold.`,
-  })
   const placed = placeRows(incoming, versions)
   if ('id' in placed) return unheld(placed.id)
   const ordered = [...placed].sort(
     (a, b) => a.position - b.position || compareCodeUnit(a.point, b.point) || a.index - b.index,
   )
   const reader = pastReader(incoming)
+  try {
+    return await judgeInOrder(reader, ordered, budget)
+  } finally {
+    reader.release()
+  }
+}
+
+const unheld = (id: string) => ({
+  reason: `Version "${id}" names a point the record does not hold.`,
+})
+
+/** The placed rows judged in the order given, each distinct (point, document) once, charged to `budget`. */
+async function judgeInOrder(
+  reader: ReturnType<typeof pastReader>,
+  ordered: readonly PlacedRow[],
+  budget: number,
+): Promise<{ readonly reason: string } | 'over-budget' | { readonly rows: AdoptedVersion[] }> {
   const judged = new Map<string, PointJudgement>()
-  const rows: AdoptedVersion[] = new Array(versions.length)
+  const rows: AdoptedVersion[] = new Array(ordered.length)
   let spent = 0
   const charge = (size: number): boolean => {
     spent += size
     return spent <= budget
   }
   let sliceStarted = Date.now()
-  for (const { index, version, decoded, point } of ordered) {
+  for (const { index, version, point } of ordered) {
     const key = `${point}\u0000${version.documentId}`
     let judgement = judged.get(key)
     if (judgement === undefined) {
@@ -278,19 +299,19 @@ async function judgeVersions(
         await yieldToLoop()
         sliceStarted = Date.now()
       }
-      if (!reader.moveTo(point, decoded)) return unheld(version.id)
-      const answer = judgeDocumentAt(reader.past, version, charge)
+      if (!reader.moveTo(point, version.frontiers)) return unheld(version.id)
+      const answer = await judgeDocumentAt(reader, version, charge)
       if (answer === 'over-budget' || 'reason' in answer) return answer
       judgement = answer
       judged.set(key, judgement)
     }
-    rows[index] = { ...version, frontiers: decoded, ...judgement }
+    rows[index] = { ...version, ...judgement }
   }
   return { rows }
 }
 
 export async function judgeCarried(
-  incoming: LoroDoc,
+  incoming: RecordSession,
   carried: {
     readonly trash: readonly CarriedTrashBytes[]
     readonly versions: readonly CarriedVersion[]
@@ -329,7 +350,7 @@ export async function judgeCarried(
  */
 export async function storeCarriedTrash(
   blobs: BlobStore,
-  merged: LoroDoc,
+  merged: RecordSession,
   trash: readonly CarriedTrashBytes[],
 ): Promise<string[]> {
   for (const carried of trash) {
@@ -340,7 +361,7 @@ export async function storeCarriedTrash(
   }
   const carriedIds = new Set(trash.map((carried) => carried.documentId))
   const stored: string[] = []
-  for (const entry of readTrashEntries(merged)) {
+  for (const entry of await merged.read({ query: 'trash' }, assertedAs<TrashEntries>())) {
     if (!carriedIds.has(entry.documentId)) continue
     if ((await blobs.has({ ref: entry.blob })).exists) stored.push(entry.documentId)
   }

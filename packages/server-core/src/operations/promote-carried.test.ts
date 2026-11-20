@@ -19,12 +19,13 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { CANVAS_MAX_NODES, MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { encodeFrontiers, LoroDoc } from 'loro-crdt'
+import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import type { WorkspaceDocuments } from '../server-deps.js'
 import { FakeBlobStore } from '../test-utils/fake-blob-store.js'
 import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
+import { leasedSession } from '../test-utils/leased-session.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
 import { PROMOTE_MAX_TRASH, PROMOTE_MAX_VERSIONS } from '../versions/version-entry.js'
 import { judgeCarried } from './promote-carried.js'
@@ -169,7 +170,7 @@ describe('promoteWorkspace, carried planes', () => {
       edges: [],
     })
     doc.commit()
-    const judged = await judgeCarried(doc, {
+    const judged = await judgeCarried(await leasedSession(doc.export({ mode: 'snapshot' })), {
       trash: [],
       versions: [
         {
@@ -195,7 +196,7 @@ describe('promoteWorkspace, carried planes', () => {
 
     // Checked out of the MERGED record, which holds ops of both peers.
     const past = target.workspaceDoc.fork()
-    past.checkout(adopted.frontiers)
+    past.checkout(decodeFrontiers(adopted.frontiers))
     const content = projectWorkspaceDocument(past, ROADMAP_ID)
     expect(content === null ? null : readMarkdownBody(content)).toBe('# as drafted')
     // Derived on the daemon from that state, not taken from the sender.
@@ -417,8 +418,7 @@ it('refuses a carried version whose envelope names another kind than its node, m
 describe('judgeCarried, what judging the carried versions costs', () => {
   it('refuses one version past the cap before checking any out', async () => {
     const record = await browserRecord()
-    const incoming = new LoroDoc()
-    incoming.import(record.snapshot)
+    const incoming = await leasedSession(record.snapshot)
     const [version] = record.versions
     if (version === undefined) throw new Error('no version')
     const rows = Array.from({ length: PROMOTE_MAX_VERSIONS + 1 }, (_, i) => ({
@@ -442,8 +442,7 @@ describe('judgeCarried, what judging the carried versions costs', () => {
 
   it('refuses one trashed document past the cap before hashing any', async () => {
     const record = await browserRecord()
-    const incoming = new LoroDoc()
-    incoming.import(record.snapshot)
+    const incoming = await leasedSession(record.snapshot)
     const [carried] = record.trash
     if (carried === undefined) throw new Error('no trash')
     const digest = vi.spyOn(globalThis.crypto.subtle, 'digest')
@@ -466,8 +465,7 @@ describe('judgeCarried, what judging the carried versions costs', () => {
 
   it('answers every row naming one point from one judgement of it', async () => {
     const record = await browserRecord()
-    const incoming = new LoroDoc()
-    incoming.import(record.snapshot)
+    const incoming = await leasedSession(record.snapshot)
     const [version] = record.versions
     if (version === undefined) throw new Error('no version')
     const rows = Array.from({ length: 1000 }, (_, i) => ({ ...version, id: `row-${i}` }))
@@ -479,8 +477,7 @@ describe('judgeCarried, what judging the carried versions costs', () => {
 
   it('counts the checkouts 1000 rows naming one frontier cost', async () => {
     const record = await browserRecord()
-    const incoming = new LoroDoc()
-    incoming.import(record.snapshot)
+    const incoming = await leasedSession(record.snapshot)
     const [version] = record.versions
     if (version === undefined) throw new Error('no version')
     const rows = Array.from({ length: 1000 }, (_, i) => ({ ...version, id: `row-${i}` }))
@@ -512,8 +509,7 @@ describe('judgeCarried, what judging the carried versions costs', () => {
     const point = encodeFrontiers(doc.oplogFrontiers())
     writeMarkdownBody(documentContainers(doc, ROADMAP_ID), '# later')
     doc.commit()
-    const incoming = new LoroDoc()
-    incoming.import(doc.export({ mode: 'snapshot' }))
+    const incoming = await leasedSession(doc.export({ mode: 'snapshot' }))
     const rows = [ROADMAP_ID, BOARD_ID].map((documentId) => ({
       id: `v-${documentId}`,
       documentId,

@@ -1,12 +1,14 @@
 import {
-  descendsFromWorkspaceTree,
-  holdsContainerCreation,
-  readWorkspaceDocuments,
-  WORKSPACE_TREE_KEY,
+  bindRecordOps,
+  leaseKind,
+  leaseOps,
+  loadCrdtEngine,
+  type RecordLease,
+  type RecordSession,
+  type readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { WORKSPACE_MAX_DOCUMENTS } from '@kamiazya/whiteboard-model'
-import { type ContainerID, LoroDoc, LoroText, type TreeID } from 'loro-crdt'
-import { DocumentEngineTrapError, runEvictingOnEngineTrap } from '../document-io.js'
+import { DocumentEngineTrapError, runEvictingOnEngineTrapLater } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { OperatorInfo } from '../versions/version-entry.js'
 import { TooManyVersionsError } from '../versions/version-refusal.js'
@@ -62,25 +64,11 @@ export type PromoteWorkspaceResult =
       versionsKept: readonly string[]
     }
 
-/**
- * The promoted document `container` lives under, or `undefined` when it is not
- * inside one — a body, a canvas's node or edge map, or a thread's messages
- * each sit below their document's workspace-tree node, and a content key
- * holding the wrong kind is named by the node's own map.
- */
-function promotedDocumentAt(
-  incoming: LoroDoc,
-  container: ContainerID,
-): { readonly path: string } | undefined {
-  // A root of another kind also named `tree` shares the tree's path, and the
-  // segment after it is then no node id: looking one up panics the engine.
-  if (!descendsFromWorkspaceTree(incoming, container)) return undefined
-  const path = incoming.getPathToContainer(container)
-  if (path === undefined || path.length < 2) return undefined
-  const node = incoming.getTree(WORKSPACE_TREE_KEY).getNodeByID(path[1] as TreeID)
-  const documentId = node?.data.get('documentId')
-  return readWorkspaceDocuments(incoming).find((each) => each.documentId === documentId)
-}
+// The engine answers in the shapes the loro-adapter readers return; this
+// package asserts the type and holds no schema of its own for it.
+const assertedAs = <T>() => ({ parse: (value: unknown) => value as T })
+
+type DocumentEntries = ReturnType<typeof readWorkspaceDocuments>
 
 /**
  * A size refusal from the merge, re-raised naming the promoted document it is
@@ -90,33 +78,30 @@ function promotedDocumentAt(
  * for a run found only in the history tells a person the document they see is
  * not the problem.
  */
-function namedInRecord(incoming: LoroDoc, err: unknown): unknown {
+async function namedInRecord(incoming: RecordSession, err: unknown): Promise<unknown> {
   if (!(err instanceof TextBreachRefusalError)) return err
   // A runs cost is summed over the whole update, so the container holding the
   // longest run is no more its cause than any other document the update wrote.
   if (err.breach.shape === 'runs') return textBreachRefusal(err.breach)
-  const { container } = err.breach
-  // A container whose creating op the record lacks has no parent, and asking
-  // the engine for its path panics rather than answering `undefined`.
-  if (!holdsContainerCreation(incoming, container)) return err
-  const entry = promotedDocumentAt(incoming, container)
-  if (entry === undefined) return err
-  const held = incoming.getContainerById(container)
+  const place = await incoming.read(
+    { query: 'containerPlace', args: { container: err.breach.container } },
+    assertedAs<{ path: string; textLength?: number } | null>(),
+  )
+  if (place === null) return err
   return textBreachRefusal(err.breach, {
-    path: entry.path,
-    ...(held instanceof LoroText && { bodyChars: held.length }),
+    path: place.path,
+    ...(place.textLength !== undefined && { bodyChars: place.textLength }),
   })
 }
 
 /**
- * The promoted record as a throwaway instance, or `null` for bytes that are
- * not a Loro snapshot. A trap is thrown, never answered as malformed: the
+ * The promoted record as a throwaway engine lease, or `null` for bytes that
+ * are not a Loro snapshot. A trap is thrown, never answered as malformed: the
  * bytes may be well-formed.
  */
-function readIncoming(input: PromoteWorkspaceInput): LoroDoc | null {
-  const incoming = new LoroDoc()
+async function readIncoming(input: PromoteWorkspaceInput): Promise<RecordLease | null> {
   try {
-    runEvictingOnEngineTrap(
+    return await runEvictingOnEngineTrapLater(
       {
         subject: 'the promoted workspace record',
         fields: { workspaceId: input.workspaceId, updateBytes: input.snapshot.byteLength },
@@ -124,13 +109,12 @@ function readIncoming(input: PromoteWorkspaceInput): LoroDoc | null {
         evict() {},
       },
       'importing an update into',
-      () => incoming.import(input.snapshot),
+      () => leaseKind(loadCrdtEngine).load(input.snapshot, []),
     )
   } catch (err) {
     if (err instanceof DocumentEngineTrapError) throw err
     return null
   }
-  return incoming
 }
 
 /**
@@ -166,9 +150,26 @@ export async function promoteWorkspace(
   deps: Pick<ServerDeps, 'liveDocuments' | 'workspaceDocuments' | 'versions' | 'blobStore'>,
   input: PromoteWorkspaceInput,
 ): Promise<PromoteWorkspaceResult> {
-  const incoming = readIncoming(input)
-  if (incoming === null) return { kind: 'malformed-snapshot' }
-  const promoted = readWorkspaceDocuments(incoming).map((entry) => entry.documentId)
+  const lease = await readIncoming(input)
+  if (lease === null) return { kind: 'malformed-snapshot' }
+  try {
+    return await promoteFrom(
+      deps,
+      input,
+      bindRecordOps(leaseOps, lease, async () => {}),
+    )
+  } finally {
+    lease.release()
+  }
+}
+
+async function promoteFrom(
+  deps: Pick<ServerDeps, 'liveDocuments' | 'workspaceDocuments' | 'versions' | 'blobStore'>,
+  input: PromoteWorkspaceInput,
+  incoming: RecordSession,
+): Promise<PromoteWorkspaceResult> {
+  const documents = await incoming.read({ query: 'documents' }, assertedAs<DocumentEntries>())
+  const promoted = documents.map((entry) => entry.documentId)
   // Counted on the incoming record before any of it merges, so a record past
   // the ceiling is refused whole without the cost of judging the merge.
   if (promoted.length > WORKSPACE_MAX_DOCUMENTS) {
@@ -193,14 +194,14 @@ export async function promoteWorkspace(
     workspaceId: input.workspaceId,
     update: input.snapshot,
     origin: 'transfer',
-  }).catch((err: unknown) => {
-    throw namedInRecord(incoming, err)
+  }).catch(async (err: unknown) => {
+    throw await namedInRecord(incoming, err)
   })
   if (applied.kind === 'malformed-update') return { kind: 'malformed-snapshot' }
 
   // The LISTING, not a by-id lookup: only the walk that sees every sibling
   // can say which document at a contested path is the shadowed one.
-  const merged = await deps.workspaceDocuments.get(input.workspaceId)
+  const merged = await deps.workspaceDocuments.open(input.workspaceId)
   const trashStored = await storeCarriedTrash(deps.blobStore, merged, carried.trash)
   // Before the move's own checkpoints, so the history lists in the order it
   // was taken: the carried rows keep their createdAt and the move's is now.
@@ -216,10 +217,11 @@ export async function promoteWorkspace(
 async function checkpointPromoted(
   deps: Pick<ServerDeps, 'liveDocuments' | 'versions'>,
   input: PromoteWorkspaceInput,
-  merged: LoroDoc,
+  merged: RecordSession,
   promoted: readonly string[],
 ): Promise<{ recorded: string[]; shadowed: string[] }> {
-  const byId = new Map(readWorkspaceDocuments(merged).map((entry) => [entry.documentId, entry]))
+  const held = await merged.read({ query: 'documents' }, assertedAs<DocumentEntries>())
+  const byId = new Map(held.map((entry) => [entry.documentId, entry]))
   const recorded: string[] = []
   const shadowed: string[] = []
   for (const documentId of promoted) {

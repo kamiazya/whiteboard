@@ -93,12 +93,12 @@ const LOSING_PEER = 18446744073709551614n
 const b64u = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64url')
 const snapshotOf = (doc: LoroDoc) => new Uint8Array(doc.export({ mode: 'snapshot' }))
 
-interface Record {
+interface PromoteBody {
   readonly snapshot: string
   readonly trash: { documentId: string; bytes: string }[]
-  readonly versions: Record_[]
+  readonly versions: CarriedRow[]
 }
-type Record_ = {
+type CarriedRow = {
   id: string
   documentId: string
   createdAt: number
@@ -108,7 +108,7 @@ type Record_ = {
 }
 
 /** A browser record: a note with a saved version, a canvas, a contested path and one trashed note. */
-function browserRecord(peer = LOSING_PEER): Record {
+function browserRecord(peer = LOSING_PEER): PromoteBody {
   const doc = new LoroDoc()
   doc.setPeerId(peer)
   createWorkspaceDocumentAtPath(doc, {
