@@ -4,7 +4,7 @@
  * the same since-reads and the same past views whichever holds the record.
  */
 import type { documentEngine as wire } from '@kamiazya/whiteboard-model'
-import { LoroDoc } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { createCrdtEngine } from './engine/engine.js'
 import { leaseKind } from './engine/lease-kind.js'
@@ -194,6 +194,42 @@ describe('a batch of writes through RecordOps', () => {
   })
 })
 
+describe('the version at a point through RecordOps', () => {
+  const total = (entries: readonly { counter: number }[]) =>
+    entries.reduce((sum, { counter }) => sum + counter, 0)
+
+  it('answers the head as versionOf does, and an earlier point with fewer operations', async () => {
+    await onEachKind(async (held, record) => {
+      const then = held.ops.versionOf(record)
+      held.ops.write(record, [
+        { op: 'setWorkspaceDocumentName', args: { documentId: BOARD, name: 'Board' } },
+      ])
+      const now = held.ops.versionOf(record)
+      const atNow = held.ops.versionAt(record, now.encodedFrontiers)
+      expect(atNow.entries).toEqual(now.entries)
+      expect(Buffer.from(atNow.encodedFrontiers).equals(Buffer.from(now.encodedFrontiers))).toBe(
+        true,
+      )
+      const atThen = held.ops.versionAt(record, then.encodedFrontiers)
+      expect(atThen.entries).toEqual(then.entries)
+      expect(total(atThen.entries)).toBeLessThan(total(atNow.entries))
+      expect(held.ops.versionOf(record).entries).toEqual(now.entries)
+    })
+  })
+
+  it('refuses a point the record does not hold and bytes that are no frontiers, on every kind', async () => {
+    const stranger = new LoroDoc()
+    stranger.setPeerId(9n)
+    stranger.getText('t').insert(0, 'elsewhere')
+    stranger.commit()
+    const foreign = new Uint8Array(encodeFrontiers(stranger.oplogFrontiers()))
+    await onEachKind((held, record) => {
+      expect(() => held.ops.versionAt(record, foreign)).toThrow()
+      expect(() => held.ops.versionAt(record, new Uint8Array([1, 2, 3]))).toThrow()
+    })
+  })
+})
+
 describe('a past view through RecordOps', () => {
   it('reads the record as it stood, and moves to the head and back', async () => {
     await onEachKind(async (held, record) => {
@@ -374,12 +410,19 @@ describe('a record bound to its operations and its save', () => {
         saved.push(each)
       })
       const before = session.version().encoded
+      const beforeFrontiers = session.version().encodedFrontiers
       session.write([
         { op: 'setWorkspaceDocumentName', args: { documentId: BOARD, name: 'Board' } },
       ])
       await session.save()
       expect(saved).toEqual([record])
       expect(session.version().encoded).not.toEqual(before)
+      expect(session.versionAt(session.version().encodedFrontiers).entries).toEqual(
+        session.version().entries,
+      )
+      expect(
+        Buffer.from(session.versionAt(beforeFrontiers).encoded).equals(Buffer.from(before)),
+      ).toBe(true)
       const documents = await session.read(
         { query: 'documents' },
         {

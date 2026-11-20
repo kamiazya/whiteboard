@@ -32,6 +32,12 @@ export interface RecordOps<R> {
   importJudged(record: R, bytes: Uint8Array, judge: wire.ImportJudge): wire.MutationResult
   versionOf(record: R): RecordVersion
   /**
+   * What the record held at `frontiers`: the operations that point had seen,
+   * without moving a view to it. Throws for bytes that are no frontiers and
+   * for a point the record does not hold.
+   */
+  versionAt(record: R, frontiers: Uint8Array): RecordVersion
+  /**
    * The documents the operations after `since` took out of the record, as a
    * trash keeps them: deepest first, a document below another removed one in
    * that one's bytes, survivors cut out of every export. Nothing for
@@ -68,6 +74,8 @@ export interface RecordView {
  */
 export interface RecordSession {
   version(): RecordVersion
+  /** What the record held at `frontiers`; throws for a point it does not hold. */
+  versionAt(frontiers: Uint8Array): RecordVersion
   importJudged(bytes: Uint8Array, judge: wire.ImportJudge): wire.MutationResult
   read<T>(query: wire.Query, shape: AnswerShape<T>): Promise<T>
   write(batch: wire.Write[]): wire.MutationApplied
@@ -86,6 +94,7 @@ export function bindRecordOps<R>(
 ): RecordSession {
   return {
     version: () => ops.versionOf(record),
+    versionAt: (frontiers) => ops.versionAt(record, frontiers),
     importJudged: (bytes, judge) => ops.importJudged(record, bytes, judge),
     read: (query, shape) => ops.read(record, query, shape),
     write: (batch) => ops.write(record, batch),

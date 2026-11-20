@@ -75,8 +75,7 @@ export interface LeaseVersion {
   readonly frontiers: wire.VersionEntry[]
 }
 
-export function versionOf(lease: RecordLease): LeaseVersion {
-  const answer = lease.engine.version({ handle: lease.handle })
+function leaseVersion(answer: wire.VersionResponse): LeaseVersion {
   return {
     encoded: bytesOf(answer.encodedVersion),
     encodedFrontiers: bytesOf(answer.encodedFrontiers),
@@ -85,8 +84,23 @@ export function versionOf(lease: RecordLease): LeaseVersion {
   }
 }
 
+export function versionOf(lease: RecordLease): LeaseVersion {
+  return leaseVersion(lease.engine.version({ handle: lease.handle }))
+}
+
 function entriesOfFrontiers(lease: RecordLease, frontiers: Uint8Array): wire.VersionEntry[] {
   return lease.engine.decode({ kind: 'frontiers', bytes: bytesToBase64(frontiers) }).entries
+}
+
+/**
+ * What the record held at `frontiers` (bytes `versionOf` answered): the
+ * operations that point had seen. Throws for bytes that are no frontiers and
+ * for a point the record does not hold.
+ */
+export function versionAt(lease: RecordLease, frontiers: Uint8Array): LeaseVersion {
+  return leaseVersion(
+    lease.engine.version({ handle: lease.handle, at: entriesOfFrontiers(lease, frontiers) }),
+  )
 }
 
 /**

@@ -58,6 +58,14 @@ export const legacyRecordOps: RecordOps<LegacyRecord> = {
       entries: versionPairs(doc.oplogVersion()).map(([peer, counter]) => ({ peer, counter })),
     }
   },
+  versionAt(doc, frontiers) {
+    const seen = doc.frontiersToVV(decodeFrontiers(frontiers))
+    return {
+      encoded: new Uint8Array(seen.encode()),
+      encodedFrontiers: new Uint8Array(encodeFrontiers(doc.vvToFrontiers(seen))),
+      entries: versionPairs(seen).map(([peer, counter]) => ({ peer, counter })),
+    }
+  },
   removedSince: (doc, since) =>
     documentsRemovedSince(doc, versionOfPairs(since.map(({ peer, counter }) => [peer, counter]))),
   viewAt(doc, frontiers) {
