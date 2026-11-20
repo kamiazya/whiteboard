@@ -47,16 +47,17 @@ describe('workspace-document routes and the deps they were handed', () => {
     const real = deps.workspaceDocuments
     deps.workspaceDocuments = {
       ...real,
-      open: async (workspaceId) => {
+      withRecord: async (workspaceId, fn) => {
         recorded.push(`open ${workspaceId}`)
-        const session = await real.open(workspaceId)
-        return {
-          ...session,
-          save: async () => {
-            recorded.push(`save ${workspaceId}`)
-            await session.save()
-          },
-        }
+        return real.withRecord(workspaceId, (session) =>
+          fn({
+            ...session,
+            save: async () => {
+              recorded.push(`save ${workspaceId}`)
+              await session.save()
+            },
+          }),
+        )
       },
     }
 

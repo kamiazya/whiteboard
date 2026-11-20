@@ -52,7 +52,7 @@ export class FakeLiveDocuments implements LiveDocuments {
     const live = this
     return {
       ...unusedWorkspaceDocuments(),
-      async open() {
+      async withRecord<T>(_workspaceId: string, fn: (record: RecordSession) => Promise<T>) {
         const record = new LoroDoc()
         for (const { documentId, path } of await live.list()) {
           createWorkspaceDocumentAtPath(record, {
@@ -66,20 +66,13 @@ export class FakeLiveDocuments implements LiveDocuments {
             live.docs.get(path) as LoroDoc,
           )
         }
-        return bindRecordOps(legacyRecordOps, record, async () => {
+        const session = bindRecordOps(legacyRecordOps, record, async () => {
           for (const entry of readWorkspaceDocuments(record)) {
             const projected = projectWorkspaceDocument(record, entry.documentId)
             if (projected !== null) live.docs.set(entry.path, projected)
             live.kinds.set(entry.path, entry.kind)
           }
         })
-      },
-      async withRecord<T>(
-        this: WorkspaceDocuments,
-        workspaceId: string,
-        fn: (record: RecordSession) => Promise<T>,
-      ): Promise<T> {
-        const session = await this.open(workspaceId)
         try {
           return await fn(session)
         } finally {

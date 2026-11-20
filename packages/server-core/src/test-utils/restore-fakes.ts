@@ -96,14 +96,6 @@ export class FakeLive implements LiveDocuments {
   workspaceDocuments(): WorkspaceDocuments {
     return {
       ...unusedWorkspaceDocuments(),
-      open: async () => {
-        this.record('open')
-        // ONE record across opens, as the daemon's cache keeps one: a write
-        // that was not saved stays in it until something drops it, so a
-        // missing eviction shows up as the next open reading the write.
-        const record = this.heldRecord()
-        return bindRecordOps(legacyRecordOps, record, () => this.saveRecord(record))
-      },
       withRecord: async (_workspaceId, fn) => {
         this.record('open')
         const record = this.heldRecord()

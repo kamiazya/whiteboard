@@ -23,10 +23,6 @@ export function unusedWorkspaceDocuments(): WorkspaceDocuments {
     // Over whatever `get` and `save` a test supplies, so a double written
     // against the record as a `LoroDoc` serves an operation that holds it as a
     // session without being written twice.
-    async open(this: WorkspaceDocuments, workspaceId) {
-      const doc = await this.get(workspaceId)
-      return bindRecordOps(legacyRecordOps, doc, (held) => this.save(workspaceId, held))
-    },
     async withRecord<T>(
       this: WorkspaceDocuments,
       workspaceId: string,

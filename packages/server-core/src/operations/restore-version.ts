@@ -498,11 +498,13 @@ async function writePastAtNode(
   countElements = false,
 ): Promise<Written | null> {
   const { workspaceDocuments } = deps
-  const record = await workspaceDocuments.open(workspaceId)
   let written: Written | null
   try {
-    written = await writeIntoRecord(record, path, pastBytes, requestedKind, countElements)
-    if (written !== null) await record.save()
+    written = await workspaceDocuments.withRecord(workspaceId, async (record) => {
+      const wrote = await writeIntoRecord(record, path, pastBytes, requestedKind, countElements)
+      if (wrote !== null) await record.save()
+      return wrote
+    })
   } catch (err) {
     workspaceDocuments.evict(workspaceId)
     workspaceDocuments.evictProjections(workspaceId)

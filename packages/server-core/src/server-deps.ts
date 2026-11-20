@@ -296,18 +296,12 @@ export interface WorkspaceDocuments {
    */
   get(workspaceId: string): Promise<LoroDoc>
   /**
-   * The same live record as `get`, bound to the operations that read and
-   * write it and to its save. An operation that holds the record only through
-   * this stays ignorant of what holds it, so the holder changes without the
-   * operation changing; `get` stays for the operations not yet moved.
-   * `save()` on the session is `save(workspaceId, doc)` for the same record.
-   */
-  open(workspaceId: string): Promise<RecordSession>
-  /**
-   * `open` for the length of `fn`: the session is released when `fn` returns
-   * or throws, and answers nothing afterwards. An operation holds the record
-   * this way so a holder that counts its users (a cache holding engine leases)
-   * knows when the last one is done; it never releases the session itself.
+   * The same live record as `get`, bound to the operations that read and write
+   * it and to its save, for the length of `fn`: the session is released when
+   * `fn` returns or throws, and answers nothing afterwards. `get` stays for the
+   * operations not yet moved. An operation holds the record this way so a
+   * holder that counts its users (a cache holding engine leases) knows when the
+   * last one is done; it never releases the session itself.
    */
   withRecord<T>(workspaceId: string, fn: (record: RecordSession) => Promise<T>): Promise<T>
   /**
