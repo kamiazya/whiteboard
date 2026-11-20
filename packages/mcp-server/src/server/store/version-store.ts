@@ -343,11 +343,13 @@ export class FileVersionStore implements VersionStore {
       // Counted off the record the frontier below names, so the row says how
       // many nodes the state it points at holds.
       const elementCount = countSpatialNodes(documentContainers(storedWorkspace, documentId))
+      // Taken beside the count, before the awaits below, so both describe one
+      // state of the record.
+      const frontiers = frontiersToText(storedWorkspace.frontiers())
       if (!opts.auto) await refusePastManualCeiling(db, workspaceId, documentId)
       if (opts.restoredFrom !== undefined) {
         await refusePastRestorePointCeiling(db, workspaceId, documentId)
       }
-      const frontiers = frontiersToText(storedWorkspace.frontiers())
       await db
         .insertInto('versions')
         .values(

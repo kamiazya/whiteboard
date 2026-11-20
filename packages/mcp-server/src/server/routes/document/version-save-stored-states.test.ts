@@ -5,7 +5,7 @@
 import { documentContainers, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
-import { LoroDoc, LoroMovableList } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc, LoroMovableList, VersionVector } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
@@ -13,6 +13,7 @@ import {
   resolveTestServerDeps,
   seedWorkspaceRow,
   testDocumentRouterOptions,
+  testStoreScope,
   withTempDataDir,
 } from '../_test-helpers.js'
 
@@ -31,6 +32,9 @@ const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
 )
 const { getWorkspaceDoc, saveWorkspaceDoc } = await import('../../store/workspace-doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
+const { FileVersionStore } = await import('../../store/version-store.js')
+const { documentStoreReady } = await import('../../store/store-handles.js')
+const { frontiersToBase64 } = await import('@kamiazya/whiteboard-history')
 const { getDb } = await import('../../store/db/index.js')
 const { createVersionSaveTool } = await import('@kamiazya/whiteboard-server-core/test-utils/tools')
 const { makeSpatialDoc } = await import('../../../shared/test-utils/spatial-doc.js')
@@ -215,5 +219,51 @@ describe('saving a version of a document in each stored state', () => {
     expect(res.status).toBe(404)
     expect(await res.json()).toMatchObject({ error: 'not_found' })
     expect(await rowsOf()).toEqual([])
+  })
+})
+
+const CONTENT_CONTAINERS = ['nodes', 'edges', 'lines', 'canvas']
+
+describe('saving a version moves nothing in the record it reads', () => {
+  it.each([
+    ['a healthy canvas', 'a-canvas', false],
+    ['a healthy note', 'b-note', false],
+    ['a canvas whose node lacks its content containers', 'a-canvas', true],
+    ['a note whose node lacks its content containers', 'b-note', true],
+  ] as const)('%s', async (_name, state, bare) => {
+    const { id } = await plant(deps, state)
+    const cached = await getWorkspaceDoc(WS)
+    if (bare) {
+      const node = cached
+        .getTree('tree')
+        .getNodes()
+        .find((n) => n.data.get('documentId') === id)
+      for (const key of CONTENT_CONTAINERS) node?.data.delete(key)
+      cached.commit()
+      await saveWorkspaceDoc(WS, cached)
+    }
+    const versionBefore = JSON.stringify([...cached.version().toJSON()])
+    const frontiersBefore = frontiersToBase64(encodeFrontiers(cached.frontiers()))
+    const store = await documentStoreReady(testStoreScope(tmp.dir))
+    const storedBefore = await store.readFrontier({
+      docRef: { kind: 'workspace-tree', workspaceId: WS },
+    })
+
+    await new FileVersionStore().save(WS, 'doc', { auto: true })
+
+    expect(JSON.stringify([...cached.version().toJSON()])).toBe(versionBefore)
+    const storedAfter = await store.readFrontier({
+      docRef: { kind: 'workspace-tree', workspaceId: WS },
+    })
+    expect(storedAfter?.frontier).toEqual(storedBefore?.frontier)
+    const [row] = await (await getDb(tmp.dir))
+      .selectFrom('versions')
+      .select(['frontiers'])
+      .execute()
+    expect(row?.frontiers).toBe(frontiersBefore)
+    // Still the cache the store would hand a later save: it equals what was stored.
+    expect(
+      cached.oplogVersion().compare(VersionVector.decode(storedAfter?.frontier as Uint8Array)),
+    ).toBe(0)
   })
 })

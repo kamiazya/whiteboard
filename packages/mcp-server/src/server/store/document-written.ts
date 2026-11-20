@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { DocumentWritten } from '@kamiazya/whiteboard-server-core'
 import { checkpointAfterWrite } from './auto-checkpoint.js'
 import { scheduleAutoCompact } from './auto-compact.js'
@@ -44,7 +45,10 @@ export function createDocumentWritten(scope: StoreScope = globalStoreScope): Doc
     const stored = await (await documentStoreReady(scope)).readFrontier({
       docRef: { kind: 'workspace-tree', workspaceId },
     })
-    return stored === null ? new Uint8Array() : stored.frontier
+    // No record is no state to compare: an answer that never equals the last
+    // leaves the decision to the keeper's rows rather than skipping a checkpoint
+    // because two reads of nothing agree.
+    return stored === null ? new TextEncoder().encode(randomUUID()) : stored.frontier
   }
   return async ({ workspaceId, path }) => {
     scheduleAutoCompact(workspaceId, new FileVersionStore(scope), { scope })

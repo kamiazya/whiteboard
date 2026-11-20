@@ -171,7 +171,7 @@ describe('documentWritten', () => {
     )
   })
 
-  it('reads an empty frontier for a workspace the keeper holds no record of', async () => {
+  it('never reads one frontier twice for a workspace the keeper holds no record of', async () => {
     const signalled: CheckpointSubject[] = []
     installAutoCheckpoint(
       Object.assign(
@@ -193,7 +193,9 @@ describe('documentWritten', () => {
       path: 'nowhere',
     })
 
-    expect(await documentFrontier(signalled[0] as CheckpointSubject)).toEqual(new Uint8Array())
+    const first = await documentFrontier(signalled[0] as CheckpointSubject)
+    const second = await documentFrontier(signalled[0] as CheckpointSubject)
+    expect(first).not.toEqual(second)
   })
 
   // A document the index does not place has no path to checkpoint under;
