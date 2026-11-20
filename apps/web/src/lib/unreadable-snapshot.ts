@@ -1,10 +1,9 @@
-import {
-  type DocumentContainers,
-  holdsRetiredCommentPlane,
-  resolveWorkspaceDocumentById,
-  retiredStoredShapeIn,
-} from '@kamiazya/whiteboard-loro-adapter'
-import type { LoroDoc } from 'loro-crdt'
+import type { SessionDocument } from './session-document.js'
+
+type Judged = Pick<
+  SessionDocument,
+  'hasEntry' | 'holdsRetiredCommentPlane' | 'holdsRetiredStoredShape'
+>
 
 /**
  * Why a snapshot arriving in a sync session cannot be served, or null when it
@@ -17,18 +16,10 @@ import type { LoroDoc } from 'loro-crdt'
  * since read as usual it would open without what the shape carried.
  */
 export function unreadableSnapshot(
-  arriving: LoroDoc,
-  contentDocumentId: string | undefined,
-  contentOf: (doc: LoroDoc) => DocumentContainers | null,
+  arriving: Judged,
 ): 'corrupt-snapshot' | 'retired-comment-plane' | 'retired-stored-shape' | null {
-  if (
-    contentDocumentId !== undefined &&
-    resolveWorkspaceDocumentById(arriving, contentDocumentId) === null
-  ) {
-    return 'corrupt-snapshot'
-  }
-  const content = contentOf(arriving)
-  return content === null ? null : unreadableContent(content)
+  if (!arriving.hasEntry()) return 'corrupt-snapshot'
+  return unreadableContent(arriving)
 }
 
 /**
@@ -39,9 +30,9 @@ export function unreadableSnapshot(
  * up.
  */
 export function unreadableContent(
-  content: DocumentContainers,
+  content: Pick<Judged, 'holdsRetiredCommentPlane' | 'holdsRetiredStoredShape'>,
 ): 'retired-comment-plane' | 'retired-stored-shape' | null {
-  if (holdsRetiredCommentPlane(content)) return 'retired-comment-plane'
-  if (retiredStoredShapeIn(content) !== null) return 'retired-stored-shape'
+  if (content.holdsRetiredCommentPlane()) return 'retired-comment-plane'
+  if (content.holdsRetiredStoredShape()) return 'retired-stored-shape'
   return null
 }

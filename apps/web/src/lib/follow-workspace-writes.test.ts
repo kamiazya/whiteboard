@@ -6,6 +6,7 @@ import type {
 import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { recordPortOf } from '../test-utils/loro-record-port.js'
 import {
   followBrowserWorkspaceWrites,
   followRecordWrites,
@@ -228,12 +229,12 @@ describe('followRecordWrites', () => {
 
   it('answers the shape it saw last, so a replacing record is not taken as the baseline', () => {
     const { record } = followedRecord()
-    const first = followRecordWrites(record, null, vi.fn())
+    const first = followRecordWrites(recordPortOf(record), null, vi.fn())
     const seen = first.seen()
     first.stop()
     const onMoved = vi.fn()
 
-    followRecordWrites(record, seen, onMoved)
+    followRecordWrites(recordPortOf(record), seen, onMoved)
     vi.runOnlyPendingTimers()
 
     expect(seen).not.toBeNull()
@@ -243,7 +244,7 @@ describe('followRecordWrites', () => {
   it('cancels a compare still waiting out a burst when it is stopped', async () => {
     const { record, peerCreatesPlan } = followedRecord()
     const onMoved = vi.fn()
-    const follow = followRecordWrites(record, null, onMoved)
+    const follow = followRecordWrites(recordPortOf(record), null, onMoved)
     onMoved.mockClear()
 
     peerCreatesPlan()

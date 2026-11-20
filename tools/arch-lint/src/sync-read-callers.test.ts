@@ -20,6 +20,8 @@ import { isShippedPath } from './source-scan.js'
 
 /** Shipped files outside loro-adapter that call `readNow`, each with why it cannot await. */
 const SYNC_READ_CALLERS: Readonly<Record<string, string>> = {
+  'apps/web/src/lib/session-document.ts':
+    'The editing session’s getters (canvas, body, locks, facets, name) are read synchronously while React renders and inside CodeMirror transactions, so they cannot await.',
   'apps/web/src/lib/replica-record.ts':
     'The offline replica page draws from the record while it renders: its entries, a selected document and its references are read in memo and event handlers that cannot await.',
 }

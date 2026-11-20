@@ -45,12 +45,18 @@ import { afterAllFloor, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 
-// The fallback to a whole-canvas reconcile logs first; the property drives it on purpose.
+// The jsdom failure guard cannot sit inside a fast-check loop, so the warnings are captured and
+// judged per command: a fallback the reference does not predict must fail the property, or a
+// mapped write that started throwing would pass through the reconcile it falls back to.
+const warnings = vi.hoisted((): string[] => [])
 vi.mock('./app-logger.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./app-logger.js')>()
   return {
     ...actual,
-    getAppLogger: (name: string) => ({ ...actual.getAppLogger(name), warn: () => undefined }),
+    getAppLogger: (name: string) => ({
+      ...actual.getAppLogger(name),
+      warn: (message: string) => void warnings.push(message),
+    }),
   }
 })
 
@@ -81,14 +87,14 @@ function oracleLeaf(
       writeSpatialNode(doc, node)
       return 'written'
     }
-    case 'connect-nodes':
-    case 'create-edge': {
-      const id = command.kind === 'create-edge' ? command.edge.id : command.edgeId
-      const edge = next.edges.find((e) => e.id === id)
+    case 'connect-nodes': {
+      const edge = next.edges.find((e) => e.id === command.edgeId)
       if (!edge) return 'target-missing'
       writeSpatialEdge(doc, edge)
       return 'written'
     }
+    // A standalone create-edge reconciles the canvas pair; only inside a batch is it written
+    // on its own (`oracleBatch`).
     case 'delete-node':
       deleteSpatialNode(doc, command.id)
       return 'written'
@@ -207,20 +213,33 @@ function oracleFine(
   }
 }
 
-/** Answers whether the command took the whole-canvas fallback. */
+/** What the reference did: no fallback, or a fallback and the warning it owes. */
+type Outcome = { fellBack: false } | { fellBack: true; warns: 'target-missing' | 'threw' | 'none' }
+
+const WARNING_OF = {
+  'target-missing': ['editor command target missing from next canvas'],
+  // a write the reference itself cannot make fails in the engine too, at plan or apply time
+  threw: ['fine-grained write failed', 'planning a command failed'],
+  none: [],
+} as const
+
 function oracle(
   host: LoroDoc,
   prev: SpatialCanvas,
   next: SpatialCanvas,
   command: EditorCommand,
-): boolean {
+): Outcome {
+  let warns: 'target-missing' | 'threw' | 'none' = 'none'
   try {
-    if (oracleFine(host, prev, next, command) === 'written') return false
+    const fine = oracleFine(host, prev, next, command)
+    if (fine === 'written') return { fellBack: false }
+    if (fine === 'target-missing') warns = 'target-missing'
   } catch {
     // the fine-grained write failed: reconcile below, as the session does
+    warns = 'threw'
   }
   reconcileSpatialCanvas(host, prev, next)
-  return true
+  return { fellBack: true, warns }
 }
 
 // ---- the fixture ----
@@ -498,7 +517,7 @@ const COMMAND_COVERAGE = {
 
 /** Per kind: how often the command CHANGED the reference document, so an inert one asserts nothing. */
 const effective = emptyTally(COMMAND_COVERAGE)
-const reach = { commands: 0, effective: 0, fellBack: 0, multiCommand: 0 }
+const reach = { commands: 0, effective: 0, fellBack: 0, multiCommand: 0, missingWarned: 0 }
 
 // ---- the three documents ----
 
@@ -560,13 +579,24 @@ describe('a command as engine writes', () => {
             const prev = readSpatialCanvas(ref)
             const next = applyCommand(prev, command)
             const before = snapshotOf(ref)
-            if (oracle(ref, prev, next, command)) reach.fellBack++
+            const outcome = oracle(ref, prev, next, command)
+            if (outcome.fellBack) reach.fellBack++
             reach.commands++
             if (snapshotOf(ref) !== before) {
               reach.effective++
               effective[command.kind]++
             }
+            warnings.length = 0
             commitToDoc(engineTarget(handle), prev, next, command)
+            const expected: readonly string[] = outcome.fellBack ? WARNING_OF[outcome.warns] : []
+            expect(
+              warnings.every((w) => expected.some((fragment) => w.includes(fragment))),
+              `${command.kind}: unexpected warning ${JSON.stringify(warnings)}`,
+            ).toBe(true)
+            if (outcome.fellBack && outcome.warns === 'target-missing') {
+              expect(warnings, `${command.kind}: a missing target warns`).toHaveLength(1)
+              reach.missingWarned++
+            }
             const wire = engine.export({ handle, mode: 'snapshot' }).bytes ?? ''
             const wireDoc = new LoroDoc()
             wireDoc.import(base64ToBytes(wire) ?? new Uint8Array())
@@ -592,6 +622,7 @@ afterAllFloor(
     expect(reach.commands, 'the property applied almost no commands').toBeGreaterThan(450)
     expect(reach.effective / reach.commands, 'most commands changed nothing').toBeGreaterThan(0.5)
     expect(reach.fellBack, 'almost no command took the whole-canvas fallback').toBeGreaterThan(150)
+    expect(reach.missingWarned, 'no missing target was warned about').toBeGreaterThan(10)
     expect(reach.multiCommand, 'no sequence ever ran two commands in a row').toBeGreaterThan(80)
   },
 )

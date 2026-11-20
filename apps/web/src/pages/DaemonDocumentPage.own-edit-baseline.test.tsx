@@ -4,14 +4,13 @@
  * elsewhere. The page is where the two are told apart: it hands the session
  * the writer of the seen baseline for the document it has open.
  */
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { contentDigestOfDocument, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { daemonMemoryScope } from '../components/workspace-files/use-device-memory.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
-import { contentStateOf } from '../lib/document-state.js'
 import { readSeenDigest, recordSeenDocument } from '../lib/seen-documents.js'
 import {
   latestEditorProps,
@@ -90,7 +89,9 @@ describe('DaemonDocumentPage seen baseline', () => {
     const replay = new LoroDoc()
     replay.import(opened.snapshot)
     for (const update of opened.pushed) replay.import(update)
-    await waitFor(() => expect(readSeenDigest(SCOPE, 'id-main')).toBe(contentStateOf(replay)))
+    await waitFor(() =>
+      expect(readSeenDigest(SCOPE, 'id-main')).toBe(contentDigestOfDocument(replay)),
+    )
     expect(readSeenDigest(SCOPE, 'id-main')).not.toBe(OPENED_AT)
   })
 

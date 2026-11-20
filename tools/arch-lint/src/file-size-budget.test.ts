@@ -214,7 +214,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // beside the canvas (the effect itself is `thread-commands.ts`), and a
   // snapshot still holding the retired comments plane is refused there, next
   // to the corrupt-record refusal it mirrors.
-  'apps/web/src/lib/document-sync-session.ts': 1297, // +20: a document a live update made unreadable takes no further write, queued ones included
+  'apps/web/src/lib/document-sync-session.ts': 1226, // the session's own pipeline: debounce, publish, undo, removal and unreadable-record handling around one engine document
   // The gesture REDUCER: every pointer phase's decision for every tool and
   // every kind of element, each arm carrying the reason it is where it is.
   // What has already left: the per-kind hit-tests (`element-pick.ts`,
