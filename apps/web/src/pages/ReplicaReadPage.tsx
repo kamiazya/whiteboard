@@ -575,10 +575,10 @@ export function ReplicaReadPage({
   const [reconnecting, setReconnecting] = useState(false)
   const [unlocking, setUnlocking] = useState(false)
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
-  const { scheduleSave, settled, retrySave, saveFailed, copyRemoved } =
+  const { scheduleSave, saved, retrySave, saveFailed, copyRemoved } =
     useReplicaSaveQueue(workspaceId)
 
-  useReplicaRecord({ workspaceId, daemonBaseUrl, attempt, withheld, setState, settled })
+  useReplicaRecord({ workspaceId, daemonBaseUrl, attempt, withheld, setState, saved })
 
   // Read on every render rather than held in state: `unlockReplicaKey` can
   // DROP the blob (a spent lease, ciphertext nothing here opens), and a

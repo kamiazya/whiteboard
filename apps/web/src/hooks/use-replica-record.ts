@@ -55,15 +55,15 @@ export function useReplicaRecord({
   attempt,
   withheld,
   setState,
-  settled,
+  saved,
 }: {
   workspaceId: string
   daemonBaseUrl: string
   attempt: number
   withheld: WithheldReason | undefined
   setState: (state: LoadState) => void
-  /** Resolves once every save of the held record has ended (`ReplicaSaveQueue.settled`). */
-  settled: () => Promise<void>
+  /** Resolves once nothing the held record holds is unsaved (`ReplicaSaveQueue.saved`). */
+  saved: () => Promise<void>
 }): void {
   useEffect(() => {
     let cancelled = false
@@ -111,10 +111,11 @@ export function useReplicaRecord({
       })
     return () => {
       cancelled = true
-      // The queue may still hold a save of this record; it is given back only
-      // once that save has ended.
+      // The queue may still hold a save of this record, and after a refused
+      // save a retry still needs it: it is given back only once its edits
+      // have landed.
       const done = held
-      if (done !== null) void settled().then(() => done.release())
+      if (done !== null) void saved().then(() => done.release())
     }
-  }, [workspaceId, daemonBaseUrl, attempt, withheld, settled])
+  }, [workspaceId, daemonBaseUrl, attempt, withheld, saved])
 }

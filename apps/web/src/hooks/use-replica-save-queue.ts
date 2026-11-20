@@ -46,7 +46,7 @@ export function useReplicaSaveQueue(workspaceId: string) {
   useCopyRemovedLock(workspaceId, queue, copyRemoved, markCopyRemoved)
   return {
     scheduleSave: queue.schedule,
-    settled: queue.settled,
+    saved: queue.saved,
     retrySave: queue.retry,
     saveFailed: health === 'failed',
     copyRemoved,
