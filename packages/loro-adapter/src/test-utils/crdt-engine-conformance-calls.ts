@@ -463,33 +463,45 @@ function retiredPlaneSnapshot(hostId?: string): string {
   const host = hostId === undefined ? doc : documentContainers(doc, hostId)
   host.getMap('comments').set('c1', { id: 'c1', x: 1, y: 2, text: 'from before threads' })
   doc.commit()
-  return Buffer.from(doc.export({ mode: 'snapshot' })).toString('base64')
+  return snapshotOf(doc)
+}
+
+const snapshotOf = (doc: LoroDoc): string =>
+  Buffer.from(doc.export({ mode: 'snapshot' })).toString('base64')
+
+/** A snapshot whose retired comment plane exists and holds no row. */
+function emptyRetiredPlaneSnapshot(): string {
+  const doc = new LoroDoc()
+  doc.getMap('comments')
+  doc.commit()
+  return snapshotOf(doc)
+}
+
+async function askPlane(
+  makeEngine: () => CrdtEngine,
+  bytes: string | undefined,
+  args?: Record<string, unknown>,
+) {
+  const engine = makeEngine()
+  const { handle } = engine.open({ peer: '1', ...(bytes === undefined ? {} : { bytes }) })
+  return ask(engine, handle, 'retiredCommentPlane', args)
 }
 
 export function describeRetiredCommentPlane(makeEngine: () => CrdtEngine) {
   describe('the retired comment plane read', () => {
-    const askPlane = async (bytes: string | undefined, args?: Record<string, unknown>) => {
-      const engine = makeEngine()
-      const { handle } = engine.open({ peer: '1', ...(bytes === undefined ? {} : { bytes }) })
-      return ask(engine, handle, 'retiredCommentPlane', args)
-    }
-
     it('answers true for a document that still holds comments in the retired plane', async () => {
-      expect(await askPlane(retiredPlaneSnapshot())).toEqual({ ok: true })
+      expect(await askPlane(makeEngine, retiredPlaneSnapshot())).toEqual({ ok: true })
     })
 
     it('answers false for a document without them, and for an empty retired plane', async () => {
-      expect(await askPlane(undefined)).toEqual({ ok: false })
-      const doc = new LoroDoc()
-      doc.getMap('comments')
-      doc.commit()
-      const bytes = Buffer.from(doc.export({ mode: 'snapshot' })).toString('base64')
-      expect(await askPlane(bytes)).toEqual({ ok: false })
+      expect(await askPlane(makeEngine, undefined)).toEqual({ ok: false })
+      expect(await askPlane(makeEngine, emptyRetiredPlaneSnapshot())).toEqual({ ok: false })
     })
 
     it('answers for the document a workspace record hosts', async () => {
-      const bytes = retiredPlaneSnapshot(FIRST)
-      expect(await askPlane(bytes, { documentId: FIRST })).toEqual({ ok: true })
+      expect(
+        await askPlane(makeEngine, retiredPlaneSnapshot(FIRST), { documentId: FIRST }),
+      ).toEqual({ ok: true })
       const engine = makeEngine()
       const { handle } = engine.open({ peer: '1' })
       write(engine, handle, 'createWorkspaceDocumentAtPath', {
