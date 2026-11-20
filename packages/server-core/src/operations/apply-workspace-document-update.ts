@@ -1,5 +1,5 @@
 import type { RecordSession, TouchedDocument } from '@kamiazya/whiteboard-loro-adapter'
-import { runEvictingOnEngineTrap } from '../document-io.js'
+import { runEvictingOnEngineTrap, runEvictingOnEngineTrapLater } from '../document-io.js'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
 import { importWithinSyncLimits } from './sync-update-limit.js'
@@ -52,13 +52,13 @@ type ApplyWorkspaceDocumentUpdateResult =
  * unsaved: the import already landed in it, and dropping it is what leaves
  * nothing of the refused update.
  */
-function refusePlacement(
+async function refusePlacement(
   record: RecordSession,
   since: Since,
   target: Parameters<typeof runEvictingOnEngineTrap>[0],
-): boolean {
-  const placed = runEvictingOnEngineTrap(target, 'importing an update into', () =>
-    record.readNow({ query: 'organisationChangedSince', args: { since } }, assertedAs<boolean>()),
+): Promise<boolean> {
+  const placed = await runEvictingOnEngineTrapLater(target, 'importing an update into', () =>
+    record.read({ query: 'organisationChangedSince', args: { since } }, assertedAs<boolean>()),
   )
   if (placed) target.evict()
   return placed
@@ -206,27 +206,31 @@ async function keepImported(
   since: Since,
   target: Parameters<typeof runEvictingOnEngineTrap>[0],
 ): Promise<ApplyWorkspaceDocumentUpdateResult> {
-  if (input.mayPlaceDocuments === false && refusePlacement(record, since, target)) {
+  if (input.mayPlaceDocuments === false && (await refusePlacement(record, since, target))) {
     return { kind: 'placement-refused' }
   }
   await evacuateRemoved(deps.blobStore, record, since, target)
   // Before the save, so the name and the stamp ride the same write and its
   // fan-out hands them back to the replica that made the edit.
-  const touched = runEvictingOnEngineTrap(target, 'importing an update into', () => {
-    const found = record.readNow(
-      { query: 'touchedSince', args: { since } },
-      assertedAs<TouchedDocument[]>(),
-    )
-    // Both writers read what was touched since `since` themselves; the names
-    // and the stamp land as one change.
-    record.write([
-      { op: 'seedNamesFromTitles', args: { since } },
-      ...(input.origin === 'transfer'
-        ? []
-        : [{ op: 'stampEditedDocuments' as const, args: { since, at: Date.now() } }]),
-    ])
-    return found
-  })
+  const touched = await runEvictingOnEngineTrapLater(
+    target,
+    'importing an update into',
+    async () => {
+      const found = await record.read(
+        { query: 'touchedSince', args: { since } },
+        assertedAs<TouchedDocument[]>(),
+      )
+      // Both writers read what was touched since `since` themselves; the names
+      // and the stamp land as one change.
+      record.write([
+        { op: 'seedNamesFromTitles', args: { since } },
+        ...(input.origin === 'transfer'
+          ? []
+          : [{ op: 'stampEditedDocuments' as const, args: { since, at: Date.now() } }]),
+      ])
+      return found
+    },
+  )
   // Fan-out to subscribers happens inside save.
   await record.save()
   deps.workspaceDocuments.evictProjections(input.workspaceId)

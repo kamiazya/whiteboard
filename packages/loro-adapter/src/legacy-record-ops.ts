@@ -3,7 +3,7 @@ import { decodeFrontiers, encodeFrontiers } from 'loro-crdt'
 import { versionOfPairs, versionPairs } from './engine/answers.js'
 import { breachOf, touchedSince } from './engine/engine.js'
 import { unwrapAnswer } from './engine/read-value.js'
-import { readQuery, readQueryNow } from './engine/readers.js'
+import { readQuery } from './engine/readers.js'
 import { applyWriter } from './engine/writers.js'
 import type { LegacyRecord } from './legacy-record-kind.js'
 import type { RecordOps } from './record-ops.js'
@@ -23,9 +23,6 @@ export const legacyRecordOps: RecordOps<LegacyRecord> = {
   async read(doc, query, shape) {
     const response = { value: await readQuery(doc, query) } as wire.ReadResponse
     return unwrapAnswer(response, query, shape)
-  },
-  readNow(doc, query, shape) {
-    return unwrapAnswer({ value: readQueryNow(doc, query) } as wire.ReadResponse, query, shape)
   },
   write(doc, batch) {
     const before = doc.oplogVersion()

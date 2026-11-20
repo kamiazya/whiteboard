@@ -27,8 +27,6 @@ export interface RecordVersion {
  */
 export interface RecordOps<R> {
   read<T>(record: R, query: wire.Query, shape: AnswerShape<T>): Promise<T>
-  /** `read` answered at once, for every query but `fileReferences`, which asks the keeper. */
-  readNow<T>(record: R, query: wire.Query, shape: AnswerShape<T>): T
   /** Applies the batch as one change, unjudged: the keeper judges what it is pushed. */
   write(record: R, batch: wire.Write[]): wire.MutationApplied
   importJudged(record: R, bytes: Uint8Array, judge: wire.ImportJudge): wire.MutationResult
@@ -57,7 +55,6 @@ export interface RecordSession {
   version(): RecordVersion
   importJudged(bytes: Uint8Array, judge: wire.ImportJudge): wire.MutationResult
   read<T>(query: wire.Query, shape: AnswerShape<T>): Promise<T>
-  readNow<T>(query: wire.Query, shape: AnswerShape<T>): T
   write(batch: wire.Write[]): wire.MutationApplied
   removedSince(since: readonly wire.VersionEntry[]): RemovedDocument[]
   /** Persists what the session changed, announcing it as every save does. */
@@ -74,7 +71,6 @@ export function bindRecordOps<R>(
     version: () => ops.versionOf(record),
     importJudged: (bytes, judge) => ops.importJudged(record, bytes, judge),
     read: (query, shape) => ops.read(record, query, shape),
-    readNow: (query, shape) => ops.readNow(record, query, shape),
     write: (batch) => ops.write(record, batch),
     removedSince: (since) => ops.removedSince(record, since),
     save: () => save(record),

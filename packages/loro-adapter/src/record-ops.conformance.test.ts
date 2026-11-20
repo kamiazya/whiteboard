@@ -163,14 +163,6 @@ describe('a judged workspace-sync import through RecordOps', () => {
         { parse: (value) => value as Array<{ documentId: string }> },
       )
       expect(touched.map(({ documentId }) => documentId)).toEqual([NOTE])
-      const now = held.ops.readNow(
-        record,
-        { query: 'touchedSince', args: { since } } as wire.Query,
-        {
-          parse: (value) => value as typeof touched,
-        },
-      )
-      expect(now).toEqual(touched)
     })
   })
 })
@@ -388,7 +380,7 @@ describe('a record bound to its operations and its save', () => {
       await session.save()
       expect(saved).toEqual([record])
       expect(session.version().encoded).not.toEqual(before)
-      const documents = session.readNow(
+      const documents = await session.read(
         { query: 'documents' },
         {
           parse: (value) => value as Array<{ documentId: string; name?: string }>,
