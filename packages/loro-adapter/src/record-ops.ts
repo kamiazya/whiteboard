@@ -59,6 +59,7 @@ export interface RecordSession {
   read<T>(query: wire.Query, shape: AnswerShape<T>): Promise<T>
   readNow<T>(query: wire.Query, shape: AnswerShape<T>): T
   write(batch: wire.Write[]): wire.MutationApplied
+  removedSince(since: readonly wire.VersionEntry[]): RemovedDocument[]
   /** Persists what the session changed, announcing it as every save does. */
   save(): Promise<void>
 }
@@ -75,6 +76,7 @@ export function bindRecordOps<R>(
     read: (query, shape) => ops.read(record, query, shape),
     readNow: (query, shape) => ops.readNow(record, query, shape),
     write: (batch) => ops.write(record, batch),
+    removedSince: (since) => ops.removedSince(record, since),
     save: () => save(record),
   }
 }

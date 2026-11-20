@@ -62,16 +62,36 @@ function updateBuildingOnAMissingOne(): Uint8Array {
   return client.export({ mode: 'update', from: middle })
 }
 
+/** What a follower holding the seed ends up with from the updates the saves fanned out. */
+function followersOf(updates: readonly Uint8Array[]) {
+  const follower = LoroDoc.fromSnapshot(SEED.export({ mode: 'snapshot' }))
+  for (const update of updates) follower.import(update)
+  return {
+    updates: updates.length,
+    documents: readWorkspaceDocuments(follower).map(({ documentId, path, name, updatedAt }) => ({
+      documentId,
+      path,
+      name,
+      stamped: updatedAt !== undefined && updatedAt > SEED_STAMP,
+    })),
+    trash: readTrashEntries(follower).map(({ documentId, path }) => ({ documentId, path })),
+  }
+}
+
 async function outcomeOf(
   update: Uint8Array,
   input: { mayPlaceDocuments?: boolean } = {},
 ): Promise<Record<string, unknown>> {
   const store = new StoredDoc(SEED)
   const announced: string[] = []
+  const saved: Uint8Array[] = []
   const workspaceDocuments: WorkspaceDocuments = {
     ...unusedWorkspaceDocuments(),
     get: async () => store.get(),
-    save: async (_workspaceId, doc) => store.save(doc),
+    save: async (_workspaceId, doc) => {
+      saved.push(doc.export({ mode: 'update', from: SEED.oplogVersion() }))
+      store.save(doc)
+    },
     evict: () => store.evict(),
     evictProjections: () => announced.push('projections'),
   }
@@ -97,6 +117,7 @@ async function outcomeOf(
     saves: store.saves,
     evictions: store.evictions,
     projectionsEvicted: announced.length,
+    followers: followersOf(saved),
     documents: readWorkspaceDocuments(stored).map(({ documentId, path, name, updatedAt }) => ({
       documentId,
       path,
@@ -127,6 +148,24 @@ describe('the outcome of applying one workspace-document update', () => {
           },
         ],
         "evictions": 0,
+        "followers": {
+          "documents": [
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA1",
+              "name": undefined,
+              "path": "note",
+              "stamped": true,
+            },
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA3",
+              "name": undefined,
+              "path": "folder/other",
+              "stamped": false,
+            },
+          ],
+          "trash": [],
+          "updates": 1,
+        },
         "projectionsEvicted": 1,
         "result": {
           "edited": [
@@ -172,6 +211,30 @@ describe('the outcome of applying one workspace-document update', () => {
           },
         ],
         "evictions": 0,
+        "followers": {
+          "documents": [
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA1",
+              "name": undefined,
+              "path": "note",
+              "stamped": false,
+            },
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA3",
+              "name": undefined,
+              "path": "folder/other",
+              "stamped": false,
+            },
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA4",
+              "name": undefined,
+              "path": "fresh",
+              "stamped": true,
+            },
+          ],
+          "trash": [],
+          "updates": 1,
+        },
         "projectionsEvicted": 1,
         "result": {
           "edited": [],
@@ -198,6 +261,23 @@ describe('the outcome of applying one workspace-document update', () => {
           },
         ],
         "evictions": 0,
+        "followers": {
+          "documents": [
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA1",
+              "name": undefined,
+              "path": "note",
+              "stamped": false,
+            },
+          ],
+          "trash": [
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA3",
+              "path": "folder/other",
+            },
+          ],
+          "updates": 1,
+        },
         "projectionsEvicted": 1,
         "result": {
           "edited": [],
@@ -234,6 +314,24 @@ describe('the outcome of applying one workspace-document update', () => {
           },
         ],
         "evictions": 1,
+        "followers": {
+          "documents": [
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA1",
+              "name": undefined,
+              "path": "note",
+              "stamped": false,
+            },
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA3",
+              "name": undefined,
+              "path": "folder/other",
+              "stamped": false,
+            },
+          ],
+          "trash": [],
+          "updates": 0,
+        },
         "message": "This update inserts 2000000 characters in one piece, past the 262144-character limit for one document; split the content across documents",
         "projectionsEvicted": 1,
         "saves": 0,
@@ -271,6 +369,24 @@ describe('the outcome of applying one workspace-document update', () => {
           },
         ],
         "evictions": 1,
+        "followers": {
+          "documents": [
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA1",
+              "name": undefined,
+              "path": "note",
+              "stamped": false,
+            },
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA3",
+              "name": undefined,
+              "path": "folder/other",
+              "stamped": false,
+            },
+          ],
+          "trash": [],
+          "updates": 0,
+        },
         "message": "This update would put documents or folders at paths this keeper cannot store: "not a segment". A path may be at most 1024 characters, and each segment may hold only ASCII letters, digits and interior hyphens",
         "projectionsEvicted": 1,
         "saves": 0,
@@ -300,6 +416,24 @@ describe('the outcome of applying one workspace-document update', () => {
           },
         ],
         "evictions": 1,
+        "followers": {
+          "documents": [
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA1",
+              "name": undefined,
+              "path": "note",
+              "stamped": false,
+            },
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA3",
+              "name": undefined,
+              "path": "folder/other",
+              "stamped": false,
+            },
+          ],
+          "trash": [],
+          "updates": 0,
+        },
         "message": "This update builds on changes this keeper has not received yet, so nothing of it was kept. Send the changes it builds on first",
         "projectionsEvicted": 1,
         "saves": 0,
@@ -331,6 +465,24 @@ describe('the outcome of applying one workspace-document update', () => {
           },
         ],
         "evictions": 1,
+        "followers": {
+          "documents": [
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA1",
+              "name": undefined,
+              "path": "note",
+              "stamped": false,
+            },
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA3",
+              "name": undefined,
+              "path": "folder/other",
+              "stamped": false,
+            },
+          ],
+          "trash": [],
+          "updates": 0,
+        },
         "projectionsEvicted": 1,
         "result": {
           "kind": "placement-refused",
@@ -360,6 +512,24 @@ describe('the outcome of applying one workspace-document update', () => {
           },
         ],
         "evictions": 0,
+        "followers": {
+          "documents": [
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA1",
+              "name": undefined,
+              "path": "note",
+              "stamped": false,
+            },
+            {
+              "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA3",
+              "name": undefined,
+              "path": "folder/other",
+              "stamped": false,
+            },
+          ],
+          "trash": [],
+          "updates": 0,
+        },
         "projectionsEvicted": 0,
         "result": {
           "kind": "malformed-update",

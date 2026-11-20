@@ -371,6 +371,8 @@ describe('the documents removed since a version, through RecordOps', () => {
       const ids = readWorkspaceDocuments(live).map((entry) => entry.documentId)
       expect(ids.sort()).toEqual([D1, D2])
     }
+  })
+})
 
 describe('a record bound to its operations and its save', () => {
   it('saves the record the session wrote to, and answers its own version and reads', async () => {
