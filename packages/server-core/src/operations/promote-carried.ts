@@ -130,13 +130,23 @@ interface PastEntry {
   readonly kind: DocumentKind
 }
 
+/** What judging one document asks of its state at a point: one projection answers all of it. */
+interface DocumentJudgement {
+  readonly stateSize: number
+  readonly contentDigest: string
+  readonly textLimitBreach: SyncTextBreach | null
+  readonly spatialNodeCount: number
+  /** The kind the document's envelope states; `null` when it states none. */
+  readonly statedKind: DocumentKind | null
+}
+
 /**
  * The document a row names, judged as the sync surface would judge it
  * written whole at the point `past` is at: a state past a limit is thrown as
  * the same `TextBreachRefusalError` the merge raises, naming the document.
  *
- * `charge` is told the projection's size BEFORE the size judgement, the
- * dearer half, and answers whether the budget still holds it.
+ * `charge` is told the projection's size BEFORE the limits are judged, and
+ * answers whether the budget still holds it.
  */
 async function judgeDocumentAt(
   past: ReturnType<typeof pastReader>,
@@ -154,27 +164,20 @@ async function judgeDocumentAt(
       reason: `Version "${version.id}" names a document the record did not hold at that point.`,
     }
   }
-  if (!charge(await past.read({ query: 'stateSize', ...at }, assertedAs<number>()))) {
-    return 'over-budget'
-  }
-  const breach = await past.read(
-    { query: 'textLimitBreach', ...at },
-    assertedAs<SyncTextBreach | null>(),
+  const judged = await past.read(
+    { query: 'documentJudgement', ...at },
+    assertedAs<DocumentJudgement>(),
   )
-  if (breach !== null) throw textBreachRefusal(breach, { path: entry.path })
+  if (!charge(judged.stateSize)) return 'over-budget'
+  if (judged.textLimitBreach !== null) {
+    throw textBreachRefusal(judged.textLimitBreach, { path: entry.path })
+  }
   // A restore writes the envelope back, so one stating another kind than its
   // node records at that point would bring the split with it.
-  const stated = await past.read(
-    { query: 'documentKind', ...at },
-    assertedAs<DocumentKind | undefined>(),
-  )
-  if (stated !== undefined && stated !== entry.kind) {
-    throw new DocumentKindChangedError(entry.kind, stated, documentId)
+  if (judged.statedKind !== null && judged.statedKind !== entry.kind) {
+    throw new DocumentKindChangedError(entry.kind, judged.statedKind, documentId)
   }
-  return {
-    elementCount: await past.read({ query: 'spatialNodeCount', ...at }, assertedAs<number>()),
-    contentDigest: await past.read({ query: 'contentDigest', ...at }, assertedAs<string>()),
-  }
+  return { elementCount: judged.spatialNodeCount, contentDigest: judged.contentDigest }
 }
 
 /** How long version judging runs before handing the loop back. */

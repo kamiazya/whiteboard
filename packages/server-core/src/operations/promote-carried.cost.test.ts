@@ -21,7 +21,7 @@ import { judgeCarried } from './promote-carried.js'
 const tally = { judgements: 0, sizeCharged: 0, projectingReads: 0 }
 
 /** The reads that project a document into one of its own: what a judgement costs, per read. */
-const PROJECTING = new Set(['stateSize', 'textLimitBreach', 'contentDigest'])
+const PROJECTING = new Set(['documentJudgement'])
 
 /** `session` with each named read of a past view counted, and the size each judgement was charged. */
 function counted(session: RecordSession): RecordSession {
@@ -31,9 +31,9 @@ function counted(session: RecordSession): RecordSession {
   ): Promise<T> => {
     const answer = await run()
     if (PROJECTING.has(query.query)) tally.projectingReads += 1
-    if (query.query === 'stateSize') {
+    if (query.query === 'documentJudgement') {
       tally.judgements += 1
-      tally.sizeCharged += answer as number
+      tally.sizeCharged += (answer as { stateSize: number }).stateSize
     }
     return answer
   }
@@ -131,8 +131,8 @@ describe('judgeCarried, rows at distinct points', () => {
     if (judged.kind !== 'admitted') throw new Error(`not admitted: ${judged.kind}`)
     expect(tally.judgements).toBe(POINTS)
     expect(tally.sizeCharged).toBeGreaterThan(POINTS * BODY_CHARS)
-    // What each judgement projects: the size, the text limits and the digest each read the document whole.
-    expect(tally.projectingReads).toBe(POINTS * PROJECTING.size)
+    // One projection answers a judgement's size, limits, digest and node count.
+    expect(tally.projectingReads).toBe(POINTS)
     // One pass over the history: the body's insert, then each edit once.
     expect(crossed()).toBeLessThanOrEqual(opsUpTo(incoming, incoming.oplogFrontiers()))
     // The answer keeps the caller's rows, in the caller's order.
