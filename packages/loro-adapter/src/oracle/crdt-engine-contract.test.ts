@@ -65,6 +65,8 @@ const DERIVED_READERS: Record<string, string> = {
     'how many messages each thread stores, readable or not, which the commentThreads answer cannot say',
   retiredCommentRows:
     'how many rows the retired plane holds: the annotations read throws exactly when that is above zero',
+  containerPlace:
+    'which document a container belongs to, from the nodes read and the container itself: its path, and its length when it is text',
 }
 
 const sorted = (values: Iterable<string>) => [...values].sort()
@@ -135,6 +137,13 @@ describe('the CRDT document-engine contract', () => {
       { outcome: 'applied', changed: ['doc-1'], localUpdate: 'bG9ybw==' },
       { outcome: 'applied', changed: [] },
       { outcome: 'refused', breach: { shape: 'canvas-size', container: 'cid:root-nodes:Map' } },
+      {
+        outcome: 'refused',
+        breach: {
+          shape: 'too-many-documents',
+          detail: { shape: 'too-many-documents', count: 5001 },
+        },
+      },
     ]
     for (const result of results) {
       expect(documentEngine.mutationResultSchema.parse(result)).toEqual(result)
@@ -199,13 +208,14 @@ describe('the CRDT document-engine contract', () => {
     ).toBe(false)
   })
 
-  it('asks an export for what its mode needs: a shallow snapshot names its frontiers', () => {
+  it('asks an export for what its mode needs: a shallow snapshot names its frontiers, or the version it is cut at', () => {
     const frontiers = [{ peer: '1', counter: 4 }]
     const requests = [
       { handle: 0, mode: 'snapshot' },
       { handle: 0, mode: 'update' },
       { handle: 0, mode: 'update', from: frontiers },
       { handle: 0, mode: 'shallow-snapshot', frontiers },
+      { handle: 0, mode: 'shallow-snapshot-at-version', version: frontiers },
     ]
     for (const request of requests) {
       expect(
@@ -215,6 +225,8 @@ describe('the CRDT document-engine contract', () => {
     }
     for (const bad of [
       { handle: 0, mode: 'shallow-snapshot' },
+      { handle: 0, mode: 'shallow-snapshot-at-version' },
+      { handle: 0, mode: 'shallow-snapshot-at-version', frontiers },
       { handle: 0, mode: 'snapshot', frontiers },
       { handle: 0, mode: 'snapshot', from: frontiers },
       { handle: 0, mode: 'update', frontiers },

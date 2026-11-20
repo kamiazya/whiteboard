@@ -17,13 +17,13 @@ import type { CrdtEngine } from '../engine/types.js'
 import { createWorkspaceDocumentAtPath, documentContainers } from '../workspace-tree.js'
 import { mutation } from './crdt-engine-conformance-kit.js'
 
-const NOTE = '01BRWAAAAAAAAAAAAAAAAAAAA0'
-const BOARD = '01BRWAAAAAAAAAAAAAAAAAAAB0'
+export const NOTE = '01BRWAAAAAAAAAAAAAAAAAAAA0'
+export const BOARD = '01BRWAAAAAAAAAAAAAAAAAAAB0'
 const base64 = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64')
 const CEILING_TIMEOUT_MS = 30_000
 
 /** A record holding a note at `notes`, a board at `board` and a folder `week`. */
-function seedRecord(): LoroDoc {
+export function seedRecord(): LoroDoc {
   const doc = new LoroDoc()
   createWorkspaceDocumentAtPath(doc, { path: 'notes', documentId: NOTE, kind: 'markdown' })
   createWorkspaceDocumentAtPath(doc, { path: 'board', documentId: BOARD, kind: 'spatial' })
@@ -37,7 +37,7 @@ function seedRecord(): LoroDoc {
 }
 
 /** `count` bare nodes: documents when `documents`, else folders. */
-function crowd(doc: LoroDoc, count: number, documents: boolean) {
+export function crowd(doc: LoroDoc, count: number, documents: boolean) {
   const tree = doc.getTree('tree')
   for (let i = 0; i < count; i++) {
     const node = tree.createNode()
@@ -67,9 +67,9 @@ const nodeOf = (doc: LoroDoc, match: (data: LoroMap) => boolean) => {
   if (node === undefined) throw new Error('no such node')
   return node
 }
-const documentNode = (doc: LoroDoc, documentId: string) =>
+export const documentNode = (doc: LoroDoc, documentId: string) =>
   nodeOf(doc, (data) => data.get('documentId') === documentId)
-const folderNode = (doc: LoroDoc, segment: string) =>
+export const folderNode = (doc: LoroDoc, segment: string) =>
   nodeOf(doc, (data) => data.get('segment') === segment && data.get('documentId') === undefined)
 
 type Judging = ReturnType<typeof judging>
@@ -253,6 +253,44 @@ function describeUpdate({ hold, send, refusedAs }: Judging) {
   )
 }
 
+function describePrecedence({ refusedAs }: Judging) {
+  const unreadable = (client: LoroDoc) => documentNode(client, NOTE).data.set('kind', 'bogus')
+  const offGrammar = (client: LoroDoc) => documentNode(client, BOARD).data.set('segment', 'not one')
+  const longName = (client: LoroDoc) =>
+    documentNode(client, BOARD).data.set('name', 'x'.repeat(DOCUMENT_NAME_MAX_LENGTH + 1))
+  const badFolderName = (client: LoroDoc) => folderNode(client, 'week').data.set('name', 'a/b')
+  const wrongKind = (client: LoroDoc) =>
+    writeDocumentKind(documentContainers(client, BOARD), 'markdown')
+
+  // One update breaking two limits answers the first of them in the judge's
+  // order, whatever order the edits were written in: a keeper's refusal must
+  // not depend on which of two violations a peer happened to make first.
+  it.each([
+    [
+      'an unreadable node over a path off the grammar',
+      [offGrammar, unreadable],
+      'unreadable-document-meta',
+    ],
+    ['a path off the grammar over a name past the bound', [longName, offGrammar], 'invalid-path'],
+    [
+      'a name past the bound over a refused folder name',
+      [badFolderName, longName],
+      'document-name-too-long',
+    ],
+    [
+      'a kind an envelope contradicts over a path off the grammar',
+      [offGrammar, wrongKind],
+      'document-kind-changed',
+    ],
+  ] as const)('answers %s', (_competing, edits, shape) => {
+    const editedBy = (order: readonly ((client: LoroDoc) => unknown)[]) => (client: LoroDoc) => {
+      for (const edit of order) edit(client)
+    }
+    refusedAs(seedRecord(), editedBy(edits), shape)
+    refusedAs(seedRecord(), editedBy([...edits].reverse()), shape)
+  })
+}
+
 export function describeWorkspaceSyncJudging(makeEngine: () => CrdtEngine) {
   describe('what a workspace-sync judge refuses', () => {
     const judge = judging(makeEngine)
@@ -260,5 +298,6 @@ export function describeWorkspaceSyncJudging(makeEngine: () => CrdtEngine) {
     describePlacement(judge)
     describeNames(judge)
     describeUpdate(judge)
+    describePrecedence(judge)
   })
 }

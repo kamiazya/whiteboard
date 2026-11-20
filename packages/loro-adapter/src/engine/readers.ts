@@ -7,10 +7,11 @@
  * contract owes an entry here and one removed here fails to compile.
  */
 import { type documentEngine, documentKindSchema } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
+import type { ContainerID, LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import { readAnnotations, retiredCommentRows } from '../annotations.js'
 import { readCommentThreads, threadMessageCounts } from '../comment-threads.js'
+import { containerPlace } from '../container-place.js'
 import type { DocumentContainers } from '../containers.js'
 import { contentDigestOfDocument } from '../content-digest.js'
 import { readContentWithTags, readDocumentContent } from '../document-content.js'
@@ -55,6 +56,8 @@ import { type Answer, answer, answerLater, attempt, versionOfPairs } from './ans
 const readArgsSchema = z
   .object({
     documentId: z.string().optional(),
+    /** The container a `containerPlace` read asks about. */
+    container: z.string().optional(),
     /** The kind the document's index row records, for a document that records none itself. */
     kind: documentKindSchema.optional(),
     since: z.array(z.tuple([z.string(), z.number().int()])).optional(),
@@ -77,6 +80,31 @@ function requiredId(args: ReadArgs): string {
   if (args.documentId === undefined) throw new TypeError('this read names a document')
   return args.documentId
 }
+
+function requiredContainer(args: ReadArgs): ContainerID {
+  if (args.container === undefined) throw new TypeError('this read names a container')
+  return args.container as ContainerID
+}
+
+/**
+ * A reader of a whole document's state: the record's own when it names no
+ * document, else the document `documentId` names, read as a document of its
+ * own. The projection is what a standalone copy of the document would be, so
+ * the answer is the one the document gives wherever it is kept.
+ */
+const wholeDocument =
+  (read: (doc: LoroDoc) => unknown): Reader =>
+  (doc, args) => {
+    if (args.documentId === undefined) return read(doc)
+    const projected = projectWorkspaceDocument(doc, args.documentId)
+    if (projected === null)
+      throw new RangeError(`No document "${args.documentId}" in this workspace`)
+    try {
+      return read(projected)
+    } finally {
+      projected.free()
+    }
+  }
 
 const since = (args: ReadArgs) => versionOfPairs(args.since ?? [])
 
@@ -102,9 +130,9 @@ export const READERS: Record<documentEngine.QueryName, Reader> = {
   imageRefIds: content((host) => [...collectImageRefIds(host)].sort()),
   retiredStoredShape: content(retiredStoredShapeIn),
   retiredCommentRows: content(retiredCommentRows),
-  stateSize: (doc) => stateSize(doc),
-  contentDigest: (doc) => contentDigestOfDocument(doc),
-  textLimitBreach: (doc) => judgeStateWithinTextLimits(doc),
+  stateSize: wholeDocument(stateSize),
+  contentDigest: wholeDocument(contentDigestOfDocument),
+  textLimitBreach: wholeDocument(judgeStateWithinTextLimits),
   documents: (doc) => readWorkspaceDocuments(doc),
   nodes: (doc) => readWorkspaceNodes(doc),
   meta: (doc) => readWorkspaceMeta(doc),
@@ -121,6 +149,7 @@ export const READERS: Record<documentEngine.QueryName, Reader> = {
     const scan = await scanFileReferences(doc, { trashBytes: async () => null })
     return { referenced: [...scan.referenced].sort(), unjudged: scan.unjudged }
   },
+  containerPlace: (doc, args) => containerPlace(doc, requiredContainer(args)),
   workspaceDocumentEntry: (doc, args) => resolveIndexedWorkspaceDocument(doc, requiredId(args)),
   workspaceDocumentProjection: (doc, args) => {
     const projected = projectWorkspaceDocument(doc, requiredId(args))

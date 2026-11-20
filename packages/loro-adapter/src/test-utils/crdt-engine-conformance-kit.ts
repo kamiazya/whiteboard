@@ -77,8 +77,22 @@ export function applied(result: object): wire.MutationApplied {
   return parsed
 }
 
-export function write(engine: CrdtEngine, handle: number, op: string, args: unknown) {
-  return applied(engine.write(wire.writeRequestSchema.parse({ handle, batch: [{ op, args }] })))
+export function write(
+  engine: CrdtEngine,
+  handle: number,
+  op: string,
+  args: unknown,
+  judge?: wire.WriteJudge,
+) {
+  return applied(
+    engine.write(
+      wire.writeRequestSchema.parse({
+        handle,
+        batch: [{ op, args }],
+        ...(judge === undefined ? {} : { judge }),
+      }),
+    ),
+  )
 }
 
 export function splice(

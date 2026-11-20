@@ -18,7 +18,14 @@
  * snapshot does not.
  */
 import { base64ToBytes, bytesToBase64, documentEngine as wire } from '@kamiazya/whiteboard-model'
-import { decodeFrontiers, encodeFrontiers, LoroDoc, UndoManager, VersionVector } from 'loro-crdt'
+import {
+  decodeFrontiers,
+  decodeImportBlobMeta,
+  encodeFrontiers,
+  LoroDoc,
+  UndoManager,
+  VersionVector,
+} from 'loro-crdt'
 import {
   importWithinTextLimits,
   type SyncTextBreach,
@@ -95,10 +102,16 @@ function decoded(text: string): Uint8Array {
   return bytes
 }
 
+/**
+ * The judge's own object rides as `detail`, made JSON as the wire carries it
+ * (a field a judge leaves undefined is not there), so a keeper rebuilds its
+ * refusal from an engine's answer exactly as from the judge.
+ */
 function breachOf(breach: SyncTextBreach | WorkspaceSyncBreach): wire.Breach {
+  const detail: unknown = JSON.parse(JSON.stringify(breach))
   return 'container' in breach
-    ? { shape: breach.shape, container: breach.container }
-    : { shape: breach.shape }
+    ? { shape: breach.shape, container: breach.container, detail }
+    : { shape: breach.shape, detail }
 }
 
 /** The workspace documents the operations after `before` wrote to; none for a document that is its own root. */
@@ -250,11 +263,45 @@ function judgeOnShadow(
   }
 }
 
+/**
+ * What a judged import answers for when operations are parked: the update and
+ * everything it activates. The judges read the operations an import adds to
+ * the oplog, and parked ones are not in it until an update supplies what they
+ * build on, so the judged copy is given the parked updates first and the import
+ * that completes them adds them to what is read. Neither judge's shortcut for a
+ * short update applies, since a short update may be what completes a long one.
+ */
+function judgeActivation(
+  entry: Held,
+  incoming: Uint8Array,
+  judge: 'text' | 'workspace-sync',
+): SyncTextBreach | WorkspaceSyncBreach | null {
+  const copy = entry.doc.fork()
+  try {
+    for (const update of entry.parked) copy.import(update)
+    return judge === 'text'
+      ? importWithinTextLimits(copy, incoming).breach
+      : judgeWorkspaceSyncImport(copy, incoming)
+  } finally {
+    release(copy)
+  }
+}
+
+/** Whether `doc` holds every operation `update` carries. */
+function holds(doc: LoroDoc, update: Uint8Array): boolean {
+  const held = doc.oplogVersion()
+  const { partialEndVersionVector: end } = decodeImportBlobMeta(update, false)
+  return [...end.toJSON()].every(([peer, counter]) => (held.get(peer) ?? 0) >= counter)
+}
+
 function importInto(entry: Held, request: wire.ImportRequest): wire.MutationResult {
   editable(entry)
   const incoming = decoded(request.bytes)
   const judge = request.judge ?? 'text'
-  if (judge === 'text') {
+  if (judge !== 'none' && entry.parked.length > 0) {
+    const breach = judgeActivation(entry, incoming, judge)
+    if (breach !== null) return { outcome: 'refused', breach: breachOf(breach) }
+  } else if (judge === 'text') {
     entry.judge ??= syncTextLimitJudge(entry.doc)
     const breach = entry.judge(incoming)
     if (breach !== null) return { outcome: 'refused', breach: breachOf(breach) }
@@ -265,6 +312,8 @@ function importInto(entry: Held, request: wire.ImportRequest): wire.MutationResu
   const before = entry.doc.oplogVersion()
   const status = entry.doc.import(incoming)
   const pending = (status.pending?.size ?? 0) > 0
+  // What this update completed is applied now, so it is no longer parked.
+  entry.parked = entry.parked.filter((update) => !holds(entry.doc, update))
   if (pending) entry.parked.push(incoming)
   keep(entry, incoming)
   return { outcome: 'applied', changed: touchedSince(entry.doc, before), pending }
@@ -289,11 +338,13 @@ function exportFrom(doc: LoroDoc, request: wire.ExportRequest): wire.ExportRespo
         : versionOfPairs(request.from.map(({ peer, counter }) => [peer, counter]))
     return { bytes: bytesToBase64(doc.export({ mode: 'update', from: since })) }
   }
-  const kept = request.frontiers.map(({ peer, counter }) => ({
-    peer: peer as `${number}`,
-    counter,
-  }))
-  return { bytes: bytesToBase64(doc.export({ mode: 'shallow-snapshot', frontiers: kept })) }
+  const cut =
+    request.mode === 'shallow-snapshot-at-version'
+      ? doc.vvToFrontiers(
+          versionOfPairs(request.version.map(({ peer, counter }) => [peer, counter])),
+        )
+      : frontiersAt(request.frontiers)
+  return { bytes: bytesToBase64(doc.export({ mode: 'shallow-snapshot', frontiers: cut })) }
 }
 
 function applyBatch(doc: LoroDoc, batch: wire.WriteRequest['batch']) {
@@ -393,14 +444,32 @@ function forkOf(source: Held, request: wire.ForkRequest): Held {
   }
 }
 
-function versionOf(doc: LoroDoc): wire.VersionResponse {
+/**
+ * What `doc` holds, or held at `at`: the operations that point had seen, with
+ * the frontiers they reach. A point the document does not hold is refused,
+ * since no operations can be named for it.
+ */
+function versionOf(doc: LoroDoc, at?: wire.VersionEntry[]): wire.VersionResponse {
   const entries = (pairs: Array<[string, number]>) =>
     pairs.map(([peer, counter]) => ({ peer, counter }))
+  const shallowRoot = entries(frontierPairs(doc.shallowSinceFrontiers()))
+  if (at === undefined) {
+    return {
+      version: entries(versionPairs(doc.oplogVersion())),
+      frontiers: entries(frontierPairs(doc.oplogFrontiers())),
+      encodedVersion: bytesToBase64(doc.oplogVersion().encode()),
+      encodedFrontiers: bytesToBase64(encodeFrontiers(doc.oplogFrontiers())),
+      shallowRoot,
+    }
+  }
+  const seen = doc.frontiersToVV(frontiersAt(at))
+  const reached = doc.vvToFrontiers(seen)
   return {
-    version: entries(versionPairs(doc.oplogVersion())),
-    frontiers: entries(frontierPairs(doc.oplogFrontiers())),
-    encodedVersion: bytesToBase64(doc.oplogVersion().encode()),
-    encodedFrontiers: bytesToBase64(encodeFrontiers(doc.oplogFrontiers())),
+    version: entries(versionPairs(seen)),
+    frontiers: entries(frontierPairs(reached)),
+    encodedVersion: bytesToBase64(seen.encode()),
+    encodedFrontiers: bytesToBase64(encodeFrontiers(reached)),
+    shallowRoot,
   }
 }
 
@@ -436,7 +505,8 @@ function inspections(heldBy: (handle: number) => Held) {
       return { value: readQueryNow(heldBy(handle).doc, query) }
     },
     version(request: wire.VersionRequest) {
-      return versionOf(heldBy(wire.versionRequestSchema.parse(request).handle).doc)
+      const { handle, at } = wire.versionRequestSchema.parse(request)
+      return versionOf(heldBy(handle).doc, at)
     },
     decode: (request: wire.DecodeRequest) => decodeBytes(wire.decodeRequestSchema.parse(request)),
     undoState(request: wire.UndoStateRequest) {

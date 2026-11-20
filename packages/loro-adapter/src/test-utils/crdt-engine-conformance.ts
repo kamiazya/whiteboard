@@ -21,6 +21,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { exportedBytes, frontierPairs, type VersionPairs, versionPairs } from '../engine/answers.js'
 import { journaledEngine } from '../engine/journal.js'
 import type { CrdtEngine } from '../engine/types.js'
+import { describeEngineAnswers } from './crdt-engine-conformance-answers.js'
 import {
   describeDocumentContentWithTags,
   describeDocumentKindFallback,
@@ -764,6 +765,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeDocumentContentWithTags(makeEngine)
     describeRetiredCommentRows(makeEngine)
     describeThreadMessageCounts(makeEngine)
+    describeEngineAnswers(makeEngine)
     describeSubtreeImport(makeEngine)
     describeSubtreeRoot(makeEngine)
     describeReadNow(makeEngine)

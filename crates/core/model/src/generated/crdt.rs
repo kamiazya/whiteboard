@@ -287,6 +287,8 @@ pub enum QueryName {
     WorkspaceDocumentEntry,
     /// Written `workspaceDocumentProjection`.
     WorkspaceDocumentProjection,
+    /// Written `containerPlace`.
+    ContainerPlace,
 }
 
 impl QueryName {
@@ -329,6 +331,7 @@ impl QueryName {
             Self::FileReferences => "fileReferences",
             Self::WorkspaceDocumentEntry => "workspaceDocumentEntry",
             Self::WorkspaceDocumentProjection => "workspaceDocumentProjection",
+            Self::ContainerPlace => "containerPlace",
         }
     }
 
@@ -371,6 +374,7 @@ impl QueryName {
             "fileReferences" => Some(Self::FileReferences),
             "workspaceDocumentEntry" => Some(Self::WorkspaceDocumentEntry),
             "workspaceDocumentProjection" => Some(Self::WorkspaceDocumentProjection),
+            "containerPlace" => Some(Self::ContainerPlace),
             _ => None,
         }
     }
@@ -660,6 +664,8 @@ pub struct Breach {
     pub shape: BreachShape,
     /// The container that broke it, when the limit names one.
     pub container: Option<String>,
+    /// The breach object the judge itself answers, as JSON: what the limit measured (a count, the nodes or paths it names, the kind recorded) so a keeper can word its refusal. Any-value on purpose: each shape carries its own fields.
+    pub detail: Option<Value>,
 }
 
 /// Release a document: its handle is then invalid and any call on it is refused.
@@ -850,13 +856,6 @@ pub struct VersionEntry {
     pub counter: i64,
 }
 
-/// Ask an open document which operations it holds.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct VersionRequest {
-    /// The document.
-    pub handle: Handle,
-}
-
 /// One write: the writer and its arguments, any-value on purpose.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Write {
@@ -880,6 +879,20 @@ pub struct CheckoutRequest {
 pub struct DecodeResponse {
     /// The peers and counters.
     pub entries: Vec<VersionEntry>,
+}
+
+/// Export the current state, keeping history only from a version on.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExportShallowAtVersionRequest {
+    /// The document.
+    pub handle: Handle,
+    /// A version vector of operations the document holds, as a version response names one: where the kept history starts; the state exported is still the current one.
+    pub version: Vec<VersionEntry>,
+}
+
+impl ExportShallowAtVersionRequest {
+    /// What `mode` is always written as.
+    pub const MODE: &str = "shallow-snapshot-at-version";
 }
 
 /// Export the current state, keeping history only from a frontier on.
@@ -960,6 +973,15 @@ pub struct ReadRequest {
     pub query: Query,
 }
 
+/// Ask an open document which operations it holds, or held at a past point.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct VersionRequest {
+    /// The document.
+    pub handle: Handle,
+    /// Frontiers the document holds, as a version response names them: answer for the operations that point had seen. Absent answers for every operation held.
+    pub at: Option<Vec<VersionEntry>>,
+}
+
 /// The operations an open document holds, as the engine encodes them.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VersionResponse {
@@ -971,6 +993,8 @@ pub struct VersionResponse {
     pub encoded_version: Bytes,
     /// The frontiers in the engine encoding, what a keeper stores.
     pub encoded_frontiers: Bytes,
+    /// The frontiers the document keeps its history from, the oldest point it can still be checked out at; empty for a document that keeps every operation.
+    pub shallow_root: Vec<VersionEntry>,
 }
 
 /// Apply writes to an open document as one batch.
@@ -993,6 +1017,8 @@ pub enum ExportRequest {
     ExportUpdateRequest(ExportUpdateRequest),
     /// A `ExportShallowSnapshotRequest`.
     ExportShallowSnapshotRequest(ExportShallowSnapshotRequest),
+    /// A `ExportShallowAtVersionRequest`.
+    ExportShallowAtVersionRequest(ExportShallowAtVersionRequest),
     /// A `ExportSubtreeRequest`.
     ExportSubtreeRequest(ExportSubtreeRequest),
     /// A `ExportProjectionRequest`.

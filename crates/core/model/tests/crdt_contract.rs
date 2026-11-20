@@ -160,7 +160,11 @@ fn every_message_defaults_empty_and_clones_equal_with_an_unsigned_index() {
 #[test]
 fn results_requests_and_opening_messages_carry_their_fields() {
     let refused = MutationRefused {
-        breach: Breach { shape: BreachShape::Body, container: Some("c".into()) },
+        breach: Breach {
+            shape: BreachShape::Body,
+            container: Some("c".into()),
+            detail: Some(Value::String("x".into())),
+        },
     };
     assert_ne!(MutationResult::MutationRefused(refused.clone()), MutationResult::default());
     let applied = MutationApplied {
@@ -232,9 +236,11 @@ fn the_calls_for_judging_versions_forks_and_undo_state_carry_their_fields() {
         frontiers: entries.clone(),
         encoded_version: "AA==".into(),
         encoded_frontiers: "AQ==".into(),
+        shallow_root: entries.clone(),
     };
     assert_ne!(version.clone(), VersionResponse::default());
-    assert_eq!(VersionRequest::default(), VersionRequest { handle: 0 });
+    assert_eq!(VersionRequest::default(), VersionRequest { handle: 0, at: None });
+    assert_ne!(VersionRequest { handle: 0, at: Some(entries.clone()) }, VersionRequest::default());
     let fork = ForkRequest { handle: 1, peer: "9".into(), at: Some(entries.clone()) };
     assert_ne!(fork.clone(), ForkRequest::default());
     let checkout = CheckoutRequest { handle: 1, at: entries };

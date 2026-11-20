@@ -97,6 +97,7 @@ export const queryNameSchema = z.enum([
   'fileReferences',
   'workspaceDocumentEntry',
   'workspaceDocumentProjection',
+  'containerPlace',
 ])
 export type QueryName = z.infer<typeof queryNameSchema>
 
@@ -184,6 +185,7 @@ export type WriterName = z.infer<typeof writerNameSchema>
 export const breachSchema = z.strictObject({
   shape: breachShapeSchema,
   container: z.string().optional(),
+  detail: z.unknown().optional(),
 })
 export type Breach = z.infer<typeof breachSchema>
 
@@ -324,12 +326,6 @@ export const versionEntrySchema = z.strictObject({
 })
 export type VersionEntry = z.infer<typeof versionEntrySchema>
 
-/** Ask an open document which operations it holds. */
-export const versionRequestSchema = z.strictObject({
-  handle: handleSchema,
-})
-export type VersionRequest = z.infer<typeof versionRequestSchema>
-
 /** One write: the writer and its arguments, any-value on purpose. */
 export const writeSchema = z.strictObject({
   op: writerNameSchema,
@@ -349,6 +345,14 @@ export const decodeResponseSchema = z.strictObject({
   entries: z.array(versionEntrySchema),
 })
 export type DecodeResponse = z.infer<typeof decodeResponseSchema>
+
+/** Export the current state, keeping history only from a version on. */
+export const exportShallowAtVersionRequestSchema = z.strictObject({
+  handle: handleSchema,
+  mode: z.literal('shallow-snapshot-at-version'),
+  version: z.array(versionEntrySchema),
+})
+export type ExportShallowAtVersionRequest = z.infer<typeof exportShallowAtVersionRequestSchema>
 
 /** Export the current state, keeping history only from a frontier on. */
 export const exportShallowSnapshotRequestSchema = z.strictObject({
@@ -398,12 +402,20 @@ export const readRequestSchema = z.strictObject({
 })
 export type ReadRequest = z.infer<typeof readRequestSchema>
 
+/** Ask an open document which operations it holds, or held at a past point. */
+export const versionRequestSchema = z.strictObject({
+  handle: handleSchema,
+  at: z.array(versionEntrySchema).optional(),
+})
+export type VersionRequest = z.infer<typeof versionRequestSchema>
+
 /** The operations an open document holds, as the engine encodes them. */
 export const versionResponseSchema = z.strictObject({
   version: z.array(versionEntrySchema),
   frontiers: z.array(versionEntrySchema),
   encodedVersion: bytesSchema,
   encodedFrontiers: bytesSchema,
+  shallowRoot: z.array(versionEntrySchema),
 })
 export type VersionResponse = z.infer<typeof versionResponseSchema>
 
@@ -420,6 +432,7 @@ export const exportRequestSchema = z.discriminatedUnion('mode', [
   exportSnapshotRequestSchema,
   exportUpdateRequestSchema,
   exportShallowSnapshotRequestSchema,
+  exportShallowAtVersionRequestSchema,
   exportSubtreeRequestSchema,
   exportProjectionRequestSchema,
 ])
