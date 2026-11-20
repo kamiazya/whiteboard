@@ -28,8 +28,6 @@ const READS_CANVAS = ['readSpatialCanvas', 'readSpatialCanvasWithSkipped']
 const READS_BODY = ['readMarkdownBody']
 
 const READS_BOTH: Readonly<Record<string, string>> = {
-  'apps/web/src/lib/document-embed-content.ts':
-    'reads every half of one load for the embed seam, which picks the half from the workspace listing afterwards',
   'packages/server-core/src/tools/document-set.ts':
     'a write path: it reads the canvas to refuse overwriting a diagram and the body to compare, not to present either',
   'apps/web/src/lib/document-sync-session.ts':
@@ -98,6 +96,6 @@ describe('a document is read by kind in one place', () => {
       return hit === undefined || !readsBoth(readFileSync(hit.path, 'utf8'), hit.path)
     })
     expect(stale, 'delete the entry; the file no longer reads both halves').toEqual([])
-    expect(Object.keys(READS_BOTH)).toHaveLength(3)
+    expect(Object.keys(READS_BOTH)).toHaveLength(2)
   })
 })

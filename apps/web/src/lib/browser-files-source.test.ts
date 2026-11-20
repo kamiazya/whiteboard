@@ -14,7 +14,11 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import {
+  type DocumentKind,
+  generateDocumentId,
+  type SpatialCanvas,
+} from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { STENCIL_LIBRARY_PATH, TAG_LIBRARY_PATH } from '@kamiazya/whiteboard-plugin-visual'
 import type { DocumentEntry, ListDocumentsInput } from '@kamiazya/whiteboard-ports'
@@ -41,6 +45,7 @@ import {
   resetBrowserWorkspaceIdForTests,
   resolveBrowserWorkspaceId,
 } from './browser-workspace-id.js'
+import { decodeSpatialSnapshot } from './decode-spatial-snapshot.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 
@@ -438,6 +443,28 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
 
     expect((await source.listDocuments())[0]?.tags).toEqual(['home'])
     expect((await source.listTagsInUse?.())?.map((row) => row.tag)).toEqual(['home'])
+  })
+
+  it('hands a board as snapshot bytes that decode to its canvas, and refuses a document the record lacks', async () => {
+    const board = await seedTreeDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'snapshot-board',
+      kind: 'spatial',
+    })
+    const doc = new Loro()
+    writeSpatialCanvas(doc, {
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'hello' })],
+      edges: [],
+    })
+    await seedTreeContent(board.documentId, doc.export({ mode: 'snapshot' }))
+    const source = createBrowserFilesSource()
+
+    const bytes = await source.loadSpatialSnapshot(board)
+
+    expect((await decodeSpatialSnapshot(bytes)).nodes.map((node) => node.id)).toEqual(['a'])
+    await expect(
+      source.loadSpatialSnapshot({ documentId: generateDocumentId(), path: 'gone' }),
+    ).rejects.toThrow(/holds no readable content/)
   })
 
   it('reads the tag library the document at the tag library path declares, and answers none without one', async () => {

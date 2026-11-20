@@ -65,9 +65,6 @@ export interface HeldDocument {
   projection(): Promise<Uint8Array>
 }
 
-/** The projection of a document the record does not hold, which `withHeldDocument` answers as absence. */
-class NotHeldError extends Error {}
-
 function heldDocument(record: RecordLease, documentId: string): HeldDocument {
   const ask = <T>(
     query: 'documentContent' | 'facets' | 'coreFacets' | 'spatialCanvas' | 'markdownBody',
@@ -96,7 +93,8 @@ function heldDocument(record: RecordLease, documentId: string): HeldDocument {
     body: () => ask('markdownBody', bodyShape),
     async projection() {
       const bytes = lease.exportProjection(record, documentId)
-      if (bytes === null) throw new NotHeldError(documentId)
+      // `withHeldDocument` reads this refusal as absence once the tree agrees.
+      if (bytes === null) throw new Error(`the record holds no document ${documentId}`)
       return bytes
     },
   }
@@ -177,7 +175,7 @@ export async function withHeldDocument<T>(
   try {
     return await use(heldDocument(content.record, documentId))
   } catch (err) {
-    if (err instanceof NotHeldError || !(await tree(content.record, documentId))) return null
+    if (!(await tree(content.record, documentId))) return null
     throw err
   }
 }

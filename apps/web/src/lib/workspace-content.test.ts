@@ -17,6 +17,31 @@ import { lazyContentRecord, loadDocument, withHeldDocument } from './workspace-c
 
 claimIsolatedWhiteboardDb('workspace-content')
 
+/** The leases `BrowserWorkspaceRecords` hands out from now on, so a test can ask whether each was given back. */
+function trackLeases(): RecordLease[] {
+  const leases: RecordLease[] = []
+  const open = BrowserWorkspaceRecords.prototype.open
+  vi.spyOn(BrowserWorkspaceRecords.prototype, 'open').mockImplementation(async function (
+    this: BrowserWorkspaceRecords,
+    workspaceId: string,
+  ) {
+    const opened = await open.call(this, workspaceId)
+    if (opened !== null) leases.push(opened)
+    return opened
+  })
+  return leases
+}
+
+/** Whether the engine still holds the lease's handle. */
+function isHeld(held: RecordLease): boolean {
+  try {
+    held.engine.version({ handle: held.handle })
+    return true
+  } catch {
+    return false
+  }
+}
+
 describe('loadDocument', () => {
   beforeEach(clearWhiteboardDb)
   afterEach(() => vi.restoreAllMocks())
@@ -69,16 +94,7 @@ describe('loadDocument', () => {
 
   it('rethrows a read that failed on a document the tree holds, and gives the record back', async () => {
     const entry = await seedTreeDocument({ path: 'notes/held', kind: 'markdown' })
-    const leases: RecordLease[] = []
-    const open = BrowserWorkspaceRecords.prototype.open
-    vi.spyOn(BrowserWorkspaceRecords.prototype, 'open').mockImplementation(async function (
-      this: BrowserWorkspaceRecords,
-      workspaceId: string,
-    ) {
-      const opened = await open.call(this, workspaceId)
-      if (opened !== null) leases.push(opened)
-      return opened
-    })
+    const leases = trackLeases()
     const refusal = new Error('the caller refused')
 
     await expect(
@@ -88,26 +104,27 @@ describe('loadDocument', () => {
     ).rejects.toBe(refusal)
 
     expect(leases).toHaveLength(1)
-    expect(() => leases[0]?.engine.version({ handle: leases[0].handle })).toThrow()
+    expect(leases.some(isHeld)).toBe(false)
   })
 })
 
 describe('withHeldDocument over a lazily opened record', () => {
   beforeEach(clearWhiteboardDb)
+  afterEach(() => vi.restoreAllMocks())
 
   it('opens the record on the first read only, and releasing it before any read opens nothing', async () => {
-    const opens = vi.spyOn(BrowserWorkspaceRecords.prototype, 'open')
-    const untouched = lazyContentRecord()
-    await untouched.release()
-    expect(opens).not.toHaveBeenCalled()
-
     const entry = await seedTreeDocument({ path: 'notes/a', kind: 'markdown' })
+    const leases = trackLeases()
+    await lazyContentRecord().release()
+    expect(leases).toHaveLength(0)
+
     const lazy = lazyContentRecord()
-    opens.mockClear()
     await withHeldDocument(await lazy.open(), entry.documentId, (held) => held.body())
     await withHeldDocument(await lazy.open(), entry.documentId, (held) => held.body())
+
+    expect(leases).toHaveLength(1)
+    expect(leases.some(isHeld)).toBe(true)
     await lazy.release()
-    expect(opens).toHaveBeenCalledTimes(1)
-    vi.restoreAllMocks()
+    expect(leases.some(isHeld)).toBe(false)
   })
 })

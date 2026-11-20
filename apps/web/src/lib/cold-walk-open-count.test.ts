@@ -23,6 +23,7 @@ import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 
 claimIsolatedWhiteboardDb('cold-walk-open-count')
 
@@ -134,5 +135,34 @@ describe('a cold walk over a browser workspace', () => {
     )
 
     expect((await read(documentIds[0] as string)).backlinks).toHaveLength(DOCUMENTS - 2)
+  })
+
+  // Each walk holds the record as an engine lease; a walk that left it open
+  // would hold the whole workspace in the engine for the life of the page.
+  it('gives the record back after a listing, a search and a backlinks ask', {
+    timeout: SEEDED_WALK_TIMEOUT_MS,
+  }, async () => {
+    const { index, documentIds } = await seedWorkspace()
+    const open = BrowserWorkspaceRecords.prototype.open
+    const leases: Awaited<ReturnType<typeof open>>[] = []
+    vi.spyOn(BrowserWorkspaceRecords.prototype, 'open').mockImplementation(async function (
+      this: BrowserWorkspaceRecords,
+      workspaceId: string,
+    ) {
+      const opened = await open.call(this, workspaceId)
+      leases.push(opened)
+      return opened
+    })
+    const source = createBrowserFilesSource({ index })
+
+    await source.listDocuments()
+    await source.searchDocuments('Body')
+    await browserBacklinksReader(index)(documentIds[0] as string)
+
+    // One lease per walk: the subject is present before it is judged released.
+    expect(leases).toHaveLength(3)
+    for (const held of leases) {
+      expect(() => held?.engine.version({ handle: held.handle })).toThrow()
+    }
   })
 })
