@@ -10,13 +10,13 @@ import {
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -54,7 +54,7 @@ describe('wb_canvas_edit proposal author', () => {
     })
 
     expect(result.proposed?.author).toBe('claude-code/1.0')
-    const { doc } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const { doc } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(readProposals(doc)[0]?.author).toBe('claude-code/1.0')
   })
 

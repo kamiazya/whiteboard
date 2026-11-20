@@ -1,5 +1,4 @@
 import { hasOkfFrontmatter } from '@kamiazya/whiteboard-codec'
-import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import {
   generateDocumentId,
   messageOf,
@@ -15,9 +14,8 @@ import {
   isWorkspaceSegmentTakenError,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
-import { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
-import { saveDocumentSnapshot } from '../document-io.js'
+import { withNewDocument } from '../document-session.js'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
 import { callerNamespaceOf } from './caller-namespace.js'
@@ -216,9 +214,10 @@ async function fillCreatedDocument(
     // the document to be conjured on first write, and nothing could then say
     // what a document is: there is no document yet to ask. The kind is
     // written once, at birth.
-    const doc = new LoroDoc()
-    writeDocumentKind(doc, input.kind)
-    await saveDocumentSnapshot(deps, workspaceId, documentId, doc)
+    await withNewDocument(deps, workspaceId, documentId, async (session) => {
+      session.write([{ op: 'writeDocumentKind', args: { kind: input.kind } }])
+      await session.save()
+    })
 
     // A body is written by DELEGATING to `document.set` rather than by
     // repeating what it does. Its write is not a one-liner — it parses OKF,

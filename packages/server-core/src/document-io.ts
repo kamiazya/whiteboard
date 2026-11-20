@@ -1,11 +1,6 @@
-import { isEngineTrap, readSpatialCanvasWithSkipped } from '@kamiazya/whiteboard-loro-adapter'
-import { type DocumentId, messageOf, type SpatialCanvas } from '@kamiazya/whiteboard-model'
-import {
-  chunkSnapshot,
-  DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
-  reassembleSnapshot,
-} from '@kamiazya/whiteboard-ports'
-import { LoroDoc } from 'loro-crdt'
+import { isEngineTrap } from '@kamiazya/whiteboard-loro-adapter'
+import { type DocumentId, messageOf } from '@kamiazya/whiteboard-model'
+import { chunkSnapshot, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES } from '@kamiazya/whiteboard-ports'
 import { getLogger } from './log.js'
 import type { ServerDeps } from './server-deps.js'
 
@@ -18,7 +13,7 @@ const log = getLogger('document-io')
  *
  * It lives beside the loader that raises it, and it is the ONLY class for
  * this condition: read-side and write-side callers alike go through
- * `loadDocument`, so `create-server.ts` maps one class to its 404 rather
+ * `openDocument`, so `create-server.ts` maps one class to its 404 rather
  * than a list that a new loader could silently grow.
  *
  * Distinct from `WorkspaceDocumentNotFoundError` (the workspace INDEX has no
@@ -178,90 +173,6 @@ export function runEvictingOnEngineTrap<T>(
   }
 }
 
-export interface LoadedDocument {
-  doc: LoroDoc
-  canvas: SpatialCanvas
-}
-
-/**
- * Loads a canvas doc for patching. Unlike `wb_facet_set` (which tolerates a
- * missing doc — facets can be set on a brand-new canvas), a patch targets
- * an *existing* element by id, so there is nothing sensible to patch in a
- * doc that has never been saved. This deliberately throws instead of
- * falling back to an empty `LoroDoc`.
- */
-export async function loadDocument(
-  deps: ServerDeps,
-  workspaceId: string,
-  documentId: DocumentId,
-): Promise<LoadedDocument> {
-  const docRef = { kind: 'document' as const, workspaceId, documentId }
-  const existing = await withEngineTrapReported(workspaceId, documentId, 'loading', () =>
-    deps.documentStore.loadSnapshot({ docRef }),
-  )
-  if (existing === null) throw new SnapshotNotFoundError(documentId)
-
-  const doc = new LoroDoc()
-  doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
-  const { canvas, skipped } = readSpatialCanvasWithSkipped(doc)
-  if (skipped > 0) {
-    // Not an error: the save that follows leaves those records alone. The
-    // cause is not knowable here — a field a newer client wrote and a record
-    // an older writer stored past a limit fail the same schema — so this
-    // states the fact and leaves the diagnosis to whoever reads the record.
-    log.warning('canvas holds records that failed validation; they are left as stored', {
-      workspaceId,
-      documentId,
-      skipped,
-    })
-  }
-  return { doc, canvas }
-}
-
-/**
- * Loads an existing canvas doc or creates a fresh one when no snapshot
- * exists yet. Used by `wb_facet_set` where setting facets on a never-saved
- * canvas is valid (unlike spatial patch tools, which require an existing
- * element to target).
- */
-export async function loadOrCreateDocument(
-  deps: ServerDeps,
-  workspaceId: string,
-  documentId: DocumentId,
-): Promise<LoroDoc> {
-  const docRef = { kind: 'document' as const, workspaceId, documentId }
-  const existing = await withEngineTrapReported(workspaceId, documentId, 'loading', () =>
-    deps.documentStore.loadSnapshot({ docRef }),
-  )
-  const doc = new LoroDoc()
-  if (existing !== null) {
-    doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
-  }
-  return doc
-}
-
-/**
- * Exports the LoroDoc as a chunked snapshot and persists it. Shared by
- * `saveDocumentBodySnapshot` (spatial patch tools) and `wb_facet_set` (facet-only
- * mutations) so the chunk+save logic lives in one place.
- */
-export async function saveDocumentSnapshot(
-  deps: ServerDeps,
-  workspaceId: string,
-  documentId: DocumentId,
-  doc: LoroDoc,
-): Promise<void> {
-  await withEngineTrapReported(workspaceId, documentId, 'saving', () =>
-    storeSnapshot(
-      deps,
-      { workspaceId, documentId },
-      doc.export({ mode: 'snapshot' }),
-      doc.oplogVersion().encode(),
-    ),
-  )
-  await announceDocumentWritten(deps, workspaceId, documentId, () => doc)
-}
-
 /** Chunks snapshot bytes and hands them to the store under the frontier they were exported at. */
 export async function storeSnapshot(
   deps: ServerDeps,
@@ -279,32 +190,19 @@ export async function storeSnapshot(
 }
 
 /**
- * Tells the composition root a save landed, with the document the bytes just
- * saved open as a `LoroDoc`: the seam still hands its observer one.
+ * Tells the composition root a save landed. After the bytes are safe, and
+ * never allowed to undo them: what the composition root does here (the daemon
+ * schedules a debounced compaction and a history checkpoint) is not part of
+ * this write's correctness, so a scheduler that throws must not turn a
+ * successful save into a failed one. It is logged rather than rethrown, so a
+ * scheduler that keeps failing stops compacting on the record instead of in
+ * silence.
  */
-export function announceSavedSnapshot(
+export async function announceDocumentWritten(
   deps: ServerDeps,
   workspaceId: string,
   documentId: DocumentId,
-  snapshot: Uint8Array,
 ): Promise<void> {
-  return announceDocumentWritten(deps, workspaceId, documentId, () =>
-    LoroDoc.fromSnapshot(snapshot),
-  )
-}
-
-async function announceDocumentWritten(
-  deps: ServerDeps,
-  workspaceId: string,
-  documentId: DocumentId,
-  doc: () => LoroDoc,
-): Promise<void> {
-  // After the bytes are safe, and never allowed to undo them: what the
-  // composition root does here (the daemon schedules a debounced
-  // compaction) is not part of this write's correctness, so a scheduler
-  // that throws must not turn a successful save into a failed one. It is
-  // logged rather than rethrown, so a scheduler that keeps failing stops
-  // compacting on the record instead of in silence.
   try {
     // A lookup that fails costs the observer its path, not the notification:
     // compaction is addressed by workspace and needs none.
@@ -312,7 +210,6 @@ async function announceDocumentWritten(
     await deps.documentWritten({
       workspaceId,
       documentId,
-      doc: doc(),
       ...(path === undefined ? {} : { path }),
     })
   } catch (err) {

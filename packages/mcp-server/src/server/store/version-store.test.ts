@@ -99,8 +99,8 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   })
 
   it('save records elementCount and returns a VersionEntry', async () => {
-    const doc = nodesDoc(3)
-    const entry = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
+    await saveDocument(SESS_1, 'canvas-a', nodesDoc(3), { kind: 'spatial', overwrite: true })
+    const entry = await store.save(SESS_1, 'canvas-a', { auto: true })
     expect(entry.id).toMatch(/^[A-Za-z0-9_-]+$/)
     expect(entry.path).toBe('canvas-a')
     expect(entry.elementCount).toBe(3)
@@ -119,16 +119,13 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
    * pass the first half alone.
    */
   it('carries restoredFrom through save and list, and leaves an ordinary point without it', async () => {
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
-
-    const merge = await store.save(SESS_1, 'canvas-a', doc, {
+    const merge = await store.save(SESS_1, 'canvas-a', {
       auto: true,
       restoredFrom: 'v-earlier',
     })
     expect(merge.restoredFrom).toBe('v-earlier')
 
-    const plain = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
+    const plain = await store.save(SESS_1, 'canvas-a', { auto: true })
     expect(plain.restoredFrom).toBeUndefined()
 
     const listed = await store.list(SESS_1, 'canvas-a')
@@ -151,15 +148,12 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
    * longer exists.
    */
   it('never sweeps a restore merge or the point it names, even past the automatic cap', async () => {
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
-
-    const source = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
-    const merge = await store.save(SESS_1, 'canvas-a', doc, { auto: true, restoredFrom: source.id })
+    const source = await store.save(SESS_1, 'canvas-a', { auto: true })
+    const merge = await store.save(SESS_1, 'canvas-a', { auto: true, restoredFrom: source.id })
     // Ordinary checkpoints on top: 53 rows against a cap of 50, so THREE are
     // over it — the lineage pair and one ordinary checkpoint.
     for (let i = 0; i < 51; i++) {
-      await store.save(SESS_1, 'canvas-a', doc, { auto: true })
+      await store.save(SESS_1, 'canvas-a', { auto: true })
     }
 
     const ids = new Set((await store.list(SESS_1, 'canvas-a')).map((v) => v.id))
@@ -174,7 +168,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(ids.size).toBe(52)
   })
 
-  it('save counts nodes-model nodes, not the retired legacy elements list', async () => {
+  it('save counts the stored nodes, not the retired legacy elements list', async () => {
     const doc = makeSpatialDoc({
       nodes: [
         textNode({ id: 'n1', text: 'a', x: 0, y: 0, width: 10, height: 10 }),
@@ -189,7 +183,8 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
         },
       ],
     })
-    const entry = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
+    await saveDocument(SESS_1, 'canvas-a', doc, { kind: 'spatial', overwrite: true })
+    const entry = await store.save(SESS_1, 'canvas-a', { auto: true })
     expect(entry.elementCount).toBe(3)
     const [listed] = await store.list(SESS_1, 'canvas-a')
     expect(listed?.elementCount).toBe(3)
@@ -199,25 +194,25 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     const doc = new LoroDoc()
     appendElement(doc, 'e1')
     appendElement(doc, 'e2')
+    await saveDocument(SESS_1, 'canvas-a', doc, { kind: 'spatial', overwrite: true })
 
-    const entry = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
+    const entry = await store.save(SESS_1, 'canvas-a', { auto: true })
     expect(entry.elementCount).toBe(0)
   })
 
-  it('save keeps its fail-soft 0 when the spatial read throws', async () => {
+  it('save counts nothing for a document the spatial read refuses, rather than failing the save', async () => {
+    // The retired list is the stored shape the reader refuses outright, which is the
+    // throw the count's fail-soft answers.
     const doc = new LoroDoc()
     appendElement(doc, 'e1')
-    vi.spyOn(doc, 'getMap').mockImplementation(() => {
-      throw new Error('boom')
-    })
-    const entry = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
+    await saveDocument(SESS_1, 'canvas-a', doc, { kind: 'spatial', overwrite: true })
+    const entry = await store.save(SESS_1, 'canvas-a', { auto: true })
     expect(entry.elementCount).toBe(0)
+    expect(await store.list(SESS_1, 'canvas-a')).toHaveLength(1)
   })
 
   it('round-trips save({ operator }) through list()', async () => {
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
-    const entry = await store.save(SESS_1, 'canvas-a', doc, {
+    const entry = await store.save(SESS_1, 'canvas-a', {
       auto: false,
       label: 'manual',
       operator: {
@@ -241,8 +236,6 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   })
 
   it('saves no attestation, and still reads one a stored row already carries', async () => {
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
     const attestation = {
       kind: 'webauthn' as const,
       credentialId: 'Y3JlZA',
@@ -250,12 +243,12 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       clientDataJSON: 'Y2xpZW50',
       signature: 'c2ln',
     }
-    const attested = await store.save(SESS_1, 'canvas-a', doc, {
+    const attested = await store.save(SESS_1, 'canvas-a', {
       auto: false,
       operator: { kind: 'human', displayName: 'Yuki' },
     })
     expect(attested.attestation).toBeUndefined()
-    const plain = await store.save(SESS_1, 'canvas-a', doc, { auto: false })
+    const plain = await store.save(SESS_1, 'canvas-a', { auto: false })
     const stored = await handle.db
       .selectFrom('versions')
       .select('attestation')
@@ -275,9 +268,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   })
 
   it('list returns operator=undefined for entries saved without an operator', async () => {
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
-    await store.save(SESS_1, 'canvas-a', doc, { auto: true })
+    await store.save(SESS_1, 'canvas-a', { auto: true })
     const listed = await store.list(SESS_1, 'canvas-a')
     expect(listed).toHaveLength(1)
     expect(listed[0]?.operator).toBeUndefined()
@@ -290,7 +281,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     const live = new LoroDoc()
     appendElement(live, 'a')
     await saveDocument(SESS_1, 'canvas-a', live, { kind: 'spatial', overwrite: true })
-    const entry = await store.save(SESS_1, 'canvas-a', live, { auto: true, label: 'v1' })
+    const entry = await store.save(SESS_1, 'canvas-a', { auto: true, label: 'v1' })
 
     appendElement(live, 'b')
     appendElement(live, 'c')
@@ -310,7 +301,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     const live = new LoroDoc()
     appendElement(live, 'x1')
     await saveDocument(SESS_1, 'canvas-a', live, { kind: 'spatial', overwrite: true })
-    const entry = await store.save(SESS_1, 'canvas-a', live, { auto: true })
+    const entry = await store.save(SESS_1, 'canvas-a', { auto: true })
     appendElement(live, 'x2')
     const liveCountBefore = countElements(live)
 
@@ -331,7 +322,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     cached.getMap('unpersisted').set('op', 1)
     cached.commit()
 
-    const entry = await store.save(SESS_1, 'canvas-a', live, { auto: false })
+    const entry = await store.save(SESS_1, 'canvas-a', { auto: false })
 
     // A restart: only what the store holds is left to check the version out on.
     _clearWorkspaceDocCacheForTests()
@@ -347,13 +338,13 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   })
 
   it('filters list by path and returns newest first', async () => {
-    const a = nodesDoc(1)
-    await store.save(SESS_1, 'canvas-a', a, { auto: true })
+    await saveDocument(SESS_1, 'canvas-a', nodesDoc(1), { kind: 'spatial', overwrite: true })
+    await store.save(SESS_1, 'canvas-a', { auto: true })
 
-    const b = nodesDoc(2)
-    await store.save(SESS_1, 'canvas-b', b, { auto: true })
+    await saveDocument(SESS_1, 'canvas-b', nodesDoc(2), { kind: 'spatial', overwrite: true })
+    await store.save(SESS_1, 'canvas-b', { auto: true })
 
-    await store.save(SESS_1, 'canvas-a', a, { auto: false, label: 'v2' })
+    await store.save(SESS_1, 'canvas-a', { auto: false, label: 'v2' })
 
     const listA = await store.list(SESS_1, 'canvas-a')
     expect(listA).toHaveLength(2)
@@ -371,13 +362,10 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   })
 
   it('keeps auto versions capped at 50 per canvas while preserving manual versions', async () => {
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
-    const manualEntry = await store.save(SESS_1, 'canvas-a', doc, { auto: false, label: 'keep me' })
+    const manualEntry = await store.save(SESS_1, 'canvas-a', { auto: false, label: 'keep me' })
 
     for (let i = 0; i < 52; i++) {
-      appendElement(doc, `auto-${i}`)
-      await store.save(SESS_1, 'canvas-a', doc, { auto: true })
+      await store.save(SESS_1, 'canvas-a', { auto: true })
     }
 
     const list = await store.list(SESS_1, 'canvas-a')
@@ -389,18 +377,14 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
 
   describe('the retired lane label', () => {
     it('is neither answered by save nor by list', async () => {
-      const doc = new LoroDoc()
-      appendElement(doc, 'e1')
-      const entry = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
+      const entry = await store.save(SESS_1, 'canvas-a', { auto: true })
       expect(entry).not.toHaveProperty('branchName')
       const [listed] = await store.list(SESS_1, 'canvas-a')
       expect(listed).not.toHaveProperty('branchName')
     })
 
     it('is not on the stored row', async () => {
-      const doc = new LoroDoc()
-      appendElement(doc, 'e1')
-      const entry = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
+      const entry = await store.save(SESS_1, 'canvas-a', { auto: true })
       const { getDb } = await import('./db/index.js')
       const db = await getDb(tempDir)
       const row = await db
@@ -419,9 +403,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   // createDocument's job alone, and a checkpoint of a document that does
   // not exist checkpoints nothing.
   it('save refuses a path with no document instead of minting a phantom row', async () => {
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
-    await expect(store.save(SESS_1, 'never-created', doc, { auto: true })).rejects.toThrow(
+    await expect(store.save(SESS_1, 'never-created', { auto: true })).rejects.toThrow(
       /no document/i,
     )
   })
@@ -431,9 +413,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   // documents table, which was the version table's last read dependency on
   // the row plane.
   it('save records the workspaceId on the version row', async () => {
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
-    const entry = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
+    const entry = await store.save(SESS_1, 'canvas-a', { auto: true })
 
     const { getDb } = await import('./db/index.js')
     const db = await getDb(tempDir)
@@ -452,9 +432,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => 1_700_000_000_000)
     try {
       for (const label of ['first', 'second', 'third']) {
-        const doc = new LoroDoc()
-        appendElement(doc, label)
-        await store.save(SESS_1, 'canvas-z', doc, { auto: false, label })
+        await store.save(SESS_1, 'canvas-z', { auto: false, label })
       }
     } finally {
       nowSpy.mockRestore()
@@ -471,15 +449,13 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       kind: 'auto' | 'manual',
       tMs: number,
     ): Promise<{ id: string }> {
-      const doc = new LoroDoc()
-      appendElement(doc, `${kind}-${tMs}`)
       // Capture the spy handle so we can mockRestore() in finally — the
       // previous "re-spy with realNow" trick installed a new spy on top of
       // an already-spied Date.now from a sibling call, leaking the wrapper
       // into later assertions instead of restoring the original.
       const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => tMs)
       try {
-        const entry = await store.save(SESS_1, path, doc, {
+        const entry = await store.save(SESS_1, path, {
           auto: kind === 'auto',
           label: kind === 'manual' ? `manual-${tMs}` : undefined,
         })
@@ -514,12 +490,10 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       const m1 = await saveAt('canvas-r', 'manual', 1_000)
       const named = await saveAt('canvas-r', 'auto', 2_000)
       const m2 = await saveAt('canvas-r', 'manual', 3_000)
-      const doc = new LoroDoc()
-      appendElement(doc, 'restored')
       const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => 4_000)
       let merge: { id: string }
       try {
-        merge = await store.save(SESS_1, 'canvas-r', doc, restorePointOptions(named.id))
+        merge = await store.save(SESS_1, 'canvas-r', restorePointOptions(named.id))
       } finally {
         nowSpy.mockRestore()
       }
@@ -562,7 +536,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
         kind: 'spatial',
         overwrite: true,
       })
-      await store.save(SESS_1, 'canvas-a', new LoroDoc(), { auto: true })
+      await store.save(SESS_1, 'canvas-a', { auto: true })
       expect(await store.isUnchangedSinceLastVersion(SESS_1, 'canvas-a')).toBe(true)
 
       for (const text of ['one', 'two', 'three', 'four', 'five']) {
@@ -584,7 +558,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
         kind: 'spatial',
         overwrite: true,
       })
-      await store.save(SESS_1, 'canvas-x', new LoroDoc(), { auto: true })
+      await store.save(SESS_1, 'canvas-x', { auto: true })
       expect(await store.isUnchangedSinceLastVersion(SESS_1, 'canvas-x')).toBe(true)
 
       await saveDocument(SESS_1, 'canvas-x', makeSpatialDoc(textCanvas('x', 'after')), {
@@ -607,7 +581,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
         kind: 'spatial',
         overwrite: true,
       })
-      await store.save(SESS_1, 'canvas-y', new LoroDoc(), { auto: true })
+      await store.save(SESS_1, 'canvas-y', { auto: true })
       expect(await store.isUnchangedSinceLastVersion(SESS_1, 'canvas-y')).toBe(true)
 
       await handle.db.updateTable('versions').set({ contentDigest: '' }).execute()
@@ -622,7 +596,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
 
   /** The document id `path` resolves to, read off the row a save writes. */
   async function documentIdOf(path: string): Promise<string> {
-    const { id } = await store.save(SESS_1, path, new LoroDoc(), { auto: true })
+    const { id } = await store.save(SESS_1, path, { auto: true })
     const row = await handle.db
       .selectFrom('versions')
       .select('documentId')
@@ -698,9 +672,9 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       await carryManualRows(documentId, MAX_MANUAL_PER_DOCUMENT - 1)
 
       // The ceiling itself is taken.
-      await store.save(SESS_1, 'canvas-x', new LoroDoc(), { auto: false, label: 'last' })
+      await store.save(SESS_1, 'canvas-x', { auto: false, label: 'last' })
       // One past it is refused, and writes nothing.
-      const refused = store.save(SESS_1, 'canvas-x', new LoroDoc(), { auto: false })
+      const refused = store.save(SESS_1, 'canvas-x', { auto: false })
       await expect(refused).rejects.toBeInstanceOf(TooManyVersionsError)
       await expect(refused).rejects.toMatchObject({ code: 'too_many_versions', status: 413 })
       const manual = await handle.db
@@ -712,16 +686,16 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       expect(Number(manual.n)).toBe(MAX_MANUAL_PER_DOCUMENT)
 
       // Checkpoints are capped by retention, not refused.
-      await expect(
-        store.save(SESS_1, 'canvas-x', new LoroDoc(), { auto: true }),
-      ).resolves.toMatchObject({ auto: true })
+      await expect(store.save(SESS_1, 'canvas-x', { auto: true })).resolves.toMatchObject({
+        auto: true,
+      })
     })
 
     it('counts per document, so a sibling at the ceiling leaves this one free', async () => {
       await carryManualRows(await documentIdOf('canvas-x'), MAX_MANUAL_PER_DOCUMENT)
-      await expect(
-        store.save(SESS_1, 'canvas-y', new LoroDoc(), { auto: false }),
-      ).resolves.toMatchObject({ auto: false })
+      await expect(store.save(SESS_1, 'canvas-y', { auto: false })).resolves.toMatchObject({
+        auto: false,
+      })
     })
   })
 
@@ -730,7 +704,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       const now = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
       const labels = ['one', 'two', 'three', 'four', 'five']
       for (const label of labels) {
-        await store.save(SESS_1, 'canvas-r', new LoroDoc(), { auto: false, label })
+        await store.save(SESS_1, 'canvas-r', { auto: false, label })
       }
       now.mockRestore()
 
@@ -751,8 +725,8 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     })
 
     it('answers a page that exactly ends the history with no cursor', async () => {
-      await store.save(SESS_1, 'canvas-r', new LoroDoc(), { auto: false, label: 'a' })
-      await store.save(SESS_1, 'canvas-r', new LoroDoc(), { auto: false, label: 'b' })
+      await store.save(SESS_1, 'canvas-r', { auto: false, label: 'a' })
+      await store.save(SESS_1, 'canvas-r', { auto: false, label: 'b' })
       const page = await store.listPage(SESS_1, 'canvas-r', { limit: 2 })
       expect(page.versions).toHaveLength(2)
       expect(page.nextCursor).toBeUndefined()
@@ -767,7 +741,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
 
   describe('belongsTo', () => {
     it('answers whether a version is one of the document at that path', async () => {
-      const mine = await store.save(SESS_1, 'canvas-a', new LoroDoc(), { auto: false })
+      const mine = await store.save(SESS_1, 'canvas-a', { auto: false })
       expect(await store.belongsTo(SESS_1, 'canvas-a', mine.id)).toBe(true)
       expect(await store.belongsTo(SESS_1, 'canvas-b', mine.id)).toBe(false)
       expect(await store.belongsTo(SESS_1, 'no-such-document', mine.id)).toBe(false)

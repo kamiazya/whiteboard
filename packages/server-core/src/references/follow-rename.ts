@@ -27,13 +27,14 @@
  * rewrite refuses it whole, before writing, and it keeps the old path.
  */
 import { type DocumentMove, planReferenceRewrite } from '@kamiazya/whiteboard-codec'
-import { applyDocumentEdit, readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
+import { documentEditWrites } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentId } from '@kamiazya/whiteboard-model'
 import {
   type ContentFactsCache,
   planDocumentReferenceRewrite,
 } from '@kamiazya/whiteboard-reference-graph'
-import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
+import { withDocument } from '../document-session.js'
+import { documentContentOf } from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
 import { factsCacheFor } from './content-source.js'
 
@@ -89,16 +90,23 @@ export async function followReferencesAfterRename(
     const refs = facts.get(entry.documentId)?.refs
     if (refs === undefined || !refs.some((ref) => plan.has(ref.target))) continue
     try {
-      const doc = await loadOrCreateDocument(
+      const rewritten = await withDocument(
         deps,
         input.workspaceId,
         entry.documentId as DocumentId,
+        async (session) => {
+          const edit = planDocumentReferenceRewrite(
+            await documentContentOf(session, entry.kind),
+            plan,
+          )
+          if (edit === null) return false
+          session.write(documentEditWrites(edit))
+          await session.save()
+          return true
+        },
+        { create: true },
       )
-      const edit = planDocumentReferenceRewrite(readDocumentContent(doc, entry.kind), plan)
-      if (edit === null) continue
-      applyDocumentEdit(doc, edit)
-      await saveDocumentSnapshot(deps, input.workspaceId, entry.documentId as DocumentId, doc)
-      updated.push(entry.documentId)
+      if (rewritten) updated.push(entry.documentId)
     } catch {
       failed.push(entry.documentId)
     }

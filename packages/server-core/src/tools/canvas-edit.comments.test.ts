@@ -13,12 +13,12 @@ import {
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { DOCUMENT_ID, makeDeps, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 
@@ -64,7 +64,7 @@ describe('wb_canvas_edit has no comment verbs', () => {
     })
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     const before = readAnnotations(
-      (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).doc,
+      (await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).doc,
     )
     expect(before.map((thread) => thread.id)).toEqual(['t1'])
 
@@ -78,7 +78,7 @@ describe('wb_canvas_edit has no comment verbs', () => {
       ],
     })
 
-    const { doc } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { doc } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(readAnnotations(doc)).toEqual(before)
   })
 })

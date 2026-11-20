@@ -15,7 +15,7 @@ import {
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 import {
-  announceSavedSnapshot,
+  announceDocumentWritten,
   SnapshotNotFoundError,
   storeSnapshot,
   withEngineTrapReported,
@@ -66,18 +66,15 @@ function sessionOver(
       if (batch.length > 0) lease.write(held, batch, { judge: 'none' })
     },
     async save() {
-      let snapshot: Uint8Array | undefined
-      await withEngineTrapReported(workspaceId, documentId, 'saving', async () => {
-        snapshot = lease.exportSnapshot(held)
-        await storeSnapshot(
+      await withEngineTrapReported(workspaceId, documentId, 'saving', () =>
+        storeSnapshot(
           deps,
           { workspaceId, documentId },
-          snapshot,
+          lease.exportSnapshot(held),
           lease.versionOf(held).encoded,
-        )
-      })
-      if (snapshot !== undefined)
-        await announceSavedSnapshot(deps, workspaceId, documentId, snapshot)
+        ),
+      )
+      await announceDocumentWritten(deps, workspaceId, documentId)
     },
     release: () => held.release(),
   }
@@ -195,6 +192,25 @@ export async function withDocument<T>(
     workspaceId,
     documentId,
   )
+  try {
+    return await work(session)
+  } finally {
+    session.release()
+  }
+}
+
+/**
+ * Runs `work` on an empty document that is not read from the store, for a
+ * document that is being BORN: nothing stored is merged into it, and its save
+ * replaces whatever a store held under the id.
+ */
+export async function withNewDocument<T>(
+  deps: ServerDeps,
+  workspaceId: WorkspaceId,
+  documentId: DocumentId,
+  work: (session: DocumentSession) => Promise<T> | T,
+): Promise<T> {
+  const session = await openOver(deps, workspaceId, documentId, null)
   try {
     return await work(session)
   } finally {

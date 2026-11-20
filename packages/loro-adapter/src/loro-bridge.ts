@@ -24,6 +24,7 @@ import {
   NODE_LOCKS_KEY,
   NODES_KEY,
   PROPOSALS_KEY,
+  peekMapOf,
   THREADS_KEY,
   TRUST_KEY,
 } from './containers.js'
@@ -47,7 +48,7 @@ import {
 const TAGS_FIELD = CANVAS_TAGS_FIELD
 /** The board's tags, read verbatim; a malformed value costs the tags alone. */
 function readCanvasTags(doc: DocumentContainers): string[] | undefined {
-  const parsed = storedTagsSchema.safeParse(doc.getMap(CANVAS_KEY).get(TAGS_FIELD))
+  const parsed = storedTagsSchema.safeParse(peekMapOf(doc, CANVAS_KEY)?.get(TAGS_FIELD))
   return parsed.success ? parsed.data : undefined
 }
 /**
@@ -555,10 +556,10 @@ export function withSpatialBatch(
 }
 
 function readLocks(doc: DocumentContainers, mapKey: string): ReadonlySet<string> {
-  const locksMap = doc.getMap(mapKey)
+  const locksMap = peekMapOf(doc, mapKey)
   const locked = new Set<string>()
-  for (const id of locksMap.keys()) {
-    if (locksMap.get(id) === true) locked.add(id)
+  for (const id of locksMap?.keys() ?? []) {
+    if (locksMap?.get(id) === true) locked.add(id)
   }
   return locked
 }
@@ -615,14 +616,14 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
  * an element the document still holds.
  */
 function readStored<T>(
-  map: CanvasMap,
+  map: CanvasMap | undefined,
   schema: { safeParse(value: unknown): { success: true; data: T } | { success: false } },
   retired: (id: string, raw: unknown) => string | null,
 ): { kept: T[]; skipped: number } {
   const kept: T[] = []
   let skipped = 0
-  for (const id of map.keys()) {
-    const raw = map.get(id)
+  for (const id of map?.keys() ?? []) {
+    const raw = map?.get(id)
     refuseRetiredShape(retired(id, raw))
     const parsed = schema.safeParse(raw)
     if (parsed.success) kept.push(parsed.data)
@@ -643,9 +644,9 @@ export function readSpatialCanvasWithSkipped(doc: DocumentContainers): {
   readonly skipped: number
 } {
   refuseRetiredShape(retiredElementsShape(doc))
-  const readNodes = readStored(doc.getMap(NODES_KEY), spatialNodeSchema, retiredNodeShape)
-  const readEdges = readStored(doc.getMap(EDGES_KEY), canvasEdgeSchema, retiredEdgeShape)
-  const readLines = readStored(doc.getMap(LINES_KEY), canvasLineSchema, () => null)
+  const readNodes = readStored(peekMapOf(doc, NODES_KEY), spatialNodeSchema, retiredNodeShape)
+  const readEdges = readStored(peekMapOf(doc, EDGES_KEY), canvasEdgeSchema, retiredEdgeShape)
+  const readLines = readStored(peekMapOf(doc, LINES_KEY), canvasLineSchema, () => null)
   const { kept: nodes } = readNodes
   const { kept: edges } = readEdges
   const { kept: lines } = readLines

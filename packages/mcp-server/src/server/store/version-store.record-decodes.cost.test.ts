@@ -110,7 +110,7 @@ async function seedHistory(
     await saveDocument(workspaceId, path, makeSpatialDoc(canvasReferencing(`d${d}`, 3)))
     for (let v = 0; v < VERSIONS_EACH; v++) {
       const doc = await loadDocument(workspaceId, path)
-      await store.save(workspaceId, path, doc, { auto: false, label: `v${v}` })
+      await store.save(workspaceId, path, { auto: false, label: `v${v}` })
       writeSpatialCanvas(doc, canvasReferencing(`d${d}v${v}`, 3))
       await saveDocument(workspaceId, path, doc, { overwrite: true })
     }
@@ -199,8 +199,7 @@ describe('whole-record decodes on the history plane', () => {
     }
     // No edit between the saves, so every version names one frontier.
     for (let d = 0; d < DOCUMENTS; d++) {
-      const doc = await loadDocument('01S5973HCRYM9KHRJQSYPGDEVP', `page-${d}`)
-      await store.save('01S5973HCRYM9KHRJQSYPGDEVP', `page-${d}`, doc, {
+      await store.save('01S5973HCRYM9KHRJQSYPGDEVP', `page-${d}`, {
         auto: false,
         label: 'same point',
       })

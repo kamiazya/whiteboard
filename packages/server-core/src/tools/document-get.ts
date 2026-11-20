@@ -184,7 +184,7 @@ async function readOrFail(
   input: DocumentGetInput,
   documentId: string,
 ): Promise<ReadDocument | FailedRead> {
-  // Placement first: `loadOrCreateDocument` conjures an empty document
+  // Placement first: a session that may create conjures an empty document
   // for any id, so without this an id that never existed reads as a
   // document that lost its kind — the wrong cause, with a repair that
   // does not apply to it.

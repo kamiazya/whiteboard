@@ -1,5 +1,5 @@
 // A markdown document's body: the Loro text container it lives in.
-import { type DocumentContainers, MARKDOWN_BODY_KEY } from './containers.js'
+import { type DocumentContainers, MARKDOWN_BODY_KEY, peekTextOf } from './containers.js'
 import { spliceText } from './minimal-change.js'
 import { refuseRetiredShape, retiredMarkdownShape } from './retired-stored-shape.js'
 
@@ -15,7 +15,7 @@ import { refuseRetiredShape, retiredMarkdownShape } from './retired-stored-shape
  */
 export function readMarkdownBody(doc: DocumentContainers): string {
   refuseRetiredShape(retiredMarkdownShape(doc))
-  return doc.getText(MARKDOWN_BODY_KEY).toString()
+  return peekTextOf(doc, MARKDOWN_BODY_KEY)?.toString() ?? ''
 }
 
 /**

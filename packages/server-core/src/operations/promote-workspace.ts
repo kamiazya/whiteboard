@@ -229,9 +229,8 @@ async function checkpointPromoted(
       shadowed.push(documentId)
       continue
     }
-    const doc = await deps.liveDocuments.get(input.workspaceId, entry.path)
     try {
-      await deps.versions.save(input.workspaceId, entry.path, doc, {
+      await deps.versions.save(input.workspaceId, entry.path, {
         auto: false,
         operator: input.operator,
       })

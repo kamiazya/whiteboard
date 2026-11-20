@@ -84,7 +84,7 @@ async function setup(text = 'original') {
       edges: [],
     })
   })
-  const versions = new FakeVersionHistory()
+  const versions = new FakeVersionHistory(store)
   const live = new FakeLiveDocuments()
   const notifier = new RecordingNotifier()
   const deps: ServerDeps = makeTestDeps({
@@ -219,7 +219,7 @@ describe('wb_version_list', () => {
 describe('wb_version_restore', () => {
   test('reconciles the LIVE document to the saved state through the operation, and answers the label', async () => {
     const { deps, versions, live } = await setup()
-    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+    const saved = await versions.save(WORKSPACE_ID, PATH, {
       auto: false,
       label: 'checkpoint',
     })
@@ -253,7 +253,7 @@ describe('wb_version_restore', () => {
 
   test('brackets a watching client with started (carrying the label) and complete', async () => {
     const { deps, versions, notifier } = await setup()
-    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+    const saved = await versions.save(WORKSPACE_ID, PATH, {
       auto: false,
       label: 'checkpoint',
     })
@@ -272,7 +272,7 @@ describe('wb_version_restore', () => {
 
   test('restores into a NEW targetPath as a copy, reporting the mode and the element count', async () => {
     const { deps, versions, live } = await setup()
-    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+    const saved = await versions.save(WORKSPACE_ID, PATH, {
       auto: false,
       label: 'checkpoint',
     })
@@ -308,7 +308,7 @@ describe('wb_version_restore', () => {
 
   test('refuses an existing targetPath without overwrite, and reconciles onto it with overwrite', async () => {
     const { deps, versions, live } = await setup()
-    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+    const saved = await versions.save(WORKSPACE_ID, PATH, {
       auto: false,
       label: 'checkpoint',
     })
@@ -346,7 +346,7 @@ describe('wb_version_restore', () => {
 
   test('refuses an overwrite onto a document of the other kind, naming the target and leaving it as it was', async () => {
     const { deps, versions, live } = await setup()
-    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+    const saved = await versions.save(WORKSPACE_ID, PATH, {
       auto: false,
       label: 'checkpoint',
     })
@@ -375,7 +375,7 @@ describe('wb_version_restore', () => {
 
   test('refuses a subtree rollback from a version that is not workspace-scoped', async () => {
     const { deps, versions } = await setup()
-    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+    const saved = await versions.save(WORKSPACE_ID, PATH, {
       auto: false,
       label: 'checkpoint',
     })
@@ -391,7 +391,7 @@ describe('wb_version_restore', () => {
 
   test('refuses subtree combined with a distinct targetPath', async () => {
     const { deps, versions } = await setup()
-    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+    const saved = await versions.save(WORKSPACE_ID, PATH, {
       auto: false,
       label: 'checkpoint',
     })
@@ -419,7 +419,7 @@ describe('wb_version_restore', () => {
 
   test('throws WorkspaceDocumentNotFoundError when workspaceId does not own documentId', async () => {
     const { deps, versions } = await setup()
-    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+    const saved = await versions.save(WORKSPACE_ID, PATH, {
       auto: false,
       label: 'v1',
     })
@@ -437,7 +437,7 @@ describe('wb_version_restore', () => {
   // class for its text to reach the caller.
   test('says by name when the restored target lists no document id', async () => {
     const { deps, versions, live } = await setup()
-    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+    const saved = await versions.save(WORKSPACE_ID, PATH, {
       auto: false,
       label: 'v1',
     })

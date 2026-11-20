@@ -27,10 +27,7 @@ const OWNER = 'packages/loro-adapter/src/'
 const READS_CANVAS = ['readSpatialCanvas', 'readSpatialCanvasWithSkipped']
 const READS_BODY = ['readMarkdownBody']
 
-const READS_BOTH: Readonly<Record<string, string>> = {
-  'packages/server-core/src/tools/document-set.ts':
-    'a write path: it reads the canvas to refuse overwriting a diagram and the body to compare, not to present either',
-}
+const READS_BOTH: Readonly<Record<string, string>> = {}
 
 const files: string[] = []
 for (const root of SCAN_ROOTS) walkSourceFiles(join(REPO_ROOT, root), files)
@@ -94,6 +91,6 @@ describe('a document is read by kind in one place', () => {
       return hit === undefined || !readsBoth(readFileSync(hit.path, 'utf8'), hit.path)
     })
     expect(stale, 'delete the entry; the file no longer reads both halves').toEqual([])
-    expect(Object.keys(READS_BOTH)).toHaveLength(1)
+    expect(Object.keys(READS_BOTH)).toHaveLength(0)
   })
 })

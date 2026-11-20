@@ -7,10 +7,10 @@ import { COMMENT_MESSAGE_MAX_CHARS, MARKDOWN_MAX_CHARS } from '@kamiazya/whitebo
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { readStoredDocumentOrEmpty, writeStoredDocument } from '../test-utils/stored-document.js'
 import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { createBodyEditTool } from './body-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
@@ -81,9 +81,9 @@ describe('wb_document_get reads a document in its own format', () => {
   it('a root key the server does not interpret reads back under frontmatter.facetsRaw, and the published schema says so', async () => {
     const deps = makeDeps()
     const documentId = await createDoc(deps, 'markdown')
-    const doc = await loadOrCreateDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId)
+    const doc = await readStoredDocumentOrEmpty(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId)
     writeCoreFacets(doc, { type: 'note', facetsRaw: { created: '2020-01-02' } })
-    await saveDocumentSnapshot(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, doc)
+    await writeStoredDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, doc)
     const tool = createDocumentGetTool(deps)
 
     const [result] = (
@@ -141,7 +141,7 @@ describe('wb_document_get reads a document in its own format', () => {
     // with still does. That row is consulted before refusing.
     const deps = makeDeps()
     const documentId = await createDoc(deps, 'markdown')
-    await saveDocumentSnapshot(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, new LoroDoc()) // overwrite: doc loses its kind
+    await writeStoredDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, new LoroDoc()) // overwrite: doc loses its kind
 
     const [result] = (
       await createDocumentGetTool(deps).execute({
@@ -158,7 +158,7 @@ describe('wb_document_get reads a document in its own format', () => {
   it('a kindless doc falls back to the index row kind: spatial', async () => {
     const deps = makeDeps()
     const documentId = await createDoc(deps, 'spatial')
-    await saveDocumentSnapshot(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, new LoroDoc()) // overwrite: doc loses its kind
+    await writeStoredDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, new LoroDoc()) // overwrite: doc loses its kind
 
     const [result] = (
       await createDocumentGetTool(deps).execute({
@@ -199,7 +199,7 @@ describe('wb_document_get reads a document in its own format', () => {
     // made the missing format invisible.
     const deps = makeDeps()
     const documentId = await createDoc(deps, 'spatial')
-    await saveDocumentSnapshot(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, new LoroDoc()) // overwrite: no kind
+    await writeStoredDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, new LoroDoc()) // overwrite: no kind
     const deviantDeps: ServerDeps = {
       ...deps,
       // strips `kind` from the real index's answer
@@ -235,12 +235,12 @@ describe('wb_document_get reads a document in its own format', () => {
     // readable ones with it.
     const deps = makeDeps()
     const retired = await createDoc(deps, 'spatial')
-    const doc = await loadOrCreateDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', retired)
+    const doc = await readStoredDocumentOrEmpty(deps, '0104Y7DY19FTA30KQYKDRRMNBN', retired)
     doc
       .getMap('nodes')
       .set('old', { id: 'old', type: 'text', text: 'hi', x: 0, y: 0, width: 1, height: 1 })
     doc.commit()
-    await saveDocumentSnapshot(deps, '0104Y7DY19FTA30KQYKDRRMNBN', retired, doc)
+    await writeStoredDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', retired, doc)
     await deps.documentIndex.createWorkspace({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })
     const { documentId: readable } = await wbDocumentCreate(deps, {
       workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
@@ -303,9 +303,9 @@ describe('wb_document_get reads a document in its own format', () => {
         path: `big-${i}`,
         kind: 'markdown',
       })
-      const doc = await loadOrCreateDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId)
+      const doc = await readStoredDocumentOrEmpty(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId)
       writeMarkdownBody(doc, i === 19 ? 'small\n' : body)
-      await saveDocumentSnapshot(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, doc)
+      await writeStoredDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, doc)
       ids.push(documentId)
     }
 
@@ -334,9 +334,9 @@ describe('wb_document_get reads a document in its own format', () => {
       path: 'huge',
       kind: 'markdown',
     })
-    const doc = await loadOrCreateDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId)
+    const doc = await readStoredDocumentOrEmpty(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId)
     writeMarkdownBody(doc, `${'y'.repeat(MARKDOWN_MAX_CHARS * 8)}\n`)
-    await saveDocumentSnapshot(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, doc)
+    await writeStoredDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, doc)
 
     const result = await createDocumentGetTool(deps).execute({
       workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
@@ -354,7 +354,7 @@ describe('wb_document_get reads a document in its own format', () => {
     const deps = makeDeps()
     const good = await createDoc(deps, 'markdown')
     const kindless = await createDoc(deps, 'spatial')
-    await saveDocumentSnapshot(deps, '0104Y7DY19FTA30KQYKDRRMNBN', kindless, new LoroDoc()) // overwrite: no kind
+    await writeStoredDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', kindless, new LoroDoc()) // overwrite: no kind
     const deviantDeps: ServerDeps = {
       ...deps,
       documentIndex: withResolveOverride(deps.documentIndex, async (input) => {
@@ -389,9 +389,9 @@ describe('wb_document_get reads a document in its own format', () => {
       path: 'unwritable',
       kind: 'markdown',
     })
-    const doc = await loadOrCreateDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', bad)
+    const doc = await readStoredDocumentOrEmpty(deps, '0104Y7DY19FTA30KQYKDRRMNBN', bad)
     writeCoreFacets(doc, { type: 'note', facetsRaw: { weird: Number.NaN } })
-    await saveDocumentSnapshot(deps, '0104Y7DY19FTA30KQYKDRRMNBN', bad, doc)
+    await writeStoredDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', bad, doc)
 
     const result = await createDocumentGetTool(deps).execute({
       workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
@@ -418,9 +418,9 @@ describe('wb_document_get reads a document in its own format', () => {
       path: 'unwritable',
       kind: 'markdown',
     })
-    const doc = await loadOrCreateDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', bad)
+    const doc = await readStoredDocumentOrEmpty(deps, '0104Y7DY19FTA30KQYKDRRMNBN', bad)
     writeCoreFacets(doc, { type: 'note', facetsRaw: { weird: Number.NaN } })
-    await saveDocumentSnapshot(deps, '0104Y7DY19FTA30KQYKDRRMNBN', bad, doc)
+    await writeStoredDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', bad, doc)
 
     const result = await createDocumentGetTool(deps).execute({
       workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
@@ -452,7 +452,7 @@ describe('wb_document_get reads a document in its own format', () => {
   it('a kindless doc whose index row resolves to null (wrong workspace) is still refused', async () => {
     const deps = makeDeps()
     const documentId = await createDoc(deps, 'spatial')
-    await saveDocumentSnapshot(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, new LoroDoc()) // overwrite: no kind
+    await writeStoredDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, new LoroDoc()) // overwrite: no kind
     const deviantDeps: ServerDeps = {
       ...deps,
       // simulates the wrong-workspace / not-found case
@@ -662,9 +662,9 @@ describe('wb_document_get carries the proposal layer', () => {
     proposalId: string,
     changeId: string,
   ) {
-    const doc = await loadOrCreateDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId)
+    const doc = await readStoredDocumentOrEmpty(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId)
     setProposedChangeStatus(doc, proposalId, changeId, 'adopted')
-    await saveDocumentSnapshot(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, doc)
+    await writeStoredDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, doc)
   }
 
   async function read(deps: ServerDeps, documentId: string) {
@@ -707,9 +707,9 @@ describe('wb_document_get carries the proposal layer', () => {
   it('a markdown document returns its proposed passage change', async () => {
     const deps = makeDeps()
     const documentId = await createDoc(deps, 'markdown')
-    const doc = await loadOrCreateDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId)
+    const doc = await readStoredDocumentOrEmpty(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId)
     writeMarkdownBody(doc, 'Ship on Thursday.\n')
-    await saveDocumentSnapshot(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, doc)
+    await writeStoredDocument(deps, '0104Y7DY19FTA30KQYKDRRMNBN', documentId, doc)
     await createBodyEditTool(deps).execute({
       workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
       documentId,

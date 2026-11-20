@@ -98,6 +98,13 @@ const contentOf = (doc: LoroDoc) => ({
   locks: [...readNodeLocks(doc)],
 })
 
+/** The records the logger emits from here on; the `afterEach` below restores the silent sink. */
+function captureRecords() {
+  const records: { level: string; msg: string; data?: Record<string, unknown> }[] = []
+  setLogSink((record) => records.push(record))
+  return records
+}
+
 afterEach(() => {
   vi.restoreAllMocks()
   setLogSink(() => {})
@@ -197,32 +204,36 @@ describe('writing through a document session', () => {
       session.write(BATCH)
       await session.save()
       expect(written).toHaveLength(1)
+      expect(readNodeLocks(await stored(store)).has('n1')).toBe(true)
       session.write([{ op: 'setNodeLock', args: { id: 'n1', locked: false } }])
       await session.save()
     })
 
     expect(written).toHaveLength(2)
-    const [first, second] = written
-    expect(Object.keys(first ?? {}).sort()).toEqual(['doc', 'documentId', 'path', 'workspaceId'])
+    const [first] = written
+    expect(Object.keys(first ?? {}).sort()).toEqual(['documentId', 'path', 'workspaceId'])
     expect(first).toMatchObject({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       path: 'where',
     })
-    expect(readNodeLocks(first?.doc as LoroDoc).has('n1')).toBe(true)
-    expect(readNodeLocks(second?.doc as LoroDoc).has('n1')).toBe(false)
-    expect(contentOf(second?.doc as LoroDoc)).toEqual(contentOf(await stored(store)))
+    expect(readNodeLocks(await stored(store)).has('n1')).toBe(false)
   })
 
   it('does not undo a save when the observer throws', async () => {
     const { store, deps } = rig()
     await seedDoc(store, DOCUMENT_ID, board)
     const failing = { ...deps, documentWritten: async () => Promise.reject(new Error('observer')) }
+    const records = captureRecords()
     await withDocument(failing, WORKSPACE_ID, DOCUMENT_ID, async (session) => {
       session.write(BATCH)
       await session.save()
     })
     expect(readMarkdownBody(await stored(store))).toBe('written through the session')
+    expect(records.find((record) => record.level === 'warning')).toMatchObject({
+      msg: expect.stringContaining('observer failed after a successful save'),
+      data: { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, err: 'observer' },
+    })
   })
 
   it('reports an engine abort while saving, as a save of that document', async () => {
@@ -230,6 +241,7 @@ describe('writing through a document session', () => {
     await seedDoc(store, DOCUMENT_ID, board)
     store.saved.length = 0
     const session = await openDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const records = captureRecords()
     try {
       vi.spyOn(sharedCrdtEngine(), 'export').mockImplementation(() => {
         throw new WebAssembly.RuntimeError('unreachable')
@@ -239,6 +251,9 @@ describe('writing through a document session', () => {
       session.release()
     }
     expect(store.saved).toEqual([])
+    expect(records.find((record) => record.level === 'error')).toMatchObject({
+      data: { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, doing: 'saving' },
+    })
   })
 
   it('gives its handle back after a save and after a failed write', async () => {

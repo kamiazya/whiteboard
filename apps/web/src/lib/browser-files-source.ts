@@ -12,7 +12,7 @@ import type {
   DocumentContent,
   RecordLease,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { lease } from '@kamiazya/whiteboard-loro-adapter'
+import { documentEditWrites, lease } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type DocumentKind,
   type ExtensionFacets,
@@ -54,7 +54,7 @@ import { writeTagLibraryDocument } from './browser-tag-library-write.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { touchContentTimestamp } from './content-timestamp.js'
 import { createSeededDocumentAt } from './create-seeded-document.js'
-import { documentEditWrites } from './document-edit-writes.js'
+
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import { DocumentFileStore } from './document-file-store.js'
 import type { ImportedDocument } from './document-import.js'
@@ -154,7 +154,7 @@ async function referenceRewriteWrites(
       z.custom<DocumentContent>(),
     )
     const edit = planDocumentReferenceRewrite(content, plan)
-    return edit === null ? [] : documentEditWrites(entry.documentId, edit)
+    return edit === null ? [] : documentEditWrites(edit, entry.documentId)
   } catch {
     return []
   }

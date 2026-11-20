@@ -16,7 +16,7 @@ import { type Context, Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { CallerName } from '../../security/membership-gate.js'
-import { getDoc, listDocuments } from '../../store/document-store.js'
+import { listDocuments } from '../../store/document-store.js'
 import type { StoreScope } from '../../store/store-scope.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
 import { type ReadJsonBodyOptions, readJsonBody } from '../read-json-body.js'
@@ -179,7 +179,6 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
     const { label, operator } = parsed.data
 
     try {
-      const doc = await getDoc(workspaceId, path, scope)
       // The SCHEMA is what stops a caller naming the device; this spread
       // order is arrangement, not a second guard — measured, reversing it
       // fails no test, because nothing can get an `actor` past the schema to
@@ -188,7 +187,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
         ...(await personOperator(c, callerName, operator)),
         ...(daemonActor === undefined ? {} : { actor: daemonActor }),
       }
-      const entry = await versionStore.save(workspaceId, path, doc, {
+      const entry = await versionStore.save(workspaceId, path, {
         auto: false,
         ...(label !== undefined ? { label } : {}),
         operator: nextOperator,

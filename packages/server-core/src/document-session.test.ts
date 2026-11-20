@@ -22,7 +22,7 @@ import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentEngineTrapError, SnapshotNotFoundError } from './document-io.js'
-import { openDocument, withDocument } from './document-session.js'
+import { openDocument, withDocument, withNewDocument } from './document-session.js'
 import {
   annotationsOf,
   canvasOf,
@@ -278,6 +278,34 @@ describe('the engine handles a session opens', () => {
     session.release()
 
     expect(handles.unaccounted()).toEqual([])
+  })
+
+  describe('of a document that is being born', () => {
+    it('is not read from the store, replaces what it held, and is closed once whether the work returns or throws', async () => {
+      const handles = watchEngineHandles()
+      const store = new FakeDocumentStore()
+      await seedDoc(store, DOCUMENT_ID, spatial)
+      const load = vi.spyOn(store, 'loadSnapshot')
+
+      await withNewDocument(deps(store), WORKSPACE_ID, DOCUMENT_ID, async (session) => {
+        expect(await kindOf(session)).toBeUndefined()
+        session.write([{ op: 'writeDocumentKind', args: { kind: 'markdown' } }])
+        await session.save()
+      })
+      await expect(
+        withNewDocument(deps(store), WORKSPACE_ID, DOCUMENT_ID, async () => {
+          throw new Error('tool refused')
+        }),
+      ).rejects.toThrow('tool refused')
+
+      expect(load).not.toHaveBeenCalled()
+      expect(handles.minted()).toHaveLength(2)
+      expect(handles.unaccounted()).toEqual([])
+      await withDocument(deps(store), WORKSPACE_ID, DOCUMENT_ID, async (session) => {
+        expect(await kindOf(session)).toBe('markdown')
+        expect((await canvasOf(session)).nodes).toEqual([])
+      })
+    })
   })
 
   it('open none when the document is not found', async () => {

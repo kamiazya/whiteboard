@@ -14,7 +14,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { deleteWorkspaceNodeAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import { hasDocumentTrash } from '@kamiazya/whiteboard-ports'
-import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
@@ -47,7 +46,7 @@ async function setUp() {
     kind: 'spatial',
   })
   const versions = new FileVersionStore()
-  const own = await versions.save('01PAW75F73PVC402Y3V151KT6R', 'doomed', new LoroDoc(), {
+  const own = await versions.save('01PAW75F73PVC402Y3V151KT6R', 'doomed', {
     auto: false,
   })
   const ownRow = await db

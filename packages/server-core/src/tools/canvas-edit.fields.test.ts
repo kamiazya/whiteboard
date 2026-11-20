@@ -2,8 +2,8 @@
 // batch has a fixed ceiling.
 
 import { describe, expect, test } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { DOCUMENT_ID, EMPTY, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { canvasEditInputSchema, createCanvasEditTool } from './canvas-edit.js'
 
@@ -17,7 +17,7 @@ async function addNode(node: Record<string, unknown>) {
     mode: 'apply',
     ops: [{ op: 'node.add', node: { id: 'added', x: 0, y: 0, width: 300, height: 200, ...node } }],
   } as never)
-  const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+  const { canvas } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
   return canvas.nodes.find((n) => n.id === 'added')
 }
 

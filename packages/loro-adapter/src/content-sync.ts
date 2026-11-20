@@ -299,6 +299,24 @@ function openNodeContainer<C extends LoroText | LoroMovableList | LoroMap>(
   return data.getOrCreateContainer(key, fresh())
 }
 
+/**
+ * The container at `key` if one is there, opening none — for a READ, since
+ * opening one on a node is a write. A key holding something a node would not
+ * open there is refused as `openNodeContainer` refuses it, so a read cannot
+ * mistake an unreadable document for an empty one.
+ */
+export function peekNodeContainer<C extends LoroText | LoroMovableList | LoroMap>(
+  data: LoroMap,
+  key: string,
+  kind: 'text' | 'list' | 'map',
+): C | undefined {
+  if (!holdsOpenable(data, key, kind)) {
+    const held: unknown = data.get(key)
+    throw new UnreadableDocumentContentError(key, containerKind(held) ?? typeof held)
+  }
+  return data.get(key) as C | undefined
+}
+
 export const nodeRoots = (data: LoroMap): RootContainers => ({
   text: (key) => openNodeContainer(data, key, 'text', () => new LoroText()),
   list: (key) => openNodeContainer(data, key, 'list', () => new LoroMovableList()),

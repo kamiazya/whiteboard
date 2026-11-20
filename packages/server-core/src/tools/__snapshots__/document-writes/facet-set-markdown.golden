@@ -1,0 +1,140 @@
+{
+  "answer": {
+    "updated": [
+      {
+        "documentId": "01H8XJZ9K5N4M3P2Q1R0S9T8V7",
+        "facets": {
+          "example.sample/v1": {
+            "status": "open"
+          },
+          "example.priority/v1": {
+            "level": "high"
+          }
+        },
+        "tags": [
+          "newer",
+          "added"
+        ]
+      },
+      {
+        "documentId": "01H8XJZ9K5N4M3P2Q1R0S9T8V8",
+        "facets": {
+          "example.sample/v1": {
+            "status": "open"
+          },
+          "example.priority/v1": {
+            "level": "high"
+          }
+        },
+        "tags": [
+          "newer",
+          "added"
+        ]
+      }
+    ]
+  },
+  "content": {
+    "doc1": {
+      "kind": "markdown",
+      "canvas": {
+        "nodes": [],
+        "edges": []
+      },
+      "skipped": 0,
+      "body": "one two three",
+      "threads": [],
+      "proposals": [],
+      "nodeLocks": [],
+      "edgeLocks": [],
+      "facets": {
+        "example.priority/v1": {
+          "level": "high"
+        },
+        "example.sample/v1": {
+          "status": "open"
+        }
+      },
+      "coreFacets": {
+        "type": "note",
+        "tags": [
+          "newer",
+          "added"
+        ]
+      },
+      "trustFacets": null
+    },
+    "doc2": {
+      "kind": "markdown",
+      "canvas": {
+        "nodes": [],
+        "edges": []
+      },
+      "skipped": 0,
+      "body": "one two three",
+      "threads": [],
+      "proposals": [],
+      "nodeLocks": [],
+      "edgeLocks": [],
+      "facets": {
+        "example.priority/v1": {
+          "level": "high"
+        },
+        "example.sample/v1": {
+          "status": "open"
+        }
+      },
+      "coreFacets": {
+        "type": "note",
+        "tags": [
+          "newer",
+          "added"
+        ]
+      },
+      "trustFacets": null
+    }
+  },
+  "saves": [
+    {
+      "documentId": "doc1",
+      "chunks": 1,
+      "frontierIsTheOplogVersion": true,
+      "docRef": {
+        "kind": "document",
+        "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+        "documentId": "doc1"
+      }
+    },
+    {
+      "documentId": "doc2",
+      "chunks": 1,
+      "frontierIsTheOplogVersion": true,
+      "docRef": {
+        "kind": "document",
+        "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+        "documentId": "doc2"
+      }
+    }
+  ],
+  "events": [
+    {
+      "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+      "documentId": "doc1",
+      "path": "doc",
+      "keys": [
+        "documentId",
+        "path",
+        "workspaceId"
+      ]
+    },
+    {
+      "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+      "documentId": "doc2",
+      "path": "doc2",
+      "keys": [
+        "documentId",
+        "path",
+        "workspaceId"
+      ]
+    }
+  ]
+}

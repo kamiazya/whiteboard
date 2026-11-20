@@ -19,7 +19,6 @@ import { mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from 'node:fs/p
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { wbDocumentCreate, wbDocumentDelete } from '@kamiazya/whiteboard-server-core'
-import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { disposeAutoCompact, uninstallAutoCompact } from '../server/store/auto-compact.js'
 import { clearDbCacheForTests, closeDb, getDb } from '../server/store/db/index.js'
@@ -69,7 +68,7 @@ describe('bootSelfHostDeps over a dir the process global does not name', () => {
 
     const doc = await deps.liveDocuments.get('01ZVM89A4A1V9FS03Z9J64KEK1', 'note')
     await deps.liveDocuments.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'note', doc, { overwrite: true })
-    const version = await deps.versions.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'note', doc, {
+    const version = await deps.versions.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'note', {
       auto: false,
     })
     const { ref } = await deps.blobStore.put({ bytes: new Uint8Array([1, 2, 3]) })
@@ -126,7 +125,7 @@ describe('bootSelfHostDeps over a dir the process global does not name', () => {
       path: 'note',
       kind: 'spatial',
     })
-    await deps.versions.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'note', new LoroDoc(), { auto: false })
+    await deps.versions.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'note', { auto: false })
 
     expect(await db.selectFrom('versions').select('id').execute()).toHaveLength(1)
     expect(
@@ -150,7 +149,6 @@ describe('bootSelfHostDeps over a dir the process global does not name', () => {
     await deps.documentWritten?.({
       workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId: created.documentId,
-      doc: new LoroDoc(),
     })
     // The debounce elapses and the compaction runs: with no versions it
     // declines, having read the workspace record and the versions table.

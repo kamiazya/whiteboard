@@ -1,13 +1,8 @@
 import type { LoadSnapshotInput, SaveSnapshotInput } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
-import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it } from 'vitest'
-import {
-  DocumentEngineTrapError,
-  loadDocument,
-  loadOrCreateDocument,
-  saveDocumentSnapshot,
-} from './document-io.js'
+import { DocumentEngineTrapError } from './document-io.js'
+import { withDocument, withNewDocument } from './document-session.js'
 import { setLogSink } from './log.js'
 import { makeTestDeps } from './test-utils/make-test-deps.js'
 
@@ -42,14 +37,18 @@ describe('an engine abort while a document is loaded or saved', () => {
 
   it.each([
     [
-      'loadOrCreateDocument',
-      () => loadOrCreateDocument(deps(), WORKSPACE_ID, DOCUMENT_ID),
+      'opening a document that may be created',
+      () => withDocument(deps(), WORKSPACE_ID, DOCUMENT_ID, () => undefined, { create: true }),
       'loading',
     ],
-    ['loadDocument', () => loadDocument(deps(), WORKSPACE_ID, DOCUMENT_ID), 'loading'],
     [
-      'saveDocumentSnapshot',
-      () => saveDocumentSnapshot(deps(), WORKSPACE_ID, DOCUMENT_ID, new LoroDoc()),
+      'opening a document that must exist',
+      () => withDocument(deps(), WORKSPACE_ID, DOCUMENT_ID, () => undefined),
+      'loading',
+    ],
+    [
+      'saving a document',
+      () => withNewDocument(deps(), WORKSPACE_ID, DOCUMENT_ID, (session) => session.save()),
       'saving',
     ],
   ])('%s answers a typed error and logs the document at error', async (_name, run, doing) => {
@@ -85,11 +84,11 @@ describe('an engine abort while a document is loaded or saved', () => {
       }
     }
     await expect(
-      saveDocumentSnapshot(
+      withNewDocument(
         makeTestDeps({ documentStore: new DiskFull() }),
         WORKSPACE_ID,
         DOCUMENT_ID,
-        new LoroDoc(),
+        (session) => session.save(),
       ),
     ).rejects.toThrow('disk full')
   })

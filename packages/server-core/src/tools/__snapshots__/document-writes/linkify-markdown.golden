@@ -1,0 +1,47 @@
+{
+  "answer": {
+    "linked": 2
+  },
+  "content": {
+    "doc1": {
+      "kind": "markdown",
+      "canvas": {
+        "nodes": [],
+        "edges": []
+      },
+      "skipped": 0,
+      "body": "The [[design/login|Login flow]] is here. [[design/login|Login flow]] again, and [[Login flow]] stays.",
+      "threads": [],
+      "proposals": [],
+      "nodeLocks": [],
+      "edgeLocks": [],
+      "facets": {},
+      "coreFacets": null,
+      "trustFacets": null
+    }
+  },
+  "saves": [
+    {
+      "documentId": "doc1",
+      "chunks": 1,
+      "frontierIsTheOplogVersion": true,
+      "docRef": {
+        "kind": "document",
+        "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+        "documentId": "doc1"
+      }
+    }
+  ],
+  "events": [
+    {
+      "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+      "documentId": "doc1",
+      "path": "doc",
+      "keys": [
+        "documentId",
+        "path",
+        "workspaceId"
+      ]
+    }
+  ]
+}

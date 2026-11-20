@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { readStoredDocumentOrEmpty, writeStoredDocument } from '../test-utils/stored-document.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
 import { createDocumentSetOperation } from '../tools/document-set.js'
 import { factsCacheFor } from './content-source.js'
@@ -70,10 +70,10 @@ describe('ContentFactsCache', () => {
     // A document that records its own kind is read as that kind whatever its
     // row says, so only one that records none can have its facts depend on the
     // row — the pre-kind documents.
-    const stored = await loadOrCreateDocument(deps, WS, a.documentId as never)
+    const stored = await readStoredDocumentOrEmpty(deps, WS, a.documentId as never)
     stored.getMap('document').delete('kind')
     stored.commit()
-    await saveDocumentSnapshot(deps, WS, a.documentId as never, stored)
+    await writeStoredDocument(deps, WS, a.documentId as never, stored)
     const cache = factsCacheFor(deps)
     const entries = await deps.documentIndex.listDocuments({ workspaceId: WS })
     const first = await cache.factsFor(WS, entries)

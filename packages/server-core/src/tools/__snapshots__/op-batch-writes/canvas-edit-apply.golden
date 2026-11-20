@@ -85,80 +85,10 @@
       "documentId": "01H8XJZ9K5N4M3P2Q1R0S9T8V7",
       "path": "doc",
       "keys": [
-        "doc",
         "documentId",
         "path",
         "workspaceId"
-      ],
-      "contentOfDoc": {
-        "kind": "spatial",
-        "canvas": {
-          "nodes": [
-            {
-              "id": "a",
-              "x": 40,
-              "y": 0,
-              "width": 200,
-              "height": 60,
-              "resource": {
-                "mimeType": "text/markdown",
-                "content": "Alpha moved"
-              }
-            },
-            {
-              "id": "b",
-              "x": 300,
-              "y": 0,
-              "width": 200,
-              "height": 60,
-              "resource": {
-                "mimeType": "text/markdown",
-                "content": "Gamma"
-              }
-            },
-            {
-              "id": "d",
-              "x": 0,
-              "y": 200,
-              "width": 200,
-              "height": 120,
-              "resource": {
-                "mimeType": "text/markdown",
-                "content": "New"
-              }
-            }
-          ],
-          "edges": [
-            {
-              "id": "e1",
-              "from": {
-                "node": "a"
-              },
-              "to": {
-                "node": "b"
-              }
-            }
-          ],
-          "tags": [
-            "kept"
-          ]
-        },
-        "skipped": 0,
-        "body": "",
-        "threads": [],
-        "proposals": [],
-        "nodeLocks": [
-          "b"
-        ],
-        "edgeLocks": [
-          "e1"
-        ],
-        "facets": {
-          "example.sample/v1": {
-            "status": "open"
-          }
-        }
-      }
+      ]
     }
   ]
 }

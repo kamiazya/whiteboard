@@ -16,7 +16,7 @@ vi.mock('../server/config.js', () => ({
 }))
 
 const { resolveTestServerDeps } = await import('../server/routes/_test-helpers.js')
-const { getDoc, saveDocument, _clearWorkspaceDocCacheForTests } = await import(
+const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
   '../server/store/document-store.js'
 )
 const { clearDocCacheForTests } = await import('../server/store/doc-cache.js')
@@ -38,15 +38,10 @@ describe('the self-host ServerDeps', () => {
     await saveDocument('011K0CCH776JA60YJHJTYXASRK', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
 
     const deps = await resolveTestServerDeps(tmp.dir)
-    const entry = await deps.versions.save(
-      '011K0CCH776JA60YJHJTYXASRK',
-      'canvas-a',
-      await getDoc('011K0CCH776JA60YJHJTYXASRK', 'canvas-a'),
-      {
-        auto: false,
-        label: 'by an agent',
-      },
-    )
+    const entry = await deps.versions.save('011K0CCH776JA60YJHJTYXASRK', 'canvas-a', {
+      auto: false,
+      label: 'by an agent',
+    })
 
     // Read back off the identity file rather than pinned: what matters is
     // that the row names the key the daemon proves itself with, not any

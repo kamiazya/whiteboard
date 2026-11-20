@@ -71,8 +71,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
     // exists, so a lookup that forgot the workspace filter finds a real row.
     async function foreignVersionId(): Promise<string> {
       await edit('01ECWTM29HBA5A9MXS76EM7JHR', 'b')
-      return (await store.save('01ECWTM29HBA5A9MXS76EM7JHR', 'doc', new LoroDoc(), { auto: false }))
-        .id
+      return (await store.save('01ECWTM29HBA5A9MXS76EM7JHR', 'doc', { auto: false })).id
     }
 
     it('is not answered as adopted into this workspace', async () => {
@@ -110,7 +109,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
 
     it("is not in this workspace's history under the same document id", async () => {
       await edit('01PAW75F73PVC402Y3V151KT6R', 'a')
-      const saved = await store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), {
+      const saved = await store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', {
         auto: false,
       })
       const own = await handle.db
@@ -157,9 +156,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
 
     it("counts only this workspace's autos, never a neighbour's under the same document id", async () => {
       await edit('01PAW75F73PVC402Y3V151KT6R', 'one')
-      await at(1_000, () =>
-        store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), { auto: true }),
-      )
+      await at(1_000, () => store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', { auto: true }))
       const own = await handle.db
         .selectFrom('versions')
         .selectAll()
@@ -179,9 +176,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
         )
         .execute()
       await edit('01PAW75F73PVC402Y3V151KT6R', 'two')
-      await at(100_000, () =>
-        store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), { auto: true }),
-      )
+      await at(100_000, () => store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', { auto: true }))
       expect(await autoRowCount('01PAW75F73PVC402Y3V151KT6R')).toBe(2)
       expect(await autoRowCount('01ECWTM29HBA5A9MXS76EM7JHR')).toBe(50)
     })
@@ -207,7 +202,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
         genuine.push(
           (
             await at(1_000 + i, () =>
-              store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), { auto: true }),
+              store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', { auto: true }),
             )
           ).id,
         )
@@ -250,7 +245,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
   describe('pruneSandwichedAutoVersions', () => {
     async function saveAt(workspaceId: string, text: string, tMs: number, auto: boolean) {
       await edit(workspaceId, text)
-      return at(tMs, () => store.save(workspaceId, 'doc', new LoroDoc(), { auto }))
+      return at(tMs, () => store.save(workspaceId, 'doc', { auto }))
     }
     const idsOf = async (workspaceId: string): Promise<string[]> =>
       (
@@ -344,7 +339,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
   describe('isUnchangedSinceLastVersion', () => {
     async function checkpoint(workspaceId: string, text: string, tMs: number): Promise<void> {
       await edit(workspaceId, text)
-      await at(tMs, () => store.save(workspaceId, 'doc', new LoroDoc(), { auto: true }))
+      await at(tMs, () => store.save(workspaceId, 'doc', { auto: true }))
     }
 
     it('judges the document against its NEWEST version', async () => {
@@ -401,16 +396,14 @@ describe('FileVersionStore workspace scoping and ordering', () => {
 
     it("is every version's point in this workspace, however old another workspace's are", async () => {
       await edit('01ECWTM29HBA5A9MXS76EM7JHR', 'b')
-      await at(500, () =>
-        store.save('01ECWTM29HBA5A9MXS76EM7JHR', 'doc', new LoroDoc(), { auto: false }),
-      )
+      await at(500, () => store.save('01ECWTM29HBA5A9MXS76EM7JHR', 'doc', { auto: false }))
       await edit('01PAW75F73PVC402Y3V151KT6R', 'one')
       const first = await at(1_000, () =>
-        store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), { auto: false }),
+        store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', { auto: false }),
       )
       await edit('01PAW75F73PVC402Y3V151KT6R', 'two')
       const second = await at(2_000, () =>
-        store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), { auto: false }),
+        store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', { auto: false }),
       )
 
       const points = (await store.workspaceVersionFrontiers('01PAW75F73PVC402Y3V151KT6R')).map(
@@ -426,7 +419,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       // compaction below has something to gain and really runs.
       for (let i = 0; i < 40; i++) await edit('01PAW75F73PVC402Y3V151KT6R', `churn-${i}`)
       const first = await at(1_000, () =>
-        store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), { auto: false }),
+        store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', { auto: false }),
       )
       await edit('01PAW75F73PVC402Y3V151KT6R', 'after')
       const asSaved = (await store.load('01PAW75F73PVC402Y3V151KT6R', first.id))?.toJSON()

@@ -259,6 +259,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the host-side journal over any CRDT engine, which rebuilds a handle the wasm core lost; the web host that wraps its engine in it is a later migration, so only the conformance suite reaches it',
   'packages/loro-adapter/src/engine/lease.ts#WriteRefusedError':
     "the typed refusal the kit's write throws for a refused batch; the first host to write through a lease catches it, and only lease.test.ts reaches it until then",
+  'packages/loro-adapter/src/document-edit.ts#applyDocumentEdit':
+    "a planned edit applied to a LoroDoc; both keepers apply the same edit as the engine's writes now (`documentEditWrites`), whose test holds the two to each other and which the reference-graph plan tests read the planners' output through",
   'packages/loro-adapter/src/direct-target.ts#directTarget':
     'a plain LoroDoc as a WriteTarget; the editing session writes through the engine now, and the command-writes tests drive the same plans over a LoroDoc to hold the two to each other',
   'packages/loro-adapter/src/name-from-title.ts#readWorkspaceDocumentName':

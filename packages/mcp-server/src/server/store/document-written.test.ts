@@ -20,9 +20,11 @@ const documentWritten = createDocumentWritten()
 const { saveDocument } = await import('./document-store.js')
 const { getDb } = await import('./db/index.js')
 const { prepareDataDir } = await import('./db/prepare.js')
-const { installAutoCheckpoint, uninstallAutoCheckpointForTests } = await import(
+const { documentFrontier, installAutoCheckpoint, uninstallAutoCheckpointForTests } = await import(
   './auto-checkpoint.js'
 )
+type CheckpointSubject = Parameters<import('./auto-checkpoint.js').DocumentCheckpointScheduler>[2]
+const { documentStoreReady } = await import('./store-handles.js')
 const { _autoCompactTimerCountForTests, disposeAutoCompact, uninstallAutoCompact } = await import(
   './auto-compact.js'
 )
@@ -59,7 +61,6 @@ describe('documentWritten', () => {
     await documentWritten({
       workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId,
-      doc: new LoroDoc(),
     })
 
     expect(_autoCompactTimerCountForTests()).toBe(1)
@@ -126,21 +127,22 @@ describe('documentWritten', () => {
       documentWritten({
         workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
         documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
-        doc: new LoroDoc(),
       }),
     ).resolves.toBeUndefined()
 
     expect(_autoCompactTimerCountForTests()).toBe(1)
   })
 
-  // The checkpoint is per document and addressed by path, so what the seam
-  // hands over is exactly what reaches the scheduler.
-  it('signals the installed checkpoint scheduler with the path and doc it was handed', async () => {
-    const signalled: { workspaceId: string; path: string; doc: LoroDoc }[] = []
+  // The checkpoint is per document and addressed by path, so that is what the
+  // seam hands over; the state it would record is the record's frontier, which
+  // the signal carries as a read of the keeper rather than as a copy.
+  it('signals the installed checkpoint scheduler with the path and the record frontier the keeper holds', async () => {
+    await saveDocument('01ZVM89A4A1V9FS03Z9J64KEK1', 'agent-written', new LoroDoc())
+    const signalled: { workspaceId: string; path: string; subject: CheckpointSubject }[] = []
     installAutoCheckpoint(
       Object.assign(
-        (workspaceId: string, path: string, doc: LoroDoc) => {
-          signalled.push({ workspaceId, path, doc })
+        (workspaceId: string, path: string, subject: CheckpointSubject) => {
+          signalled.push({ workspaceId, path, subject })
         },
         {
           flush: async () => undefined,
@@ -150,18 +152,50 @@ describe('documentWritten', () => {
         },
       ),
     )
-    const doc = new LoroDoc()
 
     await documentWritten({
       workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       path: 'agent-written',
-      doc,
     })
 
-    expect(signalled).toEqual([
-      { workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1', path: 'agent-written', doc },
+    expect(signalled.map(({ workspaceId, path }) => ({ workspaceId, path }))).toEqual([
+      { workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1', path: 'agent-written' },
     ])
+    const stored = await (await documentStoreReady()).readFrontier({
+      docRef: { kind: 'workspace-tree', workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' },
+    })
+    expect(stored).not.toBeNull()
+    expect(await documentFrontier(signalled[0]?.subject as CheckpointSubject)).toEqual(
+      stored?.frontier,
+    )
+  })
+
+  it('never reads one frontier twice for a workspace the keeper holds no record of', async () => {
+    const signalled: CheckpointSubject[] = []
+    installAutoCheckpoint(
+      Object.assign(
+        (_workspaceId: string, _path: string, subject: CheckpointSubject) => {
+          signalled.push(subject)
+        },
+        {
+          flush: async () => undefined,
+          stop: () => undefined,
+          moved: () => undefined,
+          removed: () => undefined,
+        },
+      ),
+    )
+
+    await documentWritten({
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      path: 'nowhere',
+    })
+
+    const first = await documentFrontier(signalled[0] as CheckpointSubject)
+    const second = await documentFrontier(signalled[0] as CheckpointSubject)
+    expect(first).not.toEqual(second)
   })
 
   // A document the index does not place has no path to checkpoint under;
@@ -180,7 +214,6 @@ describe('documentWritten', () => {
     await documentWritten({
       workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
-      doc: new LoroDoc(),
     })
 
     expect(signal).not.toHaveBeenCalled()

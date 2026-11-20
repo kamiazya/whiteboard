@@ -1,11 +1,10 @@
 import type { VersionHistory } from '@kamiazya/whiteboard-server-core'
-import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import type { VersionStore } from '../server/store/version-store.js'
 import { agentVersionHistory } from './agent-version-history.js'
 
 function storeSpy() {
-  const save = vi.fn(async (_ws: string, path: string, _doc: LoroDoc, opts: unknown) => ({
+  const save = vi.fn(async (_ws: string, path: string, opts: unknown) => ({
     id: 'v1',
     path,
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -23,9 +22,9 @@ describe('agentVersionHistory', () => {
     const { store, save } = storeSpy()
     const history: VersionHistory = agentVersionHistory(store, DEVICE)
 
-    await history.save('ws', 'notes/plan', new LoroDoc(), { auto: false, label: 'v1' })
+    await history.save('ws', 'notes/plan', { auto: false, label: 'v1' })
 
-    expect(save).toHaveBeenCalledWith('ws', 'notes/plan', expect.any(LoroDoc), {
+    expect(save).toHaveBeenCalledWith('ws', 'notes/plan', {
       auto: false,
       label: 'v1',
       operator: { kind: 'ai', actor: DEVICE },
@@ -38,20 +37,20 @@ describe('agentVersionHistory', () => {
   it('names the agent and no device when the composition supplied none', async () => {
     const { store, save } = storeSpy()
 
-    await agentVersionHistory(store).save('ws', 'notes/plan', new LoroDoc(), { auto: false })
+    await agentVersionHistory(store).save('ws', 'notes/plan', { auto: false })
 
-    expect(save.mock.calls[0]?.[3]).toEqual({ auto: false, operator: { kind: 'ai' } })
+    expect(save.mock.calls[0]?.[2]).toEqual({ auto: false, operator: { kind: 'ai' } })
   })
 
   it('passes a named operator through untouched', async () => {
     const { store, save } = storeSpy()
     const operator = { kind: 'human' as const, actor: 'human:yuki', displayName: 'Yuki' }
 
-    await agentVersionHistory(store).save('ws', 'notes/plan', new LoroDoc(), {
+    await agentVersionHistory(store).save('ws', 'notes/plan', {
       auto: false,
       operator,
     })
 
-    expect(save.mock.calls[0]?.[3]).toEqual({ auto: false, operator })
+    expect(save.mock.calls[0]?.[2]).toEqual({ auto: false, operator })
   })
 })

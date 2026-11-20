@@ -85,7 +85,6 @@ describe('createAutoVersionTrigger', () => {
       2,
       '01M8BBN7JS60N0ZAR13NP8SXBF',
       'canvas-a',
-      doc,
       expect.anything(),
     )
     trigger.stop()
@@ -120,7 +119,6 @@ describe('createAutoVersionTrigger', () => {
       2,
       '01M8BBN7JS60N0ZAR13NP8SXBF',
       'canvas-a',
-      doc,
       expect.anything(),
     )
     trigger.stop()

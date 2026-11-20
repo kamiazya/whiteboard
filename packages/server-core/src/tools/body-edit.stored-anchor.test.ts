@@ -5,13 +5,13 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { TextAnchor } from '@kamiazya/whiteboard-model'
 import { describe, expect, test } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { createBodyEditTool } from './body-edit.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -36,7 +36,7 @@ async function anchorStored(body: string, anchor: TextAnchor): Promise<unknown> 
     mode: 'propose',
     ops: [{ id: 'c1', op: 'body.replace', anchor, text: exact.toUpperCase(), assumed: exact }],
   })
-  const { doc } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+  const { doc } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
   const stored = readProposals(doc)[0]?.changes[0]
   expect(result.proposed?.changes[0]).toEqual(stored)
   return stored?.op === 'body.replace' ? stored.anchor : undefined

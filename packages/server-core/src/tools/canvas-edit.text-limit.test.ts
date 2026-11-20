@@ -6,8 +6,8 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { DOCUMENT_ID, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { canvasEditInputSchema } from './canvas-edit-ops.js'
@@ -66,7 +66,7 @@ async function spliceInto(stored: string, replacement: string) {
     mode: 'apply',
     ops: [{ op: 'node.splice', id: 'a', startLine: 1, endLine: 1, replacement }],
   })
-  const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+  const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
   return canvas.nodes[0] as SpatialNode
 }
 

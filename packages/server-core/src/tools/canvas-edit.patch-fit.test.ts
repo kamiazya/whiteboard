@@ -1,7 +1,7 @@
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { DOCUMENT_ID, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 
@@ -29,7 +29,7 @@ describe('wb_canvas_edit node.patch and the width a text needs', () => {
       }),
     ).rejects.toThrow(/needs \d+px of height at width 80/)
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes[0]).toMatchObject({ width: 260, height: 120 })
   })
 })

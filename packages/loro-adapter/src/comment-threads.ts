@@ -10,7 +10,7 @@ import {
   type PinDrop,
 } from '@kamiazya/whiteboard-model'
 import { LoroMap } from 'loro-crdt'
-import { type DocumentContainers, THREADS_KEY } from './containers.js'
+import { type DocumentContainers, peekMapOf, THREADS_KEY } from './containers.js'
 import { acceptedEntries } from './lenient-read.js'
 import { openMergeableMap } from './mergeable-containers.js'
 
@@ -21,8 +21,10 @@ export const ANCHOR_FIELD = 'anchor'
 const STATUS_FIELD = 'status'
 const CREATED_AT_FIELD = 'createdAt'
 
+const peekThreads = (doc: DocumentContainers): LoroMap | undefined => peekMapOf(doc, THREADS_KEY)
+
 function threadContainer(doc: DocumentContainers, threadId: string): LoroMap | undefined {
-  const stored = doc.getMap(THREADS_KEY).get(threadId)
+  const stored = peekThreads(doc)?.get(threadId)
   return stored instanceof LoroMap ? stored : undefined
 }
 
@@ -156,7 +158,7 @@ export function moveCommentThread(
  */
 export function readCommentThreads(doc: DocumentContainers): CommentThread[] {
   const threads: CommentThread[] = []
-  for (const threadId of doc.getMap(THREADS_KEY).keys()) {
+  for (const threadId of peekThreads(doc)?.keys() ?? []) {
     const thread = readCommentThread(doc, threadId)
     if (thread !== undefined) threads.push(thread)
   }
@@ -204,7 +206,7 @@ function storedThreadMessageCount(doc: DocumentContainers, threadId: string): nu
  */
 export function threadMessageCounts(doc: DocumentContainers): Record<string, number> {
   const counts: Record<string, number> = {}
-  for (const threadId of doc.getMap(THREADS_KEY).keys()) {
+  for (const threadId of peekThreads(doc)?.keys() ?? []) {
     counts[threadId] = storedThreadMessageCount(doc, threadId)
   }
   return counts

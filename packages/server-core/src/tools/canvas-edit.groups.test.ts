@@ -3,8 +3,8 @@
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { DOCUMENT_ID, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 
@@ -68,7 +68,7 @@ describe('wb_canvas_edit — node.add within a group', () => {
       ],
     })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     const byId = new Map(canvas.nodes.map((node) => [node.id, node]))
     const mobile = byId.get('mobile')
     const group = byId.get('g')
@@ -110,7 +110,7 @@ describe('wb_canvas_edit — node.add within a group', () => {
       })),
     })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     const group = canvas.nodes.find((node) => node.id === 'g')
     expect(group).toBeDefined()
     if (group === undefined) throw new Error('unreachable')
@@ -194,7 +194,7 @@ describe('wb_canvas_edit — node.add within a group', () => {
       ],
     })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.find((node) => node.id === 'mobile')).toMatchObject({ x: 560, y: 700 })
     expect(canvas.nodes.find((node) => node.id === 'g')).toMatchObject({
       x: 0,
@@ -240,7 +240,7 @@ describe('wb_canvas_edit — node.add within a group', () => {
       message: expect.stringMatching(/left edge -30 .*0/),
     })
     await expect(attempt()).rejects.toThrow(/move the node|omit its x\/y/)
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.map((node) => node.id)).toEqual(['g'])
   })
 
@@ -272,7 +272,7 @@ describe('wb_canvas_edit — node.add within a group', () => {
       ],
     })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.find((node) => node.id === 'corner')).toMatchObject({ x: 100, y: 100 })
     expect(canvas.nodes.find((node) => node.id === 'g')).toMatchObject({ x: 100, y: 100 })
   })
@@ -307,7 +307,7 @@ describe('wb_canvas_edit — node.add within a group', () => {
       opIndex: 1,
       message: expect.stringMatching(/left edge 50 is before the group's 100/),
     })
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes).toEqual([])
   })
 
@@ -386,7 +386,7 @@ describe('wb_canvas_edit — node.add within a group', () => {
         ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' }, within: 'g' }],
       }),
     ).rejects.toThrow(/"neighbour"/)
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.find((node) => node.id === 'g')).toMatchObject({ width: 200, height: 100 })
   })
 

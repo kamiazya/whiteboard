@@ -95,7 +95,7 @@ it('compaction folds to the earliest version alone, with nothing holding it back
     })
   }
   const versionStore = new FileVersionStore()
-  await versionStore.save(WS, 'doc', canvasDoc('later content'), { auto: false, label: 'only' })
+  await versionStore.save(WS, 'doc', { auto: false, label: 'only' })
 
   const result = await compactWorkspace(WS, versionStore)
   expect(result.reason).toBe('ok')

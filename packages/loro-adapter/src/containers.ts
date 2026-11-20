@@ -143,3 +143,16 @@ export type Fields = Record<string, unknown>
  * apps/web side would be a contract duplicated across a package boundary.
  */
 export const MARKDOWN_BODY_KEY = 'body'
+
+/**
+ * The map at `key` for a READ. A tree node opens a container by writing it,
+ * which a read must not do (it would add an op to a record the keeper shares and
+ * caches), so a host that can look without opening does; a document root is
+ * implicit and free to look at. `undefined` is a container that is not there.
+ */
+export const peekMapOf = (doc: DocumentContainers, key: string): LoroMap | undefined =>
+  doc.peekMap === undefined ? doc.getMap(key) : doc.peekMap(key)
+
+/** The text at `key` for a READ; `peekMapOf`'s contract for a text root. */
+export const peekTextOf = (doc: DocumentContainers, key: string): LoroText | undefined =>
+  doc.peekText === undefined ? doc.getText(key) : doc.peekText(key)

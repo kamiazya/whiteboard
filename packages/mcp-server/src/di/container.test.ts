@@ -112,7 +112,6 @@ describe('resolveServerDeps document teardown', () => {
     await deps.documentWritten?.({
       workspaceId: '01AD0EBCZCCZMY8F94QTKHK2WV',
       documentId: '01HZZZZZZZZZZZZZZZZZZZZZZZ',
-      doc: new LoroDoc(),
     })
 
     expect(_autoCompactTimerCountForTests()).toBe(1)

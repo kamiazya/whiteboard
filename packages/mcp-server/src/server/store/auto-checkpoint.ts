@@ -1,12 +1,21 @@
 import type { CheckpointScheduler } from '@kamiazya/whiteboard-history'
 import { encodeFrontiers, type LoroDoc } from 'loro-crdt'
 
-/** The scheduler over the daemon's documents. */
-export type DocumentCheckpointScheduler = CheckpointScheduler<LoroDoc>
+/**
+ * What a pending checkpoint carries to say what state it would record: the
+ * live document a signaller holds, or — for one that holds none, as an agent
+ * write that stored bytes and kept no copy — a read of the keeper for the
+ * frontier. Either is asked when the checkpoint is about to be taken, never
+ * when the signal arrives.
+ */
+type CheckpointSubject = LoroDoc | (() => Uint8Array | Promise<Uint8Array>)
 
-/** A document's frontier as the bytes the scheduler compares and never decodes. */
-export function documentFrontier(doc: LoroDoc): Uint8Array {
-  return encodeFrontiers(doc.oplogFrontiers())
+/** The scheduler over the daemon's documents. */
+export type DocumentCheckpointScheduler = CheckpointScheduler<CheckpointSubject>
+
+/** A subject's frontier as the bytes the scheduler compares and never decodes. */
+export function documentFrontier(subject: CheckpointSubject): Uint8Array | Promise<Uint8Array> {
+  return typeof subject === 'function' ? subject() : encodeFrontiers(subject.oplogFrontiers())
 }
 
 /**
@@ -41,8 +50,12 @@ export function uninstallAutoCheckpointForTests(): void {
 }
 
 /** "This document just changed" — a no-op while no scheduler is installed. */
-export function checkpointAfterWrite(workspaceId: string, path: string, doc: LoroDoc): void {
-  installed?.(workspaceId, path, doc)
+export function checkpointAfterWrite(
+  workspaceId: string,
+  path: string,
+  subject: CheckpointSubject,
+): void {
+  installed?.(workspaceId, path, subject)
 }
 
 /**

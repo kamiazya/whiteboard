@@ -1,0 +1,70 @@
+{
+  "answer": {
+    "linked": 1
+  },
+  "content": {
+    "doc1": {
+      "kind": "spatial",
+      "canvas": {
+        "nodes": [
+          {
+            "id": "t1",
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 60,
+            "resource": {
+              "mimeType": "text/markdown",
+              "content": "[[design/login|Login flow]] notes"
+            }
+          },
+          {
+            "id": "t2",
+            "x": 0,
+            "y": 100,
+            "width": 200,
+            "height": 60,
+            "resource": {
+              "mimeType": "text/markdown",
+              "content": "unrelated"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "skipped": 0,
+      "body": "",
+      "threads": [],
+      "proposals": [],
+      "nodeLocks": [],
+      "edgeLocks": [],
+      "facets": {},
+      "coreFacets": null,
+      "trustFacets": null
+    }
+  },
+  "saves": [
+    {
+      "documentId": "doc1",
+      "chunks": 1,
+      "frontierIsTheOplogVersion": true,
+      "docRef": {
+        "kind": "document",
+        "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+        "documentId": "doc1"
+      }
+    }
+  ],
+  "events": [
+    {
+      "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+      "documentId": "doc1",
+      "path": "doc",
+      "keys": [
+        "documentId",
+        "path",
+        "workspaceId"
+      ]
+    }
+  ]
+}

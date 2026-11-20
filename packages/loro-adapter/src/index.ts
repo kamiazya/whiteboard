@@ -21,7 +21,12 @@ export {
   readContentWithTags,
   readDocumentContent,
 } from './document-content.js'
-export { applyDocumentEdit, type DocumentEdit, type TextSplice } from './document-edit.js'
+export {
+  applyDocumentEdit,
+  type DocumentEdit,
+  documentEditWrites,
+  type TextSplice,
+} from './document-edit.js'
 export {
   readCoreFacets,
   readDocumentKind,

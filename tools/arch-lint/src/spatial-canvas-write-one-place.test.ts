@@ -32,6 +32,8 @@ import { isTestPath, walkSourceFiles } from './source-scan.js'
 const OWNER = 'packages/loro-adapter/src/'
 const WRITE_NAMES = ['writeSpatialCanvas']
 const ENVELOPE_NAMES = ['writeFacets', 'writeCoreFacets', 'writeTrustFacets']
+/** The same resyncs asked of the CRDT engine, which a caller names as a write's `op`. */
+const ENVELOPE_WRITE_OP = /\bop:\s*['"](?:writeFacets|writeCoreFacets|writeTrustFacets)['"]/
 
 /** Uses of a name however spelled: bare, qualified, bracketed or through an aliased import. */
 const usesAny = (names: readonly string[], source: string, fileName = 'fixture.ts'): boolean =>
@@ -109,15 +111,20 @@ const ENVELOPE_FIXTURES: readonly { readonly source: string; readonly calls: boo
   { source: '// writeCoreFacets(doc, meta) replaces the bucket', calls: false },
   { source: 'reconcileFacets(doc, prev, next)', calls: false },
   { source: 'reconcileCoreFacets(doc, prev, next)', calls: false },
+  { source: "session.write([{ op: 'writeCoreFacets', args: { core } }])", calls: true },
+  { source: 'session.write([{ op: "writeTrustFacets", args: { trust } }])', calls: true },
+  { source: "{ op: 'reconcileFacets', args: { prev, next } }", calls: false },
 ]
 
+const callsEnvelopeIn = (source: string, fileName = 'fixture.ts'): boolean =>
+  usesAny(ENVELOPE_NAMES, source, fileName) || ENVELOPE_WRITE_OP.test(source)
+
 describe('the envelope resyncs stay inside loro-adapter and document.set', () => {
-  const callsEnvelope = (path: string): boolean =>
-    usesAny(ENVELOPE_NAMES, readFileSync(path, 'utf8'), path)
+  const callsEnvelope = (path: string): boolean => callsEnvelopeIn(readFileSync(path, 'utf8'), path)
 
   it('recognises a call in every spelling, and not a mention', () => {
     for (const { source, calls } of ENVELOPE_FIXTURES) {
-      expect(usesAny(ENVELOPE_NAMES, source), source).toBe(calls)
+      expect(callsEnvelopeIn(source), source).toBe(calls)
     }
   })
 

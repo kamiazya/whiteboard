@@ -1,0 +1,88 @@
+{
+  "error": {
+    "name": "DocumentKindMismatchError",
+    "message": "Document 01H8XJZ9K5N4M3P2Q1R0S9T8V7 is a spatial document. This writes OKF Markdown, which would replace its nodes and edges with a markdown body. Edit a spatial document through wb_canvas_edit instead."
+  },
+  "content": {
+    "doc1": {
+      "kind": "spatial",
+      "canvas": {
+        "nodes": [
+          {
+            "id": "a",
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 60,
+            "tags": [
+              "x",
+              "old"
+            ],
+            "resource": {
+              "mimeType": "text/markdown",
+              "content": "Alpha"
+            }
+          },
+          {
+            "id": "b",
+            "x": 300,
+            "y": 0,
+            "width": 200,
+            "height": 60,
+            "resource": {
+              "mimeType": "text/markdown",
+              "content": "Beta"
+            }
+          },
+          {
+            "id": "c",
+            "x": 600,
+            "y": 0,
+            "width": 200,
+            "height": 60,
+            "tags": [
+              "old"
+            ],
+            "resource": {
+              "mimeType": "text/markdown",
+              "content": "Gamma"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "from": {
+              "node": "a"
+            },
+            "to": {
+              "node": "b"
+            },
+            "tags": [
+              "old"
+            ]
+          }
+        ],
+        "tags": [
+          "kept",
+          "old"
+        ]
+      },
+      "skipped": 0,
+      "body": "",
+      "threads": [],
+      "proposals": [],
+      "nodeLocks": [],
+      "edgeLocks": [],
+      "facets": {
+        "example.sample/v1": {
+          "status": "open"
+        }
+      },
+      "coreFacets": null,
+      "trustFacets": null
+    }
+  },
+  "saves": [],
+  "events": []
+}

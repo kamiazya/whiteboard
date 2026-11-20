@@ -11,7 +11,6 @@ import {
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import type { AgentActivity, ServerDeps } from '../server-deps.js'
 import {
   FakeDocumentStore,
@@ -19,6 +18,7 @@ import {
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -55,7 +55,7 @@ async function seed(store: FakeDocumentStore, canvas: SpatialCanvas): Promise<vo
 }
 
 async function storedProposals(deps: ServerDeps) {
-  const { doc } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+  const { doc } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
   return readProposals(doc)
 }
 
@@ -146,7 +146,7 @@ describe('wb_canvas_edit in propose mode', () => {
     expect(change.node.width).toBeGreaterThan(0)
     expect(change.node.height).toBeGreaterThan(0)
     // and the board still has two nodes
-    const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes).toHaveLength(2)
   })
 

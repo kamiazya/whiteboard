@@ -21,7 +21,6 @@ import {
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import {
   FakeDocumentStore,
@@ -29,6 +28,7 @@ import {
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentSetOperation } from './document-set.js'
@@ -170,10 +170,10 @@ interface Writer {
 }
 
 const storedBoard = async ({ deps }: Fixture) =>
-  (await loadDocument(deps, WORKSPACE_ID, CANVAS_ID)).canvas
+  (await readStoredDocument(deps, WORKSPACE_ID, CANVAS_ID)).canvas
 
 const storedNote = async ({ deps }: Fixture) => {
-  const { doc } = await loadDocument(deps, WORKSPACE_ID, NOTE_ID)
+  const { doc } = await readStoredDocument(deps, WORKSPACE_ID, NOTE_ID)
   return { facets: readFacets(doc), core: readCoreFacets(doc) }
 }
 
@@ -374,7 +374,9 @@ describe('a registered facet write is refused by every writer, and nothing is st
         patch: { facets: { 'visual.edges/v0': { routing: 'curved' } } },
       },
     ])
-    const canvas = readSpatialCanvas((await loadDocument(fx.deps, WORKSPACE_ID, CANVAS_ID)).doc)
+    const canvas = readSpatialCanvas(
+      (await readStoredDocument(fx.deps, WORKSPACE_ID, CANVAS_ID)).doc,
+    )
     expect(canvas.nodes.find((node) => node.id === 'c')?.facets).toEqual({
       'visual.shape/v0': { kind: 'ellipse' },
     })
@@ -562,7 +564,7 @@ describe('wb_facet_set refuses a locked node or edge, and writes nothing', () =>
 
 describe('what an op stores of a facets bucket it carries', () => {
   const stored = async (fx: Fixture) =>
-    readSpatialCanvas((await loadDocument(fx.deps, WORKSPACE_ID, CANVAS_ID)).doc)
+    readSpatialCanvas((await readStoredDocument(fx.deps, WORKSPACE_ID, CANVAS_ID)).doc)
   const nodeC = (facets: unknown) => ({
     op: 'node.add',
     node: { type: 'text', text: 'c', id: 'c', x: 0, y: 300, facets },

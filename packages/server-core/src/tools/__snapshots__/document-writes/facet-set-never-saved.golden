@@ -1,0 +1,60 @@
+{
+  "answer": {
+    "updated": [
+      {
+        "documentId": "01H8XJZ9K5N4M3P2Q1R0S9T8V7",
+        "facets": {
+          "example.kanban/v1": {
+            "status": "todo"
+          }
+        }
+      }
+    ]
+  },
+  "content": {
+    "doc1": {
+      "kind": null,
+      "canvas": {
+        "nodes": [],
+        "edges": []
+      },
+      "skipped": 0,
+      "body": "",
+      "threads": [],
+      "proposals": [],
+      "nodeLocks": [],
+      "edgeLocks": [],
+      "facets": {
+        "example.kanban/v1": {
+          "status": "todo"
+        }
+      },
+      "coreFacets": null,
+      "trustFacets": null
+    }
+  },
+  "saves": [
+    {
+      "documentId": "doc1",
+      "chunks": 1,
+      "frontierIsTheOplogVersion": true,
+      "docRef": {
+        "kind": "document",
+        "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+        "documentId": "doc1"
+      }
+    }
+  ],
+  "events": [
+    {
+      "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+      "documentId": "doc1",
+      "path": "doc",
+      "keys": [
+        "documentId",
+        "path",
+        "workspaceId"
+      ]
+    }
+  ]
+}

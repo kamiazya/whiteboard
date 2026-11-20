@@ -16,7 +16,6 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import type { LoroDoc } from 'loro-crdt'
 import { createServer } from '../create-server.js'
 import { FakeDocumentStore, seedDoc } from './fake-document-store.js'
 import { FakeLiveDocuments } from './fake-live-documents.js'
@@ -34,9 +33,7 @@ export const SEEDED_MARKDOWN_PATH = 'notes/plan'
 
 export async function seededServer(): Promise<ReturnType<typeof createServer>> {
   const store = new FakeDocumentStore()
-  let board: LoroDoc | undefined
   await seedDoc(store, SEEDED_SPATIAL_ID, (doc) => {
-    board = doc
     writeDocumentKind(doc, 'spatial')
     writeSpatialCanvas(doc, {
       nodes: [
@@ -94,10 +91,9 @@ export async function seededServer(): Promise<ReturnType<typeof createServer>> {
     kind: 'markdown',
     name: 'Plan',
   })
-  const versions = new FakeVersionHistory()
-  if (board === undefined) throw new Error('seedDoc did not configure the board')
+  const versions = new FakeVersionHistory(store)
   // One saved version, so restore and list have something to name ('v1').
-  await versions.save(SEEDED_WORKSPACE_ID, SEEDED_SPATIAL_PATH, board, {
+  await versions.save(SEEDED_WORKSPACE_ID, SEEDED_SPATIAL_PATH, {
     auto: false,
     label: 'seed',
   })

@@ -9,8 +9,8 @@ import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { DOCUMENT_ID, EMPTY, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 
@@ -56,7 +56,7 @@ describe('wb_canvas_edit sizing through the layout core', () => {
       mode: 'apply',
       ops: [{ op: 'node.add', node: { id: 'n', type: 'text', text: 'hello' } }],
     })
-    const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes[0]?.height).toBe(123)
     expect(asked).toEqual([
       expect.objectContaining({
@@ -137,7 +137,7 @@ describe('wb_canvas_edit tidy through the layout core', () => {
       mode: 'apply',
       ops: [...tidyOp],
     })
-    const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.map((n) => [n.id, n.x, n.y])).toEqual([
       ['a', 0, 0],
       ['b', 200, 0],
@@ -156,7 +156,7 @@ describe('wb_canvas_edit tidy through the layout core', () => {
       mode: 'apply',
       ops: [...tidyOp],
     })
-    const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     const direct = tidyNodes(tidyBoxes(board.nodes), { core: testLayoutCore() })
     expect(direct).toEqual([{ id: 'b', x: 200, y: 0 }])
     expect(canvas.nodes.find((n) => n.id === 'b')?.y).toBe(0)
@@ -175,7 +175,7 @@ describe('wb_canvas_edit tidy through the layout core', () => {
       mode: 'apply',
       ops: [{ op: 'node.lock', id: 'b', locked: true }, ...tidyOp],
     })
-    const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.find((n) => n.id === 'b')).toMatchObject({ x: 200, y: 3 })
   })
 })

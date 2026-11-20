@@ -1,11 +1,10 @@
-import { type DocumentContent, lease } from '@kamiazya/whiteboard-loro-adapter'
+import { type DocumentContent, documentEditWrites, lease } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { planLinkifyMentions } from '@kamiazya/whiteboard-reference-graph'
 import { z } from 'zod'
 import { editWorkspaceRecord } from './browser-record-edit.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { touchContentTimestamp } from './content-timestamp.js'
-import { documentEditWrites } from './document-edit-writes.js'
 
 /**
  * The browser keeper's half of the Connections panel's **Link**: turn the
@@ -52,7 +51,7 @@ export async function linkifyBrowserMentions(
       })
       return {
         value: plan.edit === null ? 0 : plan.linked,
-        writes: plan.edit === null ? [] : documentEditWrites(sourceDocumentId, plan.edit),
+        writes: plan.edit === null ? [] : documentEditWrites(plan.edit, sourceDocumentId),
       }
     },
   )

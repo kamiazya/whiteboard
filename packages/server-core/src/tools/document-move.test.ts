@@ -1,8 +1,8 @@
 import { readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, it } from 'vitest'
-import { loadOrCreateDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { readStoredDocumentOrEmpty } from '../test-utils/stored-document.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { wbDocumentCreate } from './document-crud.js'
 import { wbDocumentMove } from './document-move.js'
@@ -18,7 +18,7 @@ async function seed(deps: ServerDeps) {
   const write = (documentId: string, body: string) =>
     set.execute({ workspaceId: WS, documentId, markdown: `---\ntype: note\n---\n${body}` })
   const bodyOf = async (documentId: string) =>
-    readMarkdownBody(await loadOrCreateDocument(deps, WS, documentId as never))
+    readMarkdownBody(await readStoredDocumentOrEmpty(deps, WS, documentId as never))
   const pathOf = async (documentId: string) =>
     (await deps.documentIndex.resolveDocumentById({ workspaceId: WS, documentId }))?.path
   return { create, write, bodyOf, pathOf }

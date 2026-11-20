@@ -583,8 +583,7 @@ it('confirms every carried version on a re-run after the daemon took a checkpoin
   const first = promoteWorkspaceResponseSchema.parse(await (await promote(body)).json())
   expect([...first.versionsKept].sort()).toEqual(ids)
 
-  const doc = await serverDeps.liveDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF', 'notes/roadmap')
-  await serverDeps.versions.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'notes/roadmap', doc, { auto: true })
+  await serverDeps.versions.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'notes/roadmap', { auto: true })
 
   const second = promoteWorkspaceResponseSchema.parse(await (await promote(body)).json())
   expect([...second.versionsKept].sort()).toEqual(ids)
@@ -682,14 +681,9 @@ it('answers a restore of a saved state past a sync limit with 413 in the sync re
   await serverDeps.liveDocuments.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', oversized, {
     kind: 'spatial',
   })
-  const version = await serverDeps.versions.save(
-    '01M8BBN7JS60N0ZAR13NP8SXBF',
-    'canvas-a',
-    oversized,
-    {
-      auto: false,
-    },
-  )
+  const version = await serverDeps.versions.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', {
+    auto: false,
+  })
   const live = await serverDeps.liveDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
   writeSpatialCanvas(live, {
     nodes: [textNode({ id: 'kept', text: 'k', x: 0, y: 0, width: 1, height: 1 })],

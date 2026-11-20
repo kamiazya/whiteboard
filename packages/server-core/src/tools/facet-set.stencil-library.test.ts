@@ -10,9 +10,9 @@ import {
   VISUAL_TAGS_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
-import { loadOrCreateDocument } from '../document-io.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { readStoredDocumentOrEmpty } from '../test-utils/stored-document.js'
 import { FacetWriteRejectedError } from './errors.js'
 import { createFacetSetTool } from './facet-set.js'
 
@@ -76,7 +76,7 @@ describe('wb_facet_set refuses a stencil library the registry would not accept',
     expect(refusal).toBeInstanceOf(FacetWriteRejectedError)
     for (const name of names) expect((refusal as Error).message).toMatch(name)
 
-    const stored = readFacets(await loadOrCreateDocument(deps, WORKSPACE_ID, LIBRARY_ID))
+    const stored = readFacets(await readStoredDocumentOrEmpty(deps, WORKSPACE_ID, LIBRARY_ID))
     expect(stored?.[VISUAL_STENCILS_KEY]).toBeUndefined()
   })
 
@@ -88,7 +88,7 @@ describe('wb_facet_set refuses a stencil library the registry would not accept',
         worse: { displayName: 'W', facets: { 'visual.shape/v0': { kind: 'blob' } } },
       }),
     ).rejects.toThrow(/worse/)
-    const stored = readFacets(await loadOrCreateDocument(deps, WORKSPACE_ID, LIBRARY_ID))
+    const stored = readFacets(await readStoredDocumentOrEmpty(deps, WORKSPACE_ID, LIBRARY_ID))
     expect(stored?.[VISUAL_STENCILS_KEY]).toBeUndefined()
   })
 
@@ -102,7 +102,7 @@ describe('wb_facet_set refuses a stencil library the registry would not accept',
       },
       plain: { displayName: 'Plain', color: '3' },
     })
-    const stored = readFacets(await loadOrCreateDocument(deps, WORKSPACE_ID, LIBRARY_ID))
+    const stored = readFacets(await readStoredDocumentOrEmpty(deps, WORKSPACE_ID, LIBRARY_ID))
     expect(Object.keys(readStencilLibrary(stored))).toEqual(['bucket', 'plain'])
   })
 

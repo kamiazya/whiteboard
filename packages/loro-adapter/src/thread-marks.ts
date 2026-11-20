@@ -20,7 +20,7 @@
 import type { LoroDoc } from 'loro-crdt'
 import { readAnnotations } from './annotations.js'
 import type { DocumentContainers } from './containers.js'
-import { MARKDOWN_BODY_KEY } from './containers.js'
+import { MARKDOWN_BODY_KEY, peekTextOf } from './containers.js'
 
 const KEY_PREFIX = 'comment-'
 
@@ -169,7 +169,7 @@ export function markThreadPassages(
 export function readThreadMarks(doc: DocumentContainers): Map<string, PassageRange> {
   const found = new Map<string, PassageRange>()
   let at = 0
-  for (const run of doc.getText(MARKDOWN_BODY_KEY).toDelta()) {
+  for (const run of peekTextOf(doc, MARKDOWN_BODY_KEY)?.toDelta() ?? []) {
     const text = typeof run.insert === 'string' ? run.insert : ''
     for (const key of Object.keys(run.attributes ?? {})) {
       const threadId = threadIdFromStyleKey(key)

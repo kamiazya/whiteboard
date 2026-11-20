@@ -51,6 +51,30 @@ describe('createCheckpointScheduler', () => {
     expect(saves).toHaveLength(1)
   })
 
+  it('compares a frontier the keeper has to wait for, so one read from storage can stand in for a held document', async () => {
+    const saves: string[] = []
+    const errors: unknown[] = []
+    const scheduler = createCheckpointScheduler<LoroDoc, { id: string }>({
+      quietMs: 100,
+      frontierOf: async (doc) => frontierOf(doc),
+      save: async (_ws, path) => {
+        saves.push(path)
+        return { id: `v${saves.length}` }
+      },
+      onError: (err) => errors.push(err),
+    })
+    const doc = edited(new LoroDoc(), 'x')
+    scheduler('w', 'a', doc)
+    await vi.advanceTimersByTimeAsync(150)
+    scheduler('w', 'a', doc)
+    await vi.advanceTimersByTimeAsync(150)
+    expect(errors).toEqual([])
+    expect(saves).toEqual(['a'])
+    scheduler('w', 'a', edited(doc, 'y'))
+    await vi.advanceTimersByTimeAsync(150)
+    expect(saves).toEqual(['a', 'a'])
+  })
+
   it('takes a checkpoint at the ceiling when editing never pauses', async () => {
     const { scheduler, saves } = harness({ quietMs: 1000, ceilingMs: 2500 })
     const doc = new LoroDoc()

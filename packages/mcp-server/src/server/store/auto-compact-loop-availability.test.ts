@@ -65,7 +65,7 @@ async function seedWorkspace(
 ): Promise<void> {
   const path = 'board'
   await saveDocument(workspaceId, path, makeSpatialDoc(canvasOf(0, 40)), { kind: 'spatial' })
-  await store.save(workspaceId, path, await loadDocument(workspaceId, path), {
+  await store.save(workspaceId, path, {
     auto: false,
     label: 'floor',
   })
