@@ -9,12 +9,14 @@
  *
  * Interleave two checkouts by running this in each, alternately, and compare
  * the medians: a single run is one process's allocation history. `loadMs` is
- * the past state of one document, which is a copy of the record at a version.
+ * the past state of one document, which is a copy of the record at a version;
+ * `restoreMs` a restore in place that alternates between two saved states.
  */
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { wbDocumentCreate } from '@kamiazya/whiteboard-server-core'
+import { writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
+import { restoreVersion, wbDocumentCreate } from '@kamiazya/whiteboard-server-core'
 import { bootSelfHostDeps } from '../../src/di/boot-self-host-deps.ts'
 import { disposeAutoCompact, uninstallAutoCompact } from '../../src/server/store/auto-compact.ts'
 import { clearDbCacheForTests, closeDb } from '../../src/server/store/db/index.ts'
@@ -46,6 +48,21 @@ try {
   const store = new FileVersionStore(storeScope(served))
   const target = `notes/n${COUNT - 1}`
   const saved = await store.save(WORKSPACE, target, { auto: false })
+  // Two saved states of the document that a restore alternates between, so each
+  // restore moves the content rather than restating it.
+  const live = serverDeps.liveDocuments
+  const setBody = (text) =>
+    live.withWriteLock(WORKSPACE, async () => {
+      const doc = await live.get(WORKSPACE, target)
+      writeMarkdownBody(doc, text)
+      doc.commit()
+      await live.save(WORKSPACE, target, doc, { overwrite: true })
+    })
+  await setBody('# State A')
+  const stateA = await store.save(WORKSPACE, target, { auto: false })
+  await setBody('# State B')
+  const stateB = await store.save(WORKSPACE, target, { auto: false })
+  let toggle = false
   const time = async (call) => {
     await call()
     const samples = []
@@ -65,6 +82,14 @@ try {
       unchangedMs: await time(() => store.isUnchangedSinceLastVersion(WORKSPACE, target)),
       listMs: await time(() => store.list(WORKSPACE, target)),
       loadMs: await time(() => store.load(WORKSPACE, saved.id)),
+      restoreMs: await time(() => {
+        toggle = !toggle
+        return restoreVersion(serverDeps, {
+          workspaceId: WORKSPACE,
+          path: target,
+          versionId: (toggle ? stateA : stateB).id,
+        })
+      }),
     }),
   )
 } finally {
