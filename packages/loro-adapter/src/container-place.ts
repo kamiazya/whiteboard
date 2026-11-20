@@ -11,6 +11,23 @@ interface ContainerPlace {
   readonly textLength?: number
 }
 
+/** A mergeable child's id is a root id whose name starts with this, and it has a parent chain. */
+const MERGEABLE_NAME_PREFIX = '🤝:'
+
+/**
+ * Whether a true root `container` is listed in the record's state. A root
+ * resolves whatever its name — asking for its path or fetching it by id
+ * registers it when the record holds none — so an absent root is judged from
+ * the shallow value and never fetched. Every other id passes: a mergeable
+ * child is found through its parent, and one that is no root is not registered
+ * by being asked for.
+ */
+function rootIsHeld(doc: LoroDoc, container: ContainerID): boolean {
+  if (!container.startsWith('cid:root-')) return true
+  const name = container.slice('cid:root-'.length, container.lastIndexOf(':'))
+  return name.startsWith(MERGEABLE_NAME_PREFIX) || name in doc.getShallowValue()
+}
+
 /**
  * The document of a workspace record `container` belongs to, or `null` when it
  * belongs to none the record lists: a root outside the tree, a folder's own
@@ -24,6 +41,7 @@ interface ContainerPlace {
  */
 export function containerPlace(doc: LoroDoc, container: ContainerID): ContainerPlace | null {
   if (!holdsContainerCreation(doc, container)) return null
+  if (!rootIsHeld(doc, container)) return null
   if (!descendsFromWorkspaceTree(doc, container)) return null
   const path = doc.getPathToContainer(container)
   if (path === undefined || path.length < 2) return null

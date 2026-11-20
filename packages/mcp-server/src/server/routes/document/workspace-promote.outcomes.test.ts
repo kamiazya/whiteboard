@@ -273,6 +273,18 @@ describe('a clean promote', () => {
   })
 })
 
+describe('reading what a promote left', () => {
+  it('leaves the record byte for byte as it was, whichever listing is read first', async () => {
+    const { app, promote, snapshotBytes } = harness()
+    await promote(browserRecord(2n))
+    const before = Buffer.from(await snapshotBytes())
+    for (const path of ['trash', 'documents', `documents/${ROADMAP_ID}/versions`]) {
+      expect((await app.request(`/api/workspaces/${WS}/${path}`)).status).toBe(200)
+      expect(Buffer.from(await snapshotBytes()).equals(before), path).toBe(true)
+    }
+  })
+})
+
 describe('the target workspace as a follower of it sees a promote', () => {
   it('is handed the promoted documents through the announced updates', async () => {
     const { promote, snapshotBytes } = harness()

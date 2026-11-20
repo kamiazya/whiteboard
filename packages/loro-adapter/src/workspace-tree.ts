@@ -53,6 +53,7 @@ import {
 } from './content-sync.js'
 import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
 import { openMergeableMovableList } from './mergeable-containers.js'
+import { peekRootMap } from './root-peek.js'
 
 /** The one root container a workspace document has. */
 export const WORKSPACE_TREE_KEY = 'tree'
@@ -383,7 +384,7 @@ function workspaceMetaMap(doc: LoroDoc): LoroMap {
 }
 
 export function readWorkspaceMeta(doc: LoroDoc): WorkspaceMeta {
-  const raw = workspaceMetaMap(doc).get('lastCompactedAt')
+  const raw = peekRootMap(doc, WORKSPACE_META_KEY)?.get('lastCompactedAt')
   const parsed = workspaceMetaSchema.safeParse(raw === undefined ? {} : { lastCompactedAt: raw })
   return parsed.success ? parsed.data : {}
 }
@@ -400,7 +401,7 @@ export function setWorkspaceLastCompactedAt(doc: LoroDoc, at: number): void {
  * writing anything.
  */
 export function readPinnedDocumentIds(doc: LoroDoc): string[] {
-  const existing = workspaceMetaMap(doc).get(PINNED_KEY)
+  const existing = peekRootMap(doc, WORKSPACE_META_KEY)?.get(PINNED_KEY)
   if (!(existing instanceof LoroMovableList)) return []
   return existing.toArray().filter((v): v is string => typeof v === 'string')
 }

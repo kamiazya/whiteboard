@@ -1,9 +1,11 @@
 // The workspace record's trash: what it records about each document a delete
 // evacuated, in a map beside the tree. The bytes themselves live in
 // content-addressed storage; only the row naming them syncs.
+
 import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
+import { peekRootMap } from './root-peek.js'
 
 /** Where a deleted document's evacuated bytes are recorded. */
 export const WORKSPACE_TRASH_KEY = 'trash'
@@ -66,7 +68,7 @@ export function recordTrashEntry(doc: LoroDoc, entry: TrashEntry): void {
 }
 
 export function readTrashEntries(doc: LoroDoc): TrashEntry[] {
-  const raw = doc.getMap(WORKSPACE_TRASH_KEY).toJSON() as Record<string, unknown>
+  const raw = (peekRootMap(doc, WORKSPACE_TRASH_KEY)?.toJSON() ?? {}) as Record<string, unknown>
   const out: TrashEntry[] = []
   for (const value of Object.values(raw)) {
     const parsed = trashEntryReadSchema.safeParse(value)
