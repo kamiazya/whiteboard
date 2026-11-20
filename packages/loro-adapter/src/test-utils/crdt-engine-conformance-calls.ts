@@ -450,7 +450,7 @@ export function describeDocumentContentWithTags(makeEngine: () => CrdtEngine) {
 }
 
 /** A snapshot of a document the pre-threads writer left comments in, as base64. */
-function retiredPlaneSnapshot(hostId?: string): string {
+function retiredPlaneSnapshot(hostId?: string, rows = 1): string {
   const doc = new LoroDoc()
   if (hostId !== undefined) {
     createWorkspaceDocumentAtPath(doc, {
@@ -461,7 +461,11 @@ function retiredPlaneSnapshot(hostId?: string): string {
     })
   }
   const host = hostId === undefined ? doc : documentContainers(doc, hostId)
-  host.getMap('comments').set('c1', { id: 'c1', x: 1, y: 2, text: 'from before threads' })
+  for (let row = 1; row <= rows; row += 1) {
+    host
+      .getMap('comments')
+      .set(`c${row}`, { id: `c${row}`, x: 1, y: 2, text: 'from before threads' })
+  }
   doc.commit()
   return snapshotOf(doc)
 }
@@ -484,24 +488,25 @@ async function askPlane(
 ) {
   const engine = makeEngine()
   const { handle } = engine.open({ peer: '1', ...(bytes === undefined ? {} : { bytes }) })
-  return ask(engine, handle, 'retiredCommentPlane', args)
+  return ask(engine, handle, 'retiredCommentRows', args)
 }
 
-export function describeRetiredCommentPlane(makeEngine: () => CrdtEngine) {
-  describe('the retired comment plane read', () => {
-    it('answers true for a document that still holds comments in the retired plane', async () => {
-      expect(await askPlane(makeEngine, retiredPlaneSnapshot())).toEqual({ ok: true })
+export function describeRetiredCommentRows(makeEngine: () => CrdtEngine) {
+  describe('the retired comment rows read', () => {
+    it('answers how many rows a document still holds in the retired plane', async () => {
+      expect(await askPlane(makeEngine, retiredPlaneSnapshot())).toEqual({ ok: 1 })
+      expect(await askPlane(makeEngine, retiredPlaneSnapshot(undefined, 3))).toEqual({ ok: 3 })
     })
 
-    it('answers false for a document without them, and for an empty retired plane', async () => {
-      expect(await askPlane(makeEngine, undefined)).toEqual({ ok: false })
-      expect(await askPlane(makeEngine, emptyRetiredPlaneSnapshot())).toEqual({ ok: false })
+    it('answers none for a document without them, and for an empty retired plane', async () => {
+      expect(await askPlane(makeEngine, undefined)).toEqual({ ok: 0 })
+      expect(await askPlane(makeEngine, emptyRetiredPlaneSnapshot())).toEqual({ ok: 0 })
     })
 
     it('answers for the document a workspace record hosts', async () => {
       expect(
         await askPlane(makeEngine, retiredPlaneSnapshot(FIRST), { documentId: FIRST }),
-      ).toEqual({ ok: true })
+      ).toEqual({ ok: 1 })
       const engine = makeEngine()
       const { handle } = engine.open({ peer: '1' })
       write(engine, handle, 'createWorkspaceDocumentAtPath', {
@@ -509,26 +514,26 @@ export function describeRetiredCommentPlane(makeEngine: () => CrdtEngine) {
         documentId: SECOND,
         kind: 'markdown',
       })
-      expect(await ask(engine, handle, 'retiredCommentPlane', { documentId: SECOND })).toEqual({
-        ok: false,
+      expect(await ask(engine, handle, 'retiredCommentRows', { documentId: SECOND })).toEqual({
+        ok: 0,
       })
     })
 
     it('refuses a document the workspace record does not host, as the content reads do', async () => {
       const engine = makeEngine()
       const { handle } = engine.open({ peer: '1' })
-      const answer = await ask(engine, handle, 'retiredCommentPlane', { documentId: FIRST })
+      const answer = await ask(engine, handle, 'retiredCommentRows', { documentId: FIRST })
       expect(answer).toEqual(await ask(engine, handle, 'retiredStoredShape', { documentId: FIRST }))
       expect(answer).toHaveProperty('err')
     })
 
-    it('is the plane the annotations read refuses, and nothing else', async () => {
+    it('is positive exactly when the annotations read refuses', async () => {
       for (const bytes of [retiredPlaneSnapshot(), undefined]) {
         const engine = makeEngine()
         const { handle } = engine.open({ peer: '1', ...(bytes === undefined ? {} : { bytes }) })
-        const plane = (await ask(engine, handle, 'retiredCommentPlane')) as { ok: boolean }
+        const plane = (await ask(engine, handle, 'retiredCommentRows')) as { ok: number }
         const annotations = (await ask(engine, handle, 'annotations')) as object
-        expect('err' in annotations).toBe(plane.ok)
+        expect('err' in annotations).toBe(plane.ok > 0)
       }
     })
   })

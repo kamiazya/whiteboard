@@ -289,6 +289,69 @@ describe('the engine handles a session opens', () => {
 
     expect(handles.minted()).toEqual([])
   })
+
+  it('is the same typed error but may name another shape when the document holds several', async () => {
+    // The canvas read checks the retired `elements` list first; the question the
+    // session asks afterwards names the first shape of any kind, nodes before
+    // elements (the recorded read oracle pins that order). A document holding
+    // both is therefore refused for its elements by the reader and named by its
+    // node here.
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      doc.getMap('nodes').set('old', { type: 'text', id: 'old' })
+      doc.getList('elements').push({ id: 'excalidraw-1' })
+      doc.commit()
+    })
+    const stored = await seededDoc(store)
+    const expected = (() => {
+      try {
+        readSpatialCanvasWithSkipped(stored)
+      } catch (err) {
+        return err as Error
+      }
+      throw new Error('the canvas read should refuse')
+    })()
+
+    const failure = await withDocument(deps(store), WORKSPACE_ID, DOCUMENT_ID, canvasOf).catch(
+      (err: unknown) => err,
+    )
+
+    expect(failure).toBeInstanceOf(RetiredStoredShapeError)
+    expect(expected.message).toMatch(/Excalidraw/)
+    expect((failure as Error).message).toMatch(/node "old"/)
+  })
+
+  it('is the same typed error but may name another shape when a body read refuses', async () => {
+    // The body reader checks only the markdown shapes; the question the session
+    // asks afterwards names the first shape of any kind, so a body stored as a
+    // retired text node that is also a retired node is named as the node.
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      doc.getMap('nodes').set('okf-body', { type: 'text', id: 'okf-body' })
+      doc.commit()
+    })
+    const stored = await seededDoc(store)
+    const expected = (() => {
+      try {
+        readMarkdownBody(stored)
+      } catch (err) {
+        return err as Error
+      }
+      throw new Error('the body read should refuse')
+    })()
+
+    const failure = await withDocument(
+      deps(store),
+      WORKSPACE_ID,
+      DOCUMENT_ID,
+      markdownBodyOf,
+    ).catch((err: unknown) => err)
+
+    expect(failure).toBeInstanceOf(RetiredStoredShapeError)
+    expect((failure as Error).message).not.toBe(expected.message)
+    expect((failure as Error).message).toMatch(/node "okf-body"/)
+  })
 })
 
 /** The stored bytes of the one document `seedDoc` saved, read back as the adapter's own `LoroDoc`. */

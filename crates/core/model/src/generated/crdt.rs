@@ -251,8 +251,8 @@ pub enum QueryName {
     ImageRefIds,
     /// Written `retiredStoredShape`.
     RetiredStoredShape,
-    /// Written `retiredCommentPlane`.
-    RetiredCommentPlane,
+    /// Written `retiredCommentRows`.
+    RetiredCommentRows,
     /// Written `stateSize`.
     StateSize,
     /// Written `contentDigest`.
@@ -309,7 +309,7 @@ impl QueryName {
             Self::Proposals => "proposals",
             Self::ImageRefIds => "imageRefIds",
             Self::RetiredStoredShape => "retiredStoredShape",
-            Self::RetiredCommentPlane => "retiredCommentPlane",
+            Self::RetiredCommentRows => "retiredCommentRows",
             Self::StateSize => "stateSize",
             Self::ContentDigest => "contentDigest",
             Self::TextLimitBreach => "textLimitBreach",
@@ -350,7 +350,7 @@ impl QueryName {
             "proposals" => Some(Self::Proposals),
             "imageRefIds" => Some(Self::ImageRefIds),
             "retiredStoredShape" => Some(Self::RetiredStoredShape),
-            "retiredCommentPlane" => Some(Self::RetiredCommentPlane),
+            "retiredCommentRows" => Some(Self::RetiredCommentRows),
             "stateSize" => Some(Self::StateSize),
             "contentDigest" => Some(Self::ContentDigest),
             "textLimitBreach" => Some(Self::TextLimitBreach),

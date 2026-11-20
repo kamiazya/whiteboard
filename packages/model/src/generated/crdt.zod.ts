@@ -79,7 +79,7 @@ export const queryNameSchema = z.enum([
   'proposals',
   'imageRefIds',
   'retiredStoredShape',
-  'retiredCommentPlane',
+  'retiredCommentRows',
   'stateSize',
   'contentDigest',
   'textLimitBreach',

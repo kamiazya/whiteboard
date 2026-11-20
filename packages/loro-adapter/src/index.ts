@@ -1,7 +1,7 @@
 export {
-  holdsRetiredCommentPlane,
   RetiredCommentPlaneError,
   readAnnotations,
+  retiredCommentRows,
 } from './annotations.js'
 export {
   moveCommentThread,

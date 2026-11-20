@@ -82,10 +82,10 @@ fn the_combined_content_read_is_its_own_query_beside_the_content_read() {
 }
 
 #[test]
-fn the_retired_comment_plane_read_is_its_own_query_beside_the_retired_shape_read() {
-    assert_eq!(QueryName::from_wire("retiredCommentPlane"), Some(QueryName::RetiredCommentPlane));
-    assert_ne!(QueryName::RetiredCommentPlane, QueryName::RetiredStoredShape);
-    assert_eq!(QueryName::RetiredCommentPlane.as_str(), "retiredCommentPlane");
+fn the_retired_comment_rows_read_is_its_own_query_beside_the_retired_shape_read() {
+    assert_eq!(QueryName::from_wire("retiredCommentRows"), Some(QueryName::RetiredCommentRows));
+    assert_ne!(QueryName::RetiredCommentRows, QueryName::RetiredStoredShape);
+    assert_eq!(QueryName::RetiredCommentRows.as_str(), "retiredCommentRows");
 }
 wire_enum_covered!(every_writer_name_round_trips, WriterName, 50);
 wire_enum_covered!(every_import_judge_round_trips, ImportJudge, 3);

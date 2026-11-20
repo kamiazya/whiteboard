@@ -72,7 +72,7 @@ const entryShape = z
   .nullable()
 const nodesShape = asserted<readonly WorkspaceNodeRow[]>()
 const stringShape = z.string()
-const flagShape = z.boolean()
+const countShape = z.number()
 const nullableShape = z.unknown()
 
 type Entry = z.infer<typeof entryShape>
@@ -310,7 +310,7 @@ export class SessionDocument implements BodyDocPort {
 
   /** Whether the record still holds the plane comments lived in before threads. */
   holdsRetiredCommentPlane(): boolean {
-    return this.query('retiredCommentPlane', flagShape)
+    return this.query('retiredCommentRows', countShape) > 0
   }
 
   /** Whether the record holds a node, edge, canvas or body in a shape no reader serves. */

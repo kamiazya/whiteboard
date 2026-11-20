@@ -32,17 +32,12 @@ export class RetiredCommentPlaneError extends Error {
 }
 
 /** How many rows the retired plane holds, opening nothing to find out. */
-function retiredRows(doc: DocumentContainers): number {
+export function retiredCommentRows(doc: DocumentContainers): number {
   // A tree node opens a container by WRITING it, which a read must not do;
   // a document root is free to look at, since roots are implicit.
   const plane =
     doc.peekMap === undefined ? doc.getMap(RETIRED_COMMENTS_KEY) : doc.peekMap(RETIRED_COMMENTS_KEY)
   return plane?.size ?? 0
-}
-
-/** Whether this document holds comments only the retired plane carries. */
-export function holdsRetiredCommentPlane(doc: DocumentContainers): boolean {
-  return retiredRows(doc) > 0
 }
 
 /**
@@ -54,7 +49,7 @@ export function holdsRetiredCommentPlane(doc: DocumentContainers): boolean {
  * contract every reader in this package keeps.
  */
 export function readAnnotations(doc: DocumentContainers): CommentThread[] {
-  const rows = retiredRows(doc)
+  const rows = retiredCommentRows(doc)
   if (rows > 0) throw new RetiredCommentPlaneError(rows)
   return readCommentThreads(doc)
 }

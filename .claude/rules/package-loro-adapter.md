@@ -172,7 +172,7 @@ implementations live in the composition roots.
   `readAnnotations` throws `RetiredCommentPlaneError` for a document still
   holding rows there, rather than reading it as having no conversation, and
   each keeper surfaces that (409 on `/api/v1`; a read-failure screen in the
-  web app). The probe (`holdsRetiredCommentPlane`) goes through the optional
+  web app). The probe (`retiredCommentRows`, the row count the engine's query of the same name answers) goes through the optional
   `DocumentContainers.peekMap`, because opening a container on a tree node
   is a WRITE and would clear the undo manager's redo stack.
   `annotations.test.ts` holds all three.

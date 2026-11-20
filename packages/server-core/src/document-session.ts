@@ -1,6 +1,7 @@
 import {
   lease,
   type RecordLease,
+  RetiredCommentPlaneError,
   RetiredStoredShapeError,
   randomPeerId,
   sharedCrdtEngine,
@@ -48,9 +49,10 @@ function sessionOver(
 
 /**
  * The engine answers a reader's refusal as its class NAME, so the class a
- * caller maps to a status is gone by the time it reaches the tool. A retired
- * stored shape is the refusal every content read can raise, and the engine can
- * name the shape it found, so the typed error is rebuilt from that answer.
+ * caller maps to a status is gone by the time it reaches the tool. The two
+ * refusals every content read can raise are rebuilt from what the engine can
+ * still be asked: the retired shape it found, and the rows the retired
+ * comment plane holds.
  */
 async function readRestoringRefusal<T>(
   held: RecordLease,
@@ -60,9 +62,24 @@ async function readRestoringRefusal<T>(
   try {
     return await lease.read(held, query, shape)
   } catch (err) {
-    if (!(err instanceof Error) || err.name !== 'RetiredStoredShapeError') throw err
-    const found = await lease.read(held, { query: 'retiredStoredShape' }, foundShape)
-    throw new RetiredStoredShapeError(found ?? UNNAMED_RETIRED_SHAPE)
+    if (!(err instanceof Error)) throw err
+    if (err.name === 'RetiredStoredShapeError') {
+      const found = await lease.read(
+        held,
+        { query: 'retiredStoredShape', args: query.args },
+        foundShape,
+      )
+      throw new RetiredStoredShapeError(found ?? UNNAMED_RETIRED_SHAPE)
+    }
+    if (err.name === 'RetiredCommentPlaneError') {
+      const rows = await lease.read(
+        held,
+        { query: 'retiredCommentRows', args: query.args },
+        rowsShape,
+      )
+      if (rows > 0) throw new RetiredCommentPlaneError(rows)
+    }
+    throw err
   }
 }
 
@@ -72,6 +89,7 @@ async function readRestoringRefusal<T>(
 const UNNAMED_RETIRED_SHAPE = 'a markdown body stored as a canvas text node'
 
 const foundShape = z.string().nullable()
+const rowsShape = z.number()
 
 async function storedBytes(
   deps: ServerDeps,
