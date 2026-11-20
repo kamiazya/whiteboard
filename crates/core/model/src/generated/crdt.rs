@@ -243,6 +243,8 @@ pub enum QueryName {
     Annotations,
     /// Written `commentThreads`.
     CommentThreads,
+    /// Written `threadMessageCounts`.
+    ThreadMessageCounts,
     /// Written `threadMarks`.
     ThreadMarks,
     /// Written `proposals`.
@@ -305,6 +307,7 @@ impl QueryName {
             Self::Facets => "facets",
             Self::Annotations => "annotations",
             Self::CommentThreads => "commentThreads",
+            Self::ThreadMessageCounts => "threadMessageCounts",
             Self::ThreadMarks => "threadMarks",
             Self::Proposals => "proposals",
             Self::ImageRefIds => "imageRefIds",
@@ -346,6 +349,7 @@ impl QueryName {
             "facets" => Some(Self::Facets),
             "annotations" => Some(Self::Annotations),
             "commentThreads" => Some(Self::CommentThreads),
+            "threadMessageCounts" => Some(Self::ThreadMessageCounts),
             "threadMarks" => Some(Self::ThreadMarks),
             "proposals" => Some(Self::Proposals),
             "imageRefIds" => Some(Self::ImageRefIds),

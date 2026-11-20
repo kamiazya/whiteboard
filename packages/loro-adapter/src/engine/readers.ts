@@ -10,7 +10,7 @@ import { type documentEngine, documentKindSchema } from '@kamiazya/whiteboard-mo
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import { readAnnotations, retiredCommentRows } from '../annotations.js'
-import { readCommentThreads } from '../comment-threads.js'
+import { readCommentThreads, threadMessageCounts } from '../comment-threads.js'
 import type { DocumentContainers } from '../containers.js'
 import { contentDigestOfDocument } from '../content-digest.js'
 import { readContentWithTags, readDocumentContent } from '../document-content.js'
@@ -96,6 +96,7 @@ export const READERS: Record<documentEngine.QueryName, Reader> = {
   facets: content(readFacets),
   annotations: content(readAnnotations),
   commentThreads: content(readCommentThreads),
+  threadMessageCounts: content(threadMessageCounts),
   threadMarks: content(readThreadMarks),
   proposals: content(readProposals),
   imageRefIds: content((host) => [...collectImageRefIds(host)].sort()),

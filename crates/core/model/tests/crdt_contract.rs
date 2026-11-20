@@ -69,7 +69,7 @@ macro_rules! wire_enum_covered {
 }
 
 wire_enum_covered!(every_breach_shape_round_trips, BreachShape, 28);
-wire_enum_covered!(every_query_name_round_trips, QueryName, 35);
+wire_enum_covered!(every_query_name_round_trips, QueryName, 36);
 
 #[test]
 fn the_combined_content_read_is_its_own_query_beside_the_content_read() {
@@ -79,6 +79,13 @@ fn the_combined_content_read_is_its_own_query_beside_the_content_read() {
     );
     assert_ne!(QueryName::DocumentContentWithTags, QueryName::DocumentContent);
     assert_eq!(QueryName::DocumentContentWithTags.as_str(), "documentContentWithTags");
+}
+
+#[test]
+fn the_thread_message_counts_read_is_its_own_query_beside_the_thread_read() {
+    assert_eq!(QueryName::from_wire("threadMessageCounts"), Some(QueryName::ThreadMessageCounts));
+    assert_ne!(QueryName::ThreadMessageCounts, QueryName::CommentThreads);
+    assert_eq!(QueryName::ThreadMessageCounts.as_str(), "threadMessageCounts");
 }
 
 #[test]

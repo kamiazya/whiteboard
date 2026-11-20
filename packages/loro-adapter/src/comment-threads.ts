@@ -192,9 +192,22 @@ function readCommentThread(doc: DocumentContainers, threadId: string): CommentTh
  * judge holds a thread's ceiling to, so a writer that counts only what the
  * schema accepts cannot take a thread past it.
  */
-export function storedThreadMessageCount(doc: DocumentContainers, threadId: string): number {
+function storedThreadMessageCount(doc: DocumentContainers, threadId: string): number {
   const messages = threadContainer(doc, threadId)?.get(MESSAGES_KEY)
   return messages instanceof LoroMap ? messages.size : 0
+}
+
+/**
+ * What each thread STORES, by id, for every thread the document holds
+ * (readable or not): the counts a ceiling on a thread's messages is judged
+ * from, in one read rather than one lookup per thread.
+ */
+export function threadMessageCounts(doc: DocumentContainers): Record<string, number> {
+  const counts: Record<string, number> = {}
+  for (const threadId of doc.getMap(THREADS_KEY).keys()) {
+    counts[threadId] = storedThreadMessageCount(doc, threadId)
+  }
+  return counts
 }
 
 /**
