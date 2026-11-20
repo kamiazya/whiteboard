@@ -133,12 +133,13 @@ describe('restoreVersion in-place mode', () => {
     expect(live.evicted).toEqual(['canvas-a'])
   })
 
-  it('evicts the live doc when reconcile itself fails', async () => {
+  it('evicts the live doc when the past state is one the restore cannot write back', async () => {
     const live = new FakeLive()
     live.seed('canvas-a', spatialDoc(['n1']))
     // A past state holding a node in the retired shape (a kind and its own
-    // field), which the restore cannot write back: it fails inside the
-    // reconcile step, before any save runs.
+    // field), which the restore cannot write back: it is refused at the sync
+    // judge, before the reconcile and before any save. A failure AFTER the
+    // judge is held by the save-fails case above.
     const mismatched = new LoroDoc()
     mismatched.getMap('nodes').set('n1', { id: 'n1', type: 'text', text: 'old shape' })
     mismatched.commit()
