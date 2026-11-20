@@ -255,18 +255,54 @@ export async function saveDocumentSnapshot(
   documentId: DocumentId,
   doc: LoroDoc,
 ): Promise<void> {
-  await withEngineTrapReported(workspaceId, documentId, 'saving', async () => {
-    const { manifest, chunks } = chunkSnapshot(
+  await withEngineTrapReported(workspaceId, documentId, 'saving', () =>
+    storeSnapshot(
+      deps,
+      { workspaceId, documentId },
       doc.export({ mode: 'snapshot' }),
-      DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
-    )
-    await deps.documentStore.saveSnapshot({
-      docRef: { kind: 'document', workspaceId, documentId },
-      manifest,
-      chunks,
-      frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
-    })
+      doc.oplogVersion().encode(),
+    ),
+  )
+  await announceDocumentWritten(deps, workspaceId, documentId, () => doc)
+}
+
+/** Chunks snapshot bytes and hands them to the store under the frontier they were exported at. */
+export async function storeSnapshot(
+  deps: ServerDeps,
+  at: { readonly workspaceId: string; readonly documentId: DocumentId },
+  snapshot: Uint8Array,
+  frontier: Uint8Array,
+): Promise<void> {
+  const { manifest, chunks } = chunkSnapshot(snapshot, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)
+  await deps.documentStore.saveSnapshot({
+    docRef: { kind: 'document', ...at },
+    manifest,
+    chunks,
+    frontier: frontier as Uint8Array<ArrayBuffer>,
   })
+}
+
+/**
+ * Tells the composition root a save landed, with the document the bytes just
+ * saved open as a `LoroDoc`: the seam still hands its observer one.
+ */
+export function announceSavedSnapshot(
+  deps: ServerDeps,
+  workspaceId: string,
+  documentId: DocumentId,
+  snapshot: Uint8Array,
+): Promise<void> {
+  return announceDocumentWritten(deps, workspaceId, documentId, () =>
+    LoroDoc.fromSnapshot(snapshot),
+  )
+}
+
+async function announceDocumentWritten(
+  deps: ServerDeps,
+  workspaceId: string,
+  documentId: DocumentId,
+  doc: () => LoroDoc,
+): Promise<void> {
   // After the bytes are safe, and never allowed to undo them: what the
   // composition root does here (the daemon schedules a debounced
   // compaction) is not part of this write's correctness, so a scheduler
@@ -280,7 +316,7 @@ export async function saveDocumentSnapshot(
     await deps.documentWritten({
       workspaceId,
       documentId,
-      doc,
+      doc: doc(),
       ...(path === undefined ? {} : { path }),
     })
   } catch (err) {
