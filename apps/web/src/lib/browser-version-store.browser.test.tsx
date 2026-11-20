@@ -2,7 +2,6 @@ import { MAX_AUTO_PER_DOCUMENT } from '@kamiazya/whiteboard-history'
 import {
   contentDigestOfDocument,
   countSpatialNodes,
-  loadCrdtEngine,
   projectWorkspaceDocument,
   readSpatialCanvas,
   writeSpatialCanvas,
@@ -15,6 +14,7 @@ import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { watchEngineHandles } from '../test-utils/replica-lease.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { VERSIONS_STORE } from './browser-idb.js'
 import { BrowserVersionStore, savedVersionRows } from './browser-version-store.js'
@@ -428,14 +428,9 @@ describe('rows shared with the earlier store', () => {
  * whole workspace record in memory for the life of the page.
  */
 async function handlesOpenedAndClosed(run: () => Promise<unknown>) {
-  const engine = await loadCrdtEngine()
-  const opened = vi.spyOn(engine, 'open')
-  const forked = vi.spyOn(engine, 'fork')
-  const closed = vi.spyOn(engine, 'close')
+  const watched = await watchEngineHandles()
   await run().catch(() => undefined)
-  const made = (spy: { mock: { results: Array<{ type: string }> } }) =>
-    spy.mock.results.filter((result) => result.type === 'return').length
-  return { opened: made(opened) + made(forked), closed: closed.mock.calls.length }
+  return { opened: watched.minted().length, unaccounted: watched.unaccounted() }
 }
 
 describe('a document the index places and the record does not hold', () => {
@@ -487,7 +482,7 @@ describe('BrowserVersionStore gives back every engine handle it opens', () => {
     })
 
     expect(handles.opened).toBeGreaterThanOrEqual(4)
-    expect(handles.closed).toBe(handles.opened)
+    expect(handles.unaccounted).toEqual([])
   })
 
   it('when the reader of a past point throws', async () => {
@@ -500,6 +495,6 @@ describe('BrowserVersionStore gives back every engine handle it opens', () => {
     )
 
     expect(handles.opened).toBeGreaterThanOrEqual(2)
-    expect(handles.closed).toBe(handles.opened)
+    expect(handles.unaccounted).toEqual([])
   })
 })
