@@ -68,6 +68,9 @@ export const legacyRecordOps: RecordOps<LegacyRecord> = {
   moveView(view, frontiers) {
     view.checkout(decodeFrontiers(frontiers))
   },
+  release() {
+    // A LoroDoc is garbage collected; nothing to give back.
+  },
   exportProjection(doc, documentId) {
     const projected = projectWorkspaceDocument(doc, documentId)
     if (projected === null) return null

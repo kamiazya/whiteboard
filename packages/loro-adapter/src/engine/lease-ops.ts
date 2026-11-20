@@ -21,4 +21,5 @@ export const leaseOps: RecordOps<RecordLease> = {
   viewAt,
   moveView,
   exportProjection,
+  release: (record) => record.release(),
 }

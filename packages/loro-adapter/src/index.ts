@@ -99,6 +99,7 @@ export {
   type RecordOps,
   type RecordSession,
   type RecordVersion,
+  type RecordView,
 } from './record-ops.js'
 export { documentsRemovedSince, type RemovedDocument } from './removed-documents.js'
 export { ReservedKeyWriteError } from './reserved-key-write.js'
