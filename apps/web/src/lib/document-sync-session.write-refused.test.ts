@@ -13,11 +13,11 @@ import {
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
-import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { flushMicrotasks, openTestSession } from '../test-utils/document-sync-session.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { docsOverRecord } from '../test-utils/replica-lease.js'
 import { BrowserBackend } from './browser-backend.js'
 import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import {
@@ -44,13 +44,9 @@ function markdownRecord(body: string): LoroDoc {
   return record
 }
 
-function openOnBrowserKeeper(body: string) {
-  const record = markdownRecord(body)
-  const stored = () => readMarkdownBody(documentContainers(record, ID))
-  const docs = {
-    create: async () => record,
-    save: async () => null,
-  } as unknown as WorkspaceDocs
+async function openOnBrowserKeeper(body: string) {
+  const { docs, stored: storedDoc } = await docsOverRecord(markdownRecord(body))
+  const stored = () => readMarkdownBody(documentContainers(storedDoc(), ID))
   const backend = new BrowserBackend({ documentId: ID, path: 'notes', kind: 'markdown' }, docs)
 
   const refusals: SyncWriteRefusal[] = []
@@ -85,7 +81,7 @@ function openOnBrowserKeeper(body: string) {
 
 describe('a session whose browser keeper refuses a write', () => {
   it('takes what the keeper holds, says why, and saves the edits made afterwards', async () => {
-    const s = openOnBrowserKeeper('hello')
+    const s = await openOnBrowserKeeper('hello')
     await vi.waitFor(() => expect(s.session.getMarkdownBody()).toBe('hello'))
 
     s.typed((text) => text.insert(0, 'x'.repeat(MARKDOWN_MAX_CHARS + 1)))

@@ -12,10 +12,10 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { docsOverRecord } from '../test-utils/replica-lease.js'
 import { BrowserBackend } from './browser-backend.js'
 import { writeRefusalReason } from './write-refusal-store.js'
 
@@ -37,13 +37,9 @@ async function connectedBoard() {
     edges: [],
   })
   let saves = 0
-  const docs = {
-    create: async () => record,
-    save: async () => {
-      saves += 1
-      return null
-    },
-  } as unknown as WorkspaceDocs
+  const { docs, stored } = await docsOverRecord(record, () => {
+    saves += 1
+  })
   const backend = new BrowserBackend(BOARD, docs)
   const refusals: { code: string | null; message: string }[] = []
   const snapshots: Uint8Array[] = []
@@ -62,7 +58,7 @@ async function connectedBoard() {
     session.commit()
     return backend.pushLocalUpdate(session.export({ mode: 'update', from }))
   }
-  return { refusals, snapshots, saves: () => saves, pushEdit, record }
+  return { refusals, snapshots, saves: () => saves, pushEdit, record: stored }
 }
 
 describe('a retired shape pushed to a browser-kept canvas', () => {
@@ -82,7 +78,7 @@ describe('a retired shape pushed to a browser-kept canvas', () => {
       readSpatialCanvas(documentContainers(handed, BOARD.documentId)).nodes.map((n) => n.id),
     ).toEqual(['a'])
     expect(
-      readSpatialCanvas(documentContainers(record, BOARD.documentId)).nodes.map((n) => n.id),
+      readSpatialCanvas(documentContainers(record(), BOARD.documentId)).nodes.map((n) => n.id),
     ).toEqual(['a'])
   })
 

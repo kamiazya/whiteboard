@@ -2,16 +2,25 @@ import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contra
 import { CHECKPOINT_QUIET_MS } from '@kamiazya/whiteboard-history/checkpoint-scheduler'
 import { renderHook } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   resetBrowserWorkspaceIdForTests,
   setBrowserWorkspaceIdForTests,
 } from '../lib/browser-workspace-id.js'
 import type { WorkspaceBroadcast } from '../lib/workspace-broadcast.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { leaseOf } from '../test-utils/replica-lease.js'
 import { useAutoCheckpoint } from './use-auto-checkpoint.js'
 
 const WORKSPACE = 'ws-checkpoint'
+
+const live = await (async () => {
+  const doc = new LoroDoc()
+  doc.getMap('m').set('k', 'v')
+  doc.commit()
+  return leaseOf(doc)
+})()
+afterAll(() => live.release())
 
 interface Harness {
   readonly save: ReturnType<
@@ -32,12 +41,9 @@ function mount(documentPath: string): Harness & { readonly unmount: () => void }
     async (_workspaceId, path) => ({ id: `v-${path}`, path }) as unknown as VersionEntry,
   )
   let hear: (message: WorkspaceBroadcast) => void = () => {}
-  const doc = new LoroDoc()
-  doc.getMap('m').set('k', 'v')
-  doc.commit()
   const { result, unmount } = renderHook(() =>
     useAutoCheckpoint(
-      { readRecord: (read) => read(doc, 'doc-1'), applyRestore: async () => {} },
+      { readRecord: (read) => read(live, 'doc-1'), applyRestore: async () => {} },
       { save, isUnchangedSinceLastVersion: async () => false },
       documentPath,
       (_workspaceId, onMessage) => {

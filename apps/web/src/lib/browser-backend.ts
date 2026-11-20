@@ -4,22 +4,24 @@ import type {
   SyncWriteRefusal,
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
-  createWorkspaceDocumentAtPath,
-  deleteWorkspaceDocument,
-  resolveWorkspaceDocumentById,
+  lease,
+  type RecordLease,
   SYNC_TEXT_BREACH_CODES,
-  type SyncTextBreach,
-  seedNameFromTitle,
-  syncTextLimitJudge,
-  writeDocumentContentAndName,
+  SYNC_WORKSPACE_BREACH_CODES,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import {
+  base64ToBytes,
+  bytesToBase64,
+  type DocumentKind,
+  type documentEngine as wire,
+} from '@kamiazya/whiteboard-model'
 import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocCursor, WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
-import type { LoroDoc } from 'loro-crdt'
+import { z } from 'zod'
 import { getAppLogger } from './app-logger.js'
-import { BrowserWorkspaceDocs, saveAndAnnounce } from './browser-workspace-docs.js'
+import { saveAndAnnounce } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { touchContentTimestamp } from './content-timestamp.js'
 import {
   listenToWorkspace,
@@ -46,8 +48,14 @@ export interface BrowserBackendTarget {
  * the notice says why from the code alone, so text written here would be read
  * by nobody, and the breach itself is in the log line beside it.
  */
-function refusalOf(breach: SyncTextBreach): SyncWriteRefusal {
-  return { code: SYNC_TEXT_BREACH_CODES[breach.shape], message: '' }
+function refusalOf(breach: wire.Breach): SyncWriteRefusal {
+  // The engine names the shape across both judges' vocabularies; a text judge
+  // only ever answers the first table.
+  const codes: Readonly<Record<string, SyncWriteRefusal['code']>> = {
+    ...SYNC_TEXT_BREACH_CODES,
+    ...SYNC_WORKSPACE_BREACH_CODES,
+  }
+  return { code: codes[breach.shape] ?? 'invalid_document_root', message: '' }
 }
 
 /**
@@ -57,11 +65,12 @@ function refusalOf(breach: SyncTextBreach): SyncWriteRefusal {
  * tab's own saves.
  */
 function importFromAnotherTab(
-  workspaceDoc: LoroDoc,
+  record: RecordLease,
   bytes: Uint8Array,
 ): 'merged' | 'pending' | 'skipped' {
   try {
-    return workspaceDoc.import(bytes).pending === null ? 'merged' : 'pending'
+    const result = lease.importBytes(record, bytes, 'none')
+    return result.outcome === 'applied' && result.pending === true ? 'pending' : 'merged'
   } catch (err) {
     getAppLogger('browser-backend').warn('skipped an update from another tab', err)
     return 'skipped'
@@ -76,18 +85,50 @@ function importFromAnotherTab(
  */
 const WHOLE_RECORD: WorkspaceDocCursor = { generation: Number.NaN, afterSeq: null }
 
+/** The bytes of the update a call made, or null when it changed nothing. */
+function updateOf(result: wire.MutationResult): Uint8Array | null {
+  if (result.outcome !== 'applied' || result.localUpdate === undefined) return null
+  const bytes = base64ToBytes(result.localUpdate)
+  return bytes === null || bytes.length === 0 ? null : bytes
+}
+
+/**
+ * The keeper has judged what it is writing itself, so the write makes no
+ * judging copy of a record that holds every document.
+ */
+function writeUnjudged(record: RecordLease, batch: wire.Write[]): Uint8Array | null {
+  return updateOf(lease.write(record, batch, { judge: 'none' }))
+}
+
+const entryShape = z.custom<unknown>()
+
+async function holdsDocument(record: RecordLease, documentId: string): Promise<boolean> {
+  const entry = await lease.read(
+    record,
+    { query: 'workspaceDocumentEntry', args: { documentId } },
+    entryShape,
+  )
+  return entry !== null
+}
+
 /**
  * BrowserBackend: DocumentBackend implementation for fully offline, browser
  * use — backed by the WORKSPACE document.
  *
- * The bytes this backend delivers and persists are one Loro document holding
- * every document the browser keeps, each as a workspace-tree node
+ * The bytes this backend delivers and persists are one record holding every
+ * document the browser keeps, each as a workspace-tree node
  * (`docRefKey({kind:'workspace-tree'})` in the same IndexedDB stores). The
- * sync session edits it through its content scope
+ * backend holds that record as an engine lease and the sync session holds a
+ * document of its own built from the snapshot it is handed: what crosses is
+ * bytes in both directions (a local update in, a remote update out), never a
+ * shared document. The session edits through its content scope
  * (`SessionDeps.contentDocumentId`), so a local update's ops land on this
  * document's tree node. Persistence is the shared incremental shape
  * (`DocumentStoreWorkspaceDocs.save`): append a delta per push, fold when the
  * log passes the budget, never write when nothing changed.
+ *
+ * The lease is released once the writes already queued have run, on
+ * disconnect, on a reconnect and on every load that does not deliver.
  *
  * TOCTOU safety: all writes are serialized through a per-instance promise
  * chain (_writeQueue) so concurrent pushLocalUpdate calls import and save in
@@ -95,13 +136,13 @@ const WHOLE_RECORD: WorkspaceDocCursor = { generation: Number.NaN, afterSeq: nul
  */
 export class BrowserBackend implements DocumentBackend {
   private readonly target: BrowserBackendTarget
-  private readonly docs: WorkspaceDocs
+  private readonly docs: WorkspaceDocs<RecordLease>
   private handlers: DocumentBackendHandlers | null = null
   private disconnected = false
-  /** The live workspace document — set once connect() has delivered it. */
-  private workspaceDoc: LoroDoc | null = null
+  /** The live workspace record — set once connect() has delivered it. */
+  private record: RecordLease | null = null
   /**
-   * The workspace that document is the record of, read once with it. Never
+   * The workspace that record is the record of, read once with it. Never
    * the active id read again later: the active id moves on a switch or a
    * removal, and this copy written under another id is that whole workspace
    * minted somewhere it does not belong.
@@ -109,8 +150,6 @@ export class BrowserBackend implements DocumentBackend {
   private workspaceId: string | null = null
   /** The workspace left this browser: nothing more is written, and the page has been told. */
   private removed = false
-  /** One judge per record this backend has written to, so its copy outlives a push. */
-  private readonly judges = new WeakMap<LoroDoc, (update: Uint8Array) => SyncTextBreach | null>()
   /** Serializes all write operations (pushLocalUpdate) to prevent TOCTOU races. */
   private _writeQueue: Promise<void> = Promise.resolve()
   /** This connection's end of the record's channel to the other tabs. */
@@ -118,16 +157,16 @@ export class BrowserBackend implements DocumentBackend {
   /** How far into the stored record a catch-up has read this copy; null before the first. */
   private cursor: WorkspaceDocCursor | null = null
 
-  constructor(target: BrowserBackendTarget, docs?: WorkspaceDocs) {
+  constructor(target: BrowserBackendTarget, docs?: WorkspaceDocs<RecordLease>) {
     this.target = target
-    this.docs = docs ?? new BrowserWorkspaceDocs()
+    this.docs = docs ?? new BrowserWorkspaceRecords()
   }
 
   connect(handlers: DocumentBackendHandlers): void {
     this.closeBroadcast()
+    this.releaseRecord()
     this.disconnected = false
     this.handlers = handlers
-    this.workspaceDoc = null
     this.workspaceId = null
     this.removed = false
     this.cursor = null
@@ -142,38 +181,39 @@ export class BrowserBackend implements DocumentBackend {
   disconnect(): void {
     this.disconnected = true
     this.handlers = null
-    this.workspaceDoc = null
     this.workspaceId = null
+    this.releaseRecord()
     this.closeBroadcast()
   }
 
   /**
    * Accept a local Loro update — ops against the WORKSPACE document. Imported
-   * into this backend's own instance (idempotent, so the reconnect full-state
-   * re-send merges as a no-op) and persisted through the shared incremental
-   * save. Writes are chained onto _writeQueue so two concurrent calls apply
-   * in order with no lost update.
+   * into the record this backend holds (idempotent, so the reconnect
+   * full-state re-send merges as a no-op) and persisted through the shared
+   * incremental save. Writes are chained onto _writeQueue so two concurrent
+   * calls apply in order with no lost update.
    */
   pushLocalUpdate(bytes: Uint8Array): Promise<void> {
     if (bytes.length === 0) return Promise.resolve()
-    // Both the document and the WORKSPACE are captured here, at enqueue, not
+    // Both the record and the WORKSPACE are captured here, at enqueue, not
     // read again when the queued write runs. What runs later runs after
     // whatever else happened in between, and two things can happen:
     //
-    // - `disconnect()` nulls `workspaceDoc` synchronously, so a write still
+    // - `disconnect()` lets go of the record synchronously, so a write still
     //   on the queue would find nothing to land on and return — dropping
     //   the edit the person had just made. A workspace switch unmounts the
-    //   session at exactly that moment.
+    //   session at exactly that moment. (The lease itself is released only
+    //   after the queue has run.)
     // - The active workspace is re-pointed by the address, so reading
     //   `getBrowserWorkspaceId()` late would file these bytes under the workspace
     //   being switched TO. Losing an edit is bad; putting it in another
     //   workspace is worse — which is also why the id is the one the record
     //   was loaded under, never the active one.
-    const workspaceDoc = this.workspaceDoc
+    const record = this.record
     const workspaceId = this.workspaceId
     const handlers = this.handlers
     this._writeQueue = this._writeQueue.then(() =>
-      this._doWrite(bytes, workspaceDoc, workspaceId, handlers),
+      this._doWrite(bytes, record, workspaceId, handlers),
     )
     return this._writeQueue
   }
@@ -192,27 +232,33 @@ export class BrowserBackend implements DocumentBackend {
    * is one more edit on top of them. The note is named after the heading it
    * was restored to, as the daemon's restore names it.
    *
+   * `past` is the document's content as a document of its own, content at the
+   * root: the projection's bytes.
+   *
    * Bracketed with the restore events the daemon sends, so a page that
    * renders the restore overlay for a daemon restore renders it here too.
    * Queued behind pending pushes so a keystroke in flight is reconciled
    * over, not lost under, the restore.
    */
-  applyRestore(past: LoroDoc, label?: string): Promise<void> {
-    const workspaceDoc = this.workspaceDoc
+  applyRestore(past: Uint8Array, label?: string): Promise<void> {
+    const record = this.record
     const workspaceId = this.workspaceId
     const handlers = this.handlers
     const run = async (): Promise<void> => {
-      if (workspaceDoc === null || workspaceId === null || handlers === null) {
+      if (record === null || workspaceId === null || handlers === null) {
         throw new Error('restore before the document was delivered')
       }
       handlers.onRestoreStarted(label === undefined ? {} : { label })
       try {
-        const before = workspaceDoc.version()
-        writeDocumentContentAndName(workspaceDoc, this.target.documentId, past)
-        const update = workspaceDoc.export({ mode: 'update', from: before })
-        await this.saveAndTellOtherTabs(workspaceId, workspaceDoc)
+        const update = writeUnjudged(record, [
+          {
+            op: 'writeDocumentContentAndName',
+            args: { documentId: this.target.documentId, source: bytesToBase64(past) },
+          },
+        ])
+        await this.saveAndTellOtherTabs(workspaceId, record)
         await touchContentTimestamp(this.target.documentId)
-        if (update.length > 0 && !this.isStale(handlers)) handlers.onRemoteUpdate(update)
+        if (update !== null && !this.isStale(handlers)) handlers.onRemoteUpdate(update)
       } finally {
         if (!this.isStale(handlers)) handlers.onRestoreComplete()
       }
@@ -225,60 +271,61 @@ export class BrowserBackend implements DocumentBackend {
   }
 
   /**
-   * Read the live record without writing to it, or `null` before it has been
-   * delivered.
+   * Lend the live record to `read` without writing to it, or `null` before it
+   * has been delivered. The lease is the backend's own: `read` must not keep
+   * it past the call, and a read that answers a promise has begun by the time
+   * it returns.
    *
    * A read does not take the write queue.
    */
-  readRecord<T>(read: (doc: LoroDoc, documentId: string) => T): T | null {
-    if (this.workspaceDoc === null) return null
-    return read(this.workspaceDoc, this.target.documentId)
+  readRecord<T>(read: (record: RecordLease, documentId: string) => T): T | null {
+    if (this.record === null) return null
+    return read(this.record, this.target.documentId)
   }
 
   private async _doWrite(
     bytes: Uint8Array,
-    workspaceDoc: LoroDoc | null,
+    record: RecordLease | null,
     workspaceId: string | null,
     handlers: DocumentBackendHandlers | null,
   ): Promise<void> {
     // A push before the snapshot was delivered has nothing to land on — the
     // session cannot produce one, since its doc exists only after onSnapshot.
-    if (workspaceDoc === null || workspaceId === null || this.removed) return
+    if (record === null || workspaceId === null || this.removed) return
     try {
       // Refused before it lands: once imported, the bytes would ride the next
       // save whatever this one decided. Judged whatever the kind — a canvas's
       // node text, labels and comment messages are bounded as a note's body
       // is, and a record holding one past its bound is one the daemon refuses
       // to take on promotion.
-      const breach = this.judgeOf(workspaceDoc)(bytes)
-      if (breach !== null) {
+      const imported = lease.importBytes(record, bytes, 'text')
+      if (imported.outcome === 'refused') {
         getAppLogger('browser-backend').warn('refused an update past a text limit', {
           documentId: this.target.documentId,
-          ...breach,
+          ...imported.breach,
         })
-        this.refuse(refusalOf(breach), workspaceDoc, handlers)
+        this.refuse(refusalOf(imported.breach), record, handlers)
         return
       }
-      workspaceDoc.import(bytes)
       // A note is named after its body's heading while nobody has named it —
       // before the save, so the name rides the same write. No kind check: a
       // canvas has an empty body container, so it announces no title and the
-      // function leaves it alone.
-      const before = workspaceDoc.oplogVersion()
-      seedNameFromTitle(workspaceDoc, this.target.documentId)
-      const named = workspaceDoc.oplogVersion().compare(before) !== 0
-      await this.saveAndTellOtherTabs(workspaceId, workspaceDoc)
+      // writer leaves it alone.
+      const naming = writeUnjudged(record, [
+        { op: 'seedNameFromTitle', args: { documentId: this.target.documentId } },
+      ])
+      await this.saveAndTellOtherTabs(workspaceId, record)
       // The session reads the name (the open page's title follows it), and it
       // must HOLD those ops either way: every later edit anywhere depends on
       // them, and a doc missing a dependency keeps that edit pending.
-      if (named && handlers !== null && !this.isStale(handlers)) {
-        handlers.onRemoteUpdate(workspaceDoc.export({ mode: 'update', from: before }))
+      if (naming !== null && handlers !== null && !this.isStale(handlers)) {
+        handlers.onRemoteUpdate(naming)
       }
       // The listing's updatedAt: stamped per push, keyed by the document this
       // backend serves — the workspace document itself has no row to stamp.
       await touchContentTimestamp(this.target.documentId)
     } catch (err) {
-      if (isWorkspaceRemovedError(err)) this.withdraw(workspaceDoc, handlers)
+      if (isWorkspaceRemovedError(err)) this.withdraw(record, handlers)
       else this.handlers?.onError?.('storage-failure')
     }
   }
@@ -289,13 +336,14 @@ export class BrowserBackend implements DocumentBackend {
    * handed: the node's removal, as a remote update. Only this copy changes —
    * nothing is saved, and nothing is written again.
    */
-  private withdraw(workspaceDoc: LoroDoc, handlers: DocumentBackendHandlers | null): void {
+  private withdraw(record: RecordLease, handlers: DocumentBackendHandlers | null): void {
     if (this.removed) return
     this.removed = true
     if (handlers === null || this.isStale(handlers)) return
-    const before = workspaceDoc.oplogVersion()
-    deleteWorkspaceDocument(workspaceDoc, { documentId: this.target.documentId })
-    handlers.onRemoteUpdate(workspaceDoc.export({ mode: 'update', from: before }))
+    const removal = writeUnjudged(record, [
+      { op: 'deleteWorkspaceDocument', args: { documentId: this.target.documentId } },
+    ])
+    if (removal !== null) handlers.onRemoteUpdate(removal)
   }
 
   /**
@@ -306,20 +354,12 @@ export class BrowserBackend implements DocumentBackend {
    */
   private refuse(
     refusal: SyncWriteRefusal,
-    workspaceDoc: LoroDoc,
+    record: RecordLease,
     handlers: DocumentBackendHandlers | null,
   ): void {
     if (handlers === null || this.isStale(handlers)) return
     handlers.onWriteRefused?.(refusal)
-    handlers.onSnapshot(workspaceDoc.export({ mode: 'snapshot' }))
-  }
-
-  private judgeOf(workspaceDoc: LoroDoc): (update: Uint8Array) => SyncTextBreach | null {
-    const known = this.judges.get(workspaceDoc)
-    if (known !== undefined) return known
-    const judge = syncTextLimitJudge(workspaceDoc)
-    this.judges.set(workspaceDoc, judge)
-    return judge
+    handlers.onSnapshot(lease.exportSnapshot(record))
   }
 
   /** A workspace kept in the browser has no sync stream to announce readiness to. */
@@ -335,8 +375,20 @@ export class BrowserBackend implements DocumentBackend {
   }
 
   /** Persists the record and hands what it wrote to the other tabs holding it. */
-  private async saveAndTellOtherTabs(workspaceId: string, workspaceDoc: LoroDoc): Promise<void> {
-    await saveAndAnnounce(this.docs, workspaceId, workspaceDoc, this.broadcast)
+  private async saveAndTellOtherTabs(workspaceId: string, record: RecordLease): Promise<void> {
+    await saveAndAnnounce(this.docs, workspaceId, record, this.broadcast)
+  }
+
+  /**
+   * Gives the record back once the writes already queued have run: a push
+   * made just before a switch is still imported and saved after it.
+   */
+  private releaseRecord(): void {
+    const held = this.record
+    if (held === null) return
+    this.record = null
+    const release = () => held.release()
+    void this._writeQueue.then(release, release)
   }
 
   /**
@@ -362,12 +414,12 @@ export class BrowserBackend implements DocumentBackend {
   private receive(
     message: WorkspaceBroadcast,
     workspaceId: string,
-    workspaceDoc: LoroDoc,
+    record: RecordLease,
     handlers: DocumentBackendHandlers,
   ): void {
     if (this.isStale(handlers)) return
     if (message.type === 'workspace-removed') {
-      this._writeQueue = this._writeQueue.then(() => this.withdraw(workspaceDoc, handlers))
+      this._writeQueue = this._writeQueue.then(() => this.withdraw(record, handlers))
       return
     }
     if (message.type === 'version-created') {
@@ -384,7 +436,7 @@ export class BrowserBackend implements DocumentBackend {
       (message.type === 'document-renamed' && message.documentId === this.target.documentId)
     if (catchUp) {
       this._writeQueue = this._writeQueue.then(() =>
-        this.catchUpWithStore(workspaceId, workspaceDoc, handlers),
+        this.catchUpWithStore(workspaceId, record, handlers),
       )
       return
     }
@@ -392,13 +444,13 @@ export class BrowserBackend implements DocumentBackend {
     if (message.type !== 'update') return
     this._writeQueue = this._writeQueue.then(async () => {
       if (this.isStale(handlers)) return
-      const merged = importFromAnotherTab(workspaceDoc, message.bytes)
+      const merged = importFromAnotherTab(record, message.bytes)
       if (merged === 'skipped') return
       handlers.onRemoteUpdate(message.bytes)
       // Bytes that build on record writes this copy never received — the
       // index's create, move or pin, whose saves announce no bytes — stay
       // pending until it has them, and the record does.
-      if (merged === 'pending') await this.catchUpWithStore(workspaceId, workspaceDoc, handlers)
+      if (merged === 'pending') await this.catchUpWithStore(workspaceId, record, handlers)
     })
   }
 
@@ -415,12 +467,12 @@ export class BrowserBackend implements DocumentBackend {
    */
   private async catchUpWithStore(
     workspaceId: string,
-    workspaceDoc: LoroDoc,
+    record: RecordLease,
     handlers: DocumentBackendHandlers,
   ): Promise<void> {
     if (this.isStale(handlers)) return
     try {
-      const caught = await this.docs.catchUp(workspaceId, workspaceDoc, this.cursor ?? WHOLE_RECORD)
+      const caught = await this.docs.catchUp(workspaceId, record, this.cursor ?? WHOLE_RECORD)
       this.cursor = caught.cursor
       if (this.isStale(handlers)) return
       for (const update of caught.updates) handlers.onRemoteUpdate(update)
@@ -443,25 +495,25 @@ export class BrowserBackend implements DocumentBackend {
   private hearFromTheStart(
     workspaceId: string,
     handlers: DocumentBackendHandlers,
-  ): (workspaceDoc: LoroDoc) => void {
+  ): (record: RecordLease) => void {
     const held: Uint8Array[] = []
-    let delivered: LoroDoc | null = null
+    let delivered: RecordLease | null = null
     this.broadcast = listenToWorkspace(workspaceId, (message) => {
       if (delivered !== null) this.receive(message, workspaceId, delivered, handlers)
       else if (message.type === 'update') held.push(message.bytes)
     })
-    return (workspaceDoc) => {
-      for (const bytes of held.splice(0)) importFromAnotherTab(workspaceDoc, bytes)
-      delivered = workspaceDoc
+    return (record) => {
+      for (const bytes of held.splice(0)) importFromAnotherTab(record, bytes)
+      delivered = record
     }
   }
 
   private async loadAndDeliver(handlers: DocumentBackendHandlers): Promise<void> {
     const workspaceId = getBrowserWorkspaceId()
     const hear = this.hearFromTheStart(workspaceId, handlers)
-    let workspaceDoc: LoroDoc
+    let record: RecordLease
     try {
-      workspaceDoc = await this.docs.create(workspaceId)
+      record = await this.docs.create(workspaceId)
     } catch (err) {
       // WHICH failure this was decides what the reader is told, and the two
       // sentences are about different things.
@@ -488,28 +540,32 @@ export class BrowserBackend implements DocumentBackend {
       getAppLogger('browser-backend').warn('opening the workspace record failed', err)
       return
     }
-    if (this.isStale(handlers)) return
-
-    if (resolveWorkspaceDocumentById(workspaceDoc, this.target.documentId) === null) {
-      const settled = await this.placeMissingDocument(workspaceId, workspaceDoc, handlers)
-      if (!settled) return
+    let delivered = false
+    try {
+      if (this.isStale(handlers)) return
+      if (!(await holdsDocument(record, this.target.documentId))) {
+        const settled = await this.placeMissingDocument(workspaceId, record, handlers)
+        if (!settled) return
+      }
+      if (this.isStale(handlers)) return
+      this.deliver(workspaceId, record, hear, handlers)
+      delivered = true
+    } finally {
+      if (!delivered) record.release()
     }
-    if (this.isStale(handlers)) return
-
-    this.deliver(workspaceId, workspaceDoc, hear, handlers)
   }
 
   /** Hands the record to the session, with what the other tabs saved meanwhile. */
   private deliver(
     workspaceId: string,
-    workspaceDoc: LoroDoc,
-    hear: (workspaceDoc: LoroDoc) => void,
+    record: RecordLease,
+    hear: (record: RecordLease) => void,
     handlers: DocumentBackendHandlers,
   ): void {
-    this.workspaceDoc = workspaceDoc
+    this.record = record
     this.workspaceId = workspaceId
-    hear(workspaceDoc)
-    handlers.onSnapshot(workspaceDoc.export({ mode: 'snapshot' }))
+    hear(record)
+    handlers.onSnapshot(lease.exportSnapshot(record))
   }
 
   /**
@@ -525,10 +581,10 @@ export class BrowserBackend implements DocumentBackend {
    */
   private async placeMissingDocument(
     workspaceId: string,
-    workspaceDoc: LoroDoc,
+    record: RecordLease,
     handlers: DocumentBackendHandlers,
   ): Promise<boolean> {
-    if (documentIdsInRecord(workspaceDoc).has(this.target.documentId)) {
+    if ((await documentIdsInRecord(record)).has(this.target.documentId)) {
       getAppLogger('browser-backend').warn('the trash holds this document; not placing', {
         documentId: this.target.documentId,
       })
@@ -536,13 +592,13 @@ export class BrowserBackend implements DocumentBackend {
       return false
     }
     const { documentId, path, kind, name } = this.target
-    const placed = createWorkspaceDocumentAtPath(workspaceDoc, {
-      path,
-      documentId,
-      kind,
-      ...(name === undefined ? {} : { name }),
-    })
-    if (placed === null) {
+    writeUnjudged(record, [
+      {
+        op: 'createWorkspaceDocumentAtPath',
+        args: { path, documentId, kind, ...(name === undefined ? {} : { name }) },
+      },
+    ])
+    if (!(await holdsDocument(record, documentId))) {
       // The target was not placed: a DIFFERENT document already owns
       // `path` (the id itself is absent, or this method was not reached).
       // Delivering anyway hands the session bytes with no node for this
@@ -562,7 +618,7 @@ export class BrowserBackend implements DocumentBackend {
       if (!this.isStale(handlers)) handlers.onError?.('read-unavailable')
       return false
     }
-    await this.saveAndTellOtherTabs(workspaceId, workspaceDoc)
+    await this.saveAndTellOtherTabs(workspaceId, record)
     return true
   }
 }

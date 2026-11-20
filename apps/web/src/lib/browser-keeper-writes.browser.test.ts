@@ -32,8 +32,8 @@ import {
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedTreeDocument } from '../test-utils/seed-workspace-content.js'
 import { BrowserBackend } from './browser-backend.js'
-import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { createDocumentSyncSession, createGenerationCounters } from './document-sync-session.js'
 import { DOCUMENT_SYNC_CHANGED_EVENT, dispatchIdentityEvent } from './document-sync-types.js'
 import { loroTextSync } from './loro-codemirror-sync.js'
@@ -47,9 +47,9 @@ const WAIT = { timeout: 10_000 }
 const EMPTY = { nodes: [], edges: [] }
 
 /** Counts the saves a tab's backend asks the store for; the store itself is the real one. */
-class CountingDocs extends BrowserWorkspaceDocs {
+class CountingDocs extends BrowserWorkspaceRecords {
   saves = 0
-  override async save(...args: Parameters<BrowserWorkspaceDocs['save']>) {
+  override async save(...args: Parameters<BrowserWorkspaceRecords['save']>) {
     this.saves += 1
     return super.save(...args)
   }

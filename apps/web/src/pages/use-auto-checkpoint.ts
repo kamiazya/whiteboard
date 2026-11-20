@@ -4,8 +4,9 @@ import { useEffect, useMemo } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import {
   type BrowserVersionStore,
+  type RecordPoint,
   recordFrontier,
-  type WorkspaceRecordDoc,
+  recordPointOf,
 } from '../lib/browser-version-store.js'
 import type { VersionsRecordSeam } from '../lib/browser-versions-backend.js'
 import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
@@ -33,7 +34,7 @@ interface LivePath {
  * document returning: it comes back under the path it was deleted from.
  */
 function followBroadcast(
-  checkpoints: CheckpointScheduler<WorkspaceRecordDoc>,
+  checkpoints: CheckpointScheduler<RecordPoint>,
   workspaceId: string,
   live: LivePath,
   message: WorkspaceBroadcast,
@@ -54,7 +55,7 @@ function followBroadcast(
 }
 
 function useLivePath(
-  checkpoints: CheckpointScheduler<WorkspaceRecordDoc>,
+  checkpoints: CheckpointScheduler<RecordPoint>,
   documentPath: string | null,
   listen: typeof listenToWorkspace,
 ): LivePath {
@@ -86,7 +87,7 @@ function useLivePath(
 
 function armCheckpoint(
   recordSource: VersionsRecordSeam | null,
-  checkpoints: CheckpointScheduler<WorkspaceRecordDoc>,
+  checkpoints: CheckpointScheduler<RecordPoint>,
   live: { readonly path: string | null },
 ): () => void {
   return () => {
@@ -101,8 +102,8 @@ function armCheckpoint(
     // not worth that, and nothing here is worth failing an edit for either:
     // a seam that cannot answer for a record has no record to bookmark.
     try {
-      const record = recordSource?.readRecord?.((doc) => doc) ?? null
-      if (record !== null) checkpoints(getBrowserWorkspaceId(), path, record)
+      const point = recordSource?.readRecord?.(recordPointOf) ?? null
+      if (point !== null) checkpoints(getBrowserWorkspaceId(), path, point)
     } catch (err) {
       log.warn('could not arm an automatic checkpoint', err)
     }

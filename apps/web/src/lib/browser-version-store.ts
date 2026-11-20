@@ -6,9 +6,7 @@ import {
 import { autoVersionsOverCap } from '@kamiazya/whiteboard-history'
 import {
   type LeaseFileReferenceReads,
-  type LegacyRecord,
   lease,
-  loroDocKind,
   type RecordLease,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { compareCodeUnit, generateDocumentId } from '@kamiazya/whiteboard-model'
@@ -77,19 +75,25 @@ export interface BrowserVersionStoreDeps {
 }
 
 /**
- * The live workspace record a keeper's checkpoints are taken against. It is
- * the editor session's own document, so it stays the Loro-held record until
- * the session holds a lease.
+ * What the live record held when a local edit was made, as the bytes the
+ * checkpoint scheduler compares and never decodes. The version vector names
+ * the same set of operations a frontier does, so two equal answers mean
+ * nothing was added in between.
+ *
+ * A value rather than the record's lease: the scheduler keeps what it is
+ * handed until its timer fires, long after the page that armed it may have
+ * released the lease.
  */
-export type WorkspaceRecordDoc = LegacyRecord
+export interface RecordPoint {
+  readonly frontier: Uint8Array
+}
 
-/**
- * What the live record holds, as the bytes the checkpoint scheduler compares
- * and never decodes. The version vector names the same set of operations a
- * frontier does, so two equal answers mean nothing was added in between.
- */
-export function recordFrontier(record: WorkspaceRecordDoc): Uint8Array {
-  return loroDocKind.encodedVersion(record)
+export function recordPointOf(record: RecordLease): RecordPoint {
+  return { frontier: lease.versionOf(record).encoded }
+}
+
+export function recordFrontier(point: RecordPoint): Uint8Array {
+  return point.frontier
 }
 
 const fingerprintShape = z.custom<{

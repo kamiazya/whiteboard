@@ -25,6 +25,7 @@
  * arrive either way, and an editor over an empty canvas would be its own lie
  * — and changes what is said and what is offered.
  */
+import type { RecordLease } from '@kamiazya/whiteboard-loro-adapter'
 import { StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { describe, expect, it, vi } from 'vitest'
@@ -38,14 +39,14 @@ const TARGET = {
 }
 
 /** A workspace store whose every read fails with the given error. */
-function docsFailingWith(error: unknown): WorkspaceDocs {
+function docsFailingWith(error: unknown): WorkspaceDocs<RecordLease> {
   return {
     open: () => Promise.reject(error),
     create: () => Promise.reject(error),
     save: () => Promise.reject(error),
     readCursor: () => Promise.reject(error),
     catchUp: () => Promise.reject(error),
-  } as unknown as WorkspaceDocs
+  } as unknown as WorkspaceDocs<RecordLease>
 }
 
 function connectAgainst(error: unknown): { reasons: string[] } {

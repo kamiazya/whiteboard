@@ -63,7 +63,10 @@ async function browserHarness(): Promise<VersionsBackendHarness> {
 
   const docs = new BrowserWorkspaceDocs()
   const store = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
-  const backend = new BrowserBackend({ documentId, path: 'canvas-a', kind: 'spatial' }, docs)
+  const backend = new BrowserBackend(
+    { documentId, path: 'canvas-a', kind: 'spatial' },
+    new BrowserWorkspaceRecords(),
+  )
 
   // The restore path reconciles onto the record the BACKEND holds and
   // delivers the result through the sync session's handlers, so the backend

@@ -28,10 +28,10 @@ import {
   TAGS_PER_ELEMENT_MAX,
 } from '@kamiazya/whiteboard-model'
 import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { docOf, docsOverRecord } from '../test-utils/replica-lease.js'
 import { BrowserBackend } from './browser-backend.js'
 
 // jsdom has no IndexedDB, so the timestamp touch is replaced by its
@@ -53,13 +53,9 @@ async function connected(body: string) {
   })
   writeMarkdownBody(documentContainers(record, TARGET.documentId), body)
   const saved: string[] = []
-  const docs = {
-    create: async () => record,
-    save: async (_workspaceId: string, doc: LoroDoc) => {
-      saved.push(readMarkdownBody(documentContainers(doc, TARGET.documentId)))
-      return null
-    },
-  } as unknown as WorkspaceDocs
+  const { docs, stored } = await docsOverRecord(record, (held) => {
+    saved.push(readMarkdownBody(documentContainers(docOf(held), TARGET.documentId)))
+  })
   const backend = new BrowserBackend(TARGET, docs)
   const reasons: string[] = []
   const refusals: string[] = []
@@ -84,7 +80,7 @@ async function connected(body: string) {
     return backend.pushLocalUpdate(session.export({ mode: 'update', from }))
   }
   const push = (text: string) => pushEdit((body) => body.insert(0, text))
-  return { saved, reasons, refusals, snapshots: () => snapshots, push, pushEdit, record }
+  return { saved, reasons, refusals, snapshots: () => snapshots, push, pushEdit, record: stored }
 }
 
 describe('a browser-kept markdown body pushed past the limit', () => {
@@ -100,7 +96,7 @@ describe('a browser-kept markdown body pushed past the limit', () => {
     expect(reasons).toEqual([])
     expect(refusals).toEqual(['markdown_too_large'])
     expect(snapshots()).toBe(2)
-    expect(readMarkdownBody(documentContainers(record, TARGET.documentId))).toHaveLength(
+    expect(readMarkdownBody(documentContainers(record(), TARGET.documentId))).toHaveLength(
       MARKDOWN_MAX_CHARS - 1,
     )
   })
@@ -235,13 +231,9 @@ function boardRecord(): LoroDoc {
 async function connectedBoard() {
   const record = boardRecord()
   let saves = 0
-  const docs = {
-    create: async () => record,
-    save: async () => {
-      saves += 1
-      return null
-    },
-  } as unknown as WorkspaceDocs
+  const { docs, stored: storedDoc } = await docsOverRecord(record, () => {
+    saves += 1
+  })
   const backend = new BrowserBackend(BOARD, docs)
   const reasons: string[] = []
   const refusals: string[] = []
@@ -263,7 +255,7 @@ async function connectedBoard() {
     session.commit()
     return backend.pushLocalUpdate(session.export({ mode: 'update', from }))
   }
-  const stored = () => documentContainers(record, BOARD.documentId)
+  const stored = () => documentContainers(storedDoc(), BOARD.documentId)
   return { saves: () => saves, reasons, refusals, pushEdit, stored }
 }
 

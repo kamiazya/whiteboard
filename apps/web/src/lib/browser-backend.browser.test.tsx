@@ -17,6 +17,7 @@ import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
+  type RecordLease,
   readSpatialCanvas,
   readWorkspaceDocumentName,
   readWorkspaceDocuments,
@@ -39,6 +40,7 @@ import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId, setBrowserWorkspaceIdForTests } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 
 claimIsolatedWhiteboardDb('browser-backend')
 
@@ -437,9 +439,9 @@ describe('BrowserBackend', () => {
     // Subclassed rather than hand-stubbed: `WorkspaceDocs` has more members
     // than this case cares about, and a partial literal would only compile by
     // being cast — which is how a double stops standing for the real thing.
-    class RecordingDocs extends BrowserWorkspaceDocs {
+    class RecordingDocs extends BrowserWorkspaceRecords {
       readonly saves: string[] = []
-      override save(workspaceId: string, doc: LoroDoc) {
+      override save(workspaceId: string, doc: RecordLease) {
         this.saves.push(workspaceId)
         return super.save(workspaceId, doc)
       }
