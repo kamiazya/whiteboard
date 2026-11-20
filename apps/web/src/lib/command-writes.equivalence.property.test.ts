@@ -278,6 +278,11 @@ function seedDoc(): LoroDoc {
 // ---- the generator ----
 
 const pick = <T>(values: readonly T[]) => fc.constantFrom(...values)
+// A command aimed at something that is not there changes nothing, and a kind
+// that never changes anything is a kind the property never judged. The seeded
+// targets are therefore drawn twice as often as the absent one.
+const targetNode = fc.constantFrom('n0', 'n0', 'n1', 'n1', 'n2', 'n2', 'ghost')
+const targetThread = fc.constantFrom('t0', 't0', 't1', 't1', 'tx')
 const coord = fc.integer({ min: -50, max: 500 })
 const text = fc.constantFrom('', 'a', 'alpha beta', 'Ship it on Friday.\n', BODY)
 const messageArb = fc.record({
@@ -289,16 +294,16 @@ const edgeArb: fc.Arbitrary<CanvasEdge> = fc
   .map(([id, from, to]) => ({ id, from: { node: from }, to: { node: to } }))
 
 const leafArb: fc.Arbitrary<EditorLeafCommand> = fc.oneof(
-  fc.record({ kind: fc.constant('move-node' as const), id: pick(NODE_IDS), x: coord, y: coord }),
+  fc.record({ kind: fc.constant('move-node' as const), id: targetNode, x: coord, y: coord }),
   fc.record({
     kind: fc.constant('resize-node' as const),
-    id: pick(NODE_IDS),
+    id: targetNode,
     x: coord,
     y: coord,
     width: fc.integer({ min: 1, max: 300 }),
     height: fc.integer({ min: 1, max: 300 }),
   }),
-  fc.record({ kind: fc.constant('set-text' as const), id: pick(NODE_IDS), text }),
+  fc.record({ kind: fc.constant('set-text' as const), id: targetNode, text }),
   fc.record({
     kind: fc.constant('connect-nodes' as const),
     edgeId: pick(EDGE_IDS),
@@ -314,8 +319,8 @@ const leafArb: fc.Arbitrary<EditorLeafCommand> = fc.oneof(
   fc.record({ kind: fc.constant('delete-edge' as const), id: pick(EDGE_IDS) }),
   fc.record({
     kind: fc.constant('set-node-color' as const),
-    id: pick(NODE_IDS),
-    color: fc.constantFrom('1', '2', undefined),
+    id: targetNode,
+    color: fc.constantFrom('1', '2', '3', '4', undefined),
   }),
   fc.record({
     kind: fc.constant('reorder-nodes' as const),
@@ -385,8 +390,9 @@ const threadCommandArb: fc.Arbitrary<EditorCommand> = fc.oneof(
   }),
   fc.record({
     kind: fc.constant('set-thread-status' as const),
-    threadId: pick(THREAD_IDS),
-    status: fc.constantFrom('open' as const, 'resolved' as const),
+    threadId: targetThread,
+    // A seeded thread is open, so resolving is what changes it first.
+    status: fc.constantFrom('resolved' as const, 'resolved' as const, 'open' as const),
   }),
   fc.record({
     kind: fc.constant('create-thread' as const),
@@ -536,10 +542,15 @@ function engineTarget(handle: number): WriteTarget {
 }
 
 describe('a command as engine writes', () => {
-  it('leaves the document where the direct writers leave it, command after command', () => {
+  // About 2 s alone (measured 1.8 to 2.0 s): one engine document opened, written
+  // and exported per command. A loaded parallel run has taken properties of
+  // this size past the 5 s default.
+  it('leaves the document where the direct writers leave it, command after command', {
+    timeout: 20_000,
+  }, () => {
     const engine = sharedCrdtEngine()
     fc.assert(
-      fc.property(fc.array(commandArb, { minLength: 1, maxLength: 8 }), (commands) => {
+      fc.property(fc.array(commandArb, { minLength: 2, maxLength: 12 }), (commands) => {
         const seed = seedDoc().export({ mode: 'snapshot' })
         const ref = loaded(seed)
         const { handle } = engine.open({ peer: '7', bytes: bytesToBase64(seed) })
@@ -574,11 +585,13 @@ afterAllFloor(
   ['leaves the document where the direct writers leave it, command after command'],
   () => {
     assertLedger('EditorCommand kind', COMMAND_COVERAGE, effective)
-    // Floors under the lowest of the measured runs, so a generator change that
+    // Floors under the lowest of 20 measured runs (568 commands, 59% changing
+    // the document, 202 fallbacks, every sequence of two or more; each covered
+    // kind changed the document at least 7 times), so a generator change that
     // stops reaching an arm fails here by name rather than passing over it.
-    expect(reach.commands, 'the property applied almost no commands').toBeGreaterThan(250)
-    expect(reach.effective / reach.commands, 'most commands changed nothing').toBeGreaterThan(0.45)
-    expect(reach.fellBack, 'almost no command took the whole-canvas fallback').toBeGreaterThan(60)
-    expect(reach.multiCommand, 'no sequence ever ran two commands in a row').toBeGreaterThan(20)
+    expect(reach.commands, 'the property applied almost no commands').toBeGreaterThan(450)
+    expect(reach.effective / reach.commands, 'most commands changed nothing').toBeGreaterThan(0.5)
+    expect(reach.fellBack, 'almost no command took the whole-canvas fallback').toBeGreaterThan(150)
+    expect(reach.multiCommand, 'no sequence ever ran two commands in a row').toBeGreaterThan(80)
   },
 )
