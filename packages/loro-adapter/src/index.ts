@@ -47,6 +47,7 @@ export {
   scanFileReferencesOfLease,
 } from './engine/lease-file-references.js'
 export { type LeaseKindOptions, leaseKind } from './engine/lease-kind.js'
+export { leaseOps } from './engine/lease-ops.js'
 export { loadCrdtEngine, sharedCrdtEngine } from './engine/load.js'
 export { randomPeerId } from './engine/peer.js'
 export { readValue } from './engine/read-value.js'
@@ -62,6 +63,7 @@ export {
 } from './file-references.js'
 export { collectImageRefIds } from './image-refs.js'
 export { type LegacyRecord, loroDocKind } from './legacy-record-kind.js'
+export { legacyRecordOps } from './legacy-record-ops.js'
 export {
   CONTENT_CONTAINER_KEYS,
   deleteSpatialEdge,
@@ -92,6 +94,7 @@ export {
   writeProposal,
 } from './proposals.js'
 export { RecordBytesRejectedError, type RecordKind } from './record-kind.js'
+export type { RecordOps, RecordVersion } from './record-ops.js'
 export { documentsRemovedSince, type RemovedDocument } from './removed-documents.js'
 export { ReservedKeyWriteError } from './reserved-key-write.js'
 export { RetiredStoredShapeError, retiredStoredShapeIn } from './retired-stored-shape.js'
