@@ -1,4 +1,9 @@
 import { compactionCut } from '@kamiazya/whiteboard-history'
+import {
+  bindRecordOps,
+  legacyRecordOps,
+  type RecordSession,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { isDatabaseBusy } from '@kamiazya/whiteboard-ports'
 import {
@@ -12,6 +17,7 @@ import { getLogger } from '../log.js'
 import { corruptStoredData, isCorruptStoredDataError } from './corrupt-stored-data.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictWorkspaceDocs } from './doc-cache.js'
+import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { withWorkspaceWriteLock, workspaceWriteLockInUse } from './workspace-lock.js'
@@ -495,4 +501,55 @@ export function compactionCutOfDoc(doc: LoroDoc, points: readonly Frontiers[]): 
   return cut === null
     ? null
     : doc.vvToFrontiers(VersionVector.parseJSON(new Map(cut) as Map<PeerID, number>))
+}
+
+/**
+ * The cached record bound to its operations and its save, for the duration of
+ * `fn`: `null` when nothing is stored. A reader that holds the record only
+ * through the session is ignorant of what holds it, and the bracket is where
+ * the holder is acquired and given back — which a `LoroDoc` needs neither of.
+ */
+export async function withStoredWorkspaceRecord<T>(
+  workspaceId: string,
+  scope: StoreScope,
+  fn: (record: RecordSession | null) => Promise<T>,
+): Promise<T> {
+  const doc = await openWorkspaceDocIfStored(workspaceId, scope)
+  return fn(doc === null ? null : sessionOver(workspaceId, doc, scope))
+}
+
+/**
+ * The record holding exactly what the store persisted, which under the
+ * workspace write barrier is the rule: every in-process write persists before
+ * it releases the barrier, and the access caught the cache up with any other
+ * process's. The one read that checks is the record's persisted frontier. A
+ * cache holding ops the store does not — a caller inside the barrier that has
+ * not saved yet — falls back to the stored record, so a frontier saved from it
+ * never names an op a restart would lose.
+ */
+export async function withPersistedWorkspaceRecord<T>(
+  workspaceId: string,
+  scope: StoreScope,
+  fn: (record: RecordSession | null) => Promise<T>,
+): Promise<T> {
+  const cached = await openWorkspaceDocIfStored(workspaceId, scope)
+  if (cached === null) return fn(null)
+  const store = await documentStoreReady(scope)
+  const stored = await store.readFrontier({ docRef: { kind: 'workspace-tree', workspaceId } })
+  if (
+    stored !== null &&
+    cached.oplogVersion().compare(VersionVector.decode(stored.frontier)) === 0
+  ) {
+    return fn(sessionOver(workspaceId, cached, scope))
+  }
+  const persisted = await new DocumentStoreWorkspaceDocs(
+    new LibsqlDocumentStore(await scope.db()),
+  ).open(workspaceId)
+  return fn(persisted === null ? null : sessionOver(workspaceId, persisted, scope))
+}
+
+function sessionOver(workspaceId: string, doc: LoroDoc, scope: StoreScope): RecordSession {
+  return bindRecordOps(legacyRecordOps, doc, async (held) => {
+    await saveWorkspaceDoc(workspaceId, held, scope)
+  })
 }

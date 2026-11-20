@@ -1,39 +1,29 @@
 import {
   autoVersionsOverCap,
   carriedAutoVersionsOverCap,
-  frontiersFromBase64,
   frontiersToBase64,
   MAX_AUTO_PER_DOCUMENT,
   sandwichedAutoVersionIds,
 } from '@kamiazya/whiteboard-history'
-import {
-  countSpatialNodes,
-  documentContainers,
-  projectWorkspaceDocument,
-  resolveWorkspaceDocument,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { type RecordSession, sharedCrdtEngine } from '@kamiazya/whiteboard-loro-adapter'
 import { DocumentNotFoundError } from '@kamiazya/whiteboard-ports'
-import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { Insertable } from 'kysely'
 import { sql } from 'kysely'
-import {
-  decodeFrontiers,
-  encodeFrontiers,
-  type Frontiers,
-  type LoroDoc,
-  VersionVector,
-} from 'loro-crdt'
 import { nanoid } from 'nanoid'
 import { getLogger } from '../log.js'
 import { validateDocumentPath, validateVersionId, validateWorkspaceId } from '../validators.js'
 import { corruptStoredData } from './corrupt-stored-data.js'
 import type { DatabaseSchema } from './db/schema.js'
-import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
-import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { insertAdoptedRows } from './version-adopt-rows.js'
 import { refusePastManualCeiling, refusePastRestorePointCeiling } from './version-ceilings.js'
-import { openWorkspaceDocIfStored } from './workspace-doc-cache.js'
+import {
+  frontiersToText,
+  loadWorkspaceVersionAt,
+  openVersionCheckouts,
+  type VersionCheckouts,
+} from './version-store-legacy.js'
+import { withPersistedWorkspaceRecord, withStoredWorkspaceRecord } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 const log = getLogger('version-store')
@@ -107,7 +97,7 @@ export interface VersionStore extends VersionHistory {
    * compaction's cut must lie before (`compactionCut`). Empty when the
    * workspace has no versions.
    */
-  workspaceVersionFrontiers(workspaceId: string): Promise<Frontiers[]>
+  workspaceVersionFrontiers(workspaceId: string): Promise<StoredFrontiers[]>
   /**
    * One copy of the workspace record, checked out at each version asked for —
    * for a caller walking many versions, which would otherwise copy the whole
@@ -133,11 +123,24 @@ export interface VersionStore extends VersionHistory {
   ): Promise<{ deletedCount: number; deletedIds: string[] }>
 }
 
-/** See `VersionStore.openCheckouts`. */
-export interface VersionCheckouts {
-  /** What `VersionStore.load` answers, read off the shared copy. */
-  load(versionId: string): Promise<LoroDoc | null>
+export type { VersionCheckouts }
+
+/** The same points loro-crdt's `Frontiers` names, spelled without importing it. */
+export type StoredFrontiers = Array<{ peer: `${number}`; counter: number }>
+
+/**
+ * The engine's answers are the shapes the loro-adapter readers return; this
+ * store asserts the type and holds no schema of its own for it.
+ */
+const assertedAs = <T>() => ({ parse: (value: unknown) => value as T })
+
+interface PathEntry {
+  documentId: string
+  contentDigest: string
 }
+
+const entryAtPath = (record: RecordSession, path: string) =>
+  record.read({ query: 'workspaceDocumentEntry', args: { path } }, assertedAs<PathEntry | null>())
 
 interface VersionRow {
   id: string
@@ -333,19 +336,25 @@ export class FileVersionStore implements VersionStore {
       // the first daemon restart. The record must hold only persisted ops,
       // because that is what the frontier will point at — and it is also the
       // address book: the path resolves in the tree.
-      const storedWorkspace = await this.persistedRecord(workspaceId)
-      const entry =
-        storedWorkspace === null ? null : resolveWorkspaceDocument(storedWorkspace, path)
-      if (storedWorkspace === null || entry === null) {
-        throw new DocumentNotFoundError(workspaceId, path)
-      }
-      const documentId = entry.documentId
-      // Counted off the record the frontier below names, so the row says how
-      // many nodes the state it points at holds.
-      const elementCount = countSpatialNodes(documentContainers(storedWorkspace, documentId))
-      // Taken beside the count, before the awaits below, so both describe one
-      // state of the record.
-      const frontiers = frontiersToText(storedWorkspace.frontiers())
+      const { documentId, elementCount, frontiers, contentDigest } =
+        await withPersistedWorkspaceRecord(workspaceId, this.scope, async (record) => {
+          const entry = record === null ? null : await entryAtPath(record, path)
+          if (record === null || entry === null) throw new DocumentNotFoundError(workspaceId, path)
+          // Counted off the record the frontier below names, so the row says
+          // how many nodes the state it points at holds.
+          const elementCount = await record.read(
+            { query: 'spatialNodeCount', args: { documentId: entry.documentId } },
+            assertedAs<number>(),
+          )
+          return {
+            documentId: entry.documentId,
+            elementCount,
+            frontiers: frontiersToBase64(record.version().encodedFrontiers),
+            // Free: `entry` is the resolve this save already did, and the
+            // digest is derived on that same read of the tree node.
+            contentDigest: entry.contentDigest,
+          }
+        })
       if (!opts.auto) await refusePastManualCeiling(db, workspaceId, documentId)
       if (opts.restoredFrom !== undefined) {
         await refusePastRestorePointCeiling(db, workspaceId, documentId)
@@ -361,9 +370,7 @@ export class FileVersionStore implements VersionStore {
             operator,
             elementCount,
             frontiers,
-            // Free: `entry` is the resolve this save already did, and the
-            // digest is derived on that same read of the tree node.
-            contentDigest: entry.contentDigest,
+            contentDigest,
             createdAt,
           }),
         )
@@ -421,7 +428,7 @@ export class FileVersionStore implements VersionStore {
     })
   }
 
-  async load(workspaceId: string, id: string): Promise<LoroDoc | null> {
+  async load(workspaceId: string, id: string) {
     validateWorkspaceId(workspaceId)
     validateVersionId(id)
     return (await this.openCheckouts(workspaceId)).load(id)
@@ -430,46 +437,22 @@ export class FileVersionStore implements VersionStore {
   async openCheckouts(workspaceId: string): Promise<VersionCheckouts> {
     validateWorkspaceId(workspaceId)
     const db = await this.scope.db()
-    // Forked on the first version that needs it, so a walk over a document
-    // with no versions copies nothing.
-    let copy: LoroDoc | null = null
-    let standsAt: string | null = null
-    return {
-      load: async (id) => {
-        validateVersionId(id)
-        const row = await db
-          .selectFrom('versions')
-          .select(['frontiers', 'documentId'])
-          .where('workspaceId', '=', workspaceId)
-          .where('id', '=', id)
-          .executeTakeFirst()
-        if (!row) return null
-        // Checked out against the WORKSPACE record, whose oplog the frontiers
-        // were recorded in — never against a live per-document projection,
-        // whose fresh lineage does not contain them. The past state is then
-        // projected back out as a standalone doc, which is the shape every
-        // caller expects; the projection copies, so the next checkout of the
-        // shared copy cannot reach it.
-        if (copy === null) {
-          const record = await openWorkspaceDocIfStored(workspaceId, this.scope)
-          if (record === null) {
-            throw corruptStoredData(
-              `versions/${id}`,
-              'workspace-scoped version has no stored workspace document to check out against',
-            )
-          }
-          copy = record.fork()
-        }
-        if (standsAt !== row.frontiers) {
-          checkoutVersion(copy, id, row.frontiers)
-          standsAt = row.frontiers
-        }
-        return projectWorkspaceDocument(copy, row.documentId)
+    return openVersionCheckouts(
+      workspaceId,
+      {
+        version: (id) =>
+          db
+            .selectFrom('versions')
+            .select(['frontiers', 'documentId'])
+            .where('workspaceId', '=', workspaceId)
+            .where('id', '=', id)
+            .executeTakeFirst(),
       },
-    }
+      this.scope,
+    )
   }
 
-  async loadWorkspaceAt(workspaceId: string, id: string): Promise<LoroDoc | null> {
+  async loadWorkspaceAt(workspaceId: string, id: string) {
     validateWorkspaceId(workspaceId)
     validateVersionId(id)
     const db = await this.scope.db()
@@ -480,11 +463,7 @@ export class FileVersionStore implements VersionStore {
       .where('id', '=', id)
       .executeTakeFirst()
     if (!row) return null
-    const record = await openWorkspaceDocIfStored(workspaceId, this.scope)
-    if (record === null) return null
-    const clone = record.fork()
-    checkoutVersion(clone, id, row.frontiers)
-    return clone
+    return loadWorkspaceVersionAt(workspaceId, id, row.frontiers, this.scope)
   }
 
   async list(workspaceId: string, path: string): Promise<VersionEntry[]> {
@@ -639,9 +618,9 @@ export class FileVersionStore implements VersionStore {
     validateWorkspaceId(workspaceId)
     validateDocumentPath(path)
     const db = await this.scope.db()
-    const record = await openWorkspaceDocIfStored(workspaceId, this.scope)
-    if (record === null) return false
-    const entry = resolveWorkspaceDocument(record, path)
+    const entry = await withStoredWorkspaceRecord(workspaceId, this.scope, async (record) =>
+      record === null ? null : entryAtPath(record, path),
+    )
     if (entry === null) return false
     const row = await db
       .selectFrom('versions')
@@ -658,7 +637,7 @@ export class FileVersionStore implements VersionStore {
     return row.contentDigest === entry.contentDigest
   }
 
-  async workspaceVersionFrontiers(workspaceId: string): Promise<Frontiers[]> {
+  async workspaceVersionFrontiers(workspaceId: string): Promise<StoredFrontiers[]> {
     validateWorkspaceId(workspaceId)
     const db = await this.scope.db()
     const rows = await db
@@ -666,9 +645,14 @@ export class FileVersionStore implements VersionStore {
       .select(['id', 'frontiers'])
       .where('workspaceId', '=', workspaceId)
       .execute()
+    if (rows.length === 0) return []
+    const engine = await sharedCrdtEngine()
     return rows.map((row) => {
       try {
-        return frontiersFromText(row.frontiers)
+        // The engine's own decode of the stored bytes, entries as the points
+        // `Frontiers` names; a text that is no frontier throws.
+        const { entries } = engine.decode({ kind: 'frontiers', bytes: row.frontiers })
+        return entries.map(({ peer, counter }) => ({ peer: peer as `${number}`, counter }))
       } catch (error) {
         throw corruptStoredData(
           `versions/${row.id}`,
@@ -680,33 +664,8 @@ export class FileVersionStore implements VersionStore {
 
   /** The record is the address book: a path resolves in its tree. */
   private async resolveDocumentId(workspaceId: string, path: string): Promise<string | null> {
-    const record = await openWorkspaceDocIfStored(workspaceId, this.scope)
-    if (record === null) return null
-    return resolveWorkspaceDocument(record, path)?.documentId ?? null
-  }
-
-  /**
-   * The cached record when it holds exactly what the store persisted, which
-   * under the workspace write barrier is the rule: every in-process write
-   * persists before it releases the barrier, and the access caught the cache
-   * up with any other process's. The one read that checks is the record's
-   * persisted frontier. A cache holding ops the store does not — a caller
-   * inside the barrier that has not saved yet — falls back to the stored
-   * record, so a frontier saved here never names an op a restart would lose.
-   */
-  private async persistedRecord(workspaceId: string): Promise<LoroDoc | null> {
-    const cached = await openWorkspaceDocIfStored(workspaceId, this.scope)
-    if (cached === null) return null
-    const store = await documentStoreReady(this.scope)
-    const stored = await store.readFrontier({ docRef: { kind: 'workspace-tree', workspaceId } })
-    if (
-      stored !== null &&
-      cached.oplogVersion().compare(VersionVector.decode(stored.frontier)) === 0
-    ) {
-      return cached
-    }
-    return new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(await this.scope.db())).open(
-      workspaceId,
+    return withStoredWorkspaceRecord(workspaceId, this.scope, async (record) =>
+      record === null ? null : ((await entryAtPath(record, path))?.documentId ?? null),
     )
   }
 
@@ -759,28 +718,6 @@ export class FileVersionStore implements VersionStore {
       .where('documentId', '=', documentId)
       .where('id', 'in', toRemove)
       .execute()
-  }
-}
-
-/** A frontier as the text a version row stores: the engine's bytes, base64. */
-function frontiersToText(frontiers: Frontiers): string {
-  return frontiersToBase64(encodeFrontiers(frontiers))
-}
-
-/** Throws on text that is not a stored frontier. */
-function frontiersFromText(text: string): Frontiers {
-  return decodeFrontiers(frontiersFromBase64(text))
-}
-
-/** Moves `doc` to a saved version's point; frontiers it cannot reach are corruption. */
-function checkoutVersion(doc: LoroDoc, versionId: string, frontiers: string): void {
-  try {
-    doc.checkout(frontiersFromText(frontiers))
-  } catch (error) {
-    throw corruptStoredData(
-      `versions/${versionId}`,
-      `frontiers could not be checked out against the workspace document (${messageOf(error)})`,
-    )
   }
 }
 
