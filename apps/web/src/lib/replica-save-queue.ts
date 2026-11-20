@@ -29,38 +29,50 @@ export interface ReplicaSaveQueueOptions<Doc> {
 
 const DEFAULT_DEBOUNCE_MS = 500
 
-/** Each save after the one before it, reporting whether it landed. */
+/**
+ * Each save after the one before it, reporting whether everything landed.
+ *
+ * A record whose save was refused is OWED: it is saved again ahead of whatever
+ * is saved next, so its edits reach storage even when the page has since moved
+ * on to another record. Health is `ok` only while nothing is owed.
+ */
 function sequentialSaves<Doc>(
   save: ReplicaSaveQueueOptions<Doc>['save'],
   onHealth: ReplicaSaveQueueOptions<Doc>['onHealth'],
 ) {
   let chain: Promise<void> = Promise.resolve()
-  let failed = false
+  let owed: Doc[] = []
   let waiting: Array<() => void> = []
   const answerWaiting = () => {
     for (const answer of waiting) answer()
     waiting = []
   }
-  const saveNow = (record: Doc) => {
-    chain = chain
-      .then(() => save(record))
-      .then(
-        () => {
-          failed = false
-          onHealth('ok')
-          answerWaiting()
-        },
-        (error: unknown) => {
-          getAppLogger('replica-save-queue').error('replica save failed', error)
-          failed = true
-          onHealth('failed')
-        },
-      )
+  const saveOne = async (record: Doc) => {
+    try {
+      await save(record)
+      owed = owed.filter((other) => other !== record)
+    } catch (error) {
+      getAppLogger('replica-save-queue').error('replica save failed', error)
+      if (!owed.includes(record)) owed.push(record)
+    }
   }
-  /** Once the chain is idle with no refused save outstanding, or `giveUp` is called. */
+  const saveNow = (record: Doc) => {
+    chain = chain.then(async () => {
+      for (const due of [...owed.filter((other) => other !== record), record]) await saveOne(due)
+      onHealth(owed.length === 0 ? 'ok' : 'failed')
+      if (owed.length === 0) answerWaiting()
+    })
+  }
+  /** Once the chain is idle with nothing owed, or `giveUp` is called. */
   const landed = (): Promise<void> =>
-    chain.then(() => (failed ? new Promise<void>((answer) => waiting.push(answer)) : undefined))
-  return { saveNow, landed, giveUp: answerWaiting }
+    chain.then(() =>
+      owed.length === 0 ? undefined : new Promise<void>((answer) => waiting.push(answer)),
+    )
+  const giveUp = () => {
+    owed = []
+    answerWaiting()
+  }
+  return { saveNow, landed, giveUp }
 }
 
 /**

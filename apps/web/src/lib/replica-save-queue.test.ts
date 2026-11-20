@@ -103,6 +103,46 @@ describe('createReplicaSaveQueue', () => {
       expect(saved.done).toBe(true)
     })
 
+    it('saves a record whose save was refused before a newer record, and answers only once both landed', async () => {
+      const save = vi
+        .fn<(record: string) => Promise<void>>()
+        .mockRejectedValueOnce(new Error('QuotaExceededError'))
+        .mockResolvedValue(undefined)
+      const { queue, health } = setup(save)
+      queue.schedule('held before the reconnect')
+      const saved = settledFlag(queue.saved())
+      await vi.advanceTimersByTimeAsync(0)
+      await expectLoggedFailure('replica save failed')
+
+      // The page reopened the record and the user went on editing the new one.
+      queue.schedule('reopened')
+      await vi.advanceTimersByTimeAsync(100)
+      expect(save.mock.calls.map(([record]) => record)).toEqual([
+        'held before the reconnect',
+        'held before the reconnect',
+        'reopened',
+      ])
+      expect(health).toEqual(['failed', 'ok'])
+      expect(saved.done).toBe(true)
+    })
+
+    it('keeps owing a record whose save is refused again while a newer one lands', async () => {
+      const save = vi.fn<(record: string) => Promise<void>>(async (record) => {
+        if (record === 'old') throw new Error('QuotaExceededError')
+      })
+      const { queue, health } = setup(save)
+      queue.schedule('old')
+      const saved = settledFlag(queue.saved())
+      await vi.advanceTimersByTimeAsync(0)
+      await expectLoggedFailure('replica save failed')
+      queue.schedule('new')
+      await vi.advanceTimersByTimeAsync(100)
+      await expectLoggedFailure('replica save failed')
+      expect(save).toHaveBeenLastCalledWith('new')
+      expect(health).toEqual(['failed', 'failed'])
+      expect(saved.done).toBe(false)
+    })
+
     it('answers when the queue is stopped with a refused save outstanding', async () => {
       const save = vi
         .fn<(record: string) => Promise<void>>()
