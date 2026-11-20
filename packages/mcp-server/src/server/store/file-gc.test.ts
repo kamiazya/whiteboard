@@ -308,9 +308,7 @@ describe('purgeDanglingFiles', () => {
       listIdsByDocument: async () => ['v-broken'],
       openCheckouts: async () => ({
         release: () => {},
-        load: async () => {
-          throw new Error('frontier rows missing')
-        },
+        load: () => Promise.reject(new Error('frontier rows missing')),
       }),
     }
 

@@ -326,13 +326,9 @@ async function restoreSubtree(
   const pastWorkspace = await versions.loadWorkspaceAt(workspaceId, versionId)
   if (pastWorkspace === null) return { kind: 'subtree-needs-workspace-version' }
   const inSubtree = (p: string) => isSelfOrDescendant(p, path)
-  let judged: Awaited<ReturnType<typeof judgedPastSubtree>>
-  try {
-    judged = await judgedPastSubtree(pastWorkspace, inSubtree)
-  } finally {
-    pastWorkspace.release()
-  }
-  const { pastDocs, restoring } = judged
+  const { pastDocs, restoring } = await judgedPastSubtree(pastWorkspace, inSubtree).finally(() =>
+    pastWorkspace.release(),
+  )
   const pastIds = new Set(pastDocs.map((node) => node.meta.documentId))
   // A row without an id cannot be correlated to the version and is left
   // alone.

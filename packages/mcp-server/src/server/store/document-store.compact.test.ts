@@ -1,7 +1,6 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { documentFromSnapshot } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -10,16 +9,6 @@ const SESSION1 = '01M8BBN7JS60N0ZAR13NP8SXBF'
 const SESSION2 = '01GMPGTKWFGGGN52ZV6JFQP5HM'
 
 // Swap DATA_DIR to a temp directory through vi.mock.
-/** A version's past document as a LoroDoc, rebuilt from the bytes the store answers. */
-async function loadPast(
-  versions: { load(workspaceId: string, id: string): Promise<Uint8Array | null> },
-  workspaceId: string,
-  id: string,
-) {
-  const bytes = await versions.load(workspaceId, id)
-  return bytes === null ? null : documentFromSnapshot(bytes)
-}
-
 let tempDir: string
 
 vi.mock('../config.js', () => ({
@@ -219,9 +208,9 @@ describe('compactWorkspace', () => {
     expect(live.getMovableList('elements').length).toBe(60)
 
     // Restoring the oldest version should still work at the cut point.
-    const past = await loadPast(store, SESSION1, v.id)
-    expect(past).not.toBeNull()
-    expect(past!.getMovableList('elements').length).toBe(30)
+    const pastBytes = await store.load(SESSION1, v.id)
+    expect(pastBytes).not.toBeNull()
+    expect(LoroDoc.fromSnapshot(pastBytes!).getMovableList('elements').length).toBe(30)
 
     // Compaction prunes history, not state, so the frontier written for the
     // shallow workspace record must still match the live workspace doc's
