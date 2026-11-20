@@ -239,3 +239,72 @@ describe('useAutoCheckpoint when the record cannot be read', () => {
     await expectLoggedFailure('could not arm an automatic checkpoint')
   })
 })
+
+describe('useAutoCheckpoint when an edit lands after it was signalled', () => {
+  beforeEach(() => {
+    setBrowserWorkspaceIdForTests(WORKSPACE)
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    resetBrowserWorkspaceIdForTests()
+  })
+
+  // The session signals an edit before the keeper has taken it into the
+  // record, so the record moves between the signal and the quiet pause.
+  it('remembers the record as it stood when the checkpoint was taken', async () => {
+    const doc = new LoroDoc()
+    doc.getMap('m').set('k', 'v')
+    doc.commit()
+    const beforeTheEdit = await leaseOf(doc)
+    doc.getMap('m').set('k', 'edited')
+    doc.commit()
+    const withTheEdit = await leaseOf(doc)
+    let held = beforeTheEdit
+    const save = vi.fn(async (_w: string, path: string) => ({ path }) as unknown as VersionEntry)
+    const { result } = renderHook(() =>
+      useAutoCheckpoint(
+        { readRecord: (read) => read(held, 'doc-1'), applyRestore: async () => {} },
+        { save, isUnchangedSinceLastVersion: async () => false },
+        'a',
+        () => ({ post() {}, close() {} }),
+      ),
+    )
+    try {
+      result.current.signal()
+      held = withTheEdit
+      await vi.advanceTimersByTimeAsync(CHECKPOINT_QUIET_MS + 1_000)
+      expect(save).toHaveBeenCalledTimes(1)
+
+      // Nothing has changed since that checkpoint: a second one would be a
+      // row for the same state.
+      result.current.signal()
+      await vi.advanceTimersByTimeAsync(CHECKPOINT_QUIET_MS + 1_000)
+      expect(save).toHaveBeenCalledTimes(1)
+    } finally {
+      beforeTheEdit.release()
+      withTheEdit.release()
+    }
+  })
+
+  it('falls back to the record as signalled once the keeper has let it go', async () => {
+    let held: typeof live | null = live
+    const save = vi.fn(async (_w: string, path: string) => ({ path }) as unknown as VersionEntry)
+    const { result } = renderHook(() =>
+      useAutoCheckpoint(
+        {
+          readRecord: (read) => (held === null ? null : read(held, 'doc-1')),
+          applyRestore: async () => {},
+        },
+        { save, isUnchangedSinceLastVersion: async () => false },
+        'a',
+        () => ({ post() {}, close() {} }),
+      ),
+    )
+    result.current.signal()
+    held = null
+    await vi.advanceTimersByTimeAsync(CHECKPOINT_QUIET_MS + 1_000)
+
+    expect(save).toHaveBeenCalledTimes(1)
+  })
+})
