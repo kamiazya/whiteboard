@@ -33,6 +33,7 @@ import { judgeStateWithinTextLimits } from '../sync-text-limits.js'
 import { readThreadMarks } from '../thread-marks.js'
 import { documentsTouchedSince, organisationChangedSince } from '../touched-documents.js'
 import { readWorkspaceFolderNames } from '../workspace-folder-name.js'
+import { resolveIndexedWorkspaceDocument } from '../workspace-node-index.js'
 import { readTrashEntries } from '../workspace-trash.js'
 import {
   documentContainers,
@@ -41,7 +42,6 @@ import {
   readWorkspaceDocuments,
   readWorkspaceMeta,
   readWorkspaceNodes,
-  resolveWorkspaceDocumentById,
   unreadableWorkspaceNodes,
 } from '../workspace-tree.js'
 import { type Answer, answer, answerLater, attempt, versionOfPairs } from './answers.js'
@@ -119,7 +119,7 @@ export const READERS: Record<documentEngine.QueryName, Reader> = {
     const scan = await scanFileReferences(doc, { trashBytes: async () => null })
     return { referenced: [...scan.referenced].sort(), unjudged: scan.unjudged }
   },
-  workspaceDocumentEntry: (doc, args) => resolveWorkspaceDocumentById(doc, requiredId(args)),
+  workspaceDocumentEntry: (doc, args) => resolveIndexedWorkspaceDocument(doc, requiredId(args)),
   workspaceDocumentProjection: (doc, args) => {
     const projected = projectWorkspaceDocument(doc, requiredId(args))
     return projected === null
