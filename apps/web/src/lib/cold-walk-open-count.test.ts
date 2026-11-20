@@ -9,7 +9,7 @@ import {
   writeDocumentKind,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import { RecordStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -57,7 +57,7 @@ async function seedWorkspace(): Promise<{ index: BrowserDocumentIndex; documentI
  * it is independent of how many documents the workspace holds.
  */
 async function opensForTheColdWalk(ask: () => Promise<unknown>): Promise<number> {
-  const opens = vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open')
+  const opens = vi.spyOn(RecordStoreWorkspaceDocs.prototype, 'open')
   await ask()
   const cold = opens.mock.calls.length
   opens.mockClear()

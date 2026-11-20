@@ -24,6 +24,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { describeWorkspaceFilesSourceConformance } from '../test-utils/files-source.conformance.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { loadDocumentContent } from '../test-utils/load-document-content.js'
 import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
 import { seedRetiredFileRecord } from '../test-utils/seed-retired-sync-row.js'
 import {
@@ -42,7 +43,6 @@ import {
 } from './browser-workspace-id.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { loadDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('browser-files-source')
 
@@ -53,9 +53,9 @@ vi.mock('./workspace-content.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./workspace-content.js')>()
   return {
     ...actual,
-    projectDocumentContent: (...args: Parameters<typeof actual.projectDocumentContent>) => {
+    withHeldDocument: (...args: Parameters<typeof actual.withHeldDocument>) => {
       reads.push(args[1])
-      return actual.projectDocumentContent(...args)
+      return actual.withHeldDocument(...args)
     },
   }
 })

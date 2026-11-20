@@ -23,13 +23,13 @@ import { Loro, type LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { loadDocumentContent } from '../test-utils/load-document-content.js'
 import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { loadDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('browser-follow-rename')
 

@@ -24,12 +24,13 @@ import { DisplayNameTakenError } from '@kamiazya/whiteboard-ports'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { loadDocumentContent } from '../test-utils/load-document-content.js'
+import { openWorkspaceOrNull } from '../test-utils/open-workspace-or-null.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
-import { BrowserWorkspaceDocs, openWorkspaceOrNull } from './browser-workspace-docs.js'
+import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { loadDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('browser-follow-rename-property')
 

@@ -18,8 +18,8 @@ import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { seedRetiredFileRecord } from '../test-utils/seed-retired-sync-row.js'
 import { seedTreeContent, seedTreeDocument } from '../test-utils/seed-workspace-content.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
-import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { transferFragmentImages } from './clipboard-images.js'
 import {
   BROWSER_FILE_ADAPTER,
@@ -78,7 +78,7 @@ describe('loadBrowserReference', () => {
       name: 'Tree only',
     })
     const unreadableTree = vi
-      .spyOn(BrowserWorkspaceDocs.prototype, 'open')
+      .spyOn(BrowserWorkspaceRecords.prototype, 'open')
       .mockRejectedValue(new Error('the workspace record could not be opened'))
     try {
       await expect(loadBrowserReference(entry.documentId)).rejects.toThrow(/could not be read/)
@@ -136,7 +136,7 @@ describe('BROWSER_FILE_ADAPTER, referenced documents', () => {
     // The canvas's embeds read through this door, not `loadBrowserReference`,
     // and the contract is the same: `undefined` is cached as terminal.
     const failing = vi
-      .spyOn(BrowserWorkspaceDocs.prototype, 'open')
+      .spyOn(BrowserWorkspaceRecords.prototype, 'open')
       .mockRejectedValue(new Error('the workspace record could not be opened'))
     try {
       await expect(BROWSER_FILE_ADAPTER.loadDocument(generateDocumentId())).rejects.toThrow(

@@ -4,7 +4,7 @@
  * `null` and a tree that cannot be read is an unreadable answer, never `null`.
  */
 import 'fake-indexeddb/auto'
-import { writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
+import { type RecordLease, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -12,16 +12,16 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedPreTreeContentRow } from '../test-utils/seed-retired-sync-row.js'
 import { seedTreeDocument } from '../test-utils/seed-workspace-content.js'
-import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
-import { loadDocumentContent } from './workspace-content.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
+import { lazyContentRecord, loadDocument, withHeldDocument } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('workspace-content')
 
-describe('loadDocumentContent', () => {
+describe('loadDocument', () => {
   beforeEach(clearWhiteboardDb)
   afterEach(() => vi.restoreAllMocks())
 
-  it('projects a document the tree holds', async () => {
+  it('reads a document the tree holds', async () => {
     const source = new Loro()
     writeMarkdownBody(source, 'held by the tree')
     const entry = await seedTreeDocument({
@@ -30,7 +30,7 @@ describe('loadDocumentContent', () => {
       content: source.export({ mode: 'snapshot' }),
     })
 
-    expect(await loadDocumentContent(entry.documentId)).not.toBeNull()
+    expect(await loadDocument(entry.documentId, (held) => held.body())).toBe('held by the tree')
   })
 
   it('answers null for an id the tree does not hold, even beside a per-document record', async () => {
@@ -38,13 +38,76 @@ describe('loadDocumentContent', () => {
     const stray = generateDocumentId()
     await seedPreTreeContentRow(stray)
 
-    expect(await loadDocumentContent(stray)).toBeNull()
+    expect(await loadDocument(stray, (held) => held.body())).toBeNull()
+    expect(await loadDocument(stray, async (held) => held.projection())).toBeNull()
   })
 
   it('throws, rather than answering null, when the tree could not be read', async () => {
     const entry = await seedTreeDocument({ path: 'notes/held', kind: 'markdown' })
-    vi.spyOn(BrowserWorkspaceDocs.prototype, 'open').mockRejectedValue(new Error('closed'))
+    vi.spyOn(BrowserWorkspaceRecords.prototype, 'open').mockRejectedValue(new Error('closed'))
 
-    await expect(loadDocumentContent(entry.documentId)).rejects.toThrow(/could not be read/)
+    await expect(loadDocument(entry.documentId, (held) => held.body())).rejects.toThrow(
+      /could not be read/,
+    )
+  })
+
+  it('hands the projection as bytes that open to the document alone', async () => {
+    const source = new Loro()
+    writeMarkdownBody(source, 'projected body')
+    const entry = await seedTreeDocument({
+      path: 'notes/projected',
+      kind: 'markdown',
+      content: source.export({ mode: 'snapshot' }),
+    })
+
+    const bytes = await loadDocument(entry.documentId, async (held) => held.projection())
+
+    const opened = new Loro()
+    opened.import(bytes as Uint8Array)
+    expect(opened.getText('body').toString()).toBe('projected body')
+  })
+
+  it('rethrows a read that failed on a document the tree holds, and gives the record back', async () => {
+    const entry = await seedTreeDocument({ path: 'notes/held', kind: 'markdown' })
+    const leases: RecordLease[] = []
+    const open = BrowserWorkspaceRecords.prototype.open
+    vi.spyOn(BrowserWorkspaceRecords.prototype, 'open').mockImplementation(async function (
+      this: BrowserWorkspaceRecords,
+      workspaceId: string,
+    ) {
+      const opened = await open.call(this, workspaceId)
+      if (opened !== null) leases.push(opened)
+      return opened
+    })
+    const refusal = new Error('the caller refused')
+
+    await expect(
+      loadDocument(entry.documentId, async () => {
+        throw refusal
+      }),
+    ).rejects.toBe(refusal)
+
+    expect(leases).toHaveLength(1)
+    expect(() => leases[0]?.engine.version({ handle: leases[0].handle })).toThrow()
+  })
+})
+
+describe('withHeldDocument over a lazily opened record', () => {
+  beforeEach(clearWhiteboardDb)
+
+  it('opens the record on the first read only, and releasing it before any read opens nothing', async () => {
+    const opens = vi.spyOn(BrowserWorkspaceRecords.prototype, 'open')
+    const untouched = lazyContentRecord()
+    await untouched.release()
+    expect(opens).not.toHaveBeenCalled()
+
+    const entry = await seedTreeDocument({ path: 'notes/a', kind: 'markdown' })
+    const lazy = lazyContentRecord()
+    opens.mockClear()
+    await withHeldDocument(await lazy.open(), entry.documentId, (held) => held.body())
+    await withHeldDocument(await lazy.open(), entry.documentId, (held) => held.body())
+    await lazy.release()
+    expect(opens).toHaveBeenCalledTimes(1)
+    vi.restoreAllMocks()
   })
 })

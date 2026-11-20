@@ -12,6 +12,7 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { loadDocumentContent } from '../test-utils/load-document-content.js'
 import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
 import { seedPreTreeContentRow } from '../test-utils/seed-retired-sync-row.js'
 import {
@@ -22,7 +23,6 @@ import { BrowserDocumentIndex } from './browser-document-index.js'
 import { WorkspaceCapacityReachedError } from './browser-keeper-capacity.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { loadDocumentContent } from './workspace-content.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
 // nothing here needs the name itself now that clearWhiteboardDb reads it.
