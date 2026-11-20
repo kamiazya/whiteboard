@@ -45,6 +45,7 @@ describe('createBrowserFilesSource writeTagLibrary', () => {
       body: 'Tag notes.',
       coreFacets: { type: 'note' },
       facets: { 'demo.note/v1': { colour: 'teal' } },
+      name: 'Tags',
       pathBase: 'tags',
     })
     await source.writeTagLibrary?.({ kind: { values: { service: { color: '5' } } } })
