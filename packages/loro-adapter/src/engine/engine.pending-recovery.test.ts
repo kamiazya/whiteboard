@@ -1,6 +1,6 @@
 import { MARKDOWN_MAX_CHARS, documentEngine as wire } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createCrdtEngine } from './engine.js'
 
 /**
@@ -118,5 +118,31 @@ describe('recovering a document that holds a parked update', () => {
     expect(writeBody(engine, handle, 'y'.repeat(MARKDOWN_MAX_CHARS + 1)).outcome).toBe('refused')
     engine.import({ handle, bytes: first, judge: 'none' })
     expect(await bodyOf(engine, handle)).toBe('ab')
+  })
+})
+
+describe('a judged import after what was parked has been applied', () => {
+  it('is answered as it is when nothing is parked, without a copy of the document', () => {
+    const author = createCrdtEngine()
+    const authored = author.open({ peer: '1' })
+    const first = updateOf(writeBody(author, authored.handle, 'a'))
+    const second = updateOf(writeBody(author, authored.handle, 'ab'))
+    const third = updateOf(writeBody(author, authored.handle, 'abc'))
+
+    const engine = createCrdtEngine()
+    const { handle } = engine.open({ peer: '2' })
+    engine.import({ handle, bytes: second, judge: 'text' })
+    engine.import({ handle, bytes: first, judge: 'text' })
+
+    const fork = vi.spyOn(LoroDoc.prototype, 'fork')
+    try {
+      expect(engine.import({ handle, bytes: third, judge: 'text' })).toMatchObject({
+        outcome: 'applied',
+        pending: false,
+      })
+      expect(fork).not.toHaveBeenCalled()
+    } finally {
+      fork.mockRestore()
+    }
   })
 })

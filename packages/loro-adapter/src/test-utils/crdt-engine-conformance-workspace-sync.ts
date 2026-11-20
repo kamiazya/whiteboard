@@ -253,6 +253,41 @@ function describeUpdate({ hold, send, refusedAs }: Judging) {
   )
 }
 
+function describePrecedence({ refusedAs }: Judging) {
+  const unreadable = (client: LoroDoc) => documentNode(client, NOTE).data.set('kind', 'bogus')
+  const offGrammar = (client: LoroDoc) => documentNode(client, BOARD).data.set('segment', 'not one')
+  const longName = (client: LoroDoc) =>
+    documentNode(client, BOARD).data.set('name', 'x'.repeat(DOCUMENT_NAME_MAX_LENGTH + 1))
+  const badFolderName = (client: LoroDoc) => folderNode(client, 'week').data.set('name', 'a/b')
+  const wrongKind = (client: LoroDoc) =>
+    writeDocumentKind(documentContainers(client, BOARD), 'markdown')
+
+  // One update breaking two limits answers the first of them in the judge's
+  // order, whatever order the edits were written in: a keeper's refusal must
+  // not depend on which of two violations a peer happened to make first.
+  it.each([
+    [
+      'an unreadable node over a path off the grammar',
+      [offGrammar, unreadable],
+      'unreadable-document-meta',
+    ],
+    ['a path off the grammar over a name past the bound', [longName, offGrammar], 'invalid-path'],
+    [
+      'a name past the bound over a refused folder name',
+      [badFolderName, longName],
+      'document-name-too-long',
+    ],
+    [
+      'a kind an envelope contradicts over a path off the grammar',
+      [offGrammar, wrongKind],
+      'document-kind-changed',
+    ],
+  ] as const)('answers %s', (_competing, edits, shape) => {
+    refusedAs(seedRecord(), (client) => edits.forEach((edit) => edit(client)), shape)
+    refusedAs(seedRecord(), (client) => [...edits].reverse().forEach((edit) => edit(client)), shape)
+  })
+}
+
 export function describeWorkspaceSyncJudging(makeEngine: () => CrdtEngine) {
   describe('what a workspace-sync judge refuses', () => {
     const judge = judging(makeEngine)
@@ -260,5 +295,6 @@ export function describeWorkspaceSyncJudging(makeEngine: () => CrdtEngine) {
     describePlacement(judge)
     describeNames(judge)
     describeUpdate(judge)
+    describePrecedence(judge)
   })
 }

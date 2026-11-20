@@ -18,7 +18,14 @@
  * snapshot does not.
  */
 import { base64ToBytes, bytesToBase64, documentEngine as wire } from '@kamiazya/whiteboard-model'
-import { decodeFrontiers, encodeFrontiers, LoroDoc, UndoManager, VersionVector } from 'loro-crdt'
+import {
+  decodeFrontiers,
+  decodeImportBlobMeta,
+  encodeFrontiers,
+  LoroDoc,
+  UndoManager,
+  VersionVector,
+} from 'loro-crdt'
 import {
   importWithinTextLimits,
   type SyncTextBreach,
@@ -256,11 +263,45 @@ function judgeOnShadow(
   }
 }
 
+/**
+ * What a judged import answers for when operations are parked: the update and
+ * everything it activates. The judges read the operations an import adds to
+ * the oplog, and parked ones are not in it until an update supplies what they
+ * build on, so the judged copy is given the parked updates first and the import
+ * that completes them adds them to what is read. Neither judge's shortcut for a
+ * short update applies, since a short update may be what completes a long one.
+ */
+function judgeActivation(
+  entry: Held,
+  incoming: Uint8Array,
+  judge: 'text' | 'workspace-sync',
+): SyncTextBreach | WorkspaceSyncBreach | null {
+  const copy = entry.doc.fork()
+  try {
+    for (const update of entry.parked) copy.import(update)
+    return judge === 'text'
+      ? importWithinTextLimits(copy, incoming).breach
+      : judgeWorkspaceSyncImport(copy, incoming)
+  } finally {
+    release(copy)
+  }
+}
+
+/** Whether `doc` holds every operation `update` carries. */
+function holds(doc: LoroDoc, update: Uint8Array): boolean {
+  const held = doc.oplogVersion()
+  const { partialEndVersionVector: end } = decodeImportBlobMeta(update, false)
+  return [...end.toJSON()].every(([peer, counter]) => (held.get(peer) ?? 0) >= counter)
+}
+
 function importInto(entry: Held, request: wire.ImportRequest): wire.MutationResult {
   editable(entry)
   const incoming = decoded(request.bytes)
   const judge = request.judge ?? 'text'
-  if (judge === 'text') {
+  if (judge !== 'none' && entry.parked.length > 0) {
+    const breach = judgeActivation(entry, incoming, judge)
+    if (breach !== null) return { outcome: 'refused', breach: breachOf(breach) }
+  } else if (judge === 'text') {
     entry.judge ??= syncTextLimitJudge(entry.doc)
     const breach = entry.judge(incoming)
     if (breach !== null) return { outcome: 'refused', breach: breachOf(breach) }
@@ -271,6 +312,8 @@ function importInto(entry: Held, request: wire.ImportRequest): wire.MutationResu
   const before = entry.doc.oplogVersion()
   const status = entry.doc.import(incoming)
   const pending = (status.pending?.size ?? 0) > 0
+  // What this update completed is applied now, so it is no longer parked.
+  entry.parked = entry.parked.filter((update) => !holds(entry.doc, update))
   if (pending) entry.parked.push(incoming)
   keep(entry, incoming)
   return { outcome: 'applied', changed: touchedSince(entry.doc, before), pending }

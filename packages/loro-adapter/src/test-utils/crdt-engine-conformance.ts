@@ -21,6 +21,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { exportedBytes, frontierPairs, type VersionPairs, versionPairs } from '../engine/answers.js'
 import { journaledEngine } from '../engine/journal.js'
 import type { CrdtEngine } from '../engine/types.js'
+import { describeActivationJudging } from './crdt-engine-conformance-activation.js'
 import { describeBreachDetail } from './crdt-engine-conformance-breach-detail.js'
 import {
   describeDocumentContentWithTags,
@@ -774,6 +775,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeContainerPlace(makeEngine)
     describeVersionAt(makeEngine)
     describeShallowRoot(makeEngine)
+    describeActivationJudging(makeEngine)
     describeSubtreeImport(makeEngine)
     describeSubtreeRoot(makeEngine)
     describeReadNow(makeEngine)
