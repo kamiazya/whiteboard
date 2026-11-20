@@ -21,6 +21,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { exportedBytes, frontierPairs, type VersionPairs, versionPairs } from '../engine/answers.js'
 import { journaledEngine } from '../engine/journal.js'
 import type { CrdtEngine } from '../engine/types.js'
+import { describeBreachDetail } from './crdt-engine-conformance-breach-detail.js'
 import {
   describeDocumentContentWithTags,
   describeDocumentKindFallback,
@@ -37,6 +38,7 @@ import {
   describeVersionDecoding,
   describeViewMove,
 } from './crdt-engine-conformance-calls.js'
+import { describeDocumentReaders } from './crdt-engine-conformance-document-readers.js'
 import {
   applied,
   ask,
@@ -58,7 +60,6 @@ import {
   describeTrim,
 } from './crdt-engine-conformance-lifecycle.js'
 import { describeProjectionExport } from './crdt-engine-conformance-projection.js'
-import { describeBreachDetail } from './crdt-engine-conformance-breach-detail.js'
 import { describeThreadMessageCounts } from './crdt-engine-conformance-threads.js'
 import { describeWorkspaceSyncJudging } from './crdt-engine-conformance-workspace-sync.js'
 import {
@@ -766,6 +767,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeRetiredCommentRows(makeEngine)
     describeThreadMessageCounts(makeEngine)
     describeBreachDetail(makeEngine)
+    describeDocumentReaders(makeEngine)
     describeSubtreeImport(makeEngine)
     describeSubtreeRoot(makeEngine)
     describeReadNow(makeEngine)

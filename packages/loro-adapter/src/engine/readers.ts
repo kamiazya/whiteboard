@@ -78,6 +78,26 @@ function requiredId(args: ReadArgs): string {
   return args.documentId
 }
 
+/**
+ * A reader of a whole document's state: the record's own when it names no
+ * document, else the document `documentId` names, read as a document of its
+ * own. The projection is what a standalone copy of the document would be, so
+ * the answer is the one the document gives wherever it is kept.
+ */
+const wholeDocument =
+  (read: (doc: LoroDoc) => unknown): Reader =>
+  (doc, args) => {
+    if (args.documentId === undefined) return read(doc)
+    const projected = projectWorkspaceDocument(doc, args.documentId)
+    if (projected === null)
+      throw new RangeError(`No document "${args.documentId}" in this workspace`)
+    try {
+      return read(projected)
+    } finally {
+      projected.free()
+    }
+  }
+
 const since = (args: ReadArgs) => versionOfPairs(args.since ?? [])
 
 export const READERS: Record<documentEngine.QueryName, Reader> = {
@@ -102,9 +122,9 @@ export const READERS: Record<documentEngine.QueryName, Reader> = {
   imageRefIds: content((host) => [...collectImageRefIds(host)].sort()),
   retiredStoredShape: content(retiredStoredShapeIn),
   retiredCommentRows: content(retiredCommentRows),
-  stateSize: (doc) => stateSize(doc),
-  contentDigest: (doc) => contentDigestOfDocument(doc),
-  textLimitBreach: (doc) => judgeStateWithinTextLimits(doc),
+  stateSize: wholeDocument(stateSize),
+  contentDigest: wholeDocument(contentDigestOfDocument),
+  textLimitBreach: wholeDocument(judgeStateWithinTextLimits),
   documents: (doc) => readWorkspaceDocuments(doc),
   nodes: (doc) => readWorkspaceNodes(doc),
   meta: (doc) => readWorkspaceMeta(doc),
