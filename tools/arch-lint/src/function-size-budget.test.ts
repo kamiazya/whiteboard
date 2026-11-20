@@ -335,6 +335,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised by twenty-six for `documentRemoved`: the open document deleted
   // elsewhere is seen by the session alone, which stops writing and says so.
   // Raised by two more for a trash restore bringing it back, which resumes it.
+  // Raised by ten for an undo over typed note text: it commits the text as
+  // its own step before taking it back, where dropping its timer left it
+  // shown and never written.
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 904, // the session closure: one connection's debounce, publish, undo and removal state
   // Both raised for the refused write: one more backend message in the
   // handler table, and the snapshot that answers it ending the wait. Both
