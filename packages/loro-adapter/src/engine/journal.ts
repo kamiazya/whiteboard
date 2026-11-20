@@ -51,6 +51,7 @@ export interface JournaledEngine {
   textSplice(request: wire.TextSpliceRequest): JournaledMutation
   importSubtree(request: wire.ImportSubtreeRequest): JournaledMutation
   fork(request: wire.ForkRequest): wire.OpenResponse
+  checkout(request: wire.CheckoutRequest): void
   version(request: wire.VersionRequest): wire.VersionResponse
   decode(request: wire.DecodeRequest): wire.DecodeResponse
   undoState(request: wire.UndoStateRequest): wire.UndoStateResponse
@@ -207,6 +208,7 @@ export function journaledEngine(engine: CrdtEngine): JournaledEngine {
     textSplice: (request) => journalLocal(held, request.handle, engine.textSplice(request)),
     importSubtree: (request) => journalLocal(held, request.handle, engine.importSubtree(request)),
     fork: (request) => forkJournaled(held, engine, request),
+    checkout: (request) => engine.checkout(request),
     version: (request) => engine.version(request),
     decode: (request) => engine.decode(request),
     undoState: (request) => engine.undoState(request),

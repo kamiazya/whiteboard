@@ -351,6 +351,16 @@ function openDocument(request: wire.OpenRequest, defaultMergeInterval: number): 
   }
 }
 
+function frontiersAt(at: wire.VersionEntry[]) {
+  return at.map(({ peer, counter }) => ({ peer: peer as `${number}`, counter }))
+}
+
+/** Moves a view to `at`: a view is detached, so a checkout re-reads its state and never forks it. */
+function moveView(entry: Held, at: wire.VersionEntry[]): void {
+  if (!entry.view) throw new TypeError('only a view made by a fork at frontiers can be moved')
+  entry.doc.checkout(frontiersAt(at))
+}
+
 /** A copy of `source` under `peer`: its head, or a read-only view at `at`. */
 function forkOf(source: Held, request: wire.ForkRequest): Held {
   const { peer, at } = request
@@ -365,7 +375,7 @@ function forkOf(source: Held, request: wire.ForkRequest): Held {
   for (const update of parked) doc.import(update)
   doc.setPeerId(id)
   if (at !== undefined) {
-    doc.checkout(at.map(({ peer: author, counter }) => ({ peer: author as `${number}`, counter })))
+    doc.checkout(frontiersAt(at))
   }
   return {
     doc,
@@ -520,6 +530,10 @@ export function createCrdtEngine(options: CrdtEngineOptions = {}): CrdtEngine {
     fork(request) {
       const parsed = wire.forkRequestSchema.parse(request)
       return admit(forkOf(heldBy(parsed.handle), parsed))
+    },
+    checkout(request) {
+      const { handle, at } = wire.checkoutRequestSchema.parse(request)
+      moveView(heldBy(handle), at)
     },
     close(request) {
       const { handle } = wire.closeRequestSchema.parse(request)

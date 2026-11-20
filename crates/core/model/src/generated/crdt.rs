@@ -858,6 +858,15 @@ pub struct Write {
     pub args: Value,
 }
 
+/// Move a view made by a fork at frontiers to the state at other frontiers.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct CheckoutRequest {
+    /// The view; a document that is not one is refused.
+    pub handle: Handle,
+    /// The frontiers to move the view to; the view stays detached and read-only.
+    pub at: Vec<VersionEntry>,
+}
+
 /// What encoded version bytes held.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct DecodeResponse {
