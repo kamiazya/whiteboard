@@ -342,7 +342,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // document, which is the same delete rather than unreadable bytes.
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 201, // +6: a snapshot holding the retired comment plane is refused rather than shown without its comments
   'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 96, // +6: a snapshot holding the retired comment plane is refused rather than shown without its comments
-  'apps/web/src/lib/command-writes.ts#writeCommandTarget': 119,
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool': 171, // +18: a fatal reply retires its worker before it settles, and re-queues a newer request the closed worker was holding

@@ -1,29 +1,12 @@
-// How one editor command reaches the Loro document: the fine-grained write
-// for the target it names, the whole-canvas reconcile it falls back to, and the
-// key a debounce window dedupes repeat edits to one target under. Pure over
-// the containers it is handed; the session owns the debounce, the undo
-// manager and everything that outlives one write.
-import {
-  type DocumentContainers,
-  deleteSpatialNode,
-  markThreadPassages,
-  moveCommentThread,
-  readCoreFacets,
-  readMarkdownBody,
-  reconcileCoreFacets,
-  reconcileSpatialCanvas,
-  type SpatialBatchWriter,
-  setCommentThreadStatus,
-  withDocumentBatch,
-  withSpatialBatch,
-  writeCommentThread,
-  writeMarkdownBody,
-  writeSpatialEdge,
-  writeSpatialNode,
-  writeThreadMessage,
-} from '@kamiazya/whiteboard-loro-adapter'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
+// How one editor command reaches the document: what it writes (`planCommand`,
+// pure over the canvas pair and two lazy reads), the whole-canvas reconcile it
+// falls back to, and the key a debounce window dedupes repeat edits to one
+// target under. A plan is engine wire writes, so a plain LoroDoc and an engine
+// handle apply the same one; the session owns the debounce, the undo manager
+// and everything that outlives one write.
+
+import type { WriteTarget } from '@kamiazya/whiteboard-loro-adapter'
+import type { documentEngine, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
 import { applyAdoptedPassages } from './apply-adopted-passages.js'
 import type { EditorCommand, EditorLeafCommand } from './spatial/commands.js'
@@ -34,7 +17,7 @@ const log = getAppLogger('document-sync')
  * Stable key identifying the single node/edge a command targets, so a
  * debounce window can dedupe repeat edits to the SAME target down to one
  * write while still keeping edits to DIFFERENT targets separate. Commands
- * with no mapped target (see `writeCommandTarget`'s `default` case) get a
+ * with no mapped target (see `planElement`'s `default` case) get a
  * fresh key per call — each one already falls back to a full
  * whole-canvas reconcile, so there is nothing to dedupe.
  */
@@ -94,275 +77,298 @@ export function commandTargetKey(command: EditorCommand): string {
 }
 
 /**
- * Every plane in ONE commit, because a decision is one act: the changes are
- * stamped where the proposal lives, and an ADOPTED one also rewrites the
- * board and the body. A commit each would be four independent deltas for one
- * press — see `withDocumentBatch` for the measurement and for what a
- * transport dying between them left behind. The canvas write is a
- * whole-canvas reconcile deliberately: a proposal reaches whatever it names,
- * so there is no single target to write.
+ * What a plan reads of the document, lazily: a body is as long as a document
+ * may be and most commands never look at it. A plan is made against the
+ * document as the previous command left it, so a caller applies one plan
+ * before it makes the next.
  */
-function writeDecision(
-  doc: DocumentContainers,
-  command: Extract<EditorCommand, { kind: 'decide-proposal' }>,
-  prev: SpatialCanvas,
-  next: SpatialCanvas,
-): void {
-  withDocumentBatch(doc, (writer) => {
-    if (command.decision === 'adopted') {
-      // And the OTHER subject a proposal can have (ADR-0029 decision 6).
-      // `applyCommand` folds the canvas and cannot reach a body, so a passage
-      // adopted here would otherwise close its change against a document that
-      // never changed — the worst of the three states, since the person is
-      // looking at an "adopted" verdict and their own words still on the
-      // page. It runs FIRST because a body past the size limit refuses the
-      // whole decision: nothing is written and the change stays open.
-      const refused = applyAdoptedPassages(readMarkdownBody(doc), command.changes, (body) =>
-        writer.writeMarkdownBody(body),
-      )
-      if (refused !== undefined) return
-      writer.reconcileSpatialCanvas(prev, next)
-    }
-    for (const change of command.changes) {
-      writer.setProposedChangeStatus(command.proposalId, change.id, command.decision)
-    }
-  })
-}
+type PlanReads = Pick<WriteTarget, 'documentId' | 'body' | 'coreFacets'>
+
+type Write = documentEngine.Write
+type Refusal = 'target-missing' | 'unmapped'
+type Planned = Write[] | Refusal
 
 /**
- * Writes exactly the node/edge the command targets into its own LoroMap
- * entry (via crdt's `writeSpatialNode`/`writeSpatialEdge`, the
- * same field projection the whole-canvas write uses), and says whether it
- * could: `target-missing` when the command's target id is missing from
- * `next`, `unmapped` when the kind has no fine-grained write at all (see
- * commitToDoc's fallback rule). The two are told apart because only the
- * first is worth a warning — an unmapped kind takes the whole-canvas path by
- * design, on every edit. This is what preserves the node-level CRDT
- * merge granularity a whole-document rewrite would discard: a concurrent
- * peer edit to a different node survives a merge against this write.
+ * What one command writes. `fallback` is the whole-canvas reconcile to apply
+ * when `writes` throws; absent when `writes` already is that reconcile.
  */
-type WriteOutcome = 'written' | 'target-missing' | 'unmapped'
+interface CommandPlan {
+  readonly writes: readonly Write[]
+  readonly fallback: readonly Write[] | undefined
+  /** The command named a target `next` does not hold, which is worth a warning. */
+  readonly missingTarget: boolean
+}
 
-function writeCommandTarget(
-  host: LoroDoc,
-  doc: DocumentContainers,
-  prev: SpatialCanvas,
-  next: SpatialCanvas,
-  command: EditorCommand,
-): WriteOutcome {
-  switch (command.kind) {
-    case 'move-node':
-    case 'resize-node':
-    case 'set-text': {
-      const node = next.nodes.find((n) => n.id === command.id)
-      if (!node) return 'target-missing'
-      writeSpatialNode(doc, node)
-      return 'written'
-    }
-    case 'connect-nodes': {
-      const edge = next.edges.find((e) => e.id === command.edgeId)
-      if (!edge) return 'target-missing'
-      writeSpatialEdge(doc, edge)
-      return 'written'
-    }
-    case 'create-node': {
-      const node = next.nodes.find((n) => n.id === command.node.id)
-      if (!node) return 'target-missing'
-      writeSpatialNode(doc, node)
-      return 'written'
-    }
-    case 'move-thread':
-      // The threads plane, for `reply-to-thread`'s reason below; a thread
-      // this replica does not hold is left alone, as a reply to one is.
-      moveCommentThread(doc, command.threadId, command)
-      return 'written'
-    case 'reply-to-thread':
-      // Always "handled", like set-body below and for the same reason: the
-      // fallback writes the whole SpatialCanvas, and a conversation lives in
-      // the threads plane BESIDE it — a whole-canvas reconcile would rewrite the canvas
-      // and never touch the message. There is no missing-target case to fall
-      // back from either: writeThreadMessage is a documented no-op for a
-      // thread this replica does not hold, which is deliberate (replying must
-      // never be the write that opens a container).
-      writeThreadMessage(doc, command.threadId, command.message)
-      return 'written'
-    case 'set-thread-status':
-      // Same plane, same reason: a status lives on the thread, and the
-      // fallback's whole-canvas write would never reach a note's thread.
-      setCommentThreadStatus(doc, command.threadId, command.status)
-      return 'written'
-    case 'edit-thread-message':
-      // `writeThreadMessage` upserts by message id, so an edit is the same
-      // write a reply is, aimed at a message the thread already holds.
-      writeThreadMessage(doc, command.threadId, command.message)
-      return 'written'
-    case 'decide-proposal':
-      writeDecision(doc, command, prev, next)
-      return 'written'
-    case 'create-thread':
-      // Always "handled", for `reply-to-thread`'s reason: the fallback writes
-      // the whole SpatialCanvas, and a markdown document's canvas holds
-      // nothing a new conversation could ride in on. This is the one write
-      // allowed to OPEN a thread container (see `writeCommentThread`), which
-      // is exactly why replying is not.
-      writeCommentThread(doc, command.thread)
-      // And where the passage IS, so the CRDT carries it from here on. The
-      // thread's quote is what survives the document leaving the CRDT; a
-      // mark is what follows an edit — including a concurrent one merged
-      // from another peer, which the quote and its offsets can only
-      // approximate. Both, because neither replaces the other.
-      if (command.thread.anchor.kind === 'text') {
-        markThreadPassages(
-          host,
-          doc,
-          new Map([
-            [
-              command.thread.id,
-              { start: command.thread.anchor.start, end: command.thread.anchor.end },
-            ],
-          ]),
-        )
-      }
-      return 'written'
-    case 'set-body':
-      // Always "handled", and it MUST be: the fallback below writes the
-      // whole SpatialCanvas, which would leave the body container untouched
-      // and silently drop the edit.
-      writeMarkdownBody(doc, command.text)
-      return 'written'
-    case 'set-facets':
-      // Same must-handle reasoning as set-body (`core` is outside the canvas
-      // the fallback rewrites); a core field this build cannot read survives.
-      reconcileCoreFacets(doc, readCoreFacets(doc), command.facets)
-      return 'written'
-    case 'delete-node':
-      // Always "handled": deleteSpatialNode is a documented no-op for an
-      // already-absent id, so there is no missing-target case to fall back
-      // from here (unlike the other kinds, which need the target to still
-      // exist in `next` to know what to write).
-      deleteSpatialNode(doc, command.id)
-      return 'written'
-    case 'batch': {
-      // Pre-validate BEFORE any write: a batch is all-or-nothing at this
-      // layer. One unsupported member (or a missing target) sends the WHOLE
-      // batch down the whole-canvas fallback — still exactly one commit and
-      // one undo step, just with whole-canvas granularity.
-      const outcome = batchOutcome(command.commands, next)
-      if (outcome !== 'written') return outcome
-      withSpatialBatch(doc, (writer) => {
-        for (const sub of command.commands) writeSubCommand(writer, next, sub)
-      })
-      return 'written'
-    }
-    default:
-      return 'unmapped'
+type DocumentWriteArgs = Record<string, unknown>
+
+/** Where the write lands: a hosted document names itself, the root of its own LoroDoc does not. */
+function writeOf(reads: PlanReads, op: documentEngine.WriterName, args: DocumentWriteArgs): Write {
+  return {
+    op,
+    args: reads.documentId === undefined ? args : { ...args, documentId: reads.documentId },
   }
 }
 
 /**
- * The leaf kinds a batch can write fine-grained: exactly the operations
- * `SpatialBatchWriter` exposes. `delete-edge` is deliberately included here
- * even though the non-batch path has no case for it (multi-delete needs
- * it); the other kinds fall back to the whole-canvas reconcile as a whole batch.
+ * The leaf kinds a batch can write fine-grained: exactly the operations the
+ * batch writer exposes. `delete-edge` is deliberately included here even
+ * though the non-batch path has no case for it (multi-delete needs it); the
+ * other kinds send the whole batch to the whole-canvas reconcile.
  */
-function batchOutcome(commands: readonly EditorLeafCommand[], next: SpatialCanvas): WriteOutcome {
-  return commands.map((sub) => isBatchWritable(sub, next)).find((o) => o !== 'written') ?? 'written'
-}
-
-function isBatchWritable(command: EditorLeafCommand, next: SpatialCanvas): WriteOutcome {
+function batchStep(next: SpatialCanvas, command: EditorLeafCommand): DocumentWriteArgs | Refusal {
   switch (command.kind) {
     case 'move-node':
     case 'resize-node':
     case 'set-text':
-      return next.nodes.some((n) => n.id === command.id) ? 'written' : 'target-missing'
-    case 'create-node':
-      return next.nodes.some((n) => n.id === command.node.id) ? 'written' : 'target-missing'
+    case 'create-node': {
+      const id = command.kind === 'create-node' ? command.node.id : command.id
+      const node = next.nodes.find((n) => n.id === id)
+      return node ? { op: 'writeNode', node } : 'target-missing'
+    }
     case 'connect-nodes':
-      return next.edges.some((e) => e.id === command.edgeId) ? 'written' : 'target-missing'
-    case 'create-edge':
-      return next.edges.some((e) => e.id === command.edge.id) ? 'written' : 'target-missing'
+    case 'create-edge': {
+      const id = command.kind === 'create-edge' ? command.edge.id : command.edgeId
+      const edge = next.edges.find((e) => e.id === id)
+      return edge ? { op: 'writeEdge', edge } : 'target-missing'
+    }
+    // Deletes are no-ops for absent ids: always writable.
     case 'delete-node':
+      return { op: 'deleteNode', id: command.id }
     case 'delete-edge':
-      // Deletes are no-ops for absent ids — always writable.
-      return 'written'
+      return { op: 'deleteEdge', id: command.id }
     default:
       return 'unmapped'
   }
 }
 
-function writeSubCommand(
-  writer: SpatialBatchWriter,
+/** Pre-validated before any write: a batch is all-or-nothing at this layer, one commit and one undo step. */
+function planBatch(
+  reads: PlanReads,
   next: SpatialCanvas,
-  command: EditorLeafCommand,
-): void {
+  commands: readonly EditorLeafCommand[],
+): Planned {
+  const steps = commands.map((command) => batchStep(next, command))
+  for (const step of steps) if (typeof step === 'string') return step
+  return [writeOf(reads, 'withSpatialBatch', { steps })]
+}
+
+/**
+ * Every plane in ONE commit, because a decision is one act: the changes are
+ * stamped where the proposal lives, and an ADOPTED one also rewrites the
+ * board and the body. A commit each would be independent deltas for one
+ * press, and a transport dying between them would leave a half-made decision.
+ * The canvas write is a whole-canvas reconcile deliberately: a proposal
+ * reaches whatever it names, so there is no single target to write.
+ */
+function planDecision(
+  reads: PlanReads,
+  command: Extract<EditorCommand, { kind: 'decide-proposal' }>,
+  prev: SpatialCanvas,
+  next: SpatialCanvas,
+): Write[] {
+  const steps: DocumentWriteArgs[] = []
+  if (command.decision === 'adopted') {
+    // The OTHER subject a proposal can have: `applyCommand` folds the canvas
+    // and cannot reach a body, so a passage adopted only there would close
+    // its change against a document that never changed. It runs FIRST because
+    // a body past the size limit refuses the whole decision: nothing is
+    // written and the change stays open.
+    const refused = applyAdoptedPassages(reads.body(), command.changes, (body) =>
+      steps.push({ op: 'writeMarkdownBody', body }),
+    )
+    if (refused !== undefined) return []
+    steps.push({ op: 'reconcileSpatialCanvas', prev, next })
+  }
+  for (const change of command.changes) {
+    steps.push({
+      op: 'setProposedChangeStatus',
+      proposalId: command.proposalId,
+      changeId: change.id,
+      status: command.decision,
+    })
+  }
+  return [writeOf(reads, 'withDocumentBatch', { steps })]
+}
+
+/**
+ * The threads plane. Every arm is "handled" and never falls back: the
+ * fallback writes the whole SpatialCanvas, and a conversation lives BESIDE it
+ * (a markdown document's canvas holds nothing one could ride in on). There is
+ * no missing-target case either: replying to, moving or closing a thread this
+ * replica does not hold is a documented no-op, because only `create-thread`
+ * may open a thread container.
+ */
+function planConversation(reads: PlanReads, command: EditorCommand): Write[] | undefined {
   switch (command.kind) {
-    case 'move-node':
-    case 'resize-node':
-    case 'set-text': {
-      const node = next.nodes.find((n) => n.id === command.id)
-      if (node) writer.writeNode(node)
-      return
+    case 'move-thread': {
+      const { x, y, nodeId, edgeId } = command
+      const drop = {
+        x,
+        y,
+        ...(nodeId === undefined ? {} : { nodeId }),
+        ...(edgeId === undefined ? {} : { edgeId }),
+      }
+      return [writeOf(reads, 'moveCommentThread', { threadId: command.threadId, drop })]
     }
-    case 'create-node': {
-      const node = next.nodes.find((n) => n.id === command.node.id)
-      if (node) writer.writeNode(node)
-      return
+    case 'reply-to-thread':
+    case 'edit-thread-message':
+      // `writeThreadMessage` upserts by message id, so an edit is the same
+      // write a reply is, aimed at a message the thread already holds.
+      return [
+        writeOf(reads, 'writeThreadMessage', {
+          threadId: command.threadId,
+          message: command.message,
+        }),
+      ]
+    case 'set-thread-status':
+      return [
+        writeOf(reads, 'setCommentThreadStatus', {
+          threadId: command.threadId,
+          status: command.status,
+        }),
+      ]
+    case 'create-thread': {
+      const writes = [writeOf(reads, 'writeCommentThread', { thread: command.thread })]
+      const { anchor, id } = command.thread
+      // And where the passage IS, so the CRDT carries it from here on. The
+      // thread's quote is what survives the document leaving the CRDT; a mark
+      // follows an edit, a concurrent one merged from another peer included,
+      // which the quote and its offsets can only approximate. Both, because
+      // neither replaces the other.
+      if (anchor.kind === 'text') {
+        const passages = [[id, { start: anchor.start, end: anchor.end }]]
+        writes.push(writeOf(reads, 'markThreadPassages', { passages }))
+      }
+      return writes
     }
-    case 'connect-nodes': {
-      const edge = next.edges.find((e) => e.id === command.edgeId)
-      if (edge) writer.writeEdge(edge)
-      return
-    }
-    case 'create-edge': {
-      const edge = next.edges.find((e) => e.id === command.edge.id)
-      if (edge) writer.writeEdge(edge)
-      return
-    }
-    case 'delete-node':
-      writer.deleteNode(command.id)
-      return
-    case 'delete-edge':
-      writer.deleteEdge(command.id)
-      return
     default:
-      // Unreachable behind isBatchWritable; a miss here writes nothing and
-      // the batch still commits what the other members wrote.
-      return
+      return undefined
+  }
+}
+
+/** Targets outside the canvas the fallback rewrites: the body, the core facets, a decision. */
+function planDocument(
+  reads: PlanReads,
+  command: EditorCommand,
+  prev: SpatialCanvas,
+  next: SpatialCanvas,
+): Write[] | undefined {
+  switch (command.kind) {
+    case 'set-body':
+      // Must be "handled": the fallback would leave the body untouched and
+      // silently drop the edit.
+      return [writeOf(reads, 'writeMarkdownBody', { body: command.text })]
+    case 'set-facets': {
+      // Same must-handle reasoning (`core` is outside the canvas); a core
+      // field this build cannot read survives the reconcile.
+      const held: StoredCoreFacets | undefined = reads.coreFacets()
+      const args =
+        held === undefined ? { next: command.facets } : { prev: held, next: command.facets }
+      return [writeOf(reads, 'reconcileCoreFacets', args)]
+    }
+    case 'decide-proposal':
+      return planDecision(reads, command, prev, next)
+    default:
+      return undefined
   }
 }
 
 /**
- * Primary path: a fine-grained write of just the command's target node/edge.
- * Fallback: a whole-canvas `reconcileSpatialCanvas(doc, prev, next)`, used
- * when the command's target id is not present in `next` (an unmapped/unknown
- * command kind, or a target the command set has no delete for), or when the
- * fine-grained write itself throws. The reconcile deletes only what `prev`
- * held and `next` dropped, so it also recovers from a node/edge removed from
- * `next` without a corresponding command.
+ * The node or edge the command targets, written into its own map entry (the
+ * same field projection the whole-canvas write uses). That preserves the
+ * node-level merge granularity a whole-document rewrite would discard: a
+ * concurrent peer edit to a different node survives a merge against it.
+ */
+function planElement(reads: PlanReads, next: SpatialCanvas, command: EditorCommand): Planned {
+  switch (command.kind) {
+    case 'move-node':
+    case 'resize-node':
+    case 'set-text':
+    case 'create-node': {
+      const id = command.kind === 'create-node' ? command.node.id : command.id
+      const node = next.nodes.find((n) => n.id === id)
+      return node ? [writeOf(reads, 'writeSpatialNode', { node })] : 'target-missing'
+    }
+    case 'connect-nodes': {
+      const edge = next.edges.find((e) => e.id === command.edgeId)
+      return edge ? [writeOf(reads, 'writeSpatialEdge', { edge })] : 'target-missing'
+    }
+    // Always "handled": deleting an absent id is a no-op, so there is no
+    // missing-target case to fall back from.
+    case 'delete-node':
+      return [writeOf(reads, 'deleteSpatialNode', { id: command.id })]
+    case 'batch':
+      return planBatch(reads, next, command.commands)
+    default:
+      return 'unmapped'
+  }
+}
+
+function reconcileWrites(reads: PlanReads, prev: SpatialCanvas, next: SpatialCanvas): Write[] {
+  return [writeOf(reads, 'reconcileSpatialCanvas', { prev, next })]
+}
+
+/**
+ * Primary: a fine-grained write of just the command's target. Fallback: a
+ * whole-canvas `reconcileSpatialCanvas(prev, next)`, for a target `next` does
+ * not hold or a kind with no fine-grained write. The reconcile deletes only
+ * what `prev` held and `next` dropped, so it also recovers from a node/edge
+ * removed from `next` without a corresponding command.
  *
  * `prev` is the canvas the editor held when the edit began. It is never
- * re-read from `doc`: `next` comes from `readSpatialCanvas`, which omits any
- * record this build's schema cannot read, and a write that deleted every
- * stored id absent from `next` would erase a newer client's records as an op
- * that ships to every replica.
+ * re-read from the document: `next` comes from `readSpatialCanvas`, which
+ * omits any record this build's schema cannot read, and a write that deleted
+ * every stored id absent from `next` would erase a newer client's records as
+ * an op that ships to every replica.
  */
+function planCommand(
+  reads: PlanReads,
+  prev: SpatialCanvas,
+  next: SpatialCanvas,
+  command: EditorCommand,
+): CommandPlan {
+  const planned =
+    planConversation(reads, command) ??
+    planDocument(reads, command, prev, next) ??
+    planElement(reads, next, command)
+  const reconcile = reconcileWrites(reads, prev, next)
+  if (typeof planned === 'string') {
+    return { writes: reconcile, fallback: undefined, missingTarget: planned === 'target-missing' }
+  }
+  return { writes: planned, fallback: reconcile, missingTarget: false }
+}
+
+/** Applies a plan; a throwing fine-grained write is retried as the whole-canvas reconcile. */
+function commitPlan(apply: WriteTarget['apply'], plan: CommandPlan, command: EditorCommand): void {
+  if (plan.missingTarget) {
+    log.warn('editor command target missing from next canvas; reconciling the whole canvas', {
+      command,
+    })
+  }
+  try {
+    apply(plan.writes)
+    return
+  } catch (err) {
+    if (plan.fallback === undefined) throw err
+    log.warn('fine-grained write failed; reconciling the whole canvas', err)
+  }
+  apply(plan.fallback)
+}
+
+/** Plans one command against `target` and applies it, one commit for the target. */
 export function commitToDoc(
-  host: LoroDoc,
-  doc: DocumentContainers,
+  target: WriteTarget,
   prev: SpatialCanvas,
   next: SpatialCanvas,
   command: EditorCommand,
 ): void {
+  let plan: CommandPlan
   try {
-    const outcome = writeCommandTarget(host, doc, prev, next, command)
-    if (outcome === 'written') return
-    if (outcome === 'target-missing') {
-      log.warn('editor command target missing from next canvas; reconciling the whole canvas', {
-        command,
-      })
-    }
+    plan = planCommand(target, prev, next, command)
   } catch (err) {
-    log.warn('fine-grained Loro write failed; reconciling the whole canvas', err)
+    log.warn('planning a command failed; reconciling the whole canvas', err)
+    target.apply(reconcileWrites(target, prev, next))
+    return
   }
-  reconcileSpatialCanvas(doc, prev, next)
+  commitPlan((writes) => target.apply(writes), plan, command)
 }

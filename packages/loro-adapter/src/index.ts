@@ -14,6 +14,7 @@ export {
 export type { DocumentContainers } from './containers.js'
 export { MARKDOWN_BODY_KEY, NODES_KEY } from './containers.js'
 export { contentDigestOfDocument } from './content-digest.js'
+export { directTarget, type WriteTarget } from './direct-target.js'
 export { type DocumentBatchWriter, withDocumentBatch } from './document-batch.js'
 export {
   type ContentWithTags,
@@ -66,7 +67,6 @@ export {
   readSpatialCanvas,
   readSpatialCanvasWithSkipped,
   reconcileSpatialCanvas,
-  type SpatialBatchWriter,
   setEdgeLock,
   setNodeLock,
   withSpatialBatch,

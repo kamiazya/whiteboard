@@ -1,6 +1,7 @@
 // @vitest-environment node
 
 import {
+  directTarget,
   readCommentThreads,
   readCoreFacets,
   readMarkdownBody,
@@ -58,7 +59,7 @@ function noteHolding(body: string): LoroDoc {
 function commit(doc: LoroDoc, command: EditorCommand): SpatialCanvas {
   const prev = readSpatialCanvas(doc)
   const next = applyCommand(prev, command)
-  commitToDoc(doc, doc, prev, next, command)
+  commitToDoc(directTarget(doc), prev, next, command)
   return next
 }
 
@@ -176,7 +177,7 @@ describe('commitToDoc', () => {
     // command saying so — which only the whole-canvas reconcile can notice.
     const next = canvasOf(nodeA)
 
-    commitToDoc(doc, doc, prev, next, { kind: 'move-node', id: 'ghost', x: 1, y: 1 })
+    commitToDoc(directTarget(doc), prev, next, { kind: 'move-node', id: 'ghost', x: 1, y: 1 })
 
     expect(readSpatialCanvas(doc).nodes.map((n) => n.id)).toEqual(['a'])
     expect(appLoggerSpies.warn).toHaveBeenCalledTimes(1)
@@ -362,7 +363,7 @@ describe('commitToDoc', () => {
       const move: EditorCommand = { kind: 'move-node', id: 'a', x: 9, y: 9 }
       const next = applyCommand(prev, move)
 
-      commitToDoc(doc, doc, prev, next, {
+      commitToDoc(directTarget(doc), prev, next, {
         kind: 'batch',
         commands: [
           move,
@@ -455,7 +456,7 @@ describe('commitToDoc', () => {
       // `next` carries the move on purpose: a dismissal must not write it.
       const next = applyCommand(prev, decide('adopted', [moveA]))
 
-      commitToDoc(doc, doc, prev, next, command)
+      commitToDoc(directTarget(doc), prev, next, command)
 
       expect(readSpatialCanvas(doc).nodes[0]).toMatchObject({ x: 0 })
       expect(readProposals(doc)[0]?.changes[0]?.status).toBe('dismissed')
