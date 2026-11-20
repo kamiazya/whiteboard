@@ -1,17 +1,11 @@
-import {
-  applyDocumentEdit,
-  documentContainers,
-  readDocumentContent,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { type DocumentContent, lease } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { planLinkifyMentions } from '@kamiazya/whiteboard-reference-graph'
-import {
-  BrowserWorkspaceDocs,
-  openWorkspaceOrNull,
-  saveAndAnnounce,
-} from './browser-workspace-docs.js'
+import { z } from 'zod'
+import { editWorkspaceRecord } from './browser-record-edit.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { touchContentTimestamp } from './content-timestamp.js'
+import { documentEditWrites } from './document-edit-writes.js'
 
 /**
  * The browser keeper's half of the Connections panel's **Link**: turn the
@@ -39,20 +33,30 @@ export async function linkifyBrowserMentions(
   if (source === undefined) throw new Error(`No document ${sourceDocumentId} to link from.`)
   if (target === undefined) throw new Error(`No document ${targetDocumentId} to link to.`)
   // Nothing names a document with no display name, so there is no prose to find.
-  if (target.name === undefined) return 0
+  const name = target.name
+  if (name === undefined) return 0
 
-  const docs = new BrowserWorkspaceDocs(dbName)
-  const workspace = await openWorkspaceOrNull(docs)
-  if (workspace === null) throw new Error('The workspace could not be opened to add the links.')
-  const containers = documentContainers(workspace, sourceDocumentId)
-  const { linked, edit } = planLinkifyMentions(readDocumentContent(containers, source.kind), {
-    documentId: target.documentId,
-    path: target.path,
-    name: target.name,
-  })
-  if (edit === null) return 0
-  applyDocumentEdit(containers, edit)
-  await saveAndAnnounce(docs, workspaceId, workspace)
+  const linked = await editWorkspaceRecord(
+    'The workspace could not be opened to add the links.',
+    dbName,
+    async (record) => {
+      const content = await lease.read(
+        record,
+        { query: 'documentContent', args: { documentId: sourceDocumentId, kind: source.kind } },
+        z.custom<DocumentContent>(),
+      )
+      const plan = planLinkifyMentions(content, {
+        documentId: target.documentId,
+        path: target.path,
+        name,
+      })
+      return {
+        value: plan.edit === null ? 0 : plan.linked,
+        writes: plan.edit === null ? [] : documentEditWrites(sourceDocumentId, plan.edit),
+      }
+    },
+  )
+  if (linked === 0) return 0
   await touchContentTimestamp(sourceDocumentId, dbName)
   return linked
 }

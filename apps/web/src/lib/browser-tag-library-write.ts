@@ -1,4 +1,5 @@
-import { documentContainers, readFacets, reconcileFacets } from '@kamiazya/whiteboard-loro-adapter'
+import { lease } from '@kamiazya/whiteboard-loro-adapter'
+import type { ExtensionFacets } from '@kamiazya/whiteboard-model'
 import {
   TAG_LIBRARY_PATH,
   type TagLibrary,
@@ -6,12 +7,9 @@ import {
   visualTagsFacetSchema,
 } from '@kamiazya/whiteboard-plugin-visual'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
+import { z } from 'zod'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
-import {
-  BrowserWorkspaceDocs,
-  openWorkspaceOrNull,
-  saveAndAnnounce,
-} from './browser-workspace-docs.js'
+import { editWorkspaceRecord } from './browser-record-edit.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { touchContentTimestamp } from './content-timestamp.js'
 import { createSeededDocumentAt } from './create-seeded-document.js'
@@ -41,12 +39,25 @@ export async function writeTagLibraryDocument(
   const documentId =
     existing?.documentId ??
     (await createSeededDocumentAt(index, { path: TAG_LIBRARY_PATH, kind: 'markdown' })).documentId
-  const docs = new BrowserWorkspaceDocs(dbName)
-  const workspace = await openWorkspaceOrNull(docs)
-  if (workspace === null) throw new Error('The workspace could not be opened to write the tags.')
-  const containers = documentContainers(workspace, documentId)
-  const prev = readFacets(containers)
-  reconcileFacets(containers, prev, { ...prev, [VISUAL_TAGS_KEY]: facet })
-  await saveAndAnnounce(docs, workspaceId, workspace)
+  await editWorkspaceRecord(
+    'The workspace could not be opened to write the tags.',
+    dbName,
+    async (record) => {
+      const prev = await lease.read(
+        record,
+        { query: 'facets', args: { documentId } },
+        z.custom<ExtensionFacets>(),
+      )
+      return {
+        value: undefined,
+        writes: [
+          {
+            op: 'reconcileFacets',
+            args: { documentId, prev, next: { ...prev, [VISUAL_TAGS_KEY]: facet } },
+          },
+        ],
+      }
+    },
+  )
   await touchContentTimestamp(documentId, dbName)
 }
