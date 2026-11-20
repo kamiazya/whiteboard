@@ -26,6 +26,7 @@ import {
   UndoManager,
   VersionVector,
 } from 'loro-crdt'
+import { documentsRemovedSince } from '../removed-documents.js'
 import {
   importWithinTextLimits,
   type SyncTextBreach,
@@ -329,6 +330,15 @@ function exportFrom(doc: LoroDoc, request: wire.ExportRequest): wire.ExportRespo
     return projected === null
       ? {}
       : { bytes: bytesToBase64(projected.export({ mode: 'snapshot' })) }
+  }
+  if (request.mode === 'removed-since') {
+    const since = versionOfPairs(request.since.map(({ peer, counter }) => [peer, counter]))
+    return {
+      removed: documentsRemovedSince(doc, since).map(({ bytes, ...rest }) => ({
+        ...rest,
+        bytes: bytesToBase64(bytes),
+      })),
+    }
   }
   if (request.mode === 'snapshot') return { bytes: bytesToBase64(doc.export({ mode: 'snapshot' })) }
   if (request.mode === 'update') {

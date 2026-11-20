@@ -1,12 +1,13 @@
 import { bytesToBase64, type documentEngine as wire } from '@kamiazya/whiteboard-model'
 import { decodeFrontiers, encodeFrontiers } from 'loro-crdt'
-import { versionPairs } from './engine/answers.js'
+import { versionOfPairs, versionPairs } from './engine/answers.js'
 import { breachOf, touchedSince } from './engine/engine.js'
 import { unwrapAnswer } from './engine/read-value.js'
 import { readQuery } from './engine/readers.js'
 import { applyWriter } from './engine/writers.js'
 import type { LegacyRecord } from './legacy-record-kind.js'
 import type { RecordOps } from './record-ops.js'
+import { documentsRemovedSince } from './removed-documents.js'
 import { importWithinTextLimits } from './sync-text-limits.js'
 import { judgeWorkspaceSyncImport } from './workspace-sync-limits.js'
 import { projectWorkspaceDocument } from './workspace-tree.js'
@@ -57,6 +58,8 @@ export const legacyRecordOps: RecordOps<LegacyRecord> = {
       entries: versionPairs(doc.oplogVersion()).map(([peer, counter]) => ({ peer, counter })),
     }
   },
+  removedSince: (doc, since) =>
+    documentsRemovedSince(doc, versionOfPairs(since.map(({ peer, counter }) => [peer, counter]))),
   viewAt(doc, frontiers) {
     const view = doc.fork()
     view.checkout(decodeFrontiers(frontiers))

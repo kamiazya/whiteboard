@@ -20,7 +20,12 @@ import {
   NOTE,
   seedRecord,
 } from './test-utils/crdt-engine-conformance-workspace-sync.js'
-import { documentContainers } from './workspace-tree.js'
+import {
+  createWorkspaceDocumentAtPath,
+  documentContainers,
+  importWorkspaceSubtree,
+  readWorkspaceDocuments,
+} from './workspace-tree.js'
 
 const engine = createCrdtEngine()
 
@@ -241,5 +246,122 @@ describe('a projection exported through RecordOps', () => {
     await onEachKind((held, record) => {
       expect(base64(held.kind.exportSnapshot(record)).length).toBeGreaterThan(0)
     })
+  })
+})
+
+const D1 = '01J000000000000000000000D1'
+const D2 = '01J000000000000000000000D2'
+const D3 = '01J000000000000000000000D3'
+
+type Step = { op: string; args: Record<string, unknown> }
+const create = (path: string, documentId: string): Step => ({
+  op: 'createWorkspaceDocumentAtPath',
+  args: { path, documentId, kind: 'markdown' },
+})
+const remove = (path: string): Step => ({ op: 'deleteWorkspaceNodeAtPath', args: { path } })
+const move = (from: string, to: string): Step => ({
+  op: 'moveWorkspaceNodeToPath',
+  args: { from, to },
+})
+
+/** What the evacuation of `after` over a record built from `seed` comes to, per kind. */
+async function evacuated(seed: Step[], after: Step[]) {
+  const answers: unknown[] = []
+  const bytesPerKind: Uint8Array[][] = []
+  const empty = new Uint8Array(await engineEmptySnapshot())
+  for (const held of KINDS) {
+    const record = await held.kind.load(empty, [])
+    try {
+      held.ops.write(record, seed as never)
+      const since = held.ops.versionOf(record).entries
+      held.ops.write(record, after as never)
+      const removed = held.ops.removedSince(record, since)
+      bytesPerKind.push(removed.map((entry) => entry.bytes))
+      answers.push(removed.map(({ bytes, ...rest }) => ({ ...rest, holds: documentIdsIn(bytes) })))
+    } finally {
+      held.kind.release(record)
+    }
+  }
+  return { answers, bytesPerKind }
+}
+
+async function engineEmptySnapshot(): Promise<Uint8Array> {
+  const record = await loroDocKind.empty()
+  return loroDocKind.exportSnapshot(record)
+}
+
+function documentIdsIn(bytes: Uint8Array): string[] {
+  const doc = new LoroDoc()
+  doc.import(bytes)
+  return readWorkspaceDocuments(doc)
+    .map((entry) => entry.documentId)
+    .sort()
+}
+
+describe('the documents removed since a version, through RecordOps', () => {
+  const CASES: ReadonlyArray<{
+    title: string
+    seed: Step[]
+    after: Step[]
+    removed: Array<{ documentId: string; holds: string[] }>
+  }> = [
+    {
+      title: 'a document removed from a folder that stays',
+      seed: [create('folder/a', D1), create('folder/b', D2)],
+      after: [remove('folder/a')],
+      removed: [{ documentId: D1, holds: [D1] }],
+    },
+    {
+      title: 'a document below a removed one, which rides its bytes',
+      seed: [create('a', D1), create('a/b', D2)],
+      after: [remove('a')],
+      removed: [{ documentId: D1, holds: [D1, D2] }],
+    },
+    {
+      title: 'a survivor moved out of a removed document, cut from its bytes',
+      seed: [create('a', D1), create('a/b', D2)],
+      after: [move('a/b', 'kept'), remove('a')],
+      removed: [{ documentId: D1, holds: [D1] }],
+    },
+    {
+      title: 'several removals in one update, deepest first',
+      seed: [create('p', D1), create('q/r', D2), create('s', D3)],
+      after: [remove('p'), remove('q/r')],
+      removed: [
+        { documentId: D2, holds: [D2] },
+        { documentId: D1, holds: [D1] },
+      ],
+    },
+    {
+      title: 'nothing removed',
+      seed: [create('a', D1)],
+      after: [move('a', 'b')],
+      removed: [],
+    },
+  ]
+
+  for (const { title, seed, after, removed } of CASES) {
+    it(`answers ${title} alike on every kind`, async () => {
+      const { answers } = await evacuated(seed, after)
+      expect(answers[0]).toEqual(answers[1])
+      const seen = (answers[0] as Array<{ documentId: string; holds: string[] }>).map(
+        ({ documentId, holds }) => ({ documentId, holds }),
+      )
+      expect(seen).toEqual(removed)
+    })
+  }
+
+  it('restores a survivor-cutting evacuee without a second copy of the survivor', async () => {
+    const { bytesPerKind } = await evacuated(
+      [create('a', D1), create('a/b', D2)],
+      [move('a/b', 'kept'), remove('a')],
+    )
+    for (const [evacuee] of bytesPerKind) {
+      const live = new LoroDoc()
+      createWorkspaceDocumentAtPath(live, { path: 'kept', documentId: D2, kind: 'markdown' })
+      importWorkspaceSubtree(live, evacuee as Uint8Array)
+      const ids = readWorkspaceDocuments(live).map((entry) => entry.documentId)
+      expect(ids.sort()).toEqual([D1, D2])
+    }
   })
 })

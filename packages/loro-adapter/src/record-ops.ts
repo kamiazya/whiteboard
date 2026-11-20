@@ -1,5 +1,6 @@
 import type { documentEngine as wire } from '@kamiazya/whiteboard-model'
 import type { AnswerShape } from './engine/read-value.js'
+import type { RemovedDocument } from './removed-documents.js'
 
 /** What a record stands at, in the encodings a keeper compares and stores. */
 export interface RecordVersion {
@@ -30,6 +31,13 @@ export interface RecordOps<R> {
   write(record: R, batch: wire.Write[]): wire.MutationApplied
   importJudged(record: R, bytes: Uint8Array, judge: wire.ImportJudge): wire.MutationResult
   versionOf(record: R): RecordVersion
+  /**
+   * The documents the operations after `since` took out of the record, as a
+   * trash keeps them: deepest first, a document below another removed one in
+   * that one's bytes, survivors cut out of every export. Nothing for
+   * operations that removed nothing.
+   */
+  removedSince(record: R, since: readonly wire.VersionEntry[]): RemovedDocument[]
   /** A read-only copy of the record as it stood at `frontiers`; the caller releases it with its kind. */
   viewAt(record: R, frontiers: Uint8Array): R
   moveView(view: R, frontiers: Uint8Array): void

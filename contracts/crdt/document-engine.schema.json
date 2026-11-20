@@ -466,6 +466,32 @@
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
+    "ExportRemovedSinceRequest": {
+      "description": "Export the documents the operations after a version removed, as a trash keeps them.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The workspace record."
+        },
+        "mode": {
+          "type": "string",
+          "const": "removed-since",
+          "description": "Always removed-since."
+        },
+        "since": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "description": "A version vector of operations the record holds, as a version response names one: what was live then and is gone now is exported."
+        }
+      },
+      "required": ["handle", "mode", "since"],
+      "x-wb-order": ["handle", "mode", "since"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
     "ExportRequest": {
       "description": "Export an open document; the mode says what it carries and what it needs.",
       "oneOf": [
@@ -486,11 +512,65 @@
         },
         {
           "$ref": "#/$defs/ExportProjectionRequest"
+        },
+        {
+          "$ref": "#/$defs/ExportRemovedSinceRequest"
         }
       ],
       "discriminator": {
         "propertyName": "mode"
       }
+    },
+    "FolderName": {
+      "description": "The display name of a folder of a workspace record, by its path.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "The path of the folder."
+        },
+        "name": {
+          "type": "string",
+          "description": "Its display name."
+        }
+      },
+      "required": ["path", "name"],
+      "x-wb-order": ["path", "name"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "RemovedDocument": {
+      "description": "A document the operations after a version removed, as a trash keeps it.",
+      "type": "object",
+      "properties": {
+        "documentId": {
+          "$ref": "#/$defs/DocumentId",
+          "description": "The document."
+        },
+        "path": {
+          "type": "string",
+          "description": "Where it was before, for a listing a person can read."
+        },
+        "name": {
+          "type": "string",
+          "description": "The display name it had, when it was given one."
+        },
+        "folderNames": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FolderName"
+          },
+          "description": "The names of the folders above it before; absent when none had one."
+        },
+        "bytes": {
+          "$ref": "#/$defs/Bytes",
+          "description": "Its subtree as it stood before, as an export of a subtree is: a record. A document below another removed one travels in the bytes of that one and has no entry of its own, unless a document between them survived, which the bytes leave out."
+        }
+      },
+      "required": ["documentId", "path", "bytes"],
+      "x-wb-order": ["documentId", "path", "name", "folderNames", "bytes"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
     },
     "ExportResponse": {
       "description": "What an export produced.",
@@ -498,10 +578,17 @@
       "properties": {
         "bytes": {
           "$ref": "#/$defs/Bytes",
-          "description": "The exported bytes; absent when a subtree export finds no node at its path and when a projection export finds no document by its id."
+          "description": "The exported bytes; absent when a subtree export finds no node at its path, when a projection export finds no document by its id, and for a removed-since export, which answers removed instead."
+        },
+        "removed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RemovedDocument"
+          },
+          "description": "What a removed-since export found, deepest first; empty when the operations removed nothing."
         }
       },
-      "x-wb-order": ["bytes"],
+      "x-wb-order": ["bytes", "removed"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },

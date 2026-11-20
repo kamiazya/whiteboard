@@ -172,6 +172,15 @@ impl DecodeKind {
 /// A document id: the workspace tree node hosting it.
 pub type DocumentId = String;
 
+/// The display name of a folder of a workspace record, by its path.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct FolderName {
+    /// The path of the folder.
+    pub path: String,
+    /// Its display name.
+    pub name: String,
+}
+
 /// What open answers: an engine-held document, never reused in an engine life. A close ends it.
 pub type Handle = i64;
 
@@ -698,13 +707,6 @@ impl ExportProjectionRequest {
     pub const MODE: &str = "projection";
 }
 
-/// What an export produced.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExportResponse {
-    /// The exported bytes; absent when a subtree export finds no node at its path and when a projection export finds no document by its id.
-    pub bytes: Option<Bytes>,
-}
-
 /// Export everything an open document holds.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExportSnapshotRequest {
@@ -802,6 +804,21 @@ pub struct RedoRequest {
     pub judge: Option<WriteJudge>,
 }
 
+/// A document the operations after a version removed, as a trash keeps it.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct RemovedDocument {
+    /// The document.
+    pub document_id: DocumentId,
+    /// Where it was before, for a listing a person can read.
+    pub path: String,
+    /// The display name it had, when it was given one.
+    pub name: Option<String>,
+    /// The names of the folders above it before; absent when none had one.
+    pub folder_names: Option<Vec<FolderName>>,
+    /// Its subtree as it stood before, as an export of a subtree is: a record. A document below another removed one travels in the bytes of that one and has no entry of its own, unless a document between them survived, which the bytes leave out.
+    pub bytes: Bytes,
+}
+
 /// Replace runs of a text container, in UTF-16 code units.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextSpliceRequest {
@@ -879,6 +896,29 @@ pub struct CheckoutRequest {
 pub struct DecodeResponse {
     /// The peers and counters.
     pub entries: Vec<VersionEntry>,
+}
+
+/// Export the documents the operations after a version removed, as a trash keeps them.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExportRemovedSinceRequest {
+    /// The workspace record.
+    pub handle: Handle,
+    /// A version vector of operations the record holds, as a version response names one: what was live then and is gone now is exported.
+    pub since: Vec<VersionEntry>,
+}
+
+impl ExportRemovedSinceRequest {
+    /// What `mode` is always written as.
+    pub const MODE: &str = "removed-since";
+}
+
+/// What an export produced.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExportResponse {
+    /// The exported bytes; absent when a subtree export finds no node at its path, when a projection export finds no document by its id, and for a removed-since export, which answers removed instead.
+    pub bytes: Option<Bytes>,
+    /// What a removed-since export found, deepest first; empty when the operations removed nothing.
+    pub removed: Option<Vec<RemovedDocument>>,
 }
 
 /// Export the current state, keeping history only from a version on.
@@ -1023,6 +1063,8 @@ pub enum ExportRequest {
     ExportSubtreeRequest(ExportSubtreeRequest),
     /// A `ExportProjectionRequest`.
     ExportProjectionRequest(ExportProjectionRequest),
+    /// A `ExportRemovedSinceRequest`.
+    ExportRemovedSinceRequest(ExportRemovedSinceRequest),
 }
 
 impl Default for ExportRequest {

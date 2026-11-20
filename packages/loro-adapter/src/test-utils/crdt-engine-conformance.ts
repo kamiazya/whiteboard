@@ -59,6 +59,7 @@ import {
   describeTrim,
 } from './crdt-engine-conformance-lifecycle.js'
 import { describeProjectionExport } from './crdt-engine-conformance-projection.js'
+import { describeRemovedSinceExport } from './crdt-engine-conformance-removed.js'
 import { describeThreadMessageCounts } from './crdt-engine-conformance-threads.js'
 import { describeWorkspaceSyncJudging } from './crdt-engine-conformance-workspace-sync.js'
 import {
@@ -782,6 +783,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeIndexWrites(makeEngine)
     describeSubtreeExport(makeEngine)
     describeProjectionExport(makeEngine)
+    describeRemovedSinceExport(makeEngine)
     describeJournal(makeEngine)
     describeJournalOfParkedUpdates(makeEngine)
     describeJournalOfViewCopy(makeEngine)
