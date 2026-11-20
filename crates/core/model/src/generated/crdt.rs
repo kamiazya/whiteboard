@@ -660,6 +660,8 @@ pub struct Breach {
     pub shape: BreachShape,
     /// The container that broke it, when the limit names one.
     pub container: Option<String>,
+    /// The breach object the judge itself answers, as JSON: what the limit measured (a count, the nodes or paths it names, the kind recorded) so a keeper can word its refusal. Any-value on purpose: each shape carries its own fields.
+    pub detail: Option<Value>,
 }
 
 /// Release a document: its handle is then invalid and any call on it is refused.

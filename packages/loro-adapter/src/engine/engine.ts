@@ -95,10 +95,16 @@ function decoded(text: string): Uint8Array {
   return bytes
 }
 
+/**
+ * The judge's own object rides as `detail`, made JSON as the wire carries it
+ * (a field a judge leaves undefined is not there), so a keeper rebuilds its
+ * refusal from an engine's answer exactly as from the judge.
+ */
 function breachOf(breach: SyncTextBreach | WorkspaceSyncBreach): wire.Breach {
+  const detail: unknown = JSON.parse(JSON.stringify(breach))
   return 'container' in breach
-    ? { shape: breach.shape, container: breach.container }
-    : { shape: breach.shape }
+    ? { shape: breach.shape, container: breach.container, detail }
+    : { shape: breach.shape, detail }
 }
 
 /** The workspace documents the operations after `before` wrote to; none for a document that is its own root. */

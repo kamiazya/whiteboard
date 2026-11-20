@@ -17,13 +17,13 @@ import type { CrdtEngine } from '../engine/types.js'
 import { createWorkspaceDocumentAtPath, documentContainers } from '../workspace-tree.js'
 import { mutation } from './crdt-engine-conformance-kit.js'
 
-const NOTE = '01BRWAAAAAAAAAAAAAAAAAAAA0'
-const BOARD = '01BRWAAAAAAAAAAAAAAAAAAAB0'
+export const NOTE = '01BRWAAAAAAAAAAAAAAAAAAAA0'
+export const BOARD = '01BRWAAAAAAAAAAAAAAAAAAAB0'
 const base64 = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64')
 const CEILING_TIMEOUT_MS = 30_000
 
 /** A record holding a note at `notes`, a board at `board` and a folder `week`. */
-function seedRecord(): LoroDoc {
+export function seedRecord(): LoroDoc {
   const doc = new LoroDoc()
   createWorkspaceDocumentAtPath(doc, { path: 'notes', documentId: NOTE, kind: 'markdown' })
   createWorkspaceDocumentAtPath(doc, { path: 'board', documentId: BOARD, kind: 'spatial' })
@@ -37,7 +37,7 @@ function seedRecord(): LoroDoc {
 }
 
 /** `count` bare nodes: documents when `documents`, else folders. */
-function crowd(doc: LoroDoc, count: number, documents: boolean) {
+export function crowd(doc: LoroDoc, count: number, documents: boolean) {
   const tree = doc.getTree('tree')
   for (let i = 0; i < count; i++) {
     const node = tree.createNode()
@@ -67,9 +67,9 @@ const nodeOf = (doc: LoroDoc, match: (data: LoroMap) => boolean) => {
   if (node === undefined) throw new Error('no such node')
   return node
 }
-const documentNode = (doc: LoroDoc, documentId: string) =>
+export const documentNode = (doc: LoroDoc, documentId: string) =>
   nodeOf(doc, (data) => data.get('documentId') === documentId)
-const folderNode = (doc: LoroDoc, segment: string) =>
+export const folderNode = (doc: LoroDoc, segment: string) =>
   nodeOf(doc, (data) => data.get('segment') === segment && data.get('documentId') === undefined)
 
 type Judging = ReturnType<typeof judging>

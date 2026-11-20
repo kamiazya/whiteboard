@@ -135,6 +135,13 @@ describe('the CRDT document-engine contract', () => {
       { outcome: 'applied', changed: ['doc-1'], localUpdate: 'bG9ybw==' },
       { outcome: 'applied', changed: [] },
       { outcome: 'refused', breach: { shape: 'canvas-size', container: 'cid:root-nodes:Map' } },
+      {
+        outcome: 'refused',
+        breach: {
+          shape: 'too-many-documents',
+          detail: { shape: 'too-many-documents', count: 5001 },
+        },
+      },
     ]
     for (const result of results) {
       expect(documentEngine.mutationResultSchema.parse(result)).toEqual(result)

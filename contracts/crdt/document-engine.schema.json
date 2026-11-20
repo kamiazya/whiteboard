@@ -187,10 +187,14 @@
         "container": {
           "type": "string",
           "description": "The container that broke it, when the limit names one."
+        },
+        "detail": {
+          "x-wb-any": true,
+          "description": "The breach object the judge itself answers, as JSON: what the limit measured (a count, the nodes or paths it names, the kind recorded) so a keeper can word its refusal. Any-value on purpose: each shape carries its own fields."
         }
       },
       "required": ["shape"],
-      "x-wb-order": ["shape", "container"],
+      "x-wb-order": ["shape", "container", "detail"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },

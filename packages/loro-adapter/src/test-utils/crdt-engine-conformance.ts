@@ -58,6 +58,7 @@ import {
   describeTrim,
 } from './crdt-engine-conformance-lifecycle.js'
 import { describeProjectionExport } from './crdt-engine-conformance-projection.js'
+import { describeBreachDetail } from './crdt-engine-conformance-breach-detail.js'
 import { describeThreadMessageCounts } from './crdt-engine-conformance-threads.js'
 import { describeWorkspaceSyncJudging } from './crdt-engine-conformance-workspace-sync.js'
 import {
@@ -764,6 +765,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeDocumentContentWithTags(makeEngine)
     describeRetiredCommentRows(makeEngine)
     describeThreadMessageCounts(makeEngine)
+    describeBreachDetail(makeEngine)
     describeSubtreeImport(makeEngine)
     describeSubtreeRoot(makeEngine)
     describeReadNow(makeEngine)

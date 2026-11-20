@@ -184,6 +184,7 @@ export type WriterName = z.infer<typeof writerNameSchema>
 export const breachSchema = z.strictObject({
   shape: breachShapeSchema,
   container: z.string().optional(),
+  detail: z.unknown().optional(),
 })
 export type Breach = z.infer<typeof breachSchema>
 
