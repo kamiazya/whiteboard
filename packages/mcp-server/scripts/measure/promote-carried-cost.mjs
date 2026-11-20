@@ -1,9 +1,9 @@
 /**
  * What judging a promote's carried versions costs the serving loop, by how
  * many rows the request carries and how large the record they name is — the
- * work `judgeCarried` does synchronously before anything merges: a checkout
- * of the incoming record per row, a projection of the document it names, and
- * the sync surface's size judgement of that state.
+ * work `judgeCarried` does synchronously before anything merges: a point
+ * placement per row, a checkout of the incoming record's view, and the
+ * document's size, text-limit and digest reads at that state.
  *
  * Run (from packages/mcp-server):
  *   node --import tsx/esm scripts/measure/promote-carried-cost.mjs [nodes:rows ...]
@@ -14,11 +14,15 @@
  *   until the body ceiling, since rows are a few hundred bytes each.
  * - `distinct`: each row names its own frontier, one commit apart, as a real
  *   browser history does.
- * Times are the median of three calls, in milliseconds.
+ * Times are the median of fifteen calls, in milliseconds.
  */
 import {
+  bindRecordOps,
   createWorkspaceDocumentAtPath,
   documentContainers,
+  leaseKind,
+  leaseOps,
+  loadCrdtEngine,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -48,9 +52,7 @@ function record(nodes, edits) {
     writeSpatialCanvas(documentContainers(doc, BOARD_ID), moved)
     doc.commit()
   }
-  const incoming = new LoroDoc()
-  incoming.import(doc.export({ mode: 'snapshot' }))
-  return { incoming, points }
+  return { snapshot: doc.export({ mode: 'snapshot' }), points }
 }
 
 function row(id, frontiers) {
@@ -59,18 +61,20 @@ function row(id, frontiers) {
 
 async function median(fn) {
   const times = []
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 15; i++) {
     const start = performance.now()
     await fn()
     times.push(performance.now() - start)
   }
   times.sort((a, b) => a - b)
-  return times[1]
+  return times[7]
 }
 
 console.log('nodes    rows    same ms   distinct ms')
 for (const [nodes, rows] of shapes) {
-  const { incoming, points } = record(nodes, rows)
+  const { snapshot, points } = record(nodes, rows)
+  const lease = await leaseKind(loadCrdtEngine).load(snapshot, [])
+  const incoming = bindRecordOps(leaseOps, lease, async () => {})
   const first = points[0]
   const same = Array.from({ length: rows }, (_, i) => row(`s${i}`, first))
   const distinct = points.map((frontiers, i) => row(`d${i}`, frontiers))
