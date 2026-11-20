@@ -63,6 +63,7 @@ export type PeerId = z.infer<typeof peerIdSchema>
 export const queryNameSchema = z.enum([
   'documentKind',
   'documentContent',
+  'documentContentWithTags',
   'spatialCanvas',
   'nodeLocks',
   'edgeLocks',

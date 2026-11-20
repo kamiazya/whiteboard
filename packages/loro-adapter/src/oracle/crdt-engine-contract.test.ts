@@ -54,6 +54,15 @@ const NOT_ENGINE_WRITERS: Record<string, string> = {
     'pure helper, not a document write; F2 records it for the TS→Rust parity of the helper itself',
 }
 
+/**
+ * Readers the contract names that no row records, because each answers what
+ * recorded readers already answer, together. The conformance suite holds each
+ * to that; recording one would rewrite every row for an answer they imply.
+ */
+const DERIVED_READERS: Record<string, string> = {
+  documentContentWithTags: 'the answers of documentContent and coreFacets, in one read',
+}
+
 const sorted = (values: Iterable<string>) => [...values].sort()
 
 describe('the CRDT document-engine contract', () => {
@@ -95,7 +104,12 @@ describe('the CRDT document-engine contract', () => {
     for (const query of readers) {
       expect(documentEngine.querySchema.safeParse({ query }).success, query).toBe(true)
     }
-    expect(sorted(documentEngine.queryNameSchema.options)).toEqual(sorted(readers))
+    for (const derived of Object.keys(DERIVED_READERS)) {
+      expect(readers.has(derived), `${derived} is derived but recorded`).toBe(false)
+    }
+    expect(sorted(documentEngine.queryNameSchema.options)).toEqual(
+      sorted([...readers, ...Object.keys(DERIVED_READERS)]),
+    )
   })
 
   it('names every breach shape the sync judges answer, and nothing else', () => {

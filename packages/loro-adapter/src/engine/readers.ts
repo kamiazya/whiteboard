@@ -13,7 +13,7 @@ import { readAnnotations } from '../annotations.js'
 import { readCommentThreads } from '../comment-threads.js'
 import type { DocumentContainers } from '../containers.js'
 import { contentDigestOfDocument } from '../content-digest.js'
-import { readDocumentContent } from '../document-content.js'
+import { readContentWithTags, readDocumentContent } from '../document-content.js'
 import {
   readCoreFacets,
   readDocumentKind,
@@ -83,6 +83,8 @@ const since = (args: ReadArgs) => versionOfPairs(args.since ?? [])
 export const READERS: Record<documentEngine.QueryName, Reader> = {
   documentKind: content(readDocumentKind),
   documentContent: (doc, args) => readDocumentContent(hostOf(doc, args), args.kind),
+  // Content and tags in one read, so one lookup of the hosting node answers both.
+  documentContentWithTags: (doc, args) => readContentWithTags(hostOf(doc, args), args.kind),
   spatialCanvas: content(readSpatialCanvasWithSkipped),
   nodeLocks: content((host) => [...readNodeLocks(host)].sort()),
   edgeLocks: content((host) => [...readEdgeLocks(host)].sort()),

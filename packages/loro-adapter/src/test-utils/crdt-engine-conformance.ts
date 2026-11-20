@@ -22,6 +22,7 @@ import { exportedBytes, frontierPairs, type VersionPairs, versionPairs } from '.
 import { journaledEngine } from '../engine/journal.js'
 import type { CrdtEngine } from '../engine/types.js'
 import {
+  describeDocumentContentWithTags,
   describeDocumentKindFallback,
   describeFork,
   describeImportJudging,
@@ -756,6 +757,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeSpliceRuns(makeEngine)
     describeSpliceRunsRefused(makeEngine)
     describeDocumentKindFallback(makeEngine)
+    describeDocumentContentWithTags(makeEngine)
     describeSubtreeImport(makeEngine)
     describeSubtreeRoot(makeEngine)
     describeReadNow(makeEngine)

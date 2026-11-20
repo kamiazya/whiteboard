@@ -219,6 +219,8 @@ pub enum QueryName {
     DocumentKind,
     /// Written `documentContent`.
     DocumentContent,
+    /// Written `documentContentWithTags`.
+    DocumentContentWithTags,
     /// Written `spatialCanvas`.
     SpatialCanvas,
     /// Written `nodeLocks`.
@@ -289,6 +291,7 @@ impl QueryName {
         match self {
             Self::DocumentKind => "documentKind",
             Self::DocumentContent => "documentContent",
+            Self::DocumentContentWithTags => "documentContentWithTags",
             Self::SpatialCanvas => "spatialCanvas",
             Self::NodeLocks => "nodeLocks",
             Self::EdgeLocks => "edgeLocks",
@@ -328,6 +331,7 @@ impl QueryName {
         match text {
             "documentKind" => Some(Self::DocumentKind),
             "documentContent" => Some(Self::DocumentContent),
+            "documentContentWithTags" => Some(Self::DocumentContentWithTags),
             "spatialCanvas" => Some(Self::SpatialCanvas),
             "nodeLocks" => Some(Self::NodeLocks),
             "edgeLocks" => Some(Self::EdgeLocks),
