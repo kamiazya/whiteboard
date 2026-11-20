@@ -157,6 +157,14 @@ async function colouredDrawing(
   }
 }
 
+/** The canvas and its conversations, read from a document that is spatial. */
+function readViewedCanvas(deps: ServerDeps, input: CanvasViewInput) {
+  return withDocument(deps, input.workspaceId, input.documentId, async (session) => {
+    await assertSpatialDocument(deps, session, 'canvas_view')
+    return { canvas: await canvasOf(session), threads: await annotationsOf(session) }
+  })
+}
+
 /**
  * The MCP Apps (SEP-1865) inline canvas view. Its result is linked to the
  * `ui://whiteboard/canvas-view` widget resource by the registration's
@@ -181,15 +189,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
     outputSchema: canvasViewOutputSchema,
     async execute(input: CanvasViewInput): Promise<CanvasViewOutput> {
       await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-      const { canvas, threads } = await withDocument(
-        deps,
-        input.workspaceId,
-        input.documentId,
-        async (session) => {
-          await assertSpatialDocument(deps, session, 'canvas_view')
-          return { canvas: await canvasOf(session), threads: await annotationsOf(session) }
-        },
-      )
+      const { canvas, threads } = await readViewedCanvas(deps, input)
       const drawn = await colouredDrawing(deps, input.workspaceId, canvas)
       // Resolved from the style the CALLER asked for, not from the document's
       // facet alone: a canvas naming a theme drawn under the bundled look
