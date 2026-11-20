@@ -26,6 +26,7 @@ import { jsonResponse } from '../test-utils/json-response.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { replicaKeyBody } from '../test-utils/replica-key-fetch.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
 import { connectReplicaKeeper } from './replica-store.js'
 import { loadWrappedKey, saveWrappedKey } from './replica-wrapped-key-store.js'
@@ -100,7 +101,7 @@ async function pull(fetch: typeof globalThis.fetch, workspaceId = WORKSPACE) {
     fetch,
     daemonBaseUrl: BASE,
     workspaceId,
-    workspaceDocs: new BrowserWorkspaceDocs(),
+    workspaceDocs: new BrowserWorkspaceRecords(),
   })
   if (result.kind === 'ok') {
     createUserSettingsStore().update((s) =>

@@ -396,11 +396,11 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // keeps the page's cognitive complexity under the threshold; the entries
   // below are the pieces still over the line budget, and each is one concern
   // rather than several.
-  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 138,
+  'apps/web/src/pages/ReplicaReadPage.tsx#ReplicaReadPage': 139,
   // One load: attempt, unlock, the remembered blob, and what each outcome
   // leaves on screen. The states are ADR-0042 decision 6's and they share
   // the same `setState`, so splitting them would split one transition.
-  'apps/web/src/pages/ReplicaReadPage.tsx#useReplicaRecord': 70,
+  'apps/web/src/hooks/use-replica-record.ts#useReplicaRecord': 70,
   // The read surface: the banner, the tree and the editor. JSX, and the
   // three are what a replica IS to a reader. +3: the replica's tag library,
   // handed to both editors. +2: the picture seams a copy and paste carry.

@@ -25,7 +25,8 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { replicaKeyFetch } from '../test-utils/replica-key-fetch.js'
-import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { leaseOf } from '../test-utils/replica-lease.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
 import { replicaClipboardImages } from './replica-clipboard-images.js'
@@ -104,20 +105,25 @@ function daemon(record: LoroDoc, options: DaemonOptions = {}): typeof globalThis
 }
 
 /** Connects the keeper so the record key is derivable, then caches `record`'s images. */
-function cacheFor(
+async function cacheFor(
   record: LoroDoc,
   extra: { daemon?: DaemonOptions; budgetBytes?: number; blobs?: BlobStore } = {},
 ): Promise<number> {
   const fetch = daemon(record, extra.daemon)
   connectReplicaKeeper({ baseUrl: BASE, fetch })
-  return cacheReplicaImages({
-    fetch,
-    daemonBaseUrl: BASE,
-    workspaceId: DAEMON_WS,
-    record,
-    ...(extra.budgetBytes === undefined ? {} : { budgetBytes: extra.budgetBytes }),
-    ...(extra.blobs === undefined ? {} : { blobs: extra.blobs }),
-  })
+  const held = await leaseOf(record)
+  try {
+    return await cacheReplicaImages({
+      fetch,
+      daemonBaseUrl: BASE,
+      workspaceId: DAEMON_WS,
+      record: held,
+      ...(extra.budgetBytes === undefined ? {} : { budgetBytes: extra.budgetBytes }),
+      ...(extra.blobs === undefined ? {} : { blobs: extra.blobs }),
+    })
+  } finally {
+    held.release()
+  }
 }
 
 /** Reads a Blob's text without relying on the environment's `Blob#arrayBuffer`. */
@@ -199,7 +205,7 @@ describe('replica images over fake-indexeddb', () => {
       fetch,
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
 
     expect(result.kind).toBe('ok')
@@ -292,6 +298,36 @@ describe('replica images over fake-indexeddb', () => {
     expect(readReplicaImagePointer(DAEMON_WS)).toBeUndefined()
   })
 
+  it('asks the daemon for a shared image through the first document that names it', async () => {
+    const record = boardNaming('img-cat')
+    const second = '01ARZ3NDEKTSV4RRFFQ69G5FD2'
+    createWorkspaceDocumentAtPath(record, {
+      path: 'boards/copy',
+      documentId: second,
+      kind: 'spatial',
+    })
+    writeSpatialCanvas(documentContainers(record, second), {
+      nodes: [
+        fileNode({
+          id: 'again',
+          file: newImageRef('img-cat'),
+          x: 0,
+          y: 0,
+          width: 100,
+          height: 100,
+        }),
+      ],
+      edges: [],
+    })
+    record.commit()
+    const served: string[] = []
+
+    // The stub serves files under the first document only, so a read addressed
+    // through the second finds nothing to cache.
+    expect(await cacheFor(record, { daemon: { served } })).toBe(1)
+    expect(served).toEqual(['img-cat'])
+  })
+
   it('caches nothing and opens nothing while the record key is not held', async () => {
     const record = boardNaming('img-cat')
     await cacheFor(record)
@@ -299,12 +335,14 @@ describe('replica images over fake-indexeddb', () => {
     forgetAllForTests()
     const served: string[] = []
 
+    const held = await leaseOf(record)
     const cached = await cacheReplicaImages({
       fetch: daemon(record, { served }),
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      record,
+      record: held,
     })
+    held.release()
 
     expect(cached).toBe(0)
     expect(served).toEqual([])
@@ -659,7 +697,7 @@ describe('cacheDaemonWorkspace when the images cannot be stored', () => {
       fetch,
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
 
     expect(result.kind).toBe('ok')

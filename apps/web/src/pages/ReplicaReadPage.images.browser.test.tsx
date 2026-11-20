@@ -21,7 +21,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
+import { BrowserWorkspaceRecords } from '../lib/browser-workspace-records.js'
 import { carriedClipboardFiles, clearClipboardFragmentForTests } from '../lib/clipboard-store.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { IdbBlobStore } from '../lib/idb-blob-store.js'
@@ -94,7 +94,7 @@ async function pullThenGoOffline(record: LoroDoc, serves: readonly string[]): Pr
     fetch,
     daemonBaseUrl: DAEMON,
     workspaceId: DAEMON_WS,
-    workspaceDocs: new BrowserWorkspaceDocs(),
+    workspaceDocs: new BrowserWorkspaceRecords(),
   })
   if (pulled.kind !== 'ok') throw new Error(`pull failed: ${pulled.kind}`)
   await rememberReplicaKey({

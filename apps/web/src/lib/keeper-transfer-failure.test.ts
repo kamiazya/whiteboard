@@ -6,10 +6,11 @@
  */
 import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import { StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
-import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import type { WorkspaceRecords } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { leaseOf } from '../test-utils/replica-lease.js'
 import { PULL_FAILURE_COPY, PUSH_FAILURE_COPY } from './keeper-transfer-failure.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
 import { pushReplicaEdits } from './replica-push.js'
@@ -35,7 +36,7 @@ function unused(): never {
   throw new Error('not reached by these cases')
 }
 
-function workspaceDocs(overrides: Partial<WorkspaceDocs>): WorkspaceDocs {
+function workspaceDocs(overrides: Partial<WorkspaceRecords>): WorkspaceRecords {
   return {
     open: async () => null,
     create: unused,
@@ -90,7 +91,7 @@ afterEach(() => {
 })
 
 describe('cacheDaemonWorkspace failure reasons', () => {
-  const pull = (fetch: typeof globalThis.fetch, docs: WorkspaceDocs) =>
+  const pull = (fetch: typeof globalThis.fetch, docs: WorkspaceRecords) =>
     cacheDaemonWorkspace({
       fetch,
       daemonBaseUrl: BASE,
@@ -131,11 +132,11 @@ describe('cacheDaemonWorkspace failure reasons', () => {
 })
 
 describe('pushReplicaEdits failure reasons', () => {
-  const push = (fetch: typeof globalThis.fetch, docs: WorkspaceDocs) =>
+  const push = (fetch: typeof globalThis.fetch, docs: WorkspaceRecords) =>
     pushReplicaEdits({ fetch, daemonBaseUrl: BASE, workspaceId: DAEMON_WS, workspaceDocs: docs })
 
   it('a fetch that throws is reported as an unreachable daemon', async () => {
-    const result = await push(offline, workspaceDocs({ open: async () => record() }))
+    const result = await push(offline, workspaceDocs({ open: async () => leaseOf(record()) }))
     expect(result).toEqual({ kind: 'failed', reason: PUSH_FAILURE_COPY.network })
   })
 

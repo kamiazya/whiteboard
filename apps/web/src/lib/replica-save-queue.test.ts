@@ -59,6 +59,106 @@ describe('createReplicaSaveQueue', () => {
     expect(health).toEqual(['failed', 'ok'])
   })
 
+  describe('saved, the moment a holder of the record may give it back', () => {
+    const settledFlag = (promise: Promise<void>) => {
+      const flag = { done: false }
+      void promise.then(() => {
+        flag.done = true
+      })
+      return flag
+    }
+
+    it('takes the waiting save now and answers once it has landed', async () => {
+      const save = vi.fn<(record: string) => Promise<void>>().mockResolvedValue(undefined)
+      const { queue } = setup(save)
+      queue.schedule('a')
+      const saved = settledFlag(queue.saved())
+      await vi.advanceTimersByTimeAsync(0)
+      expect(save).toHaveBeenCalledExactlyOnceWith('a')
+      expect(saved.done).toBe(true)
+    })
+
+    it('answers at once when nothing was ever scheduled', async () => {
+      const { queue } = setup(vi.fn<(record: string) => Promise<void>>())
+      const saved = settledFlag(queue.saved())
+      await vi.advanceTimersByTimeAsync(0)
+      expect(saved.done).toBe(true)
+    })
+
+    it('does not answer after a refused save until a retry lands it', async () => {
+      const save = vi
+        .fn<(record: string) => Promise<void>>()
+        .mockRejectedValueOnce(new Error('QuotaExceededError'))
+        .mockResolvedValue(undefined)
+      const { queue } = setup(save)
+      queue.schedule('a')
+      const saved = settledFlag(queue.saved())
+      await vi.advanceTimersByTimeAsync(0)
+      await expectLoggedFailure('replica save failed')
+      expect(saved.done).toBe(false)
+
+      queue.retry()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(save).toHaveBeenLastCalledWith('a')
+      expect(saved.done).toBe(true)
+    })
+
+    it('saves a record whose save was refused before a newer record, and answers only once both landed', async () => {
+      const save = vi
+        .fn<(record: string) => Promise<void>>()
+        .mockRejectedValueOnce(new Error('QuotaExceededError'))
+        .mockResolvedValue(undefined)
+      const { queue, health } = setup(save)
+      queue.schedule('held before the reconnect')
+      const saved = settledFlag(queue.saved())
+      await vi.advanceTimersByTimeAsync(0)
+      await expectLoggedFailure('replica save failed')
+
+      // The page reopened the record and the user went on editing the new one.
+      queue.schedule('reopened')
+      await vi.advanceTimersByTimeAsync(100)
+      expect(save.mock.calls.map(([record]) => record)).toEqual([
+        'held before the reconnect',
+        'held before the reconnect',
+        'reopened',
+      ])
+      expect(health).toEqual(['failed', 'ok'])
+      expect(saved.done).toBe(true)
+    })
+
+    it('keeps owing a record whose save is refused again while a newer one lands', async () => {
+      const save = vi.fn<(record: string) => Promise<void>>(async (record) => {
+        if (record === 'old') throw new Error('QuotaExceededError')
+      })
+      const { queue, health } = setup(save)
+      queue.schedule('old')
+      const saved = settledFlag(queue.saved())
+      await vi.advanceTimersByTimeAsync(0)
+      await expectLoggedFailure('replica save failed')
+      queue.schedule('new')
+      await vi.advanceTimersByTimeAsync(100)
+      await expectLoggedFailure('replica save failed')
+      expect(save).toHaveBeenLastCalledWith('new')
+      expect(health).toEqual(['failed', 'failed'])
+      expect(saved.done).toBe(false)
+    })
+
+    it('answers when the queue is stopped with a refused save outstanding', async () => {
+      const save = vi
+        .fn<(record: string) => Promise<void>>()
+        .mockRejectedValue(new Error('QuotaExceededError'))
+      const { queue } = setup(save)
+      queue.schedule('a')
+      const saved = settledFlag(queue.saved())
+      await vi.advanceTimersByTimeAsync(0)
+      await expectLoggedFailure('replica save failed')
+      expect(saved.done).toBe(false)
+      queue.stop()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(saved.done).toBe(true)
+    })
+  })
+
   it('retry saves the latest record again without waiting out the debounce', async () => {
     const save = vi
       .fn<(record: string) => Promise<void>>()

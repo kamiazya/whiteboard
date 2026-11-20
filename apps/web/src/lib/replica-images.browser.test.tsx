@@ -19,8 +19,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { replicaKeyFetch } from '../test-utils/replica-key-fetch.js'
+import { leaseOf } from '../test-utils/replica-lease.js'
 import { sweepUnreferencedFiles } from './browser-file-sweep.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
@@ -80,7 +82,7 @@ async function pull(record: LoroDoc, served?: string[]): Promise<void> {
     fetch,
     daemonBaseUrl: BASE,
     workspaceId: DAEMON_WS,
-    workspaceDocs: new BrowserWorkspaceDocs(),
+    workspaceDocs: new BrowserWorkspaceRecords(),
   })
   if (result.kind !== 'ok') throw new Error(`pull failed: ${result.kind}`)
 }
@@ -172,13 +174,15 @@ describe('replica images', () => {
     await new BrowserWorkspaceDocs().save(DAEMON_WS, record)
 
     const budgetBytes = pictureOf('img-cat').byteLength
+    const held = await leaseOf(record)
     const cached = await cacheReplicaImages({
       fetch,
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      record,
+      record: held,
       budgetBytes,
     })
+    held.release()
 
     expect(cached).toBe(1)
     const loaded = (await loadReplicaImages(DAEMON_WS, ['img-cat', 'img-dog'])).images

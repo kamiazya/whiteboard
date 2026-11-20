@@ -17,6 +17,7 @@ import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.
 import { jsonResponse } from '../test-utils/json-response.js'
 import { replicaKeyBody } from '../test-utils/replica-key-fetch.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
 import { pushReplicaEdits } from './replica-push.js'
 import { connectReplicaKeeper, forgetDaemonKeys } from './replica-store.js'
@@ -68,7 +69,7 @@ async function pulledReplica(daemon: { fetch: typeof globalThis.fetch }) {
     fetch: daemon.fetch,
     daemonBaseUrl: BASE,
     workspaceId: DAEMON_WS,
-    workspaceDocs: docs,
+    workspaceDocs: new BrowserWorkspaceRecords(),
   })
   if (pulled.kind !== 'ok') throw new Error('pull failed')
   return { docs, syncedFrontier: pulled.syncedFrontier }
@@ -103,7 +104,7 @@ describe('pushReplicaEdits', () => {
       fetch: daemon.fetch,
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: docs,
+      workspaceDocs: new BrowserWorkspaceRecords(),
       syncedFrontier,
     })
     if (result.kind !== 'ok') throw new Error(`push not ok: ${JSON.stringify(result)}`)
@@ -120,7 +121,7 @@ describe('pushReplicaEdits', () => {
       fetch: daemon.fetch,
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: docs,
+      workspaceDocs: new BrowserWorkspaceRecords(),
       syncedFrontier: result.syncedFrontier,
     })
     expect(again).toEqual({ kind: 'clean' })
@@ -129,12 +130,12 @@ describe('pushReplicaEdits', () => {
 
   it('a clean replica sends nothing at all', async () => {
     const daemon = daemonStub(daemonRecord())
-    const { docs, syncedFrontier } = await pulledReplica(daemon)
+    const { syncedFrontier } = await pulledReplica(daemon)
     const result = await pushReplicaEdits({
       fetch: daemon.fetch,
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: docs,
+      workspaceDocs: new BrowserWorkspaceRecords(),
       syncedFrontier,
     })
     expect(result).toEqual({ kind: 'clean' })
@@ -144,12 +145,12 @@ describe('pushReplicaEdits', () => {
   it('no recorded frontier sends the whole snapshot once — the merge makes it safe', async () => {
     const target = daemonRecord()
     const daemon = daemonStub(target)
-    const { docs } = await pulledReplica(daemon)
+    await pulledReplica(daemon)
     const result = await pushReplicaEdits({
       fetch: daemon.fetch,
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: docs,
+      workspaceDocs: new BrowserWorkspaceRecords(),
       syncedFrontier: undefined,
     })
     if (result.kind !== 'ok') throw new Error('expected ok')
@@ -160,12 +161,12 @@ describe('pushReplicaEdits', () => {
   it('a recorded frontier that does not decode is as good as none: the whole snapshot goes', async () => {
     const target = daemonRecord()
     const daemon = daemonStub(target)
-    const { docs } = await pulledReplica(daemon)
+    await pulledReplica(daemon)
     const result = await pushReplicaEdits({
       fetch: daemon.fetch,
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: docs,
+      workspaceDocs: new BrowserWorkspaceRecords(),
       syncedFrontier: 'not base64!',
     })
     if (result.kind !== 'ok') throw new Error('expected ok')
@@ -191,7 +192,7 @@ describe('pushReplicaEdits', () => {
       fetch: refusing,
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: docs,
+      workspaceDocs: new BrowserWorkspaceRecords(),
       syncedFrontier,
     })
     expect(result.kind).toBe('failed')
@@ -205,7 +206,7 @@ describe('pushReplicaEdits', () => {
 
   it('a withheld session key surfaces as kind: withheld, distinct from a refused POST', async () => {
     const daemon = daemonStub(daemonRecord())
-    const { docs, syncedFrontier } = await pulledReplica(daemon)
+    const { syncedFrontier } = await pulledReplica(daemon)
     // The session lapses between the pull and the push: the previously-held
     // key is forgotten and the next key fetch refuses.
     forgetDaemonKeys(BASE)
@@ -223,7 +224,7 @@ describe('pushReplicaEdits', () => {
       fetch: daemon.fetch,
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: docs,
+      workspaceDocs: new BrowserWorkspaceRecords(),
       syncedFrontier,
     })
     expect(result.kind).toBe('withheld')
@@ -262,7 +263,7 @@ describe('pushReplicaEdits', () => {
         fetch: daemon.fetch,
         daemonBaseUrl: BASE,
         workspaceId: DAEMON_WS,
-        workspaceDocs: docs,
+        workspaceDocs: new BrowserWorkspaceRecords(),
         ...(withFrontier ? { syncedFrontier } : {}),
       })
       expect(result).toEqual({ kind: 'withheld' })
@@ -275,7 +276,7 @@ describe('pushReplicaEdits', () => {
       fetch: vi.fn() as unknown as typeof globalThis.fetch,
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result).toEqual({ kind: 'clean' })
   })

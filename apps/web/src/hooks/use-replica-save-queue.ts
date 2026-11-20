@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
+import { BrowserWorkspaceRecords } from '../lib/browser-workspace-records.js'
 import type { ReplicaRecord } from '../lib/replica-record.js'
 import {
   createReplicaSaveQueue,
@@ -30,7 +30,7 @@ export function useReplicaSaveQueue(workspaceId: string) {
         // A refusal because the copy is gone is not a failed save to retry:
         // nothing written here could be kept, so the page locks instead.
         save: (record) =>
-          new BrowserWorkspaceDocs().save(workspaceId, record).then(
+          new BrowserWorkspaceRecords().save(workspaceId, record).then(
             () => undefined,
             (error: unknown) => {
               if (!isWorkspaceRemovedError(error)) throw error
@@ -46,6 +46,7 @@ export function useReplicaSaveQueue(workspaceId: string) {
   useCopyRemovedLock(workspaceId, queue, copyRemoved, markCopyRemoved)
   return {
     scheduleSave: queue.schedule,
+    saved: queue.saved,
     retrySave: queue.retry,
     saveFailed: health === 'failed',
     copyRemoved,

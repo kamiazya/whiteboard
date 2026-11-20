@@ -138,13 +138,13 @@ async function cacheAndMaybeDemote({
   outcome: Extract<PromoteWorkspaceResult, { kind: 'ok' }>
   settingsStore: PromoteWorkspaceSectionProps['settingsStore']
 }): Promise<{ replicaSyncedAt: string | undefined; localCopyRemoved: boolean }> {
-  const { BrowserWorkspaceDocs } = await import('../../lib/browser-workspace-docs.js')
+  const { BrowserWorkspaceRecords } = await import('../../lib/browser-workspace-records.js')
   const { cacheDaemonWorkspace } = await import('../../lib/replica-cache.js')
   const cache = await cacheDaemonWorkspace({
     fetch: fetchImpl,
     daemonBaseUrl,
     workspaceId,
-    workspaceDocs: new BrowserWorkspaceDocs(),
+    workspaceDocs: new BrowserWorkspaceRecords(),
   })
   if (cache.kind === 'withheld') {
     log.warn('replica cache after promote withheld: reconnect and try again')
@@ -170,6 +170,7 @@ async function cacheAndMaybeDemote({
 
   try {
     const { demoteWhenSafe } = await import('../../lib/browser-workspace-removal.js')
+    const { BrowserWorkspaceDocs } = await import('../../lib/browser-workspace-docs.js')
     const removed = await demoteWhenSafe(new BrowserWorkspaceDocs(), workspaceId, outcome)
     return { replicaSyncedAt: cache.syncedAt, localCopyRemoved: removed }
   } catch (err) {

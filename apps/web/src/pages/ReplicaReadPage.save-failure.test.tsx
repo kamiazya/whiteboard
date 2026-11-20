@@ -9,6 +9,7 @@
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
+  type RecordLease,
   readMarkdownBody,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -21,6 +22,7 @@ import { REPLICA_SAVE_FAILED_COPY } from '../lib/replica-state-copy.js'
 import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
 import { stubAppBadge } from '../test-utils/app-badge.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { docOf, leaseOf } from '../test-utils/replica-lease.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
 const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FB0'
@@ -29,12 +31,17 @@ const DAEMON = 'http://127.0.0.1:3099'
 
 const store = vi.hoisted(() => ({
   record: null as import('loro-crdt').LoroDoc | null,
-  save: vi.fn<(workspaceId: string, record: import('loro-crdt').LoroDoc) => Promise<void>>(),
+  opened: null as import('@kamiazya/whiteboard-loro-adapter').RecordLease | null,
+  save: vi.fn<(workspaceId: string, record: unknown) => Promise<void>>(),
 }))
 
-vi.mock('../lib/browser-workspace-docs.js', () => ({
-  BrowserWorkspaceDocs: class {
-    open = async () => store.record
+vi.mock('../lib/browser-workspace-records.js', () => ({
+  BrowserWorkspaceRecords: class {
+    open = async () => {
+      if (store.record === null) return null
+      store.opened = await leaseOf(store.record)
+      return store.opened
+    }
     save = store.save
   },
 }))
@@ -119,7 +126,7 @@ describe('ReplicaReadPage save failure', () => {
     expect(alert.textContent).toContain(REPLICA_SAVE_FAILED_COPY.title)
     await expectLoggedFailure('replica save failed')
     // The edit itself is untouched: the in-memory record still holds it.
-    expect(readMarkdownBody(documentContainers(store.record as LoroDoc, DOC_MD))).toBe(
+    expect(readMarkdownBody(documentContainers(docOf(store.opened as RecordLease), DOC_MD))).toBe(
       'cached body, edited offline',
     )
   })

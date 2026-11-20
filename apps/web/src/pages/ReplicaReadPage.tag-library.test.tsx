@@ -20,6 +20,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { THEME_STORAGE_KEY } from '../hooks/useThemeMode.js'
+import { leaseOf } from '../test-utils/replica-lease.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
 const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FB0'
@@ -30,14 +31,19 @@ const DAEMON = 'http://127.0.0.1:3099'
 
 const store = vi.hoisted(() => ({
   record: null as import('loro-crdt').LoroDoc | null,
+  opened: null as import('@kamiazya/whiteboard-loro-adapter').RecordLease | null,
   handed: { markdown: undefined as unknown, spatial: undefined as unknown },
   suggestions: undefined as unknown,
   theme: { markdown: undefined as unknown, spatial: undefined as unknown },
 }))
 
-vi.mock('../lib/browser-workspace-docs.js', () => ({
-  BrowserWorkspaceDocs: class {
-    open = async () => store.record
+vi.mock('../lib/browser-workspace-records.js', () => ({
+  BrowserWorkspaceRecords: class {
+    open = async () => {
+      if (store.record === null) return null
+      store.opened = await leaseOf(store.record)
+      return store.opened
+    }
     save = async () => {}
   },
 }))

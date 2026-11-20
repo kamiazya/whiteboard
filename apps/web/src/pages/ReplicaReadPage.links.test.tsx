@@ -14,6 +14,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { LinkTarget } from '../lib/link-target.js'
+import { leaseOf } from '../test-utils/replica-lease.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
 const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FB0'
@@ -24,14 +25,19 @@ const UNKNOWN = '01ARZ3NDEKTSV4RRFFQ69G5FB9'
 
 const store = vi.hoisted(() => ({
   record: null as import('loro-crdt').LoroDoc | null,
+  opened: null as import('@kamiazya/whiteboard-loro-adapter').RecordLease | null,
   onOpenDocument: undefined as ((documentId: string) => void) | undefined,
   linkTargets: undefined as readonly LinkTarget[] | undefined,
   canvasOpener: undefined as ((file: string) => void) | undefined,
 }))
 
-vi.mock('../lib/browser-workspace-docs.js', () => ({
-  BrowserWorkspaceDocs: class {
-    open = async () => store.record
+vi.mock('../lib/browser-workspace-records.js', () => ({
+  BrowserWorkspaceRecords: class {
+    open = async () => {
+      if (store.record === null) return null
+      store.opened = await leaseOf(store.record)
+      return store.opened
+    }
     save = async () => {}
   },
 }))

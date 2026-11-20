@@ -10,6 +10,13 @@ export interface ReplicaSaveQueue<Doc> {
   flush(): void
   /** Saves the latest scheduled record again, now; the answer to a `failed` health. */
   retry(): void
+  /**
+   * Takes the pending save now and answers once nothing the record holds is
+   * unsaved: the moment a holder of the record may give it back. After a
+   * refused save that is when a later save lands, since until then a retry
+   * still needs the record. A stopped queue answers at once: it saves no more.
+   */
+  saved(): Promise<void>
   /** Drops what is pending and takes nothing more: the record has nowhere left to go. */
   stop(): void
 }
@@ -22,23 +29,50 @@ export interface ReplicaSaveQueueOptions<Doc> {
 
 const DEFAULT_DEBOUNCE_MS = 500
 
-/** Each save after the one before it, reporting whether it landed. */
+/**
+ * Each save after the one before it, reporting whether everything landed.
+ *
+ * A record whose save was refused is OWED: it is saved again ahead of whatever
+ * is saved next, so its edits reach storage even when the page has since moved
+ * on to another record. Health is `ok` only while nothing is owed.
+ */
 function sequentialSaves<Doc>(
   save: ReplicaSaveQueueOptions<Doc>['save'],
   onHealth: ReplicaSaveQueueOptions<Doc>['onHealth'],
-): (record: Doc) => void {
+) {
   let chain: Promise<void> = Promise.resolve()
-  return (record) => {
-    chain = chain
-      .then(() => save(record))
-      .then(
-        () => onHealth('ok'),
-        (error: unknown) => {
-          getAppLogger('replica-save-queue').error('replica save failed', error)
-          onHealth('failed')
-        },
-      )
+  let owed: Doc[] = []
+  let waiting: Array<() => void> = []
+  const answerWaiting = () => {
+    for (const answer of waiting) answer()
+    waiting = []
   }
+  const saveOne = async (record: Doc) => {
+    try {
+      await save(record)
+      owed = owed.filter((other) => other !== record)
+    } catch (error) {
+      getAppLogger('replica-save-queue').error('replica save failed', error)
+      if (!owed.includes(record)) owed.push(record)
+    }
+  }
+  const saveNow = (record: Doc) => {
+    chain = chain.then(async () => {
+      for (const due of [...owed.filter((other) => other !== record), record]) await saveOne(due)
+      onHealth(owed.length === 0 ? 'ok' : 'failed')
+      if (owed.length === 0) answerWaiting()
+    })
+  }
+  /** Once the chain is idle with nothing owed, or `giveUp` is called. */
+  const landed = (): Promise<void> =>
+    chain.then(() =>
+      owed.length === 0 ? undefined : new Promise<void>((answer) => waiting.push(answer)),
+    )
+  const giveUp = () => {
+    owed = []
+    answerWaiting()
+  }
+  return { saveNow, landed, giveUp }
 }
 
 /**
@@ -63,7 +97,7 @@ export function createReplicaSaveQueue<Doc>({
   let timer: ReturnType<typeof setTimeout> | null = null
   let latest: Doc | null = null
   let stopped = false
-  const saveNow = sequentialSaves(save, onHealth)
+  const { saveNow, landed, giveUp } = sequentialSaves(save, onHealth)
 
   /** Cancels the debounced save, answering whether one was waiting. */
   const cancelTimer = (): boolean => {
@@ -86,6 +120,10 @@ export function createReplicaSaveQueue<Doc>({
     flush() {
       if (cancelTimer() && latest !== null) saveNow(latest)
     },
+    saved() {
+      if (cancelTimer() && latest !== null) saveNow(latest)
+      return stopped ? Promise.resolve() : landed()
+    },
     retry() {
       cancelTimer()
       if (latest !== null) saveNow(latest)
@@ -94,6 +132,7 @@ export function createReplicaSaveQueue<Doc>({
       stopped = true
       latest = null
       cancelTimer()
+      giveUp()
     },
   }
 }
