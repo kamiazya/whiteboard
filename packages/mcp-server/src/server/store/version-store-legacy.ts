@@ -7,16 +7,14 @@ import { corruptStoredData } from './corrupt-stored-data.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { openWorkspaceDocIfStored } from './workspace-doc-cache.js'
 
-/**
- * What the version store still answers as a `LoroDoc`: the past state of a
- * document or of the whole workspace, which `VersionHistory.load` and
- * `loadWorkspaceAt` hand to operations that read the past through one, and the
- * frontiers an adopted row carries as a `Frontiers`.
- *
- * ponytail: in one file so the version store itself holds its record only
- * through a session. The seam changes to bytes and a view the caller releases
- * when restore-version and promote-carried move, and this file goes then.
- */
+// What the version store still answers as a `LoroDoc`: the past state of a
+// document or of the whole workspace, which `VersionHistory.load` and
+// `loadWorkspaceAt` hand to operations that read the past through one, and the
+// frontiers an adopted row carries as a `Frontiers`.
+//
+// ponytail: in one file so the version store itself holds its record only
+// through a session. The seam changes to bytes and a view the caller releases
+// when restore-version and promote-carried move, and this file goes then.
 
 /** A frontier as the text a version row stores: the engine's bytes, base64. */
 export function frontiersToText(frontiers: Frontiers): string {
