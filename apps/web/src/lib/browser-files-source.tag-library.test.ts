@@ -4,11 +4,13 @@
  * edited in place, read back by the same source's `readTagLibrary`.
  */
 import 'fake-indexeddb/auto'
+import { readFacets, readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import { TAG_LIBRARY_PATH } from '@kamiazya/whiteboard-plugin-visual'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
+import { loadDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('browser-files-source-tag-library')
 
@@ -34,5 +36,23 @@ describe('createBrowserFilesSource writeTagLibrary', () => {
     })
     const listed = await source.listDocuments()
     expect(listed.filter((entry) => entry.path === TAG_LIBRARY_PATH)).toHaveLength(1)
+  })
+
+  it("leaves the document's body and other facets as they were", async () => {
+    const source = createBrowserFilesSource()
+    await source.importDocument?.(TAG_LIBRARY_PATH, {
+      kind: 'markdown',
+      body: 'Tag notes.',
+      coreFacets: {},
+      facets: { 'demo.note/v1': { colour: 'teal' } },
+      pathBase: 'tags',
+    })
+    await source.writeTagLibrary?.({ kind: { values: { service: { color: '5' } } } })
+    const entry = (await source.listDocuments()).find((row) => row.path === TAG_LIBRARY_PATH)
+    const doc = await loadDocumentContent(entry?.documentId ?? '')
+    expect(doc === null ? null : readMarkdownBody(doc)).toBe('Tag notes.')
+    expect(doc === null ? null : readFacets(doc)).toMatchObject({
+      'demo.note/v1': { colour: 'teal' },
+    })
   })
 })

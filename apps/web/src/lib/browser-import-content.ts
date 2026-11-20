@@ -1,17 +1,39 @@
-import {
-  documentContainers,
-  reconcileCoreFacets,
-  reconcileFacets,
-  withDocumentBatch,
-} from '@kamiazya/whiteboard-loro-adapter'
-import {
-  BrowserWorkspaceDocs,
-  openWorkspaceOrNull,
-  saveAndAnnounce,
-} from './browser-workspace-docs.js'
-import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import type { documentEngine as wire } from '@kamiazya/whiteboard-model'
+import { editWorkspaceRecord } from './browser-record-edit.js'
 import { touchContentTimestamp } from './content-timestamp.js'
 import type { ImportedDocument } from './document-import.js'
+
+/** The writes that put an imported file's content into the node a create just made. */
+function importWrites(documentId: string, imported: ImportedDocument): wire.Write[] {
+  if (imported.kind === 'markdown') {
+    return [
+      {
+        op: 'reconcileCoreFacets',
+        args: { documentId, next: imported.coreFacets },
+      },
+      { op: 'reconcileFacets', args: { documentId, prev: {}, next: imported.facets } },
+      {
+        op: 'withDocumentBatch',
+        args: { documentId, steps: [{ op: 'writeMarkdownBody', body: imported.body }] },
+      },
+    ]
+  }
+  return [
+    {
+      op: 'withDocumentBatch',
+      args: {
+        documentId,
+        steps: [
+          {
+            op: 'reconcileSpatialCanvas',
+            prev: { nodes: [], edges: [] },
+            next: imported.canvas,
+          },
+        ],
+      },
+    },
+  ]
+}
 
 /**
  * Writes an imported file's content into the node a create just made, as one
@@ -23,19 +45,10 @@ export async function writeImportedContent(
   imported: ImportedDocument,
   dbName?: string,
 ): Promise<void> {
-  const docs = new BrowserWorkspaceDocs(dbName)
-  const workspace = await openWorkspaceOrNull(docs)
-  if (workspace === null) throw new Error('The workspace could not be opened to write the file.')
-  const containers = documentContainers(workspace, documentId)
-  if (imported.kind === 'markdown') {
-    reconcileCoreFacets(containers, undefined, imported.coreFacets)
-    reconcileFacets(containers, {}, imported.facets)
-    withDocumentBatch(containers, (writer) => writer.writeMarkdownBody(imported.body))
-  } else {
-    withDocumentBatch(containers, (writer) =>
-      writer.reconcileSpatialCanvas({ nodes: [], edges: [] }, imported.canvas),
-    )
-  }
-  await saveAndAnnounce(docs, getBrowserWorkspaceId(), workspace)
+  await editWorkspaceRecord(
+    'The workspace could not be opened to write the file.',
+    dbName,
+    async () => ({ value: undefined, writes: importWrites(documentId, imported) }),
+  )
   await touchContentTimestamp(documentId, dbName)
 }

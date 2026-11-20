@@ -66,10 +66,10 @@ export async function openWorkspaceOrNull(docs: BrowserWorkspaceDocs): Promise<L
  * once it has closed). Absent, a fresh end posts, which reaches this tab's
  * open pages as well as the other tabs'.
  */
-export async function saveAndAnnounce(
-  docs: WorkspaceDocs,
+export async function saveAndAnnounce<R>(
+  docs: WorkspaceDocs<R>,
   workspaceId: string,
-  record: LoroDoc,
+  record: R,
   through?: WorkspaceBroadcastEnd | null,
 ): Promise<void> {
   const persisted = await docs.save(workspaceId, record)

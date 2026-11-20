@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto'
 import {
   readCoreFacets,
+  readFacets,
   readMarkdownBody,
   readSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -36,7 +37,7 @@ describe('createBrowserFilesSource — importDocument', () => {
       kind: 'markdown',
       body: '# Trip\n',
       coreFacets: { type: 'plan', tags: ['travel'] },
-      facets: {},
+      facets: { 'demo.note/v1': { colour: 'teal' } },
       name: 'Trip plan',
       pathBase: 'trip',
     })
@@ -46,6 +47,7 @@ describe('createBrowserFilesSource — importDocument', () => {
     expect(entry?.kind).toBe('markdown')
     expect(readMarkdownBody(doc as never)).toBe('# Trip\n')
     expect(readCoreFacets(doc as never)).toMatchObject({ type: 'plan', tags: ['travel'] })
+    expect(readFacets(doc as never)).toEqual({ 'demo.note/v1': { colour: 'teal' } })
   })
 
   it('creates a canvas document holding the file nodes', async () => {
