@@ -10,9 +10,10 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, expect, it, vi } from 'vitest'
-import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
+import { BrowserWorkspaceRecords } from '../lib/browser-workspace-records.js'
 import { isReplicaCopy, markReplica, unmarkReplica } from '../lib/replica-store.js'
 import { announceWorkspaceRemoved } from '../lib/workspace-broadcast.js'
+import { leaseOf } from '../test-utils/replica-lease.js'
 import { useReplicaSaveQueue } from './use-replica-save-queue.js'
 
 const WORKSPACE_ID = '01JD0REPLICAQUEUEUNMARK001'
@@ -31,19 +32,20 @@ afterEach(async () => {
 })
 
 /** A save double, and a pending save that only a flush can take out inside the test. */
-function scheduledSave() {
-  const save = vi.spyOn(BrowserWorkspaceDocs.prototype, 'save').mockResolvedValue(null)
+async function scheduledSave() {
+  // Built before the clock is faked: opening a record loads the engine.
+  const record = await leaseOf(new LoroDoc())
+  const save = vi.spyOn(BrowserWorkspaceRecords.prototype, 'save').mockResolvedValue(null)
   // Fake timers hold the debounce shut, so a save seen here came from the
   // page-leaving signal and not from the quiet window running out.
   vi.useFakeTimers()
   const hook = renderHook(() => useReplicaSaveQueue(WORKSPACE_ID))
-  const record = new LoroDoc()
   act(() => hook.result.current.scheduleSave(record))
   return { save, record, unmount: hook.unmount }
 }
 
 it('saves a pending edit when the page unmounts', async () => {
-  const { save, record, unmount } = scheduledSave()
+  const { save, record, unmount } = await scheduledSave()
 
   unmount()
 
@@ -72,7 +74,7 @@ it('stops listening for page-leaving signals once unmounted', () => {
 })
 
 it('saves a pending edit when the page is hidden away', async () => {
-  const { save, record } = scheduledSave()
+  const { save, record } = await scheduledSave()
 
   window.dispatchEvent(new Event('pagehide'))
 
@@ -83,7 +85,7 @@ it('saves a pending edit when the page is hidden away', async () => {
 })
 
 it('saves a pending edit when the tab turns hidden, and not when it turns visible', async () => {
-  const { save, record } = scheduledSave()
+  const { save, record } = await scheduledSave()
   const visibility = vi.spyOn(document, 'visibilityState', 'get')
 
   visibility.mockReturnValue('visible')

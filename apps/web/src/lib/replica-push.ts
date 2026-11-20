@@ -13,14 +13,15 @@
  * that safe, and the result's frontier ends the snapshot era for good.
  *
  * A plain function behind the lazy chunks, like replica-cache.ts: it
- * imports loro-crdt, so nothing on the entry path may import this file
+ * reaches the CRDT engine, so nothing on the entry path may import this file
  * statically (entry-graph-loro-free.test.ts guards the closure).
  */
 import { workspaceDocumentApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { reach } from '@kamiazya/whiteboard-daemon-client/api-contracts/read-body'
+import { compareVersions } from '@kamiazya/whiteboard-history'
+import { lease, type RecordLease } from '@kamiazya/whiteboard-loro-adapter'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
-import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
-import { VersionVector } from 'loro-crdt'
+import type { WorkspaceRecords } from '@kamiazya/whiteboard-workspace-index'
 import { getAppLogger } from './app-logger.js'
 import {
   describeTransferFailure,
@@ -35,9 +36,9 @@ export interface PushReplicaEditsOptions {
   daemonBaseUrl: string
   /** The daemon workspace the replica mirrors — the KEEPER's id. */
   workspaceId: string
-  /** The browser's own planes (production: `new BrowserWorkspaceDocs()`). */
-  workspaceDocs: WorkspaceDocs
-  /** Base64 VersionVector of what the daemon is known to hold. */
+  /** The browser's own planes (production: `new BrowserWorkspaceRecords()`). */
+  workspaceDocs: WorkspaceRecords
+  /** Base64 version vector of what the daemon is known to hold. */
   syncedFrontier?: string
 }
 
@@ -46,41 +47,60 @@ export type PushReplicaEditsResult =
   | { kind: 'ok'; syncedAt: string; syncedFrontier: string }
   | TransferFailure
 
+/** A version as the per-peer counters `compareVersions` reads. */
+function countersOf(entries: readonly { peer: string; counter: number }[]) {
+  return new Map(entries.map(({ peer, counter }) => [peer, counter]))
+}
+
+/** What the daemon lacks of the record, or `null` when it lacks nothing. */
+function payloadFor(record: RecordLease, syncedFrontier: string | undefined): Uint8Array | null {
+  // A marker that does not decode is as good as none: the whole record is
+  // sent, which the daemon's CRDT import absorbs idempotently.
+  const syncedBytes = syncedFrontier === undefined ? null : base64ToBytes(syncedFrontier)
+  if (syncedBytes === null) return lease.exportSnapshot(record)
+  const synced = record.engine.decode({ kind: 'version', bytes: bytesToBase64(syncedBytes) })
+  const order = compareVersions(
+    countersOf(lease.versionOf(record).entries),
+    countersOf(synced.entries),
+  )
+  // The record within the synced point: the daemon already holds everything local.
+  if (order === 'equal' || order === 'before') return null
+  return lease.exportUpdateSince(record, syncedBytes)
+}
+
+async function pushRecord(
+  { fetch, daemonBaseUrl, workspaceId, syncedFrontier }: PushReplicaEditsOptions,
+  record: RecordLease,
+): Promise<PushReplicaEditsResult> {
+  const current = lease.versionOf(record).encoded
+  const payload = payloadFor(record, syncedFrontier)
+  if (payload === null) return { kind: 'clean' }
+  const res = await reach(
+    fetch(`${daemonBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'update')}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: payload as BodyInit,
+    }),
+  )
+  if (!res.ok) return { kind: 'failed', reason: `Update request failed (${res.status}).` }
+  return {
+    kind: 'ok',
+    syncedAt: new Date().toISOString(),
+    syncedFrontier: bytesToBase64(current),
+  }
+}
+
 export async function pushReplicaEdits(
   options: PushReplicaEditsOptions,
 ): Promise<PushReplicaEditsResult> {
-  const { fetch, daemonBaseUrl, workspaceId, workspaceDocs, syncedFrontier } = options
+  const { daemonBaseUrl, workspaceId, workspaceDocs } = options
   try {
-    const doc = await workspaceDocs.open(workspaceId)
-    if (doc === null) return { kind: 'clean' }
-    const current = doc.oplogVersion()
-
-    // A marker that does not decode is as good as none: the whole record is
-    // sent, which the daemon's CRDT import absorbs idempotently.
-    const syncedBytes = syncedFrontier === undefined ? null : base64ToBytes(syncedFrontier)
-    let payload: Uint8Array
-    if (syncedBytes === null) {
-      payload = doc.export({ mode: 'snapshot' })
-    } else {
-      const synced = VersionVector.decode(syncedBytes)
-      const cmp = current.compare(synced)
-      // current ⊆ synced: the daemon already holds everything local.
-      if (cmp === 0 || cmp === -1) return { kind: 'clean' }
-      payload = doc.export({ mode: 'update', from: synced })
-    }
-
-    const res = await reach(
-      fetch(`${daemonBaseUrl}${workspaceDocumentApiUrl(workspaceId, 'update')}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: payload as BodyInit,
-      }),
-    )
-    if (!res.ok) return { kind: 'failed', reason: `Update request failed (${res.status}).` }
-    return {
-      kind: 'ok',
-      syncedAt: new Date().toISOString(),
-      syncedFrontier: bytesToBase64(current.encode()),
+    const record = await workspaceDocs.open(workspaceId)
+    if (record === null) return { kind: 'clean' }
+    try {
+      return await pushRecord(options, record)
+    } finally {
+      record.release()
     }
   } catch (err) {
     return describeTransferFailure(err, PUSH_FAILURE_COPY, {

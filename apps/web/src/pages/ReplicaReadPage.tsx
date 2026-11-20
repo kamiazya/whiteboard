@@ -42,10 +42,10 @@ import { Button } from '../components/ui/button.js'
 import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTree.js'
 import { TRANSIENT_LOAD_ATTEMPTS } from '../hooks/use-prefetched-cache.js'
 import { useReplicaEditing } from '../hooks/use-replica-editing.js'
+import { type LoadState, useReplicaRecord } from '../hooks/use-replica-record.js'
 import { useReplicaSaveQueue } from '../hooks/use-replica-save-queue.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
-import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
 import type { ConnectionState } from '../lib/connection-state.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
@@ -57,8 +57,6 @@ import type { ReplicaKeyInput } from '../lib/replica-page-state.js'
 import { type ReplicaPageState, replicaPageState } from '../lib/replica-page-state.js'
 import {
   type ReplicaContent,
-  type ReplicaRecord,
-  replicaEntries,
   replicaReferenceGraph,
   replicaReferenceWire,
   replicaStencilLibrary,
@@ -71,9 +69,8 @@ import {
   REPLICA_SAVE_FAILED_COPY,
   REPLICA_STATE_COPY,
 } from '../lib/replica-state-copy.js'
-import { forgetDaemonKeys, forgetWithdrawnReplica, replicaKeyStatus } from '../lib/replica-store.js'
+import { forgetDaemonKeys } from '../lib/replica-store.js'
 import { isReplicaReadableOffline, unlockReplicaKey } from '../lib/replica-unlock.js'
-import { ReplicaKeyRotatedError, ReplicaKeyWithheldError } from '../lib/sealed-document-store.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { workspaceLabel } from '../lib/workspace-handle.js'
 import {
@@ -108,13 +105,6 @@ export interface ReplicaReadPageProps {
   /** Re-runs App's renewal (and, through it, the key ask) — the Reconnect action. */
   onReconnect: () => void | Promise<void>
 }
-
-type LoadState =
-  | { kind: 'loading' }
-  | { kind: 'missing' }
-  | { kind: 'rotated' }
-  | { kind: 'withheld'; reason: WithheldReason }
-  | { kind: 'ready'; record: ReplicaRecord; entries: WorkspaceDocumentEntry[] }
 
 function keyInputFor(state: LoadState): ReplicaKeyInput {
   if (state.kind === 'withheld') return { withheld: state.reason }
@@ -176,96 +166,6 @@ function ReplicaActionPanel({
       )}
     </div>
   )
-}
-
-/**
- * What a failed open means. A rotated key comes first, ahead of the generic
- * arm that would call the copy missing: the bytes are there and intact, sealed
- * under a key that is gone. A withheld key reads the holder's cached reason
- * rather than believing 'unreachable' by default — the whole point of the
- * removed state is that a daemon-refused key reads as removed, not as an
- * ordinary disconnection.
- */
-function loadFailureState(
-  error: unknown,
-  daemonBaseUrl: string,
-  workspaceId: string,
-  precheck: ReturnType<typeof replicaKeyStatus>,
-): LoadState {
-  if (error instanceof ReplicaKeyRotatedError) return { kind: 'rotated' }
-  if (!(error instanceof ReplicaKeyWithheldError)) return { kind: 'missing' }
-  const status = replicaKeyStatus(daemonBaseUrl, workspaceId)
-  const reason =
-    status?.kind === 'withheld'
-      ? status.reason
-      : precheck?.kind === 'withheld'
-        ? precheck.reason
-        : 'unreachable'
-  return { kind: 'withheld', reason }
-}
-
-/**
- * Opens this workspace's stored replica and says what came back: the record
- * and its entries, a withheld reason, or nothing at all. Re-runs on an
- * `attempt` bump, which is how Reconnect and Unlock re-enter the SAME open
- * path a cold load takes rather than a bespoke retry.
- */
-function useReplicaRecord({
-  workspaceId,
-  daemonBaseUrl,
-  attempt,
-  withheld,
-  setState,
-}: {
-  workspaceId: string
-  daemonBaseUrl: string
-  attempt: number
-  withheld: ReplicaReadPageProps['withheld']
-  setState: (state: LoadState) => void
-}): void {
-  useEffect(() => {
-    let cancelled = false
-    setState({ kind: 'loading' })
-    // The daemon already answered directly (a live-daemon membership
-    // refusal, not a replica-key holder verdict) — never open the record at
-    // all. Without this branch a removed member with no replica record on
-    // this device would read as 'needs-connection' rather than 'removed'.
-    if (withheld !== undefined) {
-      forgetWithdrawnReplica(daemonBaseUrl, workspaceId, withheld)
-      setState({ kind: 'withheld', reason: withheld })
-      return
-    }
-    // Read BEFORE the open, not only after: a lapsed entry is what
-    // `open()` itself will discover (`sessionKey`'s own lapse check runs
-    // inside the store's `keyFor`), and that check CLEARS the cache entry
-    // the moment it fires — so a status read taken only in the catch below
-    // would already find nothing and report 'unreachable', losing the one
-    // reason the lapsed state exists to show. The two never disagree when
-    // both are defined; this one is only load-bearing for a reason that
-    // vanishes between the two reads.
-    const precheck = replicaKeyStatus(daemonBaseUrl, workspaceId)
-    // `open`, never `create`: a replica the registry promises but the store
-    // lost must render as missing, not be minted empty — an empty record
-    // under the daemon's id would read as the daemon's data being gone.
-    void new BrowserWorkspaceDocs()
-      .open(workspaceId)
-      .then((record) => {
-        if (cancelled) return
-        if (record === null) {
-          setState({ kind: 'missing' })
-          return
-        }
-        const entries = replicaEntries(record)
-        setState({ kind: 'ready', record, entries })
-      })
-      .catch((error: unknown) => {
-        if (cancelled) return
-        setState(loadFailureState(error, daemonBaseUrl, workspaceId, precheck))
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [workspaceId, daemonBaseUrl, attempt, withheld])
 }
 
 /**
@@ -675,9 +575,10 @@ export function ReplicaReadPage({
   const [reconnecting, setReconnecting] = useState(false)
   const [unlocking, setUnlocking] = useState(false)
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
-  const { scheduleSave, retrySave, saveFailed, copyRemoved } = useReplicaSaveQueue(workspaceId)
+  const { scheduleSave, settled, retrySave, saveFailed, copyRemoved } =
+    useReplicaSaveQueue(workspaceId)
 
-  useReplicaRecord({ workspaceId, daemonBaseUrl, attempt, withheld, setState })
+  useReplicaRecord({ workspaceId, daemonBaseUrl, attempt, withheld, setState, settled })
 
   // Read on every render rather than held in state: `unlockReplicaKey` can
   // DROP the blob (a spent lease, ciphertext nothing here opens), and a

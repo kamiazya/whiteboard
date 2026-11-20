@@ -203,8 +203,6 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
-  'packages/workspace-index/src/document-store-workspace-docs.ts#RecordStoreWorkspaceDocs':
-    'the record store written once over a record kind, which only its tests construct until the consumers move from the LoroDoc-typed subclass onto engine leases and name it with `leaseKind`',
   'packages/workspace-index/src/index-record-kind.ts#leaseIndexKind':
     'the index over engine leases, which only its tests build until the consumers move from the LoroDoc default onto leases and pass it as the index kind',
   'packages/canvas-render/src/edge-arrows.ts#edgeArrowEnds':

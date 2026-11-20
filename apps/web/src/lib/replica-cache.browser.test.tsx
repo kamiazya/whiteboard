@@ -23,6 +23,7 @@ import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.
 import { jsonResponse } from '../test-utils/json-response.js'
 import { replicaKeyFetch } from '../test-utils/replica-key-fetch.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { cacheDaemonWorkspace } from './replica-cache.js'
 import { connectReplicaKeeper, markReplica, openDocumentStore } from './replica-store.js'
 import { withReplicaEntry } from './replicas.js'
@@ -124,7 +125,7 @@ describe('cacheDaemonWorkspace', () => {
       fetch: snapshotStub(record),
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: docs,
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     if (result.kind !== 'ok') {
       throw new Error(`pull failed: ${result.kind === 'failed' ? result.reason : result.kind}`)
@@ -158,7 +159,7 @@ describe('cacheDaemonWorkspace', () => {
       fetch: snapshotStub(record),
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
@@ -172,7 +173,7 @@ describe('cacheDaemonWorkspace', () => {
   it('a re-pull merges into the stored replica instead of forking it', async () => {
     const record = daemonRecord({ path: 'notes/plan', documentId: DOC_A })
     connectReplicaKeeper({ baseUrl: BASE, fetch: snapshotStub(record) })
-    const docs = new BrowserWorkspaceDocs()
+    const docs = new BrowserWorkspaceRecords()
     await cacheDaemonWorkspace({
       fetch: snapshotStub(record),
       daemonBaseUrl: BASE,
@@ -209,7 +210,7 @@ describe('cacheDaemonWorkspace', () => {
       fetch,
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('failed')
     expect(await new BrowserWorkspaceDocs().open(DAEMON_WS)).toBeNull()
@@ -235,7 +236,7 @@ describe('cacheDaemonWorkspace', () => {
       fetch: snapshotStub(record),
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('withheld')
     expect(await new BrowserWorkspaceDocs().open(DAEMON_WS)).toBeNull()
@@ -248,7 +249,7 @@ describe('cacheDaemonWorkspace', () => {
       }) as typeof globalThis.fetch,
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('failed')
     expect(await new BrowserWorkspaceDocs().open(DAEMON_WS)).toBeNull()
@@ -258,7 +259,7 @@ describe('cacheDaemonWorkspace', () => {
     const logged = expectLoggedFailures()
     const fetch = snapshotStub(daemonRecord({ path: 'notes/plan', documentId: DOC_A }))
     connectReplicaKeeper({ baseUrl: BASE, fetch })
-    const docs = new BrowserWorkspaceDocs()
+    const docs = new BrowserWorkspaceRecords()
     docs.open = async () => {
       throw new StoredDocumentUnreadableError('malformed', 'a delta does not decode')
     }
@@ -287,7 +288,7 @@ describe('cacheDaemonWorkspace', () => {
       fetch: snapshotStub(record),
       daemonBaseUrl: BASE,
       workspaceId: DAEMON_WS,
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('ok')
 

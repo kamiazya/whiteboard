@@ -10,6 +10,11 @@ export interface ReplicaSaveQueue<Doc> {
   flush(): void
   /** Saves the latest scheduled record again, now; the answer to a `failed` health. */
   retry(): void
+  /**
+   * Takes the pending save now and answers once every save taken so far has
+   * ended, however it ended: the moment a holder of the record may give it back.
+   */
+  settled(): Promise<void>
   /** Drops what is pending and takes nothing more: the record has nowhere left to go. */
   stop(): void
 }
@@ -26,9 +31,9 @@ const DEFAULT_DEBOUNCE_MS = 500
 function sequentialSaves<Doc>(
   save: ReplicaSaveQueueOptions<Doc>['save'],
   onHealth: ReplicaSaveQueueOptions<Doc>['onHealth'],
-): (record: Doc) => void {
+): { saveNow: (record: Doc) => void; idle: () => Promise<void> } {
   let chain: Promise<void> = Promise.resolve()
-  return (record) => {
+  const saveNow = (record: Doc) => {
     chain = chain
       .then(() => save(record))
       .then(
@@ -39,6 +44,7 @@ function sequentialSaves<Doc>(
         },
       )
   }
+  return { saveNow, idle: () => chain }
 }
 
 /**
@@ -63,7 +69,7 @@ export function createReplicaSaveQueue<Doc>({
   let timer: ReturnType<typeof setTimeout> | null = null
   let latest: Doc | null = null
   let stopped = false
-  const saveNow = sequentialSaves(save, onHealth)
+  const { saveNow, idle } = sequentialSaves(save, onHealth)
 
   /** Cancels the debounced save, answering whether one was waiting. */
   const cancelTimer = (): boolean => {
@@ -85,6 +91,10 @@ export function createReplicaSaveQueue<Doc>({
     },
     flush() {
       if (cancelTimer() && latest !== null) saveNow(latest)
+    },
+    settled() {
+      if (cancelTimer() && latest !== null) saveNow(latest)
+      return idle()
     },
     retry() {
       cancelTimer()

@@ -17,7 +17,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { base64UrlToBytes, newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
-import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import { RecordStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -756,9 +756,9 @@ describe('PromoteWorkspaceSection', () => {
     // After the demote-cache write for the promoted workspace lands, drop
     // the held key and start refusing — the next ask (replicaCarriesAll's
     // read-back) must re-mint and finds the session gone.
-    const originalSave = DocumentStoreWorkspaceDocs.prototype.save
-    vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'save').mockImplementation(async function (
-      this: DocumentStoreWorkspaceDocs,
+    const originalSave = RecordStoreWorkspaceDocs.prototype.save
+    vi.spyOn(RecordStoreWorkspaceDocs.prototype, 'save').mockImplementation(async function (
+      this: RecordStoreWorkspaceDocs<unknown>,
       workspaceId: string,
       doc,
     ) {

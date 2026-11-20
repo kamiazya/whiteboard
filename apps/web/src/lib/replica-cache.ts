@@ -7,7 +7,7 @@
  * do, keyed by the daemon workspace's own id.
  *
  * A plain function behind the lazy chunks, like promote-workspace.ts: it
- * imports loro-crdt, so nothing on the entry path may import this file
+ * reaches the CRDT engine, so nothing on the entry path may import this file
  * statically (entry-graph-loro-free.test.ts guards the closure).
  *
  * A re-pull is a MERGE, not a replacement: the pulled snapshot is imported
@@ -19,10 +19,15 @@
 
 import { workspaceDocumentApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { reach } from '@kamiazya/whiteboard-daemon-client/api-contracts/read-body'
-import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  lease,
+  leaseKind,
+  loadCrdtEngine,
+  type RecordLease,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64 } from '@kamiazya/whiteboard-model'
-import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
-import { LoroDoc } from 'loro-crdt'
+import type { WorkspaceRecords } from '@kamiazya/whiteboard-workspace-index'
+import { z } from 'zod'
 import { getAppLogger } from './app-logger.js'
 import { discardRotatedReplicaCopy } from './browser-workspace-removal.js'
 import {
@@ -38,13 +43,16 @@ import { createUserSettingsStore } from './user-settings-store.js'
 
 const log = getAppLogger('replica-cache')
 
+/** Opens the records this pull builds; the engine is shared, each record owns its handle. */
+const records = leaseKind(loadCrdtEngine)
+
 export interface CacheDaemonWorkspaceOptions {
   fetch: typeof globalThis.fetch
   daemonBaseUrl: string
   /** The daemon workspace to cache — the KEEPER's id, not a browser one. */
   workspaceId: string
-  /** The browser's own planes (production: `new BrowserWorkspaceDocs()`). */
-  workspaceDocs: WorkspaceDocs
+  /** The browser's own planes (production: `new BrowserWorkspaceRecords()`). */
+  workspaceDocs: WorkspaceRecords
 }
 
 export type CacheDaemonWorkspaceResult =
@@ -81,12 +89,12 @@ export type CacheDaemonWorkspaceResult =
  * anything on this device.
  */
 async function openForMerge(
-  workspaceDocs: WorkspaceDocs,
+  workspaceDocs: WorkspaceRecords,
   workspaceId: string,
   daemonBaseUrl: string,
-): Promise<LoroDoc> {
+): Promise<RecordLease> {
   try {
-    return (await workspaceDocs.open(workspaceId)) ?? new LoroDoc()
+    return (await workspaceDocs.open(workspaceId)) ?? (await records.empty())
   } catch (err) {
     if (!(err instanceof ReplicaKeyRotatedError)) throw err
     log.warn('replica sealed under a replaced key was dropped to pull it again', {
@@ -94,7 +102,7 @@ async function openForMerge(
       workspaceId,
     })
     await discardRotatedReplicaCopy(createUserSettingsStore(), workspaceId, daemonBaseUrl)
-    return new LoroDoc()
+    return records.empty()
   }
 }
 
@@ -105,7 +113,7 @@ async function openForMerge(
  */
 async function cacheImagesBesideRecord(
   options: CacheDaemonWorkspaceOptions,
-  record: LoroDoc,
+  record: RecordLease,
 ): Promise<void> {
   const { fetch, daemonBaseUrl, workspaceId } = options
   try {
@@ -122,7 +130,7 @@ async function cacheImagesBesideRecord(
 export async function cacheDaemonWorkspace(
   options: CacheDaemonWorkspaceOptions,
 ): Promise<CacheDaemonWorkspaceResult> {
-  const { fetch, daemonBaseUrl, workspaceId, workspaceDocs } = options
+  const { fetch, daemonBaseUrl, workspaceId } = options
   // Marks the replica BEFORE the save below, not after: both callers (the
   // Settings move and the background refresh) register the settings-store
   // entry only once this function returns, so without this mark the FIRST
@@ -137,24 +145,43 @@ export async function cacheDaemonWorkspace(
       return { kind: 'failed', reason: `Snapshot request failed (${res.status}).` }
     }
     const bytes = new Uint8Array(await reach(res.arrayBuffer()))
-    const daemonOnly = new LoroDoc()
-    daemonOnly.import(bytes)
-    const doc = await openForMerge(workspaceDocs, workspaceId, daemonBaseUrl)
-    doc.import(bytes)
-    await workspaceDocs.save(workspaceId, doc)
-    await cacheImagesBesideRecord(options, doc)
-    const held = replicaKeyStatus(daemonBaseUrl, workspaceId)
-    return {
-      kind: 'ok',
-      ...(held?.kind === 'held' && held.keyId !== undefined ? { keyId: held.keyId } : {}),
-      syncedAt: new Date().toISOString(),
-      documentCount: readWorkspaceDocuments(doc).length,
-      syncedFrontier: bytesToBase64(daemonOnly.oplogVersion().encode()),
-    }
+    return await mergePull(options, bytes)
   } catch (err) {
     return describeTransferFailure(err, PULL_FAILURE_COPY, {
       log,
       fields: { daemonBaseUrl, workspaceId },
     })
+  }
+}
+
+/** Merges the pulled bytes into the stored replica, saves it and answers what the pull brought. */
+async function mergePull(
+  options: CacheDaemonWorkspaceOptions,
+  bytes: Uint8Array,
+): Promise<CacheDaemonWorkspaceResult> {
+  const { daemonBaseUrl, workspaceId, workspaceDocs } = options
+  const daemonOnly = await records.empty()
+  try {
+    records.importInto(daemonOnly, bytes)
+    const syncedFrontier = bytesToBase64(records.encodedVersion(daemonOnly))
+    const doc = await openForMerge(workspaceDocs, workspaceId, daemonBaseUrl)
+    try {
+      records.importInto(doc, bytes)
+      await workspaceDocs.save(workspaceId, doc)
+      await cacheImagesBesideRecord(options, doc)
+      const held = replicaKeyStatus(daemonBaseUrl, workspaceId)
+      const documents = await lease.read(doc, { query: 'documents' }, z.array(z.unknown()))
+      return {
+        kind: 'ok',
+        ...(held?.kind === 'held' && held.keyId !== undefined ? { keyId: held.keyId } : {}),
+        syncedAt: new Date().toISOString(),
+        documentCount: documents.length,
+        syncedFrontier,
+      }
+    } finally {
+      doc.release()
+    }
+  } finally {
+    daemonOnly.release()
   }
 }

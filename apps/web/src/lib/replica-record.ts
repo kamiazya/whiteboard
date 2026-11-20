@@ -19,21 +19,13 @@ import {
 import type { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import type { VersionDocumentResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import type { WorkspaceStencils } from '@kamiazya/whiteboard-facet-engine'
+import { lease, type RecordLease, workspaceNodeMetaSchema } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  documentContainers,
-  projectWorkspaceDocument,
-  readContentWithTags,
-  readDocumentContent,
-  readEdgeLocks,
-  readFacets,
-  readNodeLocks,
-  readWorkspaceDocuments,
-  reconcileSpatialCanvas,
-  setEdgeLock,
-  setNodeLock,
-  writeMarkdownBody,
-} from '@kamiazya/whiteboard-loro-adapter'
-import { type ExtensionFacets, type SpatialCanvas, tagsInUse } from '@kamiazya/whiteboard-model'
+  type DocumentKind,
+  type ExtensionFacets,
+  type SpatialCanvas,
+  tagsInUse,
+} from '@kamiazya/whiteboard-model'
 import {
   readStencilLibrary,
   readTagLibrary,
@@ -42,12 +34,47 @@ import {
   type TagLibrary,
 } from '@kamiazya/whiteboard-plugin-visual'
 import { tagBearersOf } from '@kamiazya/whiteboard-reference-graph'
-import type { LoroDoc } from 'loro-crdt'
+import { z } from 'zod'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 import type { linkTitles } from './link-entries.js'
 
-/** The workspace record a replica is: one CRDT holding every document. */
-export type ReplicaRecord = LoroDoc
+/**
+ * The workspace record a replica is: one CRDT holding every document, held as
+ * an engine lease. The reads here answer at once because the page draws from
+ * them while rendering; whoever opened the record releases it.
+ */
+export type ReplicaRecord = RecordLease
+
+// Deliberately a type assertion and not a parse: the reader is total over the
+// shape (`readDocumentContent`), and a parse would strip fields a newer
+// writer added to a canvas node, which an edit here would then ship back.
+const contentShape = z.custom<ReplicaContent>()
+const lockIds = z.array(z.string())
+const documentEntries = z.array(
+  workspaceNodeMetaSchema
+    .pick({ documentId: true, kind: true, name: true })
+    .extend({ path: z.string(), shadowed: z.literal(true).optional() }),
+)
+const documentFacets = z.custom<ExtensionFacets | undefined>()
+const documentTags = z
+  .object({ tags: z.array(z.string()).optional() })
+  .passthrough()
+  .nullish()
+
+/** A named read of one document's own containers, answered at once. */
+function readDocument<T>(
+  record: ReplicaRecord,
+  documentId: string,
+  query: 'documentContent' | 'nodeLocks' | 'edgeLocks' | 'facets' | 'coreFacets',
+  shape: z.ZodType<T>,
+  kind?: DocumentKind,
+): T {
+  return lease.readNow(
+    record,
+    { query, args: kind === undefined ? { documentId } : { documentId, kind } },
+    shape,
+  )
+}
 
 /**
  * What a selected document holds, read out of the record. The shape the
@@ -62,7 +89,7 @@ export type ReplicaContent = VersionDocumentResponse
  * timestamp its banner already states better.
  */
 export function replicaEntries(record: ReplicaRecord): WorkspaceDocumentEntry[] {
-  return readWorkspaceDocuments(record).map(
+  return lease.readNow(record, { query: 'documents' }, documentEntries).map(
     ({ documentId, path, kind, name, shadowed }): WorkspaceDocumentEntry => ({
       documentId,
       path,
@@ -78,7 +105,13 @@ export function readReplicaContent(
   record: ReplicaRecord,
   entry: Pick<WorkspaceDocumentEntry, 'documentId' | 'kind'>,
 ): ReplicaContent {
-  return readDocumentContent(documentContainers(record, entry.documentId), entry.kind)
+  return readDocument(record, entry.documentId, 'documentContent', contentShape, entry.kind)
+}
+
+function writeToDocument(record: ReplicaRecord, batch: Parameters<typeof lease.write>[1]): void {
+  // The keeper this replica came from judges what it is pushed, so the write
+  // makes no judging copy of a record that can be the whole workspace.
+  lease.write(record, batch, { judge: 'none' })
 }
 
 export function writeReplicaMarkdown(
@@ -86,7 +119,7 @@ export function writeReplicaMarkdown(
   documentId: string,
   body: string,
 ): void {
-  writeMarkdownBody(documentContainers(record, documentId), body)
+  writeToDocument(record, [{ op: 'writeMarkdownBody', args: { documentId, body } }])
 }
 
 /**
@@ -100,7 +133,7 @@ export function writeReplicaSpatial(
   prev: SpatialCanvas,
   next: SpatialCanvas,
 ): void {
-  reconcileSpatialCanvas(documentContainers(record, documentId), prev, next)
+  writeToDocument(record, [{ op: 'reconcileSpatialCanvas', args: { documentId, prev, next } }])
 }
 
 /**
@@ -113,8 +146,10 @@ export function readReplicaLocks(
   record: ReplicaRecord,
   documentId: string,
 ): { nodes: ReadonlySet<string>; edges: ReadonlySet<string> } {
-  const containers = documentContainers(record, documentId)
-  return { nodes: readNodeLocks(containers), edges: readEdgeLocks(containers) }
+  return {
+    nodes: new Set(readDocument(record, documentId, 'nodeLocks', lockIds)),
+    edges: new Set(readDocument(record, documentId, 'edgeLocks', lockIds)),
+  }
 }
 
 /** Locks or unlocks one node or edge; a data-plane write, like any canvas edit. */
@@ -124,9 +159,11 @@ export function writeReplicaLock(
   target: { node: string } | { edge: string },
   locked: boolean,
 ): void {
-  const containers = documentContainers(record, documentId)
-  if ('node' in target) setNodeLock(containers, target.node, locked)
-  else setEdgeLock(containers, target.edge, locked)
+  writeToDocument(record, [
+    'node' in target
+      ? { op: 'setNodeLock', args: { documentId, id: target.node, locked } }
+      : { op: 'setEdgeLock', args: { documentId, id: target.edge, locked } },
+  ])
 }
 
 /**
@@ -144,7 +181,7 @@ function replicaLibrary<T>(
   const library = entries.find((entry) => entry.path === path)
   if (library === undefined) return read(undefined)
   try {
-    return read(readFacets(documentContainers(record, library.documentId)))
+    return read(readDocument(record, library.documentId, 'facets', documentFacets))
   } catch {
     return read(undefined)
   }
@@ -170,10 +207,20 @@ export function replicaTagsInUse(
   entries: readonly WorkspaceDocumentEntry[],
 ): string[] {
   const bearers = entries.flatMap((entry) => {
-    const doc = projectWorkspaceDocument(record, entry.documentId)
-    return doc === null ? [] : tagBearersOf(readContentWithTags(doc, entry.kind))
+    const content = readReplicaContent(record, entry)
+    const tags =
+      content.kind === 'markdown' ? readDocumentTags(record, entry.documentId) : undefined
+    return tagBearersOf(tags === undefined ? { content } : { content, tags })
   })
   return tagsInUse(bearers).map((row) => row.tag)
+}
+
+/** A markdown document's frontmatter tags; a spatial document's own are on its canvas. */
+function readDocumentTags(
+  record: ReplicaRecord,
+  documentId: string,
+): readonly string[] | undefined {
+  return readDocument(record, documentId, 'coreFacets', documentTags)?.tags
 }
 
 /**

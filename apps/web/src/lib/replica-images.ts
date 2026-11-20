@@ -19,15 +19,10 @@
  * ids are cached is readable without the key.
  */
 import { openBytes, sealBytes } from '@kamiazya/whiteboard-daemon-client/read-plane'
-import {
-  collectImageRefIds,
-  documentContainers,
-  readWorkspaceDocuments,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { lease, type RecordLease } from '@kamiazya/whiteboard-loro-adapter'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { BlobRef, BlobStore } from '@kamiazya/whiteboard-ports'
 import { blobRefSchema, docRefKey } from '@kamiazya/whiteboard-ports'
-import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import { getAppLogger } from './app-logger.js'
 import { readDaemonImage } from './daemon-image-read.js'
@@ -93,12 +88,20 @@ async function readIndex(workspaceId: string, key: SealingKey): Promise<ReplicaI
 }
 
 /** Every image the record names, each with the id of a document that names it — the file route's address. */
-function namedImages(record: LoroDoc): Map<string, string> {
+async function namedImages(record: RecordLease): Promise<Map<string, string>> {
   const named = new Map<string, string>()
-  for (const entry of readWorkspaceDocuments(record)) {
-    for (const fileId of collectImageRefIds(documentContainers(record, entry.documentId))) {
-      if (!named.has(fileId)) named.set(fileId, entry.documentId)
-    }
+  const documents = await lease.read(
+    record,
+    { query: 'documents' },
+    z.array(z.object({ documentId: z.string() })),
+  )
+  for (const { documentId } of documents) {
+    const fileIds = await lease.read(
+      record,
+      { query: 'imageRefIds', args: { documentId } },
+      z.array(z.string()),
+    )
+    for (const fileId of fileIds) if (!named.has(fileId)) named.set(fileId, documentId)
   }
   return named
 }
@@ -108,7 +111,7 @@ export interface CacheReplicaImagesOptions {
   daemonBaseUrl: string
   workspaceId: string
   /** The replica's record as just saved. */
-  record: LoroDoc
+  record: RecordLease
   budgetBytes?: number
   /** Production: the browser's own `IdbBlobStore`. */
   blobs?: BlobStore
@@ -145,7 +148,7 @@ async function nextIndex(
   key: SealingKey,
   blobs: BlobStore,
 ): Promise<ReplicaImageIndex> {
-  const named = namedImages(options.record)
+  const named = await namedImages(options.record)
   const previous = await readIndex(options.workspaceId, key)
   const budget = options.budgetBytes ?? REPLICA_IMAGE_BUDGET_BYTES
   const next: ReplicaImageIndex = {}

@@ -19,6 +19,7 @@ import { REPLICA_COPY_REMOVED_COPY } from '../lib/replica-state-copy.js'
 import { announceWorkspaceRemoved } from '../lib/workspace-broadcast.js'
 import { refuseUnlessHeld } from '../lib/workspace-tombstone.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { leaseOf } from '../test-utils/replica-lease.js'
 import { ReplicaReadPage } from './ReplicaReadPage.js'
 
 claimIsolatedWhiteboardDb('replicareadpage-copyremoved')
@@ -30,12 +31,17 @@ const OTHER_WS = '01ARZ3NDEKTSV4RRFFQ69G5FC2'
 
 const store = vi.hoisted(() => ({
   record: null as import('loro-crdt').LoroDoc | null,
-  save: vi.fn<(workspaceId: string, record: import('loro-crdt').LoroDoc) => Promise<void>>(),
+  opened: null as import('@kamiazya/whiteboard-loro-adapter').RecordLease | null,
+  save: vi.fn<(workspaceId: string, record: unknown) => Promise<void>>(),
 }))
 
-vi.mock('../lib/browser-workspace-docs.js', () => ({
-  BrowserWorkspaceDocs: class {
-    open = async () => store.record
+vi.mock('../lib/browser-workspace-records.js', () => ({
+  BrowserWorkspaceRecords: class {
+    open = async () => {
+      if (store.record === null) return null
+      store.opened = await leaseOf(store.record)
+      return store.opened
+    }
     save = store.save
   },
 }))

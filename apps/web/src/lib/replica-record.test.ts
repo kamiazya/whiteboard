@@ -2,6 +2,7 @@ import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
+  type RecordLease,
   readEdgeLocks,
   readMarkdownBody,
   readNodeLocks,
@@ -16,6 +17,7 @@ import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { STENCIL_LIBRARY_PATH, VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { docOf, leaseOf } from '../test-utils/replica-lease.js'
 import { linkEntries, linkTitles } from './link-entries.js'
 import {
   REPLICA_IMAGE_UNAVAILABLE,
@@ -37,7 +39,7 @@ const LINKER = '01ARZ3NDEKTSV4RRFFQ69G5FB3'
 const CACHED = 'asset:0b9a6c1e-1111-4222-8333-444455556666'
 const UNCACHED = 'asset:0b9a6c1e-1111-4222-8333-777788889999'
 
-function record(): LoroDoc {
+function recordDoc(): LoroDoc {
   const doc = new LoroDoc()
   createWorkspaceDocumentAtPath(doc, { path: 'notes/plan', documentId: MD, kind: 'markdown' })
   writeMarkdownBody(documentContainers(doc, MD), '# Plan')
@@ -52,9 +54,13 @@ function record(): LoroDoc {
   return doc
 }
 
+function record(): Promise<RecordLease> {
+  return leaseOf(recordDoc())
+}
+
 describe('replica record', () => {
-  it('lists its documents with the kind each carries', () => {
-    const entries = replicaEntries(record())
+  it('lists its documents with the kind each carries', async () => {
+    const entries = replicaEntries(await record())
     expect(entries.map((e) => [e.path, e.kind])).toEqual(
       expect.arrayContaining([
         ['notes/plan', 'markdown'],
@@ -64,8 +70,8 @@ describe('replica record', () => {
     expect(entries.every((e) => !('updatedAt' in e))).toBe(true)
   })
 
-  it('reads a body or a canvas according to the entry kind', () => {
-    const doc = record()
+  it('reads a body or a canvas according to the entry kind', async () => {
+    const doc = await record()
     expect(readReplicaContent(doc, { documentId: MD, kind: 'markdown' })).toEqual({
       kind: 'markdown',
       body: '# Plan',
@@ -73,41 +79,45 @@ describe('replica record', () => {
     expect(readReplicaContent(doc, { documentId: SP, kind: 'spatial' }).kind).toBe('spatial')
   })
 
-  it('reads an entry with no kind as spatial, the kind every pre-kind document was', () => {
+  it('reads an entry with no kind as spatial, the kind every pre-kind document was', async () => {
     // The daemon's readers answer a kind recorded nowhere the same way.
-    const doc = record()
+    const doc = await record()
     expect(readReplicaContent(doc, { documentId: SP }).kind).toBe('spatial')
   })
 
-  it('writes a body into the record, where a read finds it', () => {
-    const doc = record()
+  it('writes a body into the record, where a read finds it', async () => {
+    const doc = await record()
     writeReplicaMarkdown(doc, MD, '# Plan, edited')
-    expect(readMarkdownBody(documentContainers(doc, MD))).toBe('# Plan, edited')
+    expect(readMarkdownBody(documentContainers(docOf(doc), MD))).toBe('# Plan, edited')
   })
 
-  it('writes a canvas change as a diff against the previous canvas', () => {
-    const doc = record()
-    const prev = readSpatialCanvas(documentContainers(doc, SP))
+  it('writes a canvas change as a diff against the previous canvas', async () => {
+    const doc = await record()
+    const prev = readSpatialCanvas(documentContainers(docOf(doc), SP))
     const added = textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 40, text: 'hi' })
     writeReplicaSpatial(doc, SP, prev, { ...prev, nodes: [...prev.nodes, added] })
-    expect(readSpatialCanvas(documentContainers(doc, SP)).nodes.map((n) => n.id)).toEqual(['n1'])
+    expect(readSpatialCanvas(documentContainers(docOf(doc), SP)).nodes.map((n) => n.id)).toEqual([
+      'n1',
+    ])
   })
 
-  it("reads a canvas's locks from the record, and writes a toggle back into it", () => {
-    const doc = record()
-    setNodeLock(documentContainers(doc, SP), 'held', true)
+  it("reads a canvas's locks from the record, and writes a toggle back into it", async () => {
+    const seeded = recordDoc()
+    setNodeLock(documentContainers(seeded, SP), 'held', true)
+    const doc = await leaseOf(seeded)
     expect(readReplicaLocks(doc, SP)).toEqual({ nodes: new Set(['held']), edges: new Set() })
 
     writeReplicaLock(doc, SP, { node: 'held' }, false)
     writeReplicaLock(doc, SP, { edge: 'e1' }, true)
-    expect([...readNodeLocks(documentContainers(doc, SP))]).toEqual([])
-    expect([...readEdgeLocks(documentContainers(doc, SP))]).toEqual(['e1'])
+    const after = docOf(doc)
+    expect([...readNodeLocks(documentContainers(after, SP))]).toEqual([])
+    expect([...readEdgeLocks(documentContainers(after, SP))]).toEqual(['e1'])
     // Another document's locks are its own.
     expect(readReplicaLocks(doc, MD)).toEqual({ nodes: new Set(), edges: new Set() })
   })
 
-  it('resolves what the selected document links to from the record alone', () => {
-    const doc = record()
+  it('resolves what the selected document links to from the record alone', async () => {
+    const doc = await record()
     const entries = replicaEntries(doc)
     const linkable = entries.map((e) => ({
       documentId: e.documentId,
@@ -125,9 +135,9 @@ describe('replica record', () => {
     expect(JSON.stringify(wire)).toContain('# Plan')
   })
 
-  it('draws a cached image, and labels one this device does not hold as unavailable', () => {
-    const doc = record()
-    const prev = readSpatialCanvas(documentContainers(doc, SP))
+  it('draws a cached image, and labels one this device does not hold as unavailable', async () => {
+    const doc = await record()
+    const prev = readSpatialCanvas(documentContainers(docOf(doc), SP))
     const images = [CACHED, UNCACHED].map((file, i) =>
       fileNode({ id: `i${i}`, x: i * 120, y: 0, width: 100, height: 100, file }),
     )
@@ -154,9 +164,9 @@ describe('replica record', () => {
     )
   })
 
-  it('adds no image extra while the cached images are still being read', () => {
-    const doc = record()
-    const prev = readSpatialCanvas(documentContainers(doc, SP))
+  it('adds no image extra while the cached images are still being read', async () => {
+    const doc = await record()
+    const prev = readSpatialCanvas(documentContainers(docOf(doc), SP))
     const image = fileNode({ id: 'i0', x: 0, y: 0, width: 100, height: 100, file: CACHED })
     writeReplicaSpatial(doc, SP, prev, { ...prev, nodes: [...prev.nodes, image] })
     const entries = replicaEntries(doc)
@@ -180,8 +190,8 @@ describe("the replica's stencil library", () => {
     facets: { 'visual.shape/v0': { kind: 'hexagon' } },
   }
 
-  function withLibrary(facets: Record<string, unknown>): LoroDoc {
-    const doc = record()
+  function withLibrary(facets: Record<string, unknown>): Promise<RecordLease> {
+    const doc = recordDoc()
     createWorkspaceDocumentAtPath(doc, {
       path: STENCIL_LIBRARY_PATH,
       documentId: STENCILS,
@@ -189,21 +199,21 @@ describe("the replica's stencil library", () => {
     })
     writeFacets(documentContainers(doc, STENCILS), facets)
     doc.commit()
-    return doc
+    return leaseOf(doc)
   }
 
-  it('reads the stencils the document at the library path declares', () => {
-    const doc = withLibrary({ [VISUAL_STENCILS_KEY]: { stencils: { lakehouse } } })
+  it('reads the stencils the document at the library path declares', async () => {
+    const doc = await withLibrary({ [VISUAL_STENCILS_KEY]: { stencils: { lakehouse } } })
     expect(replicaStencilLibrary(doc, replicaEntries(doc))).toEqual({ lakehouse })
   })
 
-  it('is empty for a replica without a library document', () => {
-    const doc = record()
+  it('is empty for a replica without a library document', async () => {
+    const doc = await record()
     expect(replicaStencilLibrary(doc, replicaEntries(doc))).toEqual({})
   })
 
-  it('leaves out a stencil the schema refuses and keeps the rest', () => {
-    const doc = withLibrary({
+  it('leaves out a stencil the schema refuses and keeps the rest', async () => {
+    const doc = await withLibrary({
       [VISUAL_STENCILS_KEY]: { stencils: { lakehouse, broken: { color: 42 } } },
     })
     expect(replicaStencilLibrary(doc, replicaEntries(doc))).toEqual({ lakehouse })
@@ -211,8 +221,8 @@ describe("the replica's stencil library", () => {
 })
 
 describe("the replica's tags in use", () => {
-  it("lists every document's tags and its contents' once each, in code-unit order", () => {
-    const doc = record()
+  it("lists every document's tags and its contents' once each, in code-unit order", async () => {
+    const doc = recordDoc()
     writeCoreFacets(documentContainers(doc, MD), { type: 'note', tags: ['zeta', 'drafted'] })
     writeCoreFacets(documentContainers(doc, LINKER), { type: 'note', tags: ['drafted'] })
     writeSpatialCanvas(documentContainers(doc, SP), {
@@ -223,7 +233,8 @@ describe("the replica's tags in use", () => {
       edges: [],
     })
     doc.commit()
-    expect(replicaTagsInUse(doc, replicaEntries(doc))).toEqual([
+    const held = await leaseOf(doc)
+    expect(replicaTagsInUse(held, replicaEntries(held))).toEqual([
       'Drafted',
       'drafted',
       'health:ok',
@@ -231,8 +242,8 @@ describe("the replica's tags in use", () => {
     ])
   })
 
-  it('is empty for a replica whose documents carry no tags', () => {
-    const doc = record()
+  it('is empty for a replica whose documents carry no tags', async () => {
+    const doc = await record()
     expect(replicaTagsInUse(doc, replicaEntries(doc))).toEqual([])
   })
 })

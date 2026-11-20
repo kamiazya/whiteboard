@@ -152,12 +152,12 @@ async function pullReplica(deps: ReplicaRefreshDeps, key: string): Promise<void>
     if (summary === null) return
     const canonical = summary.workspaceId
     const cache = deps.cache ?? (await import('./replica-cache.js')).cacheDaemonWorkspace
-    const { BrowserWorkspaceDocs } = await import('./browser-workspace-docs.js')
+    const { BrowserWorkspaceRecords } = await import('./browser-workspace-records.js')
     const result = await cache({
       fetch: deps.fetch,
       daemonBaseUrl: deps.daemonBaseUrl,
       workspaceId: canonical,
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     if (result.kind !== 'ok') {
       reportNoPull(deps.daemonBaseUrl, canonical, result)
@@ -274,12 +274,12 @@ async function pushIfDirty(deps: ReplicaPushDeps): Promise<void> {
   const stored = await readStoredFrontier(match.workspaceId)
   if (stored !== null && stored === match.syncedFrontier) return
   const push = deps.push ?? (await import('./replica-push.js')).pushReplicaEdits
-  const { BrowserWorkspaceDocs } = await import('./browser-workspace-docs.js')
+  const { BrowserWorkspaceRecords } = await import('./browser-workspace-records.js')
   const result = await push({
     fetch: deps.fetch,
     daemonBaseUrl: deps.daemonBaseUrl,
     workspaceId: match.workspaceId,
-    workspaceDocs: new BrowserWorkspaceDocs(),
+    workspaceDocs: new BrowserWorkspaceRecords(),
     ...(match.syncedFrontier === undefined ? {} : { syncedFrontier: match.syncedFrontier }),
   })
   if (result.kind !== 'ok') {
