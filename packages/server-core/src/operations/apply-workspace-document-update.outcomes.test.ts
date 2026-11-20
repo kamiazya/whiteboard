@@ -9,6 +9,7 @@ import {
   deleteWorkspaceDocument,
   documentContainers,
   MARKDOWN_BODY_KEY,
+  readMarkdownBody,
   readTrashEntries,
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -62,6 +63,9 @@ function updateBuildingOnAMissingOne(): Uint8Array {
   return client.export({ mode: 'update', from: middle })
 }
 
+/** The markdown the note holds, which a dropped text would change and no metadata shows. */
+const bodyOfNote = (workspace: LoroDoc) => readMarkdownBody(documentContainers(workspace, NOTE))
+
 /** What a follower holding the seed ends up with from the updates the saves fanned out. */
 function followersOf(updates: readonly Uint8Array[]) {
   const follower = LoroDoc.fromSnapshot(SEED.export({ mode: 'snapshot' }))
@@ -75,6 +79,7 @@ function followersOf(updates: readonly Uint8Array[]) {
       stamped: updatedAt !== undefined && updatedAt > SEED_STAMP,
     })),
     trash: readTrashEntries(follower).map(({ documentId, path }) => ({ documentId, path })),
+    noteBody: bodyOfNote(follower),
   }
 }
 
@@ -125,6 +130,7 @@ async function outcomeOf(
       stamped: updatedAt !== undefined && updatedAt > SEED_STAMP,
     })),
     trash: readTrashEntries(stored).map(({ documentId, path }) => ({ documentId, path })),
+    noteBody: bodyOfNote(stored),
   }
 }
 
@@ -163,9 +169,11 @@ describe('the outcome of applying one workspace-document update', () => {
               "stamped": false,
             },
           ],
+          "noteBody": "# Weekly review",
           "trash": [],
           "updates": 1,
         },
+        "noteBody": "# Weekly review",
         "projectionsEvicted": 1,
         "result": {
           "edited": [
@@ -232,9 +240,11 @@ describe('the outcome of applying one workspace-document update', () => {
               "stamped": true,
             },
           ],
+          "noteBody": "",
           "trash": [],
           "updates": 1,
         },
+        "noteBody": "",
         "projectionsEvicted": 1,
         "result": {
           "edited": [],
@@ -270,6 +280,7 @@ describe('the outcome of applying one workspace-document update', () => {
               "stamped": false,
             },
           ],
+          "noteBody": "",
           "trash": [
             {
               "documentId": "01BRWAAAAAAAAAAAAAAAAAAAA3",
@@ -278,6 +289,7 @@ describe('the outcome of applying one workspace-document update', () => {
           ],
           "updates": 1,
         },
+        "noteBody": "",
         "projectionsEvicted": 1,
         "result": {
           "edited": [],
@@ -329,10 +341,12 @@ describe('the outcome of applying one workspace-document update', () => {
               "stamped": false,
             },
           ],
+          "noteBody": "",
           "trash": [],
           "updates": 0,
         },
         "message": "This update inserts 2000000 characters in one piece, past the 262144-character limit for one document; split the content across documents",
+        "noteBody": "",
         "projectionsEvicted": 1,
         "saves": 0,
         "threw": "MarkdownBodyTooLargeError",
@@ -384,10 +398,12 @@ describe('the outcome of applying one workspace-document update', () => {
               "stamped": false,
             },
           ],
+          "noteBody": "",
           "trash": [],
           "updates": 0,
         },
         "message": "This update would put documents or folders at paths this keeper cannot store: "not a segment". A path may be at most 1024 characters, and each segment may hold only ASCII letters, digits and interior hyphens",
+        "noteBody": "",
         "projectionsEvicted": 1,
         "saves": 0,
         "threw": "OffGrammarPathError",
@@ -431,10 +447,12 @@ describe('the outcome of applying one workspace-document update', () => {
               "stamped": false,
             },
           ],
+          "noteBody": "",
           "trash": [],
           "updates": 0,
         },
         "message": "This update builds on changes this keeper has not received yet, so nothing of it was kept. Send the changes it builds on first",
+        "noteBody": "",
         "projectionsEvicted": 1,
         "saves": 0,
         "threw": "CausalGapError",
@@ -480,9 +498,11 @@ describe('the outcome of applying one workspace-document update', () => {
               "stamped": false,
             },
           ],
+          "noteBody": "",
           "trash": [],
           "updates": 0,
         },
+        "noteBody": "",
         "projectionsEvicted": 1,
         "result": {
           "kind": "placement-refused",
@@ -527,9 +547,11 @@ describe('the outcome of applying one workspace-document update', () => {
               "stamped": false,
             },
           ],
+          "noteBody": "",
           "trash": [],
           "updates": 0,
         },
+        "noteBody": "",
         "projectionsEvicted": 0,
         "result": {
           "kind": "malformed-update",
