@@ -1,4 +1,5 @@
 import {
+  directTarget,
   readCoreFacets,
   readSpatialCanvas,
   writeCoreFacets,
@@ -54,7 +55,7 @@ describe('commitToDoc over records this build cannot read', () => {
     const next = applyCommand(prev, command)
     expect(next).not.toBe(prev)
 
-    commitToDoc(doc, doc, prev, next, command)
+    commitToDoc(directTarget(doc), prev, next, command)
 
     expect(ids(doc, 'nodes')).toEqual(['a', 'b', 'future-node'])
     expect(ids(doc, 'edges')).toEqual(['future-edge'])
@@ -69,7 +70,7 @@ describe('commitToDoc over records this build cannot read', () => {
     const { doc, prev } = seeded()
     const command: EditorCommand = { kind: 'move-node', id: 'gone', x: 1, y: 1 }
 
-    commitToDoc(doc, doc, prev, prev, command)
+    commitToDoc(directTarget(doc), prev, prev, command)
 
     expect(ids(doc, 'nodes')).toEqual(['a', 'b', 'future-node'])
     await expectLoggedFailure('editor command target missing')
@@ -85,7 +86,7 @@ describe('commitToDoc over records this build cannot read', () => {
       ],
     }
 
-    commitToDoc(doc, doc, prev, applyCommand(prev, command), command)
+    commitToDoc(directTarget(doc), prev, applyCommand(prev, command), command)
 
     expect(ids(doc, 'nodes')).toEqual(['a', 'b', 'future-node'])
     expect(ids(doc, 'edges')).toEqual(['future-edge'])
@@ -116,7 +117,7 @@ describe('commitToDoc over records this build cannot read', () => {
       changes: proposal.changes,
     }
 
-    commitToDoc(doc, doc, prev, applyCommand(prev, command), command)
+    commitToDoc(directTarget(doc), prev, applyCommand(prev, command), command)
 
     expect(readSpatialCanvas(doc).nodes.find((n) => n.id === 'a')?.x).toBe(240)
     expect(ids(doc, 'nodes')).toEqual(['a', 'b', 'future-node'])
@@ -128,7 +129,7 @@ describe('commitToDoc over records this build cannot read', () => {
     const { doc, prev } = seeded()
     const command: EditorCommand = { kind: 'move-node', id: 'a', x: 5, y: 5 }
 
-    commitToDoc(doc, doc, prev, applyCommand(prev, command), command)
+    commitToDoc(directTarget(doc), prev, applyCommand(prev, command), command)
 
     expect(ids(doc, 'nodes')).toEqual(['a', 'b', 'future-node'])
     expect(ids(doc, 'edges')).toEqual(['future-edge'])
@@ -144,7 +145,7 @@ describe('commitToDoc over a canvas the editor could see', () => {
     const command: EditorCommand = { kind: 'set-node-color', id: 'a', color: '1' }
     const next = { ...applyCommand(prev, command), nodes: [A] }
 
-    commitToDoc(doc, doc, prev, next, command)
+    commitToDoc(directTarget(doc), prev, next, command)
 
     expect(ids(doc, 'nodes')).toEqual(['a', 'future-node'])
     expect(Object.keys(doc.getMap('nodeLocks').toJSON())).toEqual([])
@@ -156,7 +157,7 @@ describe('commitToDoc over a canvas the editor could see', () => {
     doc.commit()
     const command: EditorCommand = { kind: 'set-node-color', id: 'a', color: '1' }
 
-    commitToDoc(doc, doc, prev, applyCommand(prev, command), command)
+    commitToDoc(directTarget(doc), prev, applyCommand(prev, command), command)
 
     expect(ids(doc, 'nodes')).toEqual(['a', 'b', 'future-node', 'peer'])
   })
@@ -166,7 +167,7 @@ describe('commitToDoc over a canvas the editor could see', () => {
     const before = doc.oplogVersion()
     const command: EditorCommand = { kind: 'set-node-color', id: 'a', color: undefined }
 
-    commitToDoc(doc, doc, prev, prev, command)
+    commitToDoc(directTarget(doc), prev, prev, command)
 
     expect(doc.oplogVersion().compare(before)).toBe(0)
   })
@@ -181,7 +182,7 @@ describe('commitToDoc over envelope entries this build cannot read', () => {
     expect(readCoreFacets(doc)).toEqual({ type: 'note', tags: ['one'] })
     const empty: SpatialCanvas = { nodes: [], edges: [] }
 
-    commitToDoc(doc, doc, empty, empty, {
+    commitToDoc(directTarget(doc), empty, empty, {
       kind: 'set-facets',
       facets: { type: 'note', tags: ['one', 'two'] },
     })
@@ -195,7 +196,7 @@ describe('commitToDoc over envelope entries this build cannot read', () => {
     writeCoreFacets(doc, { type: 'note', view: 'board', tags: ['one'] })
     const empty: SpatialCanvas = { nodes: [], edges: [] }
 
-    commitToDoc(doc, doc, empty, empty, { kind: 'set-facets', facets: { type: 'note' } })
+    commitToDoc(directTarget(doc), empty, empty, { kind: 'set-facets', facets: { type: 'note' } })
 
     expect(doc.getMap('core').toJSON()).toEqual({ type: 'note' })
   })
@@ -215,7 +216,7 @@ describe('commitToDoc over envelope entries this build cannot read', () => {
       payload: { routing: 'orthogonal' },
     }
 
-    commitToDoc(doc, doc, prev, applyCommand(prev, command), command)
+    commitToDoc(directTarget(doc), prev, applyCommand(prev, command), command)
 
     expect(doc.getMap('canvas').get('facets')).toEqual({
       'visual.theme/v0': { theme: 'visual.neon' },
@@ -239,7 +240,7 @@ describe('commitToDoc over envelope entries this build cannot read', () => {
       payload: undefined,
     }
 
-    commitToDoc(doc, doc, prev, applyCommand(prev, command), command)
+    commitToDoc(directTarget(doc), prev, applyCommand(prev, command), command)
 
     expect(doc.getMap('canvas').get('facets')).toEqual({ 'Bad Key': { from: 'the future' } })
   })

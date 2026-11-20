@@ -4,6 +4,7 @@ import type {
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   type DocumentContainers,
+  directTarget,
   documentContainers,
   MARKDOWN_BODY_KEY,
   markThreadPassages,
@@ -764,8 +765,8 @@ export function createDocumentSyncSession(
     next: SpatialCanvas,
     command: EditorCommand,
   ): void {
-    const content = contentOf(targetDoc)
-    if (content !== null) commitToDoc(targetDoc, content, prev, next, command)
+    if (contentOf(targetDoc) === null) return
+    commitToDoc(directTarget(targetDoc, deps.contentDocumentId), prev, next, command)
   }
 
   const debounce = createCommitDebounce(commitPendingTargets)
