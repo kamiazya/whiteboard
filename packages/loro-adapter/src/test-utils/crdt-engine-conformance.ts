@@ -21,8 +21,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { exportedBytes, frontierPairs, type VersionPairs, versionPairs } from '../engine/answers.js'
 import { journaledEngine } from '../engine/journal.js'
 import type { CrdtEngine } from '../engine/types.js'
-import { describeActivationJudging } from './crdt-engine-conformance-activation.js'
-import { describeBreachDetail } from './crdt-engine-conformance-breach-detail.js'
+import { describeEngineAnswers } from './crdt-engine-conformance-answers.js'
 import {
   describeDocumentContentWithTags,
   describeDocumentKindFallback,
@@ -39,8 +38,6 @@ import {
   describeVersionDecoding,
   describeViewMove,
 } from './crdt-engine-conformance-calls.js'
-import { describeContainerPlace } from './crdt-engine-conformance-container-place.js'
-import { describeDocumentReaders } from './crdt-engine-conformance-document-readers.js'
 import {
   applied,
   ask,
@@ -62,9 +59,7 @@ import {
   describeTrim,
 } from './crdt-engine-conformance-lifecycle.js'
 import { describeProjectionExport } from './crdt-engine-conformance-projection.js'
-import { describeShallowRoot } from './crdt-engine-conformance-shallow.js'
 import { describeThreadMessageCounts } from './crdt-engine-conformance-threads.js'
-import { describeVersionAt } from './crdt-engine-conformance-version-at.js'
 import { describeWorkspaceSyncJudging } from './crdt-engine-conformance-workspace-sync.js'
 import {
   describeIndexWrites,
@@ -770,12 +765,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeDocumentContentWithTags(makeEngine)
     describeRetiredCommentRows(makeEngine)
     describeThreadMessageCounts(makeEngine)
-    describeBreachDetail(makeEngine)
-    describeDocumentReaders(makeEngine)
-    describeContainerPlace(makeEngine)
-    describeVersionAt(makeEngine)
-    describeShallowRoot(makeEngine)
-    describeActivationJudging(makeEngine)
+    describeEngineAnswers(makeEngine)
     describeSubtreeImport(makeEngine)
     describeSubtreeRoot(makeEngine)
     describeReadNow(makeEngine)

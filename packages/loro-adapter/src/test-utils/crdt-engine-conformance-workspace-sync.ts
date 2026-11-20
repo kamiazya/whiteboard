@@ -283,8 +283,11 @@ function describePrecedence({ refusedAs }: Judging) {
       'document-kind-changed',
     ],
   ] as const)('answers %s', (_competing, edits, shape) => {
-    refusedAs(seedRecord(), (client) => edits.forEach((edit) => edit(client)), shape)
-    refusedAs(seedRecord(), (client) => [...edits].reverse().forEach((edit) => edit(client)), shape)
+    const editedBy = (order: readonly ((client: LoroDoc) => unknown)[]) => (client: LoroDoc) => {
+      for (const edit of order) edit(client)
+    }
+    refusedAs(seedRecord(), editedBy(edits), shape)
+    refusedAs(seedRecord(), editedBy([...edits].reverse()), shape)
   })
 }
 

@@ -25,73 +25,83 @@ function threeEdits(makeEngine: () => CrdtEngine) {
   return { engine, handle, first, second, third: engine.version({ handle }) }
 }
 
+function describeShallowRootPart1(makeEngine: () => CrdtEngine) {
+  it('answers no root for a document that keeps every operation', () => {
+    const { engine, handle, second } = threeEdits(makeEngine)
+    expect(engine.version({ handle }).shallowRoot).toEqual([])
+    expect(engine.version({ handle, at: second.frontiers }).shallowRoot).toEqual([])
+  })
+
+  it('answers the frontiers a shallow snapshot was cut at, for a document opened from one', () => {
+    const { engine, handle, second } = threeEdits(makeEngine)
+    const { bytes } = engine.export({
+      handle,
+      mode: 'shallow-snapshot',
+      frontiers: second.frontiers,
+    })
+    const other = makeEngine()
+    const opened = other.open({ peer: '2', bytes })
+    const answer = wire.versionResponseSchema.parse(other.version({ handle: opened.handle }))
+    expect(answer.shallowRoot).toEqual(second.frontiers)
+    // What npm loro says the opened document's root is, not what the engine says of its own.
+    expect(
+      entriesOf(frontierPairs(held(other, opened.handle, 'snapshot').shallowSinceFrontiers())),
+    ).toEqual(answer.shallowRoot)
+    expect(other.version({ handle: opened.handle, at: answer.frontiers }).shallowRoot).toEqual(
+      second.frontiers,
+    )
+  })
+}
+
+function describeShallowRootPart2(makeEngine: () => CrdtEngine) {
+  it('cuts a shallow snapshot at a version vector as at the frontiers that vector reaches', () => {
+    const { engine, handle, second, third } = threeEdits(makeEngine)
+    const cut = engine.export({
+      handle,
+      mode: 'shallow-snapshot-at-version',
+      version: second.version,
+    })
+    const other = makeEngine()
+    const opened = other.open({ peer: '2', bytes: cut.bytes })
+    const answer = other.version({ handle: opened.handle })
+    expect(answer.shallowRoot).toEqual(second.frontiers)
+    expect(answer.version).toEqual(third.version)
+    // The history from the cut on is kept, so the cut point itself still checks out.
+    expect(() =>
+      other.fork({ handle: opened.handle, peer: '3', at: second.frontiers }),
+    ).not.toThrow()
+  })
+
+  it('keeps no history before the version it is cut at', () => {
+    const { engine, handle, first, second } = threeEdits(makeEngine)
+    const cut = engine.export({
+      handle,
+      mode: 'shallow-snapshot-at-version',
+      version: second.version,
+    })
+    const other = makeEngine()
+    const opened = other.open({ peer: '2', bytes: cut.bytes })
+    expect(() => other.fork({ handle: opened.handle, peer: '3', at: first.frontiers })).toThrow()
+  })
+}
+
+function describeShallowRootPart3(makeEngine: () => CrdtEngine) {
+  it('refuses a cut at a version the document does not hold', () => {
+    const { engine, handle } = threeEdits(makeEngine)
+    expect(() =>
+      engine.export({
+        handle,
+        mode: 'shallow-snapshot-at-version',
+        version: [{ peer: '424242', counter: 7 }],
+      }),
+    ).toThrow()
+  })
+}
+
 export function describeShallowRoot(makeEngine: () => CrdtEngine) {
   describe('where a document keeps its history from', () => {
-    it('answers no root for a document that keeps every operation', () => {
-      const { engine, handle, second } = threeEdits(makeEngine)
-      expect(engine.version({ handle }).shallowRoot).toEqual([])
-      expect(engine.version({ handle, at: second.frontiers }).shallowRoot).toEqual([])
-    })
-
-    it('answers the frontiers a shallow snapshot was cut at, for a document opened from one', () => {
-      const { engine, handle, second } = threeEdits(makeEngine)
-      const { bytes } = engine.export({
-        handle,
-        mode: 'shallow-snapshot',
-        frontiers: second.frontiers,
-      })
-      const other = makeEngine()
-      const opened = other.open({ peer: '2', bytes })
-      const answer = wire.versionResponseSchema.parse(other.version({ handle: opened.handle }))
-      expect(answer.shallowRoot).toEqual(second.frontiers)
-      // What npm loro says the opened document's root is, not what the engine says of its own.
-      expect(
-        entriesOf(frontierPairs(held(other, opened.handle, 'snapshot').shallowSinceFrontiers())),
-      ).toEqual(answer.shallowRoot)
-      expect(other.version({ handle: opened.handle, at: answer.frontiers }).shallowRoot).toEqual(
-        second.frontiers,
-      )
-    })
-
-    it('cuts a shallow snapshot at a version vector as at the frontiers that vector reaches', () => {
-      const { engine, handle, second, third } = threeEdits(makeEngine)
-      const cut = engine.export({
-        handle,
-        mode: 'shallow-snapshot-at-version',
-        version: second.version,
-      })
-      const other = makeEngine()
-      const opened = other.open({ peer: '2', bytes: cut.bytes })
-      const answer = other.version({ handle: opened.handle })
-      expect(answer.shallowRoot).toEqual(second.frontiers)
-      expect(answer.version).toEqual(third.version)
-      // The history from the cut on is kept, so the cut point itself still checks out.
-      expect(() =>
-        other.fork({ handle: opened.handle, peer: '3', at: second.frontiers }),
-      ).not.toThrow()
-    })
-
-    it('keeps no history before the version it is cut at', () => {
-      const { engine, handle, first, second } = threeEdits(makeEngine)
-      const cut = engine.export({
-        handle,
-        mode: 'shallow-snapshot-at-version',
-        version: second.version,
-      })
-      const other = makeEngine()
-      const opened = other.open({ peer: '2', bytes: cut.bytes })
-      expect(() => other.fork({ handle: opened.handle, peer: '3', at: first.frontiers })).toThrow()
-    })
-
-    it('refuses a cut at a version the document does not hold', () => {
-      const { engine, handle } = threeEdits(makeEngine)
-      expect(() =>
-        engine.export({
-          handle,
-          mode: 'shallow-snapshot-at-version',
-          version: [{ peer: '424242', counter: 7 }],
-        }),
-      ).toThrow()
-    })
+    describeShallowRootPart1(makeEngine)
+    describeShallowRootPart2(makeEngine)
+    describeShallowRootPart3(makeEngine)
   })
 }
