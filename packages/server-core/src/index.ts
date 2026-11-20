@@ -11,7 +11,7 @@ export {
 } from './api-errors.js'
 export { answerUnhandled, createServer } from './create-server.js'
 export { DocumentEngineTrapError } from './document-io.js'
-export { type NamedReader, readRestoringRefusal } from './document-session.js'
+export { readRestoringRefusal } from './document-session.js'
 export { facetWriteCoreInstalled, installFacetWriteCore } from './facet-write-core.js'
 export { setLogSink } from './log.js'
 export { applyWorkspaceDocumentUpdate } from './operations/apply-workspace-document-update.js'
