@@ -33,7 +33,6 @@ import type { SyncStatus, UseDocumentSyncOptions } from '../lib/document-sync-ty
 import { dispatchIdentityEvent } from '../lib/document-sync-types.js'
 import { layoutWithFragments } from '../lib/fragment-requests.js'
 import { FRAGMENT_ENGINES } from '../lib/markdown-fragment-renderers.js'
-import type { BodyBinding } from '../lib/session-body-binding.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import type { PictureExportOptions } from '../lib/spatial/picture-options.js'
 import { renderCanvasForExport } from '../lib/spatial/scene-render.js'
@@ -133,7 +132,7 @@ export interface UseDocumentSyncResult {
    * snapshot. A new object only when a snapshot replaces the doc, so an
    * editor keyed on it remounts exactly then.
    */
-  bodyBinding: BodyBinding | null
+  bodyBinding: ReturnType<DocumentSyncSession['getBodyBinding']>
   /**
    * OKF core facets from the doc's `core` map — `undefined` for a spatial
    * document, which has none to hold. Republished on the same signal as
@@ -322,7 +321,8 @@ export function useDocumentSync(
   const [threadMarks, setThreadMarks] = useState<ReadonlyMap<string, PassageRange>>(EMPTY_MARKS)
   const [lockedNodeIds, setLockedNodeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [markdownBody, setMarkdownBodyState] = useState('')
-  const [bodyBinding, setBodyBinding] = useState<BodyBinding | null>(null)
+  const [bodyBinding, setBodyBinding] =
+    useState<ReturnType<DocumentSyncSession['getBodyBinding']>>(null)
   const [coreFacets, setCoreFacetsState] = useState<StoredCoreFacets | undefined>(undefined)
   const [facets, setFacetsState] = useState<ExtensionFacets>(EMPTY_FACETS)
   const [documentName, setDocumentName] = useState<string | null | undefined>(undefined)

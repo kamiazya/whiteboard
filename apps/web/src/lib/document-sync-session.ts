@@ -5,6 +5,7 @@ import type {
 import {
   type DocumentContainers,
   documentContainers,
+  MARKDOWN_BODY_KEY,
   markThreadPassages,
   type PassageRange,
   readAnnotations,
@@ -50,7 +51,7 @@ import type {
   SpatialCanvas,
   StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
-import { LoroDoc, UndoManager } from 'loro-crdt'
+import { LoroDoc, type LoroText, UndoManager } from 'loro-crdt'
 import { sameAnnotations, sameThreadMarks } from './annotations-equal.js'
 import { getAppLogger } from './app-logger.js'
 import type { BrowserPersistenceState } from './browser-persistence-state.js'
@@ -238,7 +239,7 @@ export interface DocumentSyncSession {
    * first snapshot. One object per doc — a new one only when a snapshot
    * replaces the doc — so an editor keyed on it remounts exactly then.
    */
-  getBodyBinding(): BodyBinding | null
+  getBodyBinding(): BodyBinding<LoroDoc, LoroText> | null
   /**
    * OKF core facets from the doc's `core` map. `undefined` until hydrated,
    * when none were ever written, and — by `readCoreFacets`' own rule — for
@@ -788,10 +789,10 @@ export function createDocumentSyncSession(
   }
 
   const bodyBindingOf = bodyBindingFor({
-    contentOf,
+    readText: (target: LoroDoc) => contentOf(target)?.getText(MARKDOWN_BODY_KEY) ?? null,
     onEdited: bodyEdited,
   })
-  function getBodyBinding(): BodyBinding | null {
+  function getBodyBinding(): BodyBinding<LoroDoc, LoroText> | null {
     return bodyBindingOf(doc)
   }
   onCanvasChange.flush = (): void => {
