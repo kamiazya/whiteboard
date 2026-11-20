@@ -270,7 +270,9 @@ takes a fresh `updatedAt` (`stampEditedDocuments`) — except under
 `origin: 'transfer'` (promotion), which keeps the arriving clocks. The edited
 documents are answered as `edited`, which the daemon's route checkpoints.
 A document the update REMOVES is evacuated first (`evacuateRemoved`, over
-loro-adapter's `documentsRemovedSince`): its blob and a trash entry are written
+the record session's `removedSince`, which is loro-adapter's
+`documentsRemovedSince` on a `LoroDoc` and the engine's `removed-since`
+export on a lease): its blob and a trash entry are written
 before the save, so a sync delete stays restorable like a route delete.
 
 ## Common mistakes (append as review finds them)
