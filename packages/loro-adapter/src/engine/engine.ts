@@ -399,14 +399,29 @@ function forkOf(source: Held, request: wire.ForkRequest): Held {
   }
 }
 
-function versionOf(doc: LoroDoc): wire.VersionResponse {
+/**
+ * What `doc` holds, or held at `at`: the operations that point had seen, with
+ * the frontiers they reach. A point the document does not hold is refused,
+ * since no operations can be named for it.
+ */
+function versionOf(doc: LoroDoc, at?: wire.VersionEntry[]): wire.VersionResponse {
   const entries = (pairs: Array<[string, number]>) =>
     pairs.map(([peer, counter]) => ({ peer, counter }))
+  if (at === undefined) {
+    return {
+      version: entries(versionPairs(doc.oplogVersion())),
+      frontiers: entries(frontierPairs(doc.oplogFrontiers())),
+      encodedVersion: bytesToBase64(doc.oplogVersion().encode()),
+      encodedFrontiers: bytesToBase64(encodeFrontiers(doc.oplogFrontiers())),
+    }
+  }
+  const seen = doc.frontiersToVV(frontiersAt(at))
+  const reached = doc.vvToFrontiers(seen)
   return {
-    version: entries(versionPairs(doc.oplogVersion())),
-    frontiers: entries(frontierPairs(doc.oplogFrontiers())),
-    encodedVersion: bytesToBase64(doc.oplogVersion().encode()),
-    encodedFrontiers: bytesToBase64(encodeFrontiers(doc.oplogFrontiers())),
+    version: entries(versionPairs(seen)),
+    frontiers: entries(frontierPairs(reached)),
+    encodedVersion: bytesToBase64(seen.encode()),
+    encodedFrontiers: bytesToBase64(encodeFrontiers(reached)),
   }
 }
 
@@ -442,7 +457,8 @@ function inspections(heldBy: (handle: number) => Held) {
       return { value: readQueryNow(heldBy(handle).doc, query) }
     },
     version(request: wire.VersionRequest) {
-      return versionOf(heldBy(wire.versionRequestSchema.parse(request).handle).doc)
+      const { handle, at } = wire.versionRequestSchema.parse(request)
+      return versionOf(heldBy(handle).doc, at)
     },
     decode: (request: wire.DecodeRequest) => decodeBytes(wire.decodeRequestSchema.parse(request)),
     undoState(request: wire.UndoStateRequest) {

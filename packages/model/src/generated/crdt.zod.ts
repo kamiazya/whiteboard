@@ -326,12 +326,6 @@ export const versionEntrySchema = z.strictObject({
 })
 export type VersionEntry = z.infer<typeof versionEntrySchema>
 
-/** Ask an open document which operations it holds. */
-export const versionRequestSchema = z.strictObject({
-  handle: handleSchema,
-})
-export type VersionRequest = z.infer<typeof versionRequestSchema>
-
 /** One write: the writer and its arguments, any-value on purpose. */
 export const writeSchema = z.strictObject({
   op: writerNameSchema,
@@ -399,6 +393,13 @@ export const readRequestSchema = z.strictObject({
   query: querySchema,
 })
 export type ReadRequest = z.infer<typeof readRequestSchema>
+
+/** Ask an open document which operations it holds, or held at a past point. */
+export const versionRequestSchema = z.strictObject({
+  handle: handleSchema,
+  at: z.array(versionEntrySchema).optional(),
+})
+export type VersionRequest = z.infer<typeof versionRequestSchema>
 
 /** The operations an open document holds, as the engine encodes them. */
 export const versionResponseSchema = z.strictObject({

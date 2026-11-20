@@ -856,13 +856,6 @@ pub struct VersionEntry {
     pub counter: i64,
 }
 
-/// Ask an open document which operations it holds.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct VersionRequest {
-    /// The document.
-    pub handle: Handle,
-}
-
 /// One write: the writer and its arguments, any-value on purpose.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Write {
@@ -964,6 +957,15 @@ pub struct ReadRequest {
     pub handle: Handle,
     /// The read.
     pub query: Query,
+}
+
+/// Ask an open document which operations it holds, or held at a past point.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct VersionRequest {
+    /// The document.
+    pub handle: Handle,
+    /// Frontiers the document holds, as a version response names them: answer for the operations that point had seen. Absent answers for every operation held.
+    pub at: Option<Vec<VersionEntry>>,
 }
 
 /// The operations an open document holds, as the engine encodes them.

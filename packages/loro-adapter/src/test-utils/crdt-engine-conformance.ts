@@ -62,6 +62,7 @@ import {
 } from './crdt-engine-conformance-lifecycle.js'
 import { describeProjectionExport } from './crdt-engine-conformance-projection.js'
 import { describeThreadMessageCounts } from './crdt-engine-conformance-threads.js'
+import { describeVersionAt } from './crdt-engine-conformance-version-at.js'
 import { describeWorkspaceSyncJudging } from './crdt-engine-conformance-workspace-sync.js'
 import {
   describeIndexWrites,
@@ -770,6 +771,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeBreachDetail(makeEngine)
     describeDocumentReaders(makeEngine)
     describeContainerPlace(makeEngine)
+    describeVersionAt(makeEngine)
     describeSubtreeImport(makeEngine)
     describeSubtreeRoot(makeEngine)
     describeReadNow(makeEngine)

@@ -238,7 +238,8 @@ fn the_calls_for_judging_versions_forks_and_undo_state_carry_their_fields() {
         encoded_frontiers: "AQ==".into(),
     };
     assert_ne!(version.clone(), VersionResponse::default());
-    assert_eq!(VersionRequest::default(), VersionRequest { handle: 0 });
+    assert_eq!(VersionRequest::default(), VersionRequest { handle: 0, at: None });
+    assert_ne!(VersionRequest { handle: 0, at: Some(entries.clone()) }, VersionRequest::default());
     let fork = ForkRequest { handle: 1, peer: "9".into(), at: Some(entries.clone()) };
     assert_ne!(fork.clone(), ForkRequest::default());
     let checkout = CheckoutRequest { handle: 1, at: entries };

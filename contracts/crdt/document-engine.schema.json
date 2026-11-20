@@ -477,16 +477,23 @@
       "x-wb-unknownKeys": "refuse"
     },
     "VersionRequest": {
-      "description": "Ask an open document which operations it holds.",
+      "description": "Ask an open document which operations it holds, or held at a past point.",
       "type": "object",
       "properties": {
         "handle": {
           "$ref": "#/$defs/Handle",
           "description": "The document."
+        },
+        "at": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "description": "Frontiers the document holds, as a version response names them: answer for the operations that point had seen. Absent answers for every operation held."
         }
       },
       "required": ["handle"],
-      "x-wb-order": ["handle"],
+      "x-wb-order": ["handle", "at"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
