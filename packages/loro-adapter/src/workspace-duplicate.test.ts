@@ -1,7 +1,7 @@
 import type { CommentThread, Proposal } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { holdsRetiredCommentPlane } from './annotations.js'
+import { retiredCommentRows } from './annotations.js'
 import { readCommentThreads, writeCommentThread } from './comment-threads.js'
 import { readMarkdownBody, writeMarkdownBody } from './markdown-body.js'
 import { readProposals, writeProposal } from './proposals.js'
@@ -186,6 +186,6 @@ describe('duplicateWorkspaceDocument and the annotation layer', () => {
 
     duplicateWorkspaceDocument(doc, { ...COPY_INPUT, withoutAnnotations: true })
 
-    expect(holdsRetiredCommentPlane(documentContainers(doc, COPY))).toBe(true)
+    expect(retiredCommentRows(documentContainers(doc, COPY))).toBeGreaterThan(0)
   })
 })

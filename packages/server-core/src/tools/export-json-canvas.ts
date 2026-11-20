@@ -1,7 +1,8 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import { documentIdSchema, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { ZodError, z } from 'zod'
-import { loadDocument } from '../document-io.js'
+import { withDocument } from '../document-session.js'
+import { canvasOf } from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { DocumentSerializeError } from './errors.js'
@@ -43,7 +44,7 @@ export async function exportJsonCanvas(
   input: ExportJsonCanvasInput,
 ): Promise<ExportJsonCanvasOutput> {
   await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-  const { canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
+  const canvas = await withDocument(deps, input.workspaceId, input.documentId, canvasOf)
   const mode = input.options?.strict === true ? 'strict' : 'extended'
   try {
     return { json: serializeSpatial(canvas, mode) }

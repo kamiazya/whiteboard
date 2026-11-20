@@ -6,10 +6,10 @@
  * cannot differ between libraries.
  */
 
-import { readFacets } from '@kamiazya/whiteboard-loro-adapter'
 import type { ExtensionFacets } from '@kamiazya/whiteboard-model'
 import { type DocumentEntry, isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
-import { loadOrCreateDocument } from '../document-io.js'
+import { withDocument } from '../document-session.js'
+import { facetsOf } from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
 
 /**
@@ -61,5 +61,5 @@ export async function readWorkspaceLibraryFacets(
   const entries = listed ?? (await listWorkspaceDocuments(deps, workspaceId, unknownWorkspace))
   const library = entries.find((entry) => entry.path === path)
   if (library === undefined) return undefined
-  return readFacets(await loadOrCreateDocument(deps, workspaceId, library.documentId))
+  return withDocument(deps, workspaceId, library.documentId, facetsOf, { create: true })
 }

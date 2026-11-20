@@ -11,11 +11,7 @@
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import {
-  holdsRetiredCommentPlane,
-  RetiredCommentPlaneError,
-  readAnnotations,
-} from './annotations.js'
+import { RetiredCommentPlaneError, readAnnotations, retiredCommentRows } from './annotations.js'
 import { writeCommentThread } from './comment-threads.js'
 import { writeMarkdownBody } from './markdown-body.js'
 import { createWorkspaceDocumentAtPath, documentContainers } from './workspace-tree.js'
@@ -50,7 +46,7 @@ describe('readAnnotations', () => {
     const doc = new LoroDoc()
     writeCommentThread(doc, THREAD)
     seedRetired(doc, { id: 'c1', x: 10, y: 20, text: 'from before threads' })
-    expect(holdsRetiredCommentPlane(doc)).toBe(true)
+    expect(retiredCommentRows(doc)).toBe(1)
     expect(() => readAnnotations(doc)).toThrow(RetiredCommentPlaneError)
     expect(() => readAnnotations(doc)).toThrow(/1 comment .*older version/)
   })
@@ -61,7 +57,7 @@ describe('readAnnotations', () => {
     const doc = new LoroDoc()
     doc.getMap('comments')
     writeCommentThread(doc, THREAD)
-    expect(holdsRetiredCommentPlane(doc)).toBe(false)
+    expect(retiredCommentRows(doc)).toBe(0)
     expect(readAnnotations(doc)).toEqual([THREAD])
   })
 
@@ -77,7 +73,7 @@ describe('readAnnotations', () => {
     })
     doc.commit()
     const before = doc.oplogVersion().encode()
-    expect(holdsRetiredCommentPlane(documentContainers(doc, DOCUMENT_ID))).toBe(false)
+    expect(retiredCommentRows(documentContainers(doc, DOCUMENT_ID))).toBe(0)
     expect(readAnnotations(documentContainers(doc, DOCUMENT_ID))).toEqual([])
     doc.commit()
     expect(doc.oplogVersion().encode()).toEqual(before)

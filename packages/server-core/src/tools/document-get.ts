@@ -1,10 +1,5 @@
 import { okfMarkdownFrontmatterSchema } from '@kamiazya/whiteboard-codec'
-import {
-  RetiredStoredShapeError,
-  readAnnotations,
-  readDocumentKind,
-  readProposals,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { RetiredStoredShapeError } from '@kamiazya/whiteboard-loro-adapter'
 import {
   commentThreadSchema,
   type DocumentKind,
@@ -14,7 +9,8 @@ import {
   proposalSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import { loadOrCreateDocument } from '../document-io.js'
+import { withDocument } from '../document-session.js'
+import { annotationsOf, kindOf, proposalsOf } from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
 import { DocumentSerializeError, reportedFaultText } from './errors.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
@@ -274,17 +270,24 @@ async function readOne(
   documentId: string,
   indexedKind: DocumentKind | undefined,
 ): Promise<ReadDocument> {
-  const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
-  // A document created before kinds existed carries none on its own Loro
-  // doc. Its index row, written at creation time, may still have one —
-  // consult it before refusing. This is a read-only fallback: the kind
-  // is never written back onto the doc or the row.
-  const kind = readDocumentKind(doc) ?? indexedKind
+  const { kind, threads, proposals } = await withDocument(
+    deps,
+    input.workspaceId,
+    documentId,
+    async (session) => ({
+      // A document created before kinds existed carries none on its own Loro
+      // doc. Its index row, written at creation time, may still have one —
+      // consult it before refusing. This is a read-only fallback: the kind
+      // is never written back onto the doc or the row.
+      kind: (await kindOf(session)) ?? indexedKind,
+      threads: await annotationsOf(session),
+      proposals: await proposalsOf(session),
+    }),
+    { create: true },
+  )
   if (kind === undefined) {
     throw new DocumentKindUnknownError(documentId)
   }
-  const threads = readAnnotations(doc)
-  const proposals = readProposals(doc)
   const annotated = {
     ...(threads.length === 0 ? {} : { threads }),
     ...(proposals.length === 0 ? {} : { proposals }),

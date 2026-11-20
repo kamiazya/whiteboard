@@ -27,7 +27,7 @@ import {
   describeFork,
   describeImportJudging,
   describeImportPending,
-  describeRetiredCommentPlane,
+  describeRetiredCommentRows,
   describeSpliceRuns,
   describeSpliceRunsRefused,
   describeSubtreeImport,
@@ -761,7 +761,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeSpliceRunsRefused(makeEngine)
     describeDocumentKindFallback(makeEngine)
     describeDocumentContentWithTags(makeEngine)
-    describeRetiredCommentPlane(makeEngine)
+    describeRetiredCommentRows(makeEngine)
     describeSubtreeImport(makeEngine)
     describeSubtreeRoot(makeEngine)
     describeReadNow(makeEngine)

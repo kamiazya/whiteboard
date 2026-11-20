@@ -1,6 +1,5 @@
-import { readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentId, WorkspaceId } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
+import type { DocumentSession } from '../document-session.js'
+import { kindOf } from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
 
 /**
@@ -27,12 +26,11 @@ class NotASpatialDocumentError extends Error {
  */
 export async function assertSpatialDocument(
   deps: ServerDeps,
-  workspaceId: WorkspaceId,
-  documentId: DocumentId,
-  doc: LoroDoc,
+  session: DocumentSession,
   toolName: string,
 ): Promise<void> {
-  const docKind = readDocumentKind(doc)
+  const { workspaceId, documentId } = session
+  const docKind = await kindOf(session)
   const kind =
     docKind ?? (await deps.documentIndex.resolveDocumentById({ workspaceId, documentId }))?.kind
   if (kind === 'markdown') {

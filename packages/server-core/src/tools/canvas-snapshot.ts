@@ -1,5 +1,4 @@
 import { sceneDigestSchema } from '@kamiazya/whiteboard-canvas-render'
-import { readEdgeLocks, readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type CanvasEdge,
   type CanvasLine,
@@ -24,7 +23,8 @@ import {
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import { loadDocument } from '../document-io.js'
+import { withDocument } from '../document-session.js'
+import { canvasOf, edgeLocksOf, nodeLocksOf } from '../document-session-reads.js'
 import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { composeCanvasDigest } from '../render/compose-canvas-scene.js'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
@@ -346,21 +346,17 @@ export function projectCanvasSnapshot(
   }
 }
 
-/** The canvas the snapshot reads: placed in the named workspace, and spatial. */
-async function loadOwnedCanvas(
-  deps: ServerDeps,
-  input: CanvasSnapshotInput,
-): Promise<Awaited<ReturnType<typeof loadDocument>>> {
+/** The canvas the snapshot reads and the locks over it, from a document placed in the named workspace and spatial. */
+async function readOwnedCanvas(deps: ServerDeps, input: CanvasSnapshotInput) {
   await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-  const loaded = await loadDocument(deps, input.workspaceId, input.documentId)
-  await assertSpatialDocument(
-    deps,
-    input.workspaceId,
-    input.documentId,
-    loaded.doc,
-    'wb_canvas_snapshot',
-  )
-  return loaded
+  return withDocument(deps, input.workspaceId, input.documentId, async (session) => {
+    await assertSpatialDocument(deps, session, 'wb_canvas_snapshot')
+    return {
+      canvas: await canvasOf(session),
+      nodeLocks: await nodeLocksOf(session),
+      edgeLocks: await edgeLocksOf(session),
+    }
+  })
 }
 
 /**
@@ -390,13 +386,8 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
     inputSchema: canvasSnapshotInputSchema,
     outputSchema: canvasSnapshotSchema,
     async execute(input: CanvasSnapshotInput): Promise<CanvasSnapshot> {
-      const { doc, canvas } = await loadOwnedCanvas(deps, input)
-      const snapshot = projectCanvasSnapshot(
-        input.documentId,
-        canvas,
-        readNodeLocks(doc),
-        readEdgeLocks(doc),
-      )
+      const { canvas, nodeLocks, edgeLocks } = await readOwnedCanvas(deps, input)
+      const snapshot = projectCanvasSnapshot(input.documentId, canvas, nodeLocks, edgeLocks)
       if (input.layout !== true) return snapshot
 
       // The exporter's own measurer when the composition root supplies one:

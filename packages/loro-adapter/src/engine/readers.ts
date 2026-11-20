@@ -9,7 +9,7 @@
 import { type documentEngine, documentKindSchema } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
-import { holdsRetiredCommentPlane, readAnnotations } from '../annotations.js'
+import { readAnnotations, retiredCommentRows } from '../annotations.js'
 import { readCommentThreads } from '../comment-threads.js'
 import type { DocumentContainers } from '../containers.js'
 import { contentDigestOfDocument } from '../content-digest.js'
@@ -100,7 +100,7 @@ export const READERS: Record<documentEngine.QueryName, Reader> = {
   proposals: content(readProposals),
   imageRefIds: content((host) => [...collectImageRefIds(host)].sort()),
   retiredStoredShape: content(retiredStoredShapeIn),
-  retiredCommentPlane: content(holdsRetiredCommentPlane),
+  retiredCommentRows: content(retiredCommentRows),
   stateSize: (doc) => stateSize(doc),
   contentDigest: (doc) => contentDigestOfDocument(doc),
   textLimitBreach: (doc) => judgeStateWithinTextLimits(doc),
