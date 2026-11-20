@@ -252,7 +252,11 @@ class StartPush extends Step {
     model.log.push({ event: 'start', id })
     model.open.push(id)
     model.everStarted = true
-    return []
+    // A push with no edit before it (an undo, a redo, a re-send) is a write
+    // in flight all the same, so a settled document reads pending until it lands.
+    if (model.dirty) return []
+    model.dirty = true
+    return ['pending']
   }
 }
 

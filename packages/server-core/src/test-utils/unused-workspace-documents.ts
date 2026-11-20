@@ -1,3 +1,4 @@
+import { bindRecordOps, legacyRecordOps } from '@kamiazya/whiteboard-loro-adapter'
 import type { WorkspaceDocuments } from '../server-deps.js'
 
 /**
@@ -15,6 +16,13 @@ export function unusedWorkspaceDocuments(): WorkspaceDocuments {
   return {
     exists: refuse('exists'),
     get: refuse('get'),
+    // Over whatever `get` and `save` a test supplies, so a double written
+    // against the record as a `LoroDoc` serves an operation that holds it as a
+    // session without being written twice.
+    async open(this: WorkspaceDocuments, workspaceId) {
+      const doc = await this.get(workspaceId)
+      return bindRecordOps(legacyRecordOps, doc, (held) => this.save(workspaceId, held))
+    },
     save: refuse('save'),
     evictProjections: refuse('evictProjections'),
     evict: refuse('evict'),

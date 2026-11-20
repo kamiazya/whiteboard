@@ -1,5 +1,6 @@
 import type { LayoutCore, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import type { RecordSession } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
 import type { HonoRequest } from 'hono'
@@ -294,6 +295,14 @@ export interface WorkspaceDocuments {
    * documents yet.
    */
   get(workspaceId: string): Promise<LoroDoc>
+  /**
+   * The same live record as `get`, bound to the operations that read and
+   * write it and to its save. An operation that holds the record only through
+   * this stays ignorant of what holds it, so the holder changes without the
+   * operation changing; `get` stays for the operations not yet moved.
+   * `save()` on the session is `save(workspaceId, doc)` for the same record.
+   */
+  open(workspaceId: string): Promise<RecordSession>
   /**
    * Persists the workspace doc. Fan-out to update subscribers happens
    * INSIDE the implementation, so a caller never broadcasts separately.

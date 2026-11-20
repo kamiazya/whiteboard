@@ -1,3 +1,4 @@
+import { bindRecordOps, legacyRecordOps } from '@kamiazya/whiteboard-loro-adapter'
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import type { LiveDocuments, WorkspaceDocuments } from '@kamiazya/whiteboard-server-core'
 import { evictDoc, evictWorkspaceDocs } from './doc-cache.js'
@@ -63,6 +64,12 @@ export function workspaceDocuments(scope: StoreScope = globalStoreScope): Worksp
   return {
     exists: (workspaceId) => workspaceExists(workspaceId, scope),
     get: (workspaceId) => getWorkspaceDoc(workspaceId, scope),
+    async open(workspaceId) {
+      const record = await getWorkspaceDoc(workspaceId, scope)
+      return bindRecordOps(legacyRecordOps, record, async (doc) => {
+        await saveWorkspaceDoc(workspaceId, doc, scope)
+      })
+    },
     async save(workspaceId, doc) {
       // saveWorkspaceDoc answers the update bytes it fanned out; the seam
       // promises only persistence, so the value is deliberately dropped.

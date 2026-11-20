@@ -7,13 +7,13 @@ use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_model::Value;
 use whiteboard_model::crdt::{
     Breach, BreachShape, CheckoutRequest, CloseRequest, DecodeKind, DecodeRequest, DecodeResponse,
-    ExportProjectionRequest, ExportRequest, ExportResponse, ExportShallowSnapshotRequest,
-    ExportSnapshotRequest, ExportSubtreeRequest, ExportUpdateRequest, ForkRequest, ImportJudge,
-    ImportRequest, ImportSubtreeRequest, MutationApplied, MutationRefused, MutationResult,
-    OpenRequest, OpenResponse, PlacedRoot, Query, QueryName, ReadRequest, ReadResponse,
-    RedoRequest, TextRun, TextSpliceRequest, TrimRequest, UndoClearRequest, UndoRequest,
-    UndoStateRequest, UndoStateResponse, VersionEntry, VersionRequest, VersionResponse, Write,
-    WriteJudge, WriteRequest, WriterName,
+    ExportProjectionRequest, ExportRemovedSinceRequest, ExportRequest, ExportResponse,
+    ExportShallowSnapshotRequest, ExportSnapshotRequest, ExportSubtreeRequest, ExportUpdateRequest,
+    FolderName, ForkRequest, ImportJudge, ImportRequest, ImportSubtreeRequest, MutationApplied,
+    MutationRefused, MutationResult, OpenRequest, OpenResponse, PlacedRoot, Query, QueryName,
+    ReadRequest, ReadResponse, RedoRequest, RemovedDocument, TextRun, TextSpliceRequest,
+    TrimRequest, UndoClearRequest, UndoRequest, UndoStateRequest, UndoStateResponse, VersionEntry,
+    VersionRequest, VersionResponse, Write, WriteJudge, WriteRequest, WriterName,
 };
 use whiteboard_model::json::parse;
 
@@ -114,6 +114,7 @@ fn a_union_defaults_to_its_first_member_and_each_constant_is_the_contract_tag() 
     assert_eq!(ExportSubtreeRequest::MODE, "subtree");
     assert_eq!(ExportProjectionRequest::MODE, "projection");
     assert_eq!(ExportShallowSnapshotRequest::MODE, "shallow-snapshot");
+    assert_eq!(ExportRemovedSinceRequest::MODE, "removed-since");
     assert_eq!(MutationApplied::OUTCOME, "applied");
     assert_eq!(MutationRefused::OUTCOME, "refused");
 }
@@ -155,6 +156,12 @@ fn every_message_defaults_empty_and_clones_equal_with_an_unsigned_index() {
     let shallow =
         ExportShallowSnapshotRequest { handle: 1, frontiers: vec![VersionEntry::default()] };
     assert_ne!(shallow, ExportShallowSnapshotRequest::default());
+    let removed = ExportRemovedSinceRequest { handle: 1, since: vec![VersionEntry::default()] };
+    assert_eq!(
+        ExportRequest::ExportRemovedSinceRequest(removed.clone()).clone(),
+        ExportRequest::ExportRemovedSinceRequest(removed.clone())
+    );
+    assert_ne!(removed, ExportRemovedSinceRequest::default());
 }
 
 #[test]
@@ -212,7 +219,23 @@ fn the_calls_that_close_undo_redo_and_export_carry_their_fields() {
     assert_ne!(UndoRequest { handle: 0, judge: Some(WriteJudge::None) }, UndoRequest::default());
     assert_ne!(RedoRequest { handle: 0, judge: Some(WriteJudge::Text) }, RedoRequest::default());
     assert_eq!(ExportResponse::default().bytes, None);
-    assert_ne!(ExportResponse { bytes: Some("AA==".into()) }, ExportResponse::default());
+    assert_ne!(
+        ExportResponse { bytes: Some("AA==".into()), removed: None },
+        ExportResponse::default()
+    );
+    assert_eq!(ExportResponse::default().removed, None);
+    let removed = RemovedDocument {
+        document_id: "01BRWAAAAAAAAAAAAAAAAAAAA0".into(),
+        path: "folder/other".into(),
+        name: Some("Other".into()),
+        folder_names: Some(vec![FolderName { path: "folder".into(), name: "Shelf".into() }]),
+        bytes: "AA==".into(),
+    };
+    assert_ne!(removed.clone(), RemovedDocument::default());
+    assert_ne!(
+        ExportResponse { bytes: None, removed: Some(vec![removed]) },
+        ExportResponse::default()
+    );
     assert_eq!(WriteJudge::default(), WriteJudge::Text);
     assert_eq!(WriteRequest::default().judge, None);
     assert_eq!(ImportRequest::default().bytes, "");

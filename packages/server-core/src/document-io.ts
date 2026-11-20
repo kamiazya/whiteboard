@@ -162,15 +162,36 @@ export function runEvictingOnEngineTrap<T>(
   try {
     return work()
   } catch (err) {
-    if (!isEngineTrap(err)) throw err
-    target.evict()
-    log.error('the CRDT engine trapped on a cached document; the cached copy was dropped', {
-      ...target.fields,
-      doing,
-      err: messageOf(err),
-    })
-    throw new DocumentEngineTrapError(target.subject, doing, err)
+    return dropTrapped(target, doing, err)
   }
+}
+
+/** `runEvictingOnEngineTrap` for work that answers later, such as a named read of the record. */
+export async function runEvictingOnEngineTrapLater<T>(
+  target: CachedTarget,
+  doing: Exclude<DocumentEngineTrapError['doing'], 'running'>,
+  work: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await work()
+  } catch (err) {
+    return dropTrapped(target, doing, err)
+  }
+}
+
+function dropTrapped(
+  target: CachedTarget,
+  doing: Exclude<DocumentEngineTrapError['doing'], 'running'>,
+  err: unknown,
+): never {
+  if (!isEngineTrap(err)) throw err
+  target.evict()
+  log.error('the CRDT engine trapped on a cached document; the cached copy was dropped', {
+    ...target.fields,
+    doing,
+    err: messageOf(err),
+  })
+  throw new DocumentEngineTrapError(target.subject, doing, err)
 }
 
 /** Chunks snapshot bytes and hands them to the store under the frontier they were exported at. */

@@ -47,6 +47,13 @@ export type DecodeKind = z.infer<typeof decodeKindSchema>
 export const documentIdSchema = z.string()
 export type DocumentId = z.infer<typeof documentIdSchema>
 
+/** The display name of a folder of a workspace record, by its path. */
+export const folderNameSchema = z.strictObject({
+  path: z.string(),
+  name: z.string(),
+})
+export type FolderName = z.infer<typeof folderNameSchema>
+
 /** What open answers: an engine-held document, never reused in an engine life. A close ends it. */
 export const handleSchema = z.number().int().meta({ minimum: undefined, maximum: undefined })
 export type Handle = z.infer<typeof handleSchema>
@@ -210,12 +217,6 @@ export const exportProjectionRequestSchema = z.strictObject({
 })
 export type ExportProjectionRequest = z.infer<typeof exportProjectionRequestSchema>
 
-/** What an export produced. */
-export const exportResponseSchema = z.strictObject({
-  bytes: bytesSchema.optional(),
-})
-export type ExportResponse = z.infer<typeof exportResponseSchema>
-
 /** Export everything an open document holds. */
 export const exportSnapshotRequestSchema = z.strictObject({
   handle: handleSchema,
@@ -284,6 +285,16 @@ export const redoRequestSchema = z.strictObject({
 })
 export type RedoRequest = z.infer<typeof redoRequestSchema>
 
+/** A document the operations after a version removed, as a trash keeps it. */
+export const removedDocumentSchema = z.strictObject({
+  documentId: documentIdSchema,
+  path: z.string(),
+  name: z.string().optional(),
+  folderNames: z.array(folderNameSchema).optional(),
+  bytes: bytesSchema,
+})
+export type RemovedDocument = z.infer<typeof removedDocumentSchema>
+
 /** Replace runs of a text container, in UTF-16 code units. */
 export const textSpliceRequestSchema = z.strictObject({
   handle: handleSchema,
@@ -345,6 +356,21 @@ export const decodeResponseSchema = z.strictObject({
   entries: z.array(versionEntrySchema),
 })
 export type DecodeResponse = z.infer<typeof decodeResponseSchema>
+
+/** Export the documents the operations after a version removed, as a trash keeps them. */
+export const exportRemovedSinceRequestSchema = z.strictObject({
+  handle: handleSchema,
+  mode: z.literal('removed-since'),
+  since: z.array(versionEntrySchema),
+})
+export type ExportRemovedSinceRequest = z.infer<typeof exportRemovedSinceRequestSchema>
+
+/** What an export produced. */
+export const exportResponseSchema = z.strictObject({
+  bytes: bytesSchema.optional(),
+  removed: z.array(removedDocumentSchema).optional(),
+})
+export type ExportResponse = z.infer<typeof exportResponseSchema>
 
 /** Export the current state, keeping history only from a version on. */
 export const exportShallowAtVersionRequestSchema = z.strictObject({
@@ -435,6 +461,7 @@ export const exportRequestSchema = z.discriminatedUnion('mode', [
   exportShallowAtVersionRequestSchema,
   exportSubtreeRequestSchema,
   exportProjectionRequestSchema,
+  exportRemovedSinceRequestSchema,
 ])
 export type ExportRequest = z.infer<typeof exportRequestSchema>
 

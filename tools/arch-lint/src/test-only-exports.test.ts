@@ -203,6 +203,8 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/loro-adapter/src/engine/lease-ops.ts#leaseOps':
+    'the operations over an engine lease, which only the conformance test builds until the daemon operations are written over `RecordOps` and the cache holds leases',
   'packages/workspace-index/src/index-record-kind.ts#leaseIndexKind':
     'the index over engine leases, which only its tests build until the consumers move from the LoroDoc default onto leases and pass it as the index kind',
   'packages/canvas-render/src/edge-arrows.ts#edgeArrowEnds':

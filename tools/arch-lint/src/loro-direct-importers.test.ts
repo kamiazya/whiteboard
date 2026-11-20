@@ -57,7 +57,6 @@ const LORO_DIRECT: Readonly<Record<string, string>> = {
   'packages/mcp-server/src/server/store/workspace-doc-cache.ts': 'M8: daemon store',
   'packages/mcp-server/src/server/store/workspace-plane.ts': 'M8: daemon store',
   'packages/mcp-server/src/server/store/workspace-tail.ts': 'M8: daemon store',
-  'packages/server-core/src/operations/apply-workspace-document-update.ts': 'M7: server-core',
   'packages/server-core/src/operations/promote-carried.ts': 'M7: server-core',
   'packages/server-core/src/operations/promote-workspace.ts': 'M7: server-core',
   'packages/server-core/src/operations/restore-version.ts': 'M7: server-core',

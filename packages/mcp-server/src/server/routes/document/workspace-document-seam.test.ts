@@ -47,13 +47,16 @@ describe('workspace-document routes and the deps they were handed', () => {
     const real = deps.workspaceDocuments
     deps.workspaceDocuments = {
       ...real,
-      get: async (workspaceId) => {
-        recorded.push(`get ${workspaceId}`)
-        return real.get(workspaceId)
-      },
-      save: async (workspaceId, doc) => {
-        recorded.push(`save ${workspaceId}`)
-        return real.save(workspaceId, doc)
+      open: async (workspaceId) => {
+        recorded.push(`open ${workspaceId}`)
+        const session = await real.open(workspaceId)
+        return {
+          ...session,
+          save: async () => {
+            recorded.push(`save ${workspaceId}`)
+            await session.save()
+          },
+        }
       },
     }
 
@@ -73,6 +76,6 @@ describe('workspace-document routes and the deps they were handed', () => {
     // The recorder on the injected deps is the discriminator: a route that
     // went around the seam to module-level stores persists the same bytes
     // and leaves this empty.
-    expect(recorded).toEqual([`get ${WS}`, `save ${WS}`])
+    expect(recorded).toEqual([`open ${WS}`, `save ${WS}`])
   })
 })

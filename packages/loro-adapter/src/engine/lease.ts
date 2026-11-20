@@ -12,6 +12,7 @@ import {
   bytesToBase64,
   type documentEngine as wire,
 } from '@kamiazya/whiteboard-model'
+import type { RemovedDocument } from '../removed-documents.js'
 import { exportedBytes } from './answers.js'
 import { randomPeerId } from './peer.js'
 import { type AnswerShape, readValue, unwrapAnswer } from './read-value.js'
@@ -117,6 +118,23 @@ export function exportSnapshot(lease: RecordLease): Uint8Array {
 export function exportProjection(lease: RecordLease, documentId: string): Uint8Array | null {
   const { bytes } = lease.engine.export({ handle: lease.handle, mode: 'projection', documentId })
   return bytes === undefined ? null : bytesOf(bytes)
+}
+
+/**
+ * The documents the operations after `since` removed, with the bytes a trash
+ * keeps to bring each back; see `RecordOps.removedSince`.
+ */
+export function removedSince(
+  lease: RecordLease,
+  since: readonly wire.VersionEntry[],
+): RemovedDocument[] {
+  const { removed } = lease.engine.export({
+    handle: lease.handle,
+    mode: 'removed-since',
+    since: [...since],
+  })
+  if (removed === undefined) throw new TypeError('the engine answered no removed list')
+  return removed.map(({ bytes, ...rest }) => ({ ...rest, bytes: bytesOf(bytes) }))
 }
 
 /** The operations after a version `versionOf` encoded; the whole history for `null`. */

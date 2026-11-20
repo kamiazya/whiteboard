@@ -216,6 +216,7 @@ describe('the CRDT document-engine contract', () => {
       { handle: 0, mode: 'update', from: frontiers },
       { handle: 0, mode: 'shallow-snapshot', frontiers },
       { handle: 0, mode: 'shallow-snapshot-at-version', version: frontiers },
+      { handle: 0, mode: 'removed-since', since: frontiers },
     ]
     for (const request of requests) {
       expect(
@@ -227,6 +228,8 @@ describe('the CRDT document-engine contract', () => {
       { handle: 0, mode: 'shallow-snapshot' },
       { handle: 0, mode: 'shallow-snapshot-at-version' },
       { handle: 0, mode: 'shallow-snapshot-at-version', frontiers },
+      { handle: 0, mode: 'removed-since' },
+      { handle: 0, mode: 'removed-since', version: frontiers },
       { handle: 0, mode: 'snapshot', frontiers },
       { handle: 0, mode: 'snapshot', from: frontiers },
       { handle: 0, mode: 'update', frontiers },

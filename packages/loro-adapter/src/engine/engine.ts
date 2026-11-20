@@ -26,6 +26,7 @@ import {
   UndoManager,
   VersionVector,
 } from 'loro-crdt'
+import { documentsRemovedSince } from '../removed-documents.js'
 import {
   importWithinTextLimits,
   type SyncTextBreach,
@@ -107,7 +108,7 @@ function decoded(text: string): Uint8Array {
  * (a field a judge leaves undefined is not there), so a keeper rebuilds its
  * refusal from an engine's answer exactly as from the judge.
  */
-function breachOf(breach: SyncTextBreach | WorkspaceSyncBreach): wire.Breach {
+export function breachOf(breach: SyncTextBreach | WorkspaceSyncBreach): wire.Breach {
   const detail: unknown = JSON.parse(JSON.stringify(breach))
   return 'container' in breach
     ? { shape: breach.shape, container: breach.container, detail }
@@ -115,7 +116,7 @@ function breachOf(breach: SyncTextBreach | WorkspaceSyncBreach): wire.Breach {
 }
 
 /** The workspace documents the operations after `before` wrote to; none for a document that is its own root. */
-function touchedSince(doc: LoroDoc, before: VersionVector): string[] {
+export function touchedSince(doc: LoroDoc, before: VersionVector): string[] {
   return WORKSPACE_TREE_KEY in doc.getShallowValue()
     ? documentsTouchedSince(doc, before).map(({ documentId }) => documentId)
     : []
@@ -329,6 +330,15 @@ function exportFrom(doc: LoroDoc, request: wire.ExportRequest): wire.ExportRespo
     return projected === null
       ? {}
       : { bytes: bytesToBase64(projected.export({ mode: 'snapshot' })) }
+  }
+  if (request.mode === 'removed-since') {
+    const since = versionOfPairs(request.since.map(({ peer, counter }) => [peer, counter]))
+    return {
+      removed: documentsRemovedSince(doc, since).map(({ bytes, ...rest }) => ({
+        ...rest,
+        bytes: bytesToBase64(bytes),
+      })),
+    }
   }
   if (request.mode === 'snapshot') return { bytes: bytesToBase64(doc.export({ mode: 'snapshot' })) }
   if (request.mode === 'update') {
