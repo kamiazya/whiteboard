@@ -4,7 +4,11 @@
  * connection can end: asserted by the handle the engine minted, so a handle
  * closed twice cannot hide one that leaked.
  */
-import { documentContainers, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  documentContainers,
+  readMarkdownBody,
+  writeMarkdownBody,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { InMemoryRecordDocs } from '../test-utils/in-memory-record-docs.js'
@@ -65,8 +69,8 @@ describe('the workspace record a BrowserBackend holds', () => {
     connect(backend)
     backend.disconnect()
 
-    await vi.waitFor(() => expect(handles.unaccounted()).toEqual([]))
     await vi.waitFor(() => expect(handles.minted().length).toBeGreaterThan(0))
+    await vi.waitFor(() => expect(handles.unaccounted()).toEqual([]))
   })
 
   it('is given back when the document cannot be placed', async () => {
@@ -103,7 +107,9 @@ describe('the workspace record a BrowserBackend holds', () => {
     await pushed
 
     const stored = docs.openDoc()
-    expect(stored).not.toBeNull()
+    expect(stored && readMarkdownBody(documentContainers(stored, TARGET.documentId))).toBe(
+      'typed before the switch',
+    )
     await vi.waitFor(() => expect(handles.unaccounted()).toEqual([]))
   })
 })
