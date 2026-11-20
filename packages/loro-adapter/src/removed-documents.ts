@@ -3,6 +3,7 @@
 // import, because a removed tree node cannot be revived and a shallow
 // snapshot drops what it held.
 import type { LoroDoc, TreeID, VersionVector } from 'loro-crdt'
+import { opsSince } from './ops-since.js'
 import { folderNamesByPath, namedFoldersAbove } from './workspace-folder-name.js'
 import {
   deleteWorkspaceNode,
@@ -113,8 +114,7 @@ export function documentsRemovedSince(workspace: LoroDoc, since: VersionVector):
 
 function treeChangedSince(workspace: LoroDoc, since: VersionVector): boolean {
   const tree = workspace.getTree(WORKSPACE_TREE_KEY).id
-  const { changes } = workspace.exportJsonUpdates(since, workspace.oplogVersion(), false)
-  return changes.some((change) => change.ops.some((op) => op.container === tree))
+  return opsSince(workspace, since).some((op) => op.container === tree)
 }
 
 /**
