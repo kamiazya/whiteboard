@@ -54,6 +54,12 @@ const LIBRARY: TagLibrary = { h: { values: { ok: { color: '4' } } } }
 
 const DEFAULT_PADDING_PX = 10
 
+// 96 renders, half of them rasterised: 5.5s alone, so more than half of the
+// default 10s ceiling before anything else runs. Six busy processes beside it
+// (a whole-project run keeps every core busy) took it past 10s and failed it on
+// the clock alone; three whole runs on three branches did the same.
+const RENDER_GRID_TIMEOUT_MS = 30_000
+
 /** The root's `name` attribute as a number. */
 const rootNumber = (svg: string, name: string): number =>
   Number(new RegExp(`^<svg [^>]*?\\b${name}="([^"]*)"`).exec(svg)?.[1])
@@ -73,55 +79,61 @@ function expectPaper(
 }
 
 describe('the file export in one core call', () => {
-  it('draws the SVG and the PNG source from the one scene the core answered', async () => {
-    const { core, answered } = recordingCore()
-    let compared = 0
-    const marks = new Set<string>()
-    const widths = new Map<string, number>()
-    for (const canvas of [BOARD, { nodes: [], edges: [] }]) {
-      for (const theme of ['light', 'dark'] as const) {
-        for (const style of [undefined, 'document', 'visual.sketch', 'visual.neon'] as const) {
-          for (const padding of [undefined, 0, 24]) {
-            const options = {
-              core,
-              theme,
-              tagLibrary: LIBRARY,
-              ...(style === undefined ? {} : { style }),
-              ...(padding === undefined ? {} : { padding }),
+  it(
+    'draws the SVG and the PNG source from the one scene the core answered',
+    async () => {
+      const { core, answered } = recordingCore()
+      let compared = 0
+      const marks = new Set<string>()
+      const widths = new Map<string, number>()
+      for (const canvas of [BOARD, { nodes: [], edges: [] }]) {
+        for (const theme of ['light', 'dark'] as const) {
+          for (const style of [undefined, 'document', 'visual.sketch', 'visual.neon'] as const) {
+            for (const padding of [undefined, 0, 24]) {
+              const options = {
+                core,
+                theme,
+                tagLibrary: LIBRARY,
+                ...(style === undefined ? {} : { style }),
+                ...(padding === undefined ? {} : { padding }),
+              }
+              const label = `${canvas.nodes.length} ${theme} ${style} ${padding}`
+              const svg = await renderSpatialCanvasToSvg(canvas, NO_INSTALLED_FONTS, options)
+              const one = answered.at(-1) as Answered
+              expect(svg.svg === one.svg, label).toBe(true)
+              expectPaper(one.svg, canvas, options, label)
+              widths.set(`${label}`, rootNumber(one.svg, 'width'))
+              for (const mark of ['calls', 'data-wb-legend', 'wb-glow']) {
+                if (one.svg.includes(mark)) marks.add(mark)
+              }
+              await renderSpatialCanvasToPng(canvas, NO_INSTALLED_FONTS, { ...options, scale: 3 })
+              const zoomed = answered.at(-1) as Answered
+              expect(zoomed === one, label).toBe(false)
+              expectPaper(zoomed.svg, canvas, options, label)
+              compared += 2
             }
-            const label = `${canvas.nodes.length} ${theme} ${style} ${padding}`
-            const svg = await renderSpatialCanvasToSvg(canvas, NO_INSTALLED_FONTS, options)
-            const one = answered.at(-1) as Answered
-            expect(svg.svg === one.svg, label).toBe(true)
-            expectPaper(one.svg, canvas, options, label)
-            widths.set(`${label}`, rootNumber(one.svg, 'width'))
-            for (const mark of ['calls', 'data-wb-legend', 'wb-glow']) {
-              if (one.svg.includes(mark)) marks.add(mark)
-            }
-            await renderSpatialCanvasToPng(canvas, NO_INSTALLED_FONTS, { ...options, scale: 3 })
-            const zoomed = answered.at(-1) as Answered
-            expect(zoomed === one, label).toBe(false)
-            expectPaper(zoomed.svg, canvas, options, label)
-            compared += 2
           }
         }
       }
-    }
-    expect(compared).toBe(96)
-    // Padding grows the picture by its width on both sides.
-    for (const canvas of ['3', '0']) {
-      for (const theme of ['light', 'dark']) {
-        for (const style of [undefined, 'document', 'visual.sketch', 'visual.neon']) {
-          const at = (padding: number | undefined) =>
-            widths.get(`${canvas} ${theme} ${style} ${padding}`) as number
-          expect(at(24) - at(0), `${canvas} ${theme} ${style}`).toBe(48)
-          expect(at(undefined) - at(0), `${canvas} ${theme} ${style}`).toBe(2 * DEFAULT_PADDING_PX)
+      expect(compared).toBe(96)
+      // Padding grows the picture by its width on both sides.
+      for (const canvas of ['3', '0']) {
+        for (const theme of ['light', 'dark']) {
+          for (const style of [undefined, 'document', 'visual.sketch', 'visual.neon']) {
+            const at = (padding: number | undefined) =>
+              widths.get(`${canvas} ${theme} ${style} ${padding}`) as number
+            expect(at(24) - at(0), `${canvas} ${theme} ${style}`).toBe(48)
+            expect(at(undefined) - at(0), `${canvas} ${theme} ${style}`).toBe(
+              2 * DEFAULT_PADDING_PX,
+            )
+          }
         }
       }
-    }
-    // The board reaches what the export draws: an edge label, a legend and a theme's glow.
-    expect([...marks].sort()).toEqual(['calls', 'data-wb-legend', 'wb-glow'])
-  })
+      // The board reaches what the export draws: an edge label, a legend and a theme's glow.
+      expect([...marks].sort()).toEqual(['calls', 'data-wb-legend', 'wb-glow'])
+    },
+    RENDER_GRID_TIMEOUT_MS,
+  )
 
   it('budgets the filters at the zoom the PNG is drawn at', async () => {
     const { core, answered } = recordingCore()
