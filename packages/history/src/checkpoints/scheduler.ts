@@ -41,9 +41,11 @@ export interface CheckpointSchedulerOptions<Doc, Entry> {
   /**
    * The document's encoded frontier now. Asked when a checkpoint is about to
    * be taken, not when an update arrives, so a burst of edits pays for one
-   * read. The scheduler never decodes it: it only asks whether it moved.
+   * read. The scheduler never decodes it: it only asks whether it moved. A
+   * keeper that holds no document may read it from storage, so it may be
+   * waited for.
    */
-  readonly frontierOf: (doc: Doc) => Uint8Array
+  readonly frontierOf: (doc: Doc) => Uint8Array | Promise<Uint8Array>
   /** Writes the checkpoint. */
   readonly save: (workspaceId: string, path: string, doc: Doc) => Promise<Entry>
   /**
@@ -153,7 +155,7 @@ function createCheckpointTaker<Doc, Entry>(options: CheckpointSchedulerOptions<D
       const key = `${workspaceId}/${path}`
       // Encoding a frontier is free (measured at 0ms), so the "has anything
       // changed" question costs nothing and a quiet document writes no row.
-      const now = frontiersToBase64(options.frontierOf(doc))
+      const now = frontiersToBase64(await options.frontierOf(doc))
       if (savedAt.get(key) === now) return
 
       // Memory said nothing, so ask the rows. A read per checkpoint is
