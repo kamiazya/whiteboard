@@ -363,7 +363,9 @@ export function createDocumentSyncSession(
   let unreadable = false
   let commitChain: Promise<void> = Promise.resolve()
   // Counts onChange firings that have been chained onto commitChain but have
-  // not yet settled. Lets dispose() tell "nothing was pending, safe to
+  // not yet settled, and pushes `send` has queued whose call to the keeper has
+  // not happened yet (an undo, a redo or a body commit makes one outside the
+  // chain). Lets dispose() tell "nothing was pending, safe to
   // disconnect immediately" apart from "a flush-triggered (or still-running)
   // firing exists" without needing to inspect a Promise's settled state
   // synchronously (not otherwise observable in plain JS).
@@ -400,8 +402,12 @@ export function createDocumentSyncSession(
    */
   function send(bytes: () => Uint8Array): void {
     const push = persistence.pushStarted()
+    pendingCommitCount++
     void Promise.resolve()
-      .then(() => backend.pushLocalUpdate(bytes()))
+      .then(() => {
+        pendingCommitCount--
+        return backend.pushLocalUpdate(bytes())
+      })
       .then(push.resolved, () => {
         if (isStale()) return push.dropped()
         deps.onStatusChange('error')

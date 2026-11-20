@@ -48,9 +48,12 @@ describe('undo pressed outside the note editor inside the write window', () => {
     await waitFor(() => expect(document.activeElement).toBe(editable), { timeout: 30_000 })
 
     await userEvent.keyboard('bbb')
-    await waitFor(() => expect(editorText()).toBe('bbb'))
     // Focus leaves the editor, so the press reaches the session's window handler.
     await userEvent.click(document.body)
+    // Still inside the write window: a write that had already landed would
+    // make the press undo a committed step and this test pass without the
+    // case it exists for, so a slow run fails here instead.
+    expect(saveState()).toBe('pending')
     await userEvent.keyboard('{Control>}z{/Control}')
 
     await waitFor(

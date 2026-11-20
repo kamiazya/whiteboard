@@ -337,8 +337,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised by two more for a trash restore bringing it back, which resumes it.
   // Raised by ten for an undo over typed note text: it commits the text as
   // its own step before taking it back, where dropping its timer left it
-  // shown and never written.
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 904, // the session closure: one connection's debounce, publish, undo and removal state
+  // shown and never written. Raised by six more so a push queued by an undo or
+  // a redo is counted by dispose() before it lets the keeper go.
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 910, // the session closure: one connection's debounce, publish, undo and removal state
   // Both raised for the refused write: one more backend message in the
   // handler table, and the snapshot that answers it ending the wait. Both
   // raised by one more for a reconnect whose snapshot no longer holds the
