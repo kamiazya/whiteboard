@@ -43,7 +43,7 @@ describe('createBrowserFilesSource writeTagLibrary', () => {
     await source.importDocument?.(TAG_LIBRARY_PATH, {
       kind: 'markdown',
       body: 'Tag notes.',
-      coreFacets: {},
+      coreFacets: { type: 'note' },
       facets: { 'demo.note/v1': { colour: 'teal' } },
       pathBase: 'tags',
     })
