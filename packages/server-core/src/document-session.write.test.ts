@@ -13,7 +13,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { documentEngine as wire } from '@kamiazya/whiteboard-model'
+import { MARKDOWN_MAX_CHARS, type documentEngine as wire } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { reassembleSnapshot, type SaveSnapshotInput } from '@kamiazya/whiteboard-ports'
 import { LoroDoc, VersionVector } from 'loro-crdt'
@@ -139,6 +139,19 @@ describe('writing through a document session', () => {
     expect(store.saved).toEqual([])
     expect(written).toEqual([])
     expect(contentOf(await stored(store))).toEqual(before)
+  })
+
+  it('does not judge a write against the sync limits, as the direct writers were not', async () => {
+    const { store, deps } = rig()
+    await seedDoc(store, DOCUMENT_ID, board)
+    const longBody = 'x'.repeat(MARKDOWN_MAX_CHARS + 1)
+
+    await withDocument(deps, WORKSPACE_ID, DOCUMENT_ID, async (session) => {
+      session.write([{ op: 'writeMarkdownBody', args: { body: longBody } }])
+      await session.save()
+    })
+
+    expect(readMarkdownBody(await stored(store))).toBe(longBody)
   })
 
   it('keeps the writes of one batch visible to the reads that follow it', async () => {
