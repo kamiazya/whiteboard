@@ -4,6 +4,7 @@
 // stamping when it was edited, checkpointing it — needs to know.
 import type { ContainerID, LoroDoc, LoroTreeNode, TreeID, VersionVector } from 'loro-crdt'
 import { isNodeMetaContainer } from './node-meta-containers.js'
+import { opsSince } from './ops-since.js'
 import { WORKSPACE_TREE_KEY, workspaceNodeMetaSchema } from './workspace-tree.js'
 import { descendsFromWorkspaceTree } from './workspace-tree-descent.js'
 
@@ -62,8 +63,7 @@ function placesOf(workspace: LoroDoc) {
 function nodesWritten(workspace: LoroDoc, since: VersionVector): Map<TreeID, boolean> {
   const content = new Map<TreeID, boolean>()
   const placeOf = placesOf(workspace)
-  const { changes } = workspace.exportJsonUpdates(since, workspace.oplogVersion(), false)
-  for (const op of changes.flatMap((change) => change.ops)) {
+  for (const op of opsSince(workspace, since)) {
     const path = placeOf(op.container)
     if (path === 'outside' || path === undefined || path.length < 2) continue
     // Below the real tree, the second segment is always a node's id.
@@ -124,24 +124,21 @@ const PLACEMENT_KEYS: ReadonlySet<string> = new Set(['documentId', 'segment', 'k
 export function organisationChangedSince(workspace: LoroDoc, since: VersionVector): boolean {
   const tree = workspace.getTree(WORKSPACE_TREE_KEY).id
   const placeOf = placesOf(workspace)
-  const { changes } = workspace.exportJsonUpdates(since, workspace.oplogVersion(), false)
-  return changes
-    .flatMap((change) => change.ops)
-    .some((op) => {
-      if (op.container === tree) return true
-      const path = placeOf(op.container)
-      if (path === 'outside') return true
-      // No path at all is a container under a node a delete took: judged as
-      // the tree's, by the placement keys below, as it always was.
-      // Inside a container held at a meta key: a reader refuses the node, and
-      // an edit there could rename or re-place it from below the node's map.
-      if (path !== undefined && path.length > 2 && isNodeMetaContainer(path, op.container)) {
-        return true
-      }
-      const content = op.content as { readonly key?: unknown }
-      if (typeof content.key !== 'string' || !PLACEMENT_KEYS.has(content.key)) return false
-      return path?.length === 2
-    })
+  return opsSince(workspace, since).some((op) => {
+    if (op.container === tree) return true
+    const path = placeOf(op.container)
+    if (path === 'outside') return true
+    // No path at all is a container under a node a delete took: judged as
+    // the tree's, by the placement keys below, as it always was.
+    // Inside a container held at a meta key: a reader refuses the node, and
+    // an edit there could rename or re-place it from below the node's map.
+    if (path !== undefined && path.length > 2 && isNodeMetaContainer(path, op.container)) {
+      return true
+    }
+    const content = op.content as { readonly key?: unknown }
+    if (typeof content.key !== 'string' || !PLACEMENT_KEYS.has(content.key)) return false
+    return path?.length === 2
+  })
 }
 
 /**

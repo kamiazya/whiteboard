@@ -520,6 +520,22 @@ export function resolveWorkspaceDocument(
   return null
 }
 
+/**
+ * The entry of a document node, its path read off the nodes above it; `null`
+ * when the node, or one above it, is not one a listing would show.
+ */
+export function entryOfDocumentNode(node: LoroTreeNode): WorkspaceDocumentEntry | null {
+  const read = readMeta(node)
+  if (read === null || read.type !== 'document') return null
+  const segments = [read.meta.segment]
+  for (let up = node.parent(); up !== undefined; up = up.parent()) {
+    const above = readMeta(up)
+    if (above === null) return null
+    segments.unshift(above.type === 'document' ? above.meta.segment : above.segment)
+  }
+  return entryOf(node, read, segments.join('/'))
+}
+
 export function resolveWorkspaceDocumentById(
   doc: LoroDoc,
   documentId: string,
