@@ -53,6 +53,8 @@ export type SceneExportFormat = DocumentExportFormat
  * on screen draws with. The kind is REQUIRED — a note has no canvas, and an
  * export that defaulted to one drew a blank picture of it.
  */
+type SessionBodyBinding = ReturnType<DocumentSyncSession['getBodyBinding']>
+
 export interface SceneExportOptions {
   readonly kind: DocumentKind
   /** The bundle the editor resolves file nodes, embeds and pictures through. */
@@ -132,7 +134,7 @@ export interface UseDocumentSyncResult {
    * snapshot. A new object only when a snapshot replaces the doc, so an
    * editor keyed on it remounts exactly then.
    */
-  bodyBinding: ReturnType<DocumentSyncSession['getBodyBinding']>
+  bodyBinding: SessionBodyBinding
   /**
    * OKF core facets from the doc's `core` map — `undefined` for a spatial
    * document, which has none to hold. Republished on the same signal as
@@ -321,8 +323,7 @@ export function useDocumentSync(
   const [threadMarks, setThreadMarks] = useState<ReadonlyMap<string, PassageRange>>(EMPTY_MARKS)
   const [lockedNodeIds, setLockedNodeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [markdownBody, setMarkdownBodyState] = useState('')
-  const [bodyBinding, setBodyBinding] =
-    useState<ReturnType<DocumentSyncSession['getBodyBinding']>>(null)
+  const [bodyBinding, setBodyBinding] = useState<SessionBodyBinding>(null)
   const [coreFacets, setCoreFacetsState] = useState<StoredCoreFacets | undefined>(undefined)
   const [facets, setFacetsState] = useState<ExtensionFacets>(EMPTY_FACETS)
   const [documentName, setDocumentName] = useState<string | null | undefined>(undefined)

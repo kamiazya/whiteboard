@@ -792,9 +792,7 @@ export function createDocumentSyncSession(
     readText: (target: LoroDoc) => contentOf(target)?.getText(MARKDOWN_BODY_KEY) ?? null,
     onEdited: bodyEdited,
   })
-  function getBodyBinding(): BodyBinding<LoroDoc, LoroText> | null {
-    return bodyBindingOf(doc)
-  }
+  const getBodyBinding = (): BodyBinding<LoroDoc, LoroText> | null => bodyBindingOf(doc)
   onCanvasChange.flush = (): void => {
     debounce.cancel()
     commitPendingTargets()
