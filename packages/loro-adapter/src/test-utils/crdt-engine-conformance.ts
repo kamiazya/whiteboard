@@ -38,6 +38,7 @@ import {
   describeVersionDecoding,
   describeViewMove,
 } from './crdt-engine-conformance-calls.js'
+import { describeEntryByPath } from './crdt-engine-conformance-entry-path.js'
 import {
   applied,
   ask,
@@ -784,6 +785,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeSubtreeExport(makeEngine)
     describeProjectionExport(makeEngine)
     describeRemovedSinceExport(makeEngine)
+    describeEntryByPath(makeEngine)
     describeJournal(makeEngine)
     describeJournalOfParkedUpdates(makeEngine)
     describeJournalOfViewCopy(makeEngine)

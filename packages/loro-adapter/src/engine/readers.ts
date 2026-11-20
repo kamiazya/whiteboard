@@ -43,6 +43,7 @@ import {
   readWorkspaceDocuments,
   readWorkspaceMeta,
   readWorkspaceNodes,
+  resolveWorkspaceDocument,
   unreadableWorkspaceNodes,
 } from '../workspace-tree.js'
 import { type Answer, answer, answerLater, attempt, versionOfPairs } from './answers.js'
@@ -56,6 +57,8 @@ import { type Answer, answer, answerLater, attempt, versionOfPairs } from './ans
 const readArgsSchema = z
   .object({
     documentId: z.string().optional(),
+    /** A `workspaceDocumentEntry` read's other way to name a document: the one that owns this path. */
+    path: z.string().optional(),
     /** The container a `containerPlace` read asks about. */
     container: z.string().optional(),
     /** The kind the document's index row records, for a document that records none itself. */
@@ -150,7 +153,14 @@ export const READERS: Record<documentEngine.QueryName, Reader> = {
     return { referenced: [...scan.referenced].sort(), unjudged: scan.unjudged }
   },
   containerPlace: (doc, args) => containerPlace(doc, requiredContainer(args)),
-  workspaceDocumentEntry: (doc, args) => resolveIndexedWorkspaceDocument(doc, requiredId(args)),
+  workspaceDocumentEntry: (doc, args) => {
+    if ((args.documentId === undefined) === (args.path === undefined)) {
+      throw new TypeError('this read names a document by its id or by its path, one of them')
+    }
+    return args.path === undefined
+      ? resolveIndexedWorkspaceDocument(doc, requiredId(args))
+      : resolveWorkspaceDocument(doc, args.path)
+  },
   workspaceDocumentProjection: (doc, args) => {
     const projected = projectWorkspaceDocument(doc, requiredId(args))
     return projected === null
