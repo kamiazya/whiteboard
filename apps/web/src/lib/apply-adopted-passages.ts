@@ -1,5 +1,3 @@
-import type { DocumentContainers } from '@kamiazya/whiteboard-loro-adapter'
-import { readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import type { PlacedPassage, ProposedChange } from '@kamiazya/whiteboard-model'
 import {
   applyPassages,
@@ -24,8 +22,8 @@ import {
  * written for it, which is the only honest thing to do with a passage that is
  * not there.
  *
- * The body is READ from `doc` and WRITTEN through `write`, so the caller
- * decides the commit boundary — today `withDocumentBatch`, which folds this
+ * The body is handed in as the caller read it and WRITTEN through `write`, so
+ * the caller decides the commit boundary — today `withDocumentBatch`, which folds this
  * rewrite into the same commit as the statuses it closes.
  *
  * Every position comes from ONE read of the body and the batch is applied by
@@ -46,13 +44,12 @@ import {
  * decision unmade instead.
  */
 export function applyAdoptedPassages(
-  doc: DocumentContainers,
+  body: string,
   changes: readonly ProposedChange[],
   write: (body: string) => void,
 ): AdoptionRefusal | undefined {
   const passages = changes.filter((change) => change.op === 'body.replace')
   if (passages.length === 0) return undefined
-  const body = readMarkdownBody(doc)
   let placed: PlacedPassage[] = []
   for (const change of passages) {
     const resolved = resolveTextAnchor(body, change.anchor)

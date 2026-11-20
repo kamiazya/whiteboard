@@ -9,6 +9,7 @@ import {
   markThreadPassages,
   moveCommentThread,
   readCoreFacets,
+  readMarkdownBody,
   reconcileCoreFacets,
   reconcileSpatialCanvas,
   type SpatialBatchWriter,
@@ -116,7 +117,7 @@ function writeDecision(
       // looking at an "adopted" verdict and their own words still on the
       // page. It runs FIRST because a body past the size limit refuses the
       // whole decision: nothing is written and the change stays open.
-      const refused = applyAdoptedPassages(doc, command.changes, (body) =>
+      const refused = applyAdoptedPassages(readMarkdownBody(doc), command.changes, (body) =>
         writer.writeMarkdownBody(body),
       )
       if (refused !== undefined) return

@@ -1,14 +1,20 @@
-import { type DocumentContainers, MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-loro-adapter'
-import type { LoroDoc, LoroText } from 'loro-crdt'
+import type { BodyDocPort, BodyTextPort } from './body-text-port.js'
 
 /**
  * What a CodeMirror binding writes a sync session's body through: the live
  * doc, the body text on it, and the session's debounced commit.
  */
-export interface BodyBinding {
-  readonly doc: LoroDoc
-  /** Null once the document has left the workspace record. */
-  readonly readText: (doc: LoroDoc) => LoroText | null
+export interface BodyBinding<
+  D extends BodyDocPort = BodyDocPort,
+  T extends BodyTextPort = BodyTextPort,
+> {
+  readonly doc: D
+  /**
+   * Null once the document has left the workspace record. A method rather
+   * than a property so a binding over a concrete doc stays assignable to the
+   * port-typed one the consumers hold.
+   */
+  readText(doc: D): T | null
   readonly commit: () => void
 }
 
@@ -18,12 +24,12 @@ export interface BodyBinding {
  * every body change. `onEdited` is told WHICH doc the ops went into, so the
  * session never commits a doc a snapshot has replaced.
  */
-export function bodyBindingFor(deps: {
-  contentOf: (doc: LoroDoc) => DocumentContainers | null
-  onEdited: (doc: LoroDoc) => void
-}): (doc: LoroDoc | null) => BodyBinding | null {
-  const readText = (doc: LoroDoc) => deps.contentOf(doc)?.getText(MARKDOWN_BODY_KEY) ?? null
-  let cached: BodyBinding | null = null
+export function bodyBindingFor<D extends BodyDocPort, T extends BodyTextPort>(deps: {
+  readText: (doc: D) => T | null
+  onEdited: (doc: D) => void
+}): (doc: D | null) => BodyBinding<D, T> | null {
+  const { readText } = deps
+  let cached: BodyBinding<D, T> | null = null
   return (doc) => {
     if (doc === null) return null
     if (cached?.doc !== doc) {

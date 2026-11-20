@@ -1,21 +1,24 @@
+import { createCrdtEngine } from './engine.js'
 import type { CrdtEngine } from './types.js'
 
-let loaded: Promise<CrdtEngine> | undefined
+let shared: CrdtEngine | undefined
 
 /**
- * The one engine of this realm, loaded on first use and then shared.
+ * The one engine of this realm, created on first use and then shared, so a
+ * lease taken through one accessor is valid through the other.
  *
- * The engine module is imported here rather than at the top of the package
- * entry so a realm that holds the entry but never opens a document does not
- * run the wasm initialisation. A load that failed is asked for again by the
- * next call.
+ * Synchronous because the engine module is already in this package's static
+ * graph (the entry exports `createCrdtEngine`) and `loro-crdt` is imported
+ * statically by every sibling: nothing is left to fetch. A caller that holds
+ * this entry has therefore already paid for the wasm, and the bundle-size
+ * boundary is the one that keeps the entry itself off the first-paint path.
  */
-export function loadCrdtEngine(): Promise<CrdtEngine> {
-  loaded ??= import('./engine.js')
-    .then(({ createCrdtEngine }) => createCrdtEngine())
-    .catch((error: unknown) => {
-      loaded = undefined
-      throw error
-    })
-  return loaded
+export function sharedCrdtEngine(): CrdtEngine {
+  shared ??= createCrdtEngine()
+  return shared
+}
+
+/** The same engine as `sharedCrdtEngine`, for a caller that is already asynchronous. */
+export async function loadCrdtEngine(): Promise<CrdtEngine> {
+  return sharedCrdtEngine()
 }

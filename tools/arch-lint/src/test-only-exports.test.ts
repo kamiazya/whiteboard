@@ -259,6 +259,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the host-side journal over any CRDT engine, which rebuilds a handle the wasm core lost; the web host that wraps its engine in it is a later migration, so only the conformance suite reaches it',
   'packages/loro-adapter/src/engine/lease.ts#WriteRefusedError':
     "the typed refusal the kit's write throws for a refused batch; the first host to write through a lease catches it, and only lease.test.ts reaches it until then",
+  'packages/loro-adapter/src/engine/load.ts#sharedCrdtEngine':
+    'the engine of the realm without awaiting it; first shipped user is the editing session',
   'packages/loro-adapter/src/engine/readers.ts#READERS':
     "the engine's reader table, which the engine reads through readQuery; exported so the recorded read oracle's recorder and replay ask the same table the engine answers from",
   'packages/loro-adapter/src/engine/readers.ts#CONTENT_QUERIES':

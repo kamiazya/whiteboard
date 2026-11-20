@@ -1,8 +1,6 @@
 // @vitest-environment node
 
-import { readMarkdownBody, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import { MARKDOWN_MAX_CHARS, type ProposedChange } from '@kamiazya/whiteboard-model'
-import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { applyAdoptedPassages } from './apply-adopted-passages.js'
 
@@ -26,38 +24,24 @@ function passageChange(
   }
 }
 
-function noteWithBody(body: string): LoroDoc {
-  const doc = new LoroDoc()
-  writeMarkdownBody(doc, body)
-  return doc
-}
-
 describe('applyAdoptedPassages', () => {
   it('writes the body with the passage replaced', () => {
-    const doc = noteWithBody(BODY)
+    const current = BODY
     const write = vi.fn()
 
-    applyAdoptedPassages(doc, [passageChange('c1', 'Thursday', 'Friday')], write)
+    applyAdoptedPassages(current, [passageChange('c1', 'Thursday', 'Friday')], write)
 
     expect(write).toHaveBeenCalledExactlyOnceWith('# Plan\n\nThe plan is to ship on Friday.\n')
-  })
-
-  it('reads the body but never writes it itself: the caller owns the commit', () => {
-    const doc = noteWithBody(BODY)
-
-    applyAdoptedPassages(doc, [passageChange('c1', 'Thursday', 'Friday')], () => {})
-
-    expect(readMarkdownBody(doc)).toBe(BODY)
   })
 
   it('finds the passage by its quote when an edit has moved it', () => {
     // The change was written against BODY; the document now carries a note
     // above it, so every offset is stale by that prefix. The quote is what
     // still finds the passage.
-    const doc = noteWithBody(`> Added since.\n\n${BODY}`)
+    const current = `> Added since.\n\n${BODY}`
     const write = vi.fn()
 
-    applyAdoptedPassages(doc, [passageChange('c1', 'Thursday', 'Friday')], write)
+    applyAdoptedPassages(current, [passageChange('c1', 'Thursday', 'Friday')], write)
 
     expect(write).toHaveBeenCalledExactlyOnceWith(
       '> Added since.\n\n# Plan\n\nThe plan is to ship on Friday.\n',
@@ -66,11 +50,11 @@ describe('applyAdoptedPassages', () => {
 
   it('applies several passages without the earlier one shifting the later', () => {
     const body = 'Ship on Thursday. Review on Thursday too.\n'
-    const doc = noteWithBody(body)
+    const current = body
     const write = vi.fn()
 
     applyAdoptedPassages(
-      doc,
+      current,
       [
         passageChange('c1', 'Ship on Thursday', 'Ship on Monday', body),
         passageChange('c2', 'Review on Thursday', 'Review on Wednesday', body),
@@ -83,11 +67,11 @@ describe('applyAdoptedPassages', () => {
 
   it('applies passages given in any order, one write for all of them', () => {
     const body = 'Ship on Thursday. Review on Thursday too.\n'
-    const doc = noteWithBody(body)
+    const current = body
     const write = vi.fn()
 
     applyAdoptedPassages(
-      doc,
+      current,
       [
         passageChange('c2', 'Review on Thursday', 'Review on Wednesday', body),
         passageChange('c1', 'Ship on Thursday', 'Ship on Monday', body),
@@ -99,20 +83,20 @@ describe('applyAdoptedPassages', () => {
   })
 
   it('skips a passage that is gone rather than writing it somewhere', () => {
-    const doc = noteWithBody('The plan changed entirely.\n')
+    const current = 'The plan changed entirely.\n'
     const write = vi.fn()
 
-    applyAdoptedPassages(doc, [passageChange('c1', 'Thursday', 'Friday', BODY)], write)
+    applyAdoptedPassages(current, [passageChange('c1', 'Thursday', 'Friday', BODY)], write)
 
     expect(write).not.toHaveBeenCalled()
   })
 
   it('still applies the passages that resolve when a sibling is gone', () => {
-    const doc = noteWithBody(BODY)
+    const current = BODY
     const write = vi.fn()
 
     applyAdoptedPassages(
-      doc,
+      current,
       [passageChange('c1', 'Thursday', 'Friday'), absentPassage('c2', 'Monday')],
       write,
     )
@@ -125,11 +109,11 @@ describe('applyAdoptedPassages', () => {
     // then deleted ` yy c`, so `cde` now starts inside `abc`; applying both
     // back-to-front would write `xx 11122`.
     const proposedOver = 'xx abc yy cde'
-    const doc = noteWithBody('xx abcde')
+    const current = 'xx abcde'
     const write = vi.fn()
 
     applyAdoptedPassages(
-      doc,
+      current,
       [
         passageChange('A', 'abc', '111', proposedOver),
         passageChange('B', 'cde', '222', proposedOver),
@@ -142,11 +126,11 @@ describe('applyAdoptedPassages', () => {
 
   it('still applies a disjoint sibling when two other passages overlap', () => {
     const proposedOver = 'xx abc yy cde zz end'
-    const doc = noteWithBody('xx abcde zz end')
+    const current = 'xx abcde zz end'
     const write = vi.fn()
 
     applyAdoptedPassages(
-      doc,
+      current,
       [
         passageChange('A', 'abc', '111', proposedOver),
         passageChange('B', 'cde', '222', proposedOver),
@@ -159,7 +143,7 @@ describe('applyAdoptedPassages', () => {
   })
 
   it('writes nothing for changes that name no passage', () => {
-    const doc = noteWithBody(BODY)
+    const current = BODY
     const write = vi.fn()
     const moveNode: ProposedChange = {
       id: 'node:n1',
@@ -170,8 +154,8 @@ describe('applyAdoptedPassages', () => {
       assumed: { x: 0 },
     }
 
-    applyAdoptedPassages(doc, [moveNode], write)
-    applyAdoptedPassages(doc, [], write)
+    applyAdoptedPassages(current, [moveNode], write)
+    applyAdoptedPassages(current, [], write)
 
     expect(write).not.toHaveBeenCalled()
   })
@@ -180,10 +164,14 @@ describe('applyAdoptedPassages', () => {
     // Both keepers refuse a body past the limit, and a refused write is one
     // the sync worker retries without end — so it must never be made.
     const body = `tail-${'x'.repeat(MARKDOWN_MAX_CHARS - 'tail-'.length)}`
-    const doc = noteWithBody(body)
+    const current = body
     const write = vi.fn()
 
-    const refusal = applyAdoptedPassages(doc, [passageChange('c1', 'tail', 'tails', body)], write)
+    const refusal = applyAdoptedPassages(
+      current,
+      [passageChange('c1', 'tail', 'tails', body)],
+      write,
+    )
 
     expect(refusal).toEqual({ length: MARKDOWN_MAX_CHARS + 1 })
     expect(write).not.toHaveBeenCalled()
@@ -191,10 +179,14 @@ describe('applyAdoptedPassages', () => {
 
   it('lets an adoption land exactly on the limit', () => {
     const body = `tail-${'x'.repeat(MARKDOWN_MAX_CHARS - 1 - 'tail-'.length)}`
-    const doc = noteWithBody(body)
+    const current = body
     const write = vi.fn()
 
-    const refusal = applyAdoptedPassages(doc, [passageChange('c1', 'tail', 'tails', body)], write)
+    const refusal = applyAdoptedPassages(
+      current,
+      [passageChange('c1', 'tail', 'tails', body)],
+      write,
+    )
 
     expect(refusal).toBeUndefined()
     expect(write.mock.calls[0]?.[0]).toHaveLength(MARKDOWN_MAX_CHARS)
@@ -204,20 +196,20 @@ describe('applyAdoptedPassages', () => {
     // A body written before the limit existed stays editable toward it, as
     // both keepers and the editor let it.
     const body = `tail-${'x'.repeat(MARKDOWN_MAX_CHARS + 100)}`
-    const doc = noteWithBody(body)
+    const current = body
     const write = vi.fn()
 
-    const refusal = applyAdoptedPassages(doc, [passageChange('c1', 'tail', 't', body)], write)
+    const refusal = applyAdoptedPassages(current, [passageChange('c1', 'tail', 't', body)], write)
 
     expect(refusal).toBeUndefined()
     expect(write.mock.calls[0]?.[0]).toHaveLength(body.length - 3)
   })
 
   it('writes nothing when the replacement is the text already there', () => {
-    const doc = noteWithBody(BODY)
+    const current = BODY
     const write = vi.fn()
 
-    applyAdoptedPassages(doc, [passageChange('c1', 'Thursday', 'Thursday')], write)
+    applyAdoptedPassages(current, [passageChange('c1', 'Thursday', 'Thursday')], write)
 
     expect(write).not.toHaveBeenCalled()
   })

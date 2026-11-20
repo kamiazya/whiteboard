@@ -33,7 +33,7 @@
 import { Annotation, type Extension, Transaction } from '@codemirror/state'
 import { type EditorView, type PluginValue, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 import { minimalChange } from '@kamiazya/whiteboard-loro-adapter'
-import type { LoroDoc, LoroText, Subscription } from 'loro-crdt'
+import type { BodyDocPort, ReadBoundText } from './body-text-port.js'
 
 /**
  * Marks a transaction this binding dispatched, so `update()` does not write it
@@ -41,24 +41,14 @@ import type { LoroDoc, LoroText, Subscription } from 'loro-crdt'
  */
 const fromContainer = Annotation.define<true>()
 
-/**
- * Reads the container this view is bound to.
- *
- * Called per operation rather than captured once: in workspace mode the body
- * lives on the document's tree node, and `documentContainers` re-resolves it,
- * so a handle stays valid across a move. `null` once the document has left
- * the record: there is nothing to bind, and the binding leaves the view alone.
- */
-export type ReadBoundText = (doc: LoroDoc) => LoroText | null
-
-class LoroTextSync implements PluginValue {
-  private readonly unsubscribe: Subscription
+class LoroTextSync<D extends BodyDocPort> implements PluginValue {
+  private readonly unsubscribe: () => void
   private disposed = false
 
   constructor(
     private readonly view: EditorView,
-    private readonly doc: LoroDoc,
-    private readonly readText: ReadBoundText,
+    private readonly doc: D,
+    private readonly readText: ReadBoundText<D>,
     private readonly commit: () => void,
   ) {
     this.unsubscribe = doc.subscribe(() => this.reconcile())
@@ -168,12 +158,12 @@ export interface LoroTextSyncOptions {
   readonly commit?: () => void
 }
 
-export function loroTextSync(
-  doc: LoroDoc,
-  readText: ReadBoundText,
+export function loroTextSync<D extends BodyDocPort>(
+  doc: D,
+  readText: ReadBoundText<D>,
   options: LoroTextSyncOptions = {},
 ): Extension {
-  const commit = options.commit ?? (() => doc.commit())
+  const commit = options.commit ?? (() => void doc.commit())
   return ViewPlugin.define((view) => new LoroTextSync(view, doc, readText, commit))
 }
 
@@ -182,10 +172,10 @@ export function loroTextSync(
  * the session holds a doc. Memoise on the binding: the editor is keyed on
  * the array's identity and remounts when it changes.
  */
-export function sessionBodyBinding(
+export function sessionBodyBinding<D extends BodyDocPort>(
   binding: {
-    doc: LoroDoc
-    readText: ReadBoundText
+    doc: D
+    readText: ReadBoundText<D>
     commit: () => void
   } | null,
 ): Extension[] | undefined {

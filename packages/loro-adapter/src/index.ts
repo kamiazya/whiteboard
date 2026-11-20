@@ -42,7 +42,7 @@ export {
   scanFileReferencesOfLease,
 } from './engine/lease-file-references.js'
 export { type LeaseKindOptions, leaseKind } from './engine/lease-kind.js'
-export { loadCrdtEngine } from './engine/load.js'
+export { loadCrdtEngine, sharedCrdtEngine } from './engine/load.js'
 export { randomPeerId } from './engine/peer.js'
 export { readValue } from './engine/read-value.js'
 export type { CrdtEngine } from './engine/types.js'
