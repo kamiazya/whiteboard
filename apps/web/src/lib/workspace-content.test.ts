@@ -4,7 +4,11 @@
  * `null` and a tree that cannot be read is an unreadable answer, never `null`.
  */
 import 'fake-indexeddb/auto'
-import { type RecordLease, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  type RecordLease,
+  writeCoreFacets,
+  writeMarkdownBody,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -56,6 +60,35 @@ describe('loadDocument', () => {
     })
 
     expect(await loadDocument(entry.documentId, (held) => held.body())).toBe('held by the tree')
+  })
+
+  it("reads a markdown document's content and tags in ONE engine read", async () => {
+    const source = new Loro()
+    writeMarkdownBody(source, 'tagged body')
+    writeCoreFacets(source, { type: 'note', tags: ['team:a', 'q3'] })
+    const entry = await seedTreeDocument({
+      path: 'notes/tagged',
+      kind: 'markdown',
+      content: source.export({ mode: 'snapshot' }),
+    })
+    const leases = trackLeases()
+    const reads: string[] = []
+
+    const read = await loadDocument(entry.documentId, async (held) => {
+      const lease = leases[0] as RecordLease
+      const engineRead = lease.engine.read.bind(lease.engine)
+      vi.spyOn(lease.engine, 'read').mockImplementation(async (request) => {
+        reads.push(request.query.query)
+        return engineRead(request)
+      })
+      return held.contentWithTags('markdown')
+    })
+
+    expect(read).toEqual({
+      content: { kind: 'markdown', body: 'tagged body' },
+      tags: ['team:a', 'q3'],
+    })
+    expect(reads).toHaveLength(1)
   })
 
   it('answers null for an id the tree does not hold, even beside a per-document record', async () => {

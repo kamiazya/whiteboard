@@ -41,6 +41,7 @@ class DocumentContentUnreadableError extends Error {
 // The readers are total over their shapes, and a parse would strip fields a
 // newer writer added, so these assert the type and check nothing.
 const contentShape = z.custom<DocumentContent>()
+const contentWithTagsShape = z.custom<ContentWithTags>()
 const canvasShape = z.object({ canvas: z.custom<SpatialCanvas>() })
 const facetsShape = z.custom<ExtensionFacets>()
 const coreFacetsShape = z.custom<StoredCoreFacets | undefined>()
@@ -67,7 +68,13 @@ export interface HeldDocument {
 
 function heldDocument(record: RecordLease, documentId: string): HeldDocument {
   const ask = <T>(
-    query: 'documentContent' | 'facets' | 'coreFacets' | 'spatialCanvas' | 'markdownBody',
+    query:
+      | 'documentContent'
+      | 'documentContentWithTags'
+      | 'facets'
+      | 'coreFacets'
+      | 'spatialCanvas'
+      | 'markdownBody',
     shape: z.ZodType<T>,
     kind?: DocumentKind,
   ) =>
@@ -80,13 +87,8 @@ function heldDocument(record: RecordLease, documentId: string): HeldDocument {
   const coreFacets = () => ask('coreFacets', coreFacetsShape)
   return {
     content,
-    // The same two reads `readContentWithTags` makes of one document.
-    async contentWithTags(kind) {
-      const read = await content(kind)
-      if (read.kind !== 'markdown') return { content: read }
-      const tags = (await coreFacets())?.tags
-      return tags === undefined ? { content: read } : { content: read, tags }
-    },
+    // One read, not two: each read resolves the document's node by walking the record's tree.
+    contentWithTags: (kind) => ask('documentContentWithTags', contentWithTagsShape, kind),
     facets: () => ask('facets', facetsShape),
     coreFacets,
     canvas: async () => (await ask('spatialCanvas', canvasShape)).canvas,
