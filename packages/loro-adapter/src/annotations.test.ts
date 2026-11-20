@@ -11,11 +11,7 @@
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import {
-  retiredCommentRows,
-  RetiredCommentPlaneError,
-  readAnnotations,
-} from './annotations.js'
+import { RetiredCommentPlaneError, readAnnotations, retiredCommentRows } from './annotations.js'
 import { writeCommentThread } from './comment-threads.js'
 import { writeMarkdownBody } from './markdown-body.js'
 import { createWorkspaceDocumentAtPath, documentContainers } from './workspace-tree.js'
