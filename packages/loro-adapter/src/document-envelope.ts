@@ -17,6 +17,7 @@ import {
   type DocumentContainers,
   FACETS_KEY,
   type Fields,
+  peekMapOf,
   TRUST_KEY,
 } from './containers.js'
 import { isReadableFacetKey } from './document-envelope-reconcile.js'
@@ -64,10 +65,10 @@ export function writeFacets(doc: DocumentContainers, facets: ExtensionFacets): v
  * entire read — consistent with readSpatialCanvas's per-node tolerance.
  */
 export function readFacets(doc: DocumentContainers): ExtensionFacets {
-  const facetsMap = doc.getMap(FACETS_KEY)
+  const facetsMap = peekMapOf(doc, FACETS_KEY)
   const result: ExtensionFacets = {}
-  for (const key of facetsMap.keys()) {
-    if (isReadableFacetKey(key)) result[key] = facetsMap.get(key)
+  for (const key of facetsMap?.keys() ?? []) {
+    if (isReadableFacetKey(key)) result[key] = facetsMap?.get(key)
   }
   return result
 }
@@ -130,8 +131,8 @@ export function writeTrustFacets(doc: DocumentContainers, trust: TrustFacets): v
 export function readTrustFacets(doc: DocumentContainers): TrustFacets | undefined {
   if (readDocumentKind(doc) === 'spatial') return undefined
 
-  const trustMap = doc.getMap(TRUST_KEY)
-  if (trustMap.keys().length === 0) return undefined
+  const trustMap = peekMapOf(doc, TRUST_KEY)
+  if (trustMap === undefined || trustMap.keys().length === 0) return undefined
 
   const candidate: Record<string, unknown> = {}
   for (const key of trustMap.keys()) {
@@ -169,8 +170,8 @@ export function readTrustFacets(doc: DocumentContainers): TrustFacets | undefine
 export function readCoreFacets(doc: DocumentContainers): StoredCoreFacets | undefined {
   if (readDocumentKind(doc) === 'spatial') return undefined
 
-  const coreMap = doc.getMap(CORE_KEY)
-  if (coreMap.keys().length === 0) return undefined
+  const coreMap = peekMapOf(doc, CORE_KEY)
+  if (coreMap === undefined || coreMap.keys().length === 0) return undefined
 
   const candidate: Record<string, unknown> = {}
   for (const key of coreMap.keys()) {
@@ -202,6 +203,6 @@ export function writeDocumentKind(doc: DocumentContainers, kind: DocumentKind): 
  * here would replace its message with a parse error from three layers down.
  */
 export function readDocumentKind(doc: DocumentContainers): DocumentKind | undefined {
-  const parsed = documentKindSchema.safeParse(doc.getMap(DOCUMENT_KEY).get('kind'))
+  const parsed = documentKindSchema.safeParse(peekMapOf(doc, DOCUMENT_KEY)?.get('kind'))
   return parsed.success ? parsed.data : undefined
 }

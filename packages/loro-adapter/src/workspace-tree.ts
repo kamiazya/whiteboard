@@ -29,10 +29,9 @@ import {
 } from '@kamiazya/whiteboard-model'
 import {
   LoroDoc,
-  LoroList,
-  LoroMap,
+  type LoroMap,
   LoroMovableList,
-  LoroText,
+  type LoroText,
   type LoroTreeNode,
   type TreeID,
 } from 'loro-crdt'
@@ -47,6 +46,7 @@ import {
   freshNodeRoots,
   holdsDeclaredContent,
   nodeRoots,
+  peekNodeContainer,
   projectedKind,
   rootFitsNode,
   syncRootContainer,
@@ -1063,23 +1063,14 @@ export function documentContainers(doc: LoroDoc, documentId: string): DocumentCo
   return {
     getMap: (key) => nodeRoots(live().data).map(key),
     getText: (key) => nodeRoots(live().data).text(key),
-    peekMap: (key) => {
-      const held = live().data.get(key)
-      return held instanceof LoroMap ? held : undefined
-    },
-    peekList: (key) => {
-      const held = live().data.get(key)
-      return held instanceof LoroMovableList || held instanceof LoroList ? held : undefined
-    },
+    peekMap: (key) => peekNodeContainer<LoroMap>(live().data, key, 'map'),
+    peekList: (key) => peekNodeContainer<LoroMovableList>(live().data, key, 'list'),
     // A text root is pre-attached on creation, so this answers `undefined`
     // only for a node an older writer left without one — exactly the note
     // whose body still sits in a canvas text node, which the retired-shape
     // probe reads. `getText` there would open the container: a write, which
     // clears redo (measured: 433 -> 438 bytes, canRedo true -> false).
-    peekText: (key) => {
-      const held = live().data.get(key)
-      return held instanceof LoroText ? held : undefined
-    },
+    peekText: (key) => peekNodeContainer<LoroText>(live().data, key, 'text'),
     commit: () => doc.commit(),
   }
 }

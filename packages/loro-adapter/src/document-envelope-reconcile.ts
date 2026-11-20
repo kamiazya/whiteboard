@@ -16,6 +16,7 @@ import {
   type DocumentContainers,
   FACETS_KEY,
   type Fields,
+  peekMapOf,
 } from './containers.js'
 import { refuseReservedKey } from './reserved-key-write.js'
 import { refuseRetiredShape, retiredCanvasShape } from './retired-stored-shape.js'
@@ -87,7 +88,8 @@ export function reconcileCoreFacets(
  * otherwise read as a board with no theme or routing chosen.
  */
 function storedCanvasFacets(doc: DocumentContainers): Record<string, unknown> | undefined {
-  const canvasMap = doc.getMap(CANVAS_KEY)
+  const canvasMap = peekMapOf(doc, CANVAS_KEY)
+  if (canvasMap === undefined) return undefined
   refuseRetiredShape(retiredCanvasShape(canvasMap))
   return asRecord(canvasMap.get(CANVAS_FACETS_FIELD))
 }

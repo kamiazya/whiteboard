@@ -15,6 +15,8 @@ import {
   EDGES_KEY,
   MARKDOWN_BODY_KEY,
   NODES_KEY,
+  peekMapOf,
+  peekTextOf,
   RETIRED_ELEMENTS_KEY,
 } from './containers.js'
 
@@ -89,9 +91,7 @@ export const RETIRED_BODY_NODE_ID = 'okf-body'
 
 /** The body's length; a host that can peek reads an absent body as empty without opening it. */
 const bodyLength = (doc: DocumentContainers): number =>
-  doc.peekText === undefined
-    ? doc.getText(MARKDOWN_BODY_KEY).length
-    : (doc.peekText(MARKDOWN_BODY_KEY)?.length ?? 0)
+  peekTextOf(doc, MARKDOWN_BODY_KEY)?.length ?? 0
 
 /**
  * Whether this document's body is still the retired `okf-body` text node: an
@@ -100,7 +100,7 @@ const bodyLength = (doc: DocumentContainers): number =>
  * Opens no container on a tree host.
  */
 function retiredMarkdownBodyShape(doc: DocumentContainers): string | null {
-  const nodes = doc.peekMap === undefined ? doc.getMap(NODES_KEY) : doc.peekMap(NODES_KEY)
+  const nodes = peekMapOf(doc, NODES_KEY)
   if (nodes?.get(RETIRED_BODY_NODE_ID) === undefined) return null
   return bodyLength(doc) > 0
     ? null
@@ -115,7 +115,7 @@ function retiredMarkdownBodyShape(doc: DocumentContainers): string | null {
  */
 export function retiredMarkdownCanvasShape(doc: DocumentContainers): string | null {
   if (bodyLength(doc) > 0) return null
-  const nodes = doc.peekMap === undefined ? doc.getMap(NODES_KEY) : doc.peekMap(NODES_KEY)
+  const nodes = peekMapOf(doc, NODES_KEY)
   const holdsText = (nodes?.values() ?? []).some(
     (raw) => typeof recordOf(recordOf(raw)?.resource)?.content === 'string',
   )
@@ -140,9 +140,6 @@ export function firstRetired(
   return null
 }
 
-const peekMap = (doc: DocumentContainers, key: string): LoroMap | undefined =>
-  doc.peekMap === undefined ? doc.getMap(key) : doc.peekMap(key)
-
 /**
  * The body checks, asked by the document's recorded kind: none of a spatial
  * document, since a canvas edit may legitimately mint the body node's id
@@ -151,7 +148,7 @@ const peekMap = (doc: DocumentContainers, key: string): LoroMap | undefined =>
  * markdown document. Opens no container.
  */
 export function retiredMarkdownShape(doc: DocumentContainers): string | null {
-  const kind = documentKindSchema.safeParse(peekMap(doc, DOCUMENT_KEY)?.get('kind'))
+  const kind = documentKindSchema.safeParse(peekMapOf(doc, DOCUMENT_KEY)?.get('kind'))
   if (kind.success && kind.data === 'spatial') return null
   return (
     retiredMarkdownBodyShape(doc) ??
@@ -192,10 +189,10 @@ export function retiredElementsShape(doc: DocumentContainers): string | null {
  * opens one by WRITING it.
  */
 export function retiredStoredShapeIn(doc: DocumentContainers): string | null {
-  const canvasMap = peekMap(doc, CANVAS_KEY)
+  const canvasMap = peekMapOf(doc, CANVAS_KEY)
   return (
-    firstRetired(peekMap(doc, NODES_KEY), retiredNodeShape) ??
-    firstRetired(peekMap(doc, EDGES_KEY), retiredEdgeShape) ??
+    firstRetired(peekMapOf(doc, NODES_KEY), retiredNodeShape) ??
+    firstRetired(peekMapOf(doc, EDGES_KEY), retiredEdgeShape) ??
     (canvasMap === undefined ? null : retiredCanvasShape(canvasMap)) ??
     retiredMarkdownShape(doc) ??
     retiredElementsShape(doc)

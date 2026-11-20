@@ -10,7 +10,7 @@ import {
   type PinDrop,
 } from '@kamiazya/whiteboard-model'
 import { LoroMap } from 'loro-crdt'
-import { type DocumentContainers, THREADS_KEY } from './containers.js'
+import { type DocumentContainers, peekMapOf, THREADS_KEY } from './containers.js'
 import { acceptedEntries } from './lenient-read.js'
 import { openMergeableMap } from './mergeable-containers.js'
 
@@ -21,14 +21,7 @@ export const ANCHOR_FIELD = 'anchor'
 const STATUS_FIELD = 'status'
 const CREATED_AT_FIELD = 'createdAt'
 
-/**
- * The threads map for a READ. A tree node opens a container by writing it,
- * which a read must not do, so it is looked at without opening; a document root
- * is free to look at, since roots are implicit. `undefined` is no threads.
- */
-function peekThreads(doc: DocumentContainers): LoroMap | undefined {
-  return doc.peekMap === undefined ? doc.getMap(THREADS_KEY) : doc.peekMap(THREADS_KEY)
-}
+const peekThreads = (doc: DocumentContainers): LoroMap | undefined => peekMapOf(doc, THREADS_KEY)
 
 function threadContainer(doc: DocumentContainers, threadId: string): LoroMap | undefined {
   const stored = peekThreads(doc)?.get(threadId)

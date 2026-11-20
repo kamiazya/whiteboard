@@ -6,7 +6,7 @@ import {
   proposedChangeSchema,
 } from '@kamiazya/whiteboard-model'
 import { LoroMap } from 'loro-crdt'
-import { type DocumentContainers, PROPOSALS_KEY } from './containers.js'
+import { type DocumentContainers, PROPOSALS_KEY, peekMapOf } from './containers.js'
 import { acceptedEntries } from './lenient-read.js'
 import { openMergeableMap } from './mergeable-containers.js'
 
@@ -17,7 +17,7 @@ const CREATED_AT_FIELD = 'createdAt'
 const STATUS_FIELD = 'status'
 
 function proposalContainer(doc: DocumentContainers, proposalId: string): LoroMap | undefined {
-  const stored = doc.getMap(PROPOSALS_KEY).get(proposalId)
+  const stored = peekMapOf(doc, PROPOSALS_KEY)?.get(proposalId)
   return stored instanceof LoroMap ? stored : undefined
 }
 
@@ -101,9 +101,8 @@ export function setProposedChangeStatusInto(
  * contract every reader in this package keeps.
  */
 export function readProposals(doc: DocumentContainers): Proposal[] {
-  const proposalsMap = doc.getMap(PROPOSALS_KEY)
   const proposals: Proposal[] = []
-  for (const proposalId of proposalsMap.keys()) {
+  for (const proposalId of peekMapOf(doc, PROPOSALS_KEY)?.keys() ?? []) {
     const container = proposalContainer(doc, proposalId)
     if (container === undefined) continue
     const changes = acceptedEntries(changesOf(container), proposedChangeSchema)
