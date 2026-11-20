@@ -178,7 +178,12 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
     const { targetPath, overwrite, subtree } = asked.data
     try {
       const result = await restoreVersion(
-        { versions: versionStore, liveDocuments: options.serverDeps.liveDocuments },
+        {
+          versions: versionStore,
+          liveDocuments: options.serverDeps.liveDocuments,
+          workspaceDocuments: options.serverDeps.workspaceDocuments,
+          documentWritten: options.serverDeps.documentWritten,
+        },
         {
           workspaceId,
           path,

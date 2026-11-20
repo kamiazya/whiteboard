@@ -48,7 +48,6 @@ vi.mock('../../store/document-store.js', async () => {
 
 const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 
-const { getDoc } = await import('../../store/document-store.js')
 const { createDocumentRouter } = await import('../document.js')
 // Pre-load ws.js before the race below. document.ts pulls it in via a
 // fire-and-forget dynamic import (documented cycle workaround), and
@@ -108,24 +107,25 @@ describe('restore targetPath-overwrite vs delete race', () => {
       targetDoc.export({ mode: 'update', from: tvv0 }) as Uint8Array<ArrayBuffer>,
     )
 
-    // Stall the restore route's getDoc(targetPath) call so a DELETE of the
+    // Stall the restore's first read of the workspace record (it writes the target at its node there) so a DELETE of the
     // target can be fired while the request is paused mid-flight, matching
     // the real race: the read resolves before the delete runs, the write
     // happens after.
     const { promise: getDocGate, resolve: releaseGetDoc } = Promise.withResolvers<void>()
     const { promise: getDocCalled, resolve: signalGetDocCalled } = Promise.withResolvers<void>()
-    const actual = await vi.importActual<typeof import('../../store/document-store.js')>(
-      '../../store/document-store.js',
-    )
     let gateArmed = true
-    vi.mocked(getDoc).mockImplementation(async (workspaceId, path) => {
-      if (gateArmed && path === 'canvas-b') {
-        gateArmed = false
-        signalGetDocCalled()
-        await getDocGate
-      }
-      return actual.getDoc(workspaceId, path)
-    })
+    const realOpen = serverDeps.workspaceDocuments.open.bind(serverDeps.workspaceDocuments)
+    serverDeps.workspaceDocuments = {
+      ...serverDeps.workspaceDocuments,
+      open: async (workspaceId) => {
+        if (gateArmed) {
+          gateArmed = false
+          signalGetDocCalled()
+          await getDocGate
+        }
+        return realOpen(workspaceId)
+      },
+    }
 
     const restorePromise = app.request(
       `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions/${saveBody.version.id}/restore`,
@@ -200,24 +200,25 @@ describe('restore in-place vs delete race', () => {
     )
     const saveBody = (await saveRes.json()) as { version: { id: string } }
 
-    // Stall the restore route's getDoc(path) call so a DELETE of the same
+    // Stall the restore's first read of the workspace record (it writes the target at its node there) so a DELETE of the same
     // canvas can be fired while the request is paused mid-flight, matching
     // the real race: the read resolves before the delete runs, the write
     // happens after.
     const { promise: getDocGate, resolve: releaseGetDoc } = Promise.withResolvers<void>()
     const { promise: getDocCalled, resolve: signalGetDocCalled } = Promise.withResolvers<void>()
-    const actual = await vi.importActual<typeof import('../../store/document-store.js')>(
-      '../../store/document-store.js',
-    )
     let gateArmed = true
-    vi.mocked(getDoc).mockImplementation(async (workspaceId, path) => {
-      if (gateArmed && path === 'canvas-a') {
-        gateArmed = false
-        signalGetDocCalled()
-        await getDocGate
-      }
-      return actual.getDoc(workspaceId, path)
-    })
+    const realOpen = serverDeps.workspaceDocuments.open.bind(serverDeps.workspaceDocuments)
+    serverDeps.workspaceDocuments = {
+      ...serverDeps.workspaceDocuments,
+      open: async (workspaceId) => {
+        if (gateArmed) {
+          gateArmed = false
+          signalGetDocCalled()
+          await getDocGate
+        }
+        return realOpen(workspaceId)
+      },
+    }
 
     const restorePromise = app.request(
       `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions/${saveBody.version.id}/restore`,

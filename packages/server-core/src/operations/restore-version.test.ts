@@ -130,7 +130,11 @@ describe('restoreVersion in-place mode', () => {
     await expect(run(live, versionsWith({ v1: { doc: spatialDoc(['n2']) } }))).rejects.toThrow(
       'disk full',
     )
-    expect(live.evicted).toEqual(['canvas-a'])
+    // The record the write landed in is dropped unsaved, and the projections cut from it.
+    expect(live.recordsDropped).toEqual([WS])
+    expect(live.projectionsDropped).toEqual([WS])
+    expect(nodeIdsAt(live, 'canvas-a')).toEqual(['n1'])
+    expectAllCallsLocked(live)
   })
 
   it('evicts the live doc when the past state is one the restore cannot write back', async () => {
@@ -145,7 +149,8 @@ describe('restoreVersion in-place mode', () => {
     mismatched.commit()
     const poisoned = versionsWith({ v1: { doc: mismatched } })
     await expect(run(live, poisoned)).rejects.toThrow()
-    expect(live.evicted).toEqual(['canvas-a'])
+    expect(live.recordsDropped).toEqual([WS])
+    expect(live.projectionsDropped).toEqual([WS])
     expect(live.calls.map((c) => c.method)).not.toContain('save')
   })
 
@@ -484,10 +489,11 @@ describe('a restore records the merge point it creates', () => {
     live.seed('canvas-a', spatialDoc(['now']))
     const versions = versionsWith({ 'v-past': { doc: spatialDoc(['then']), path: 'canvas-a' } })
 
-    const result = await restoreVersion(
-      { versions, liveDocuments: live },
-      { workspaceId: WS, path: 'canvas-a', versionId: 'v-past' },
-    )
+    const result = await restoreVersion(live.deps(versions), {
+      workspaceId: WS,
+      path: 'canvas-a',
+      versionId: 'v-past',
+    })
 
     expect(result).toEqual({ kind: 'restored-in-place' })
     expect(versions.saved).toHaveLength(1)
@@ -504,10 +510,12 @@ describe('a restore records the merge point it creates', () => {
     live.seed('canvas-a', spatialDoc(['now']))
     const versions = versionsWith({ 'v-past': { doc: spatialDoc(['then']), path: 'canvas-a' } })
 
-    const result = await restoreVersion(
-      { versions, liveDocuments: live },
-      { workspaceId: WS, path: 'canvas-a', versionId: 'v-past', targetPath: 'canvas-new' },
-    )
+    const result = await restoreVersion(live.deps(versions), {
+      workspaceId: WS,
+      path: 'canvas-a',
+      versionId: 'v-past',
+      targetPath: 'canvas-new',
+    })
 
     expect(result).toMatchObject({ kind: 'restored-to-target', targetPath: 'canvas-new' })
     expect(versions.saved).toEqual([
@@ -521,16 +529,13 @@ describe('a restore records the merge point it creates', () => {
     live.seed('canvas-b', spatialDoc(['other']))
     const versions = versionsWith({ 'v-past': { doc: spatialDoc(['then']), path: 'canvas-a' } })
 
-    await restoreVersion(
-      { versions, liveDocuments: live },
-      {
-        workspaceId: WS,
-        path: 'canvas-a',
-        versionId: 'v-past',
-        targetPath: 'canvas-b',
-        overwrite: true,
-      },
-    )
+    await restoreVersion(live.deps(versions), {
+      workspaceId: WS,
+      path: 'canvas-a',
+      versionId: 'v-past',
+      targetPath: 'canvas-b',
+      overwrite: true,
+    })
 
     // The document that CHANGED is the one whose history gained a point.
     expect(versions.saved).toHaveLength(1)

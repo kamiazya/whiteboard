@@ -92,6 +92,7 @@ async function setup(text = 'original') {
     documentIndex: store.documentIndex,
     versions,
     liveDocuments: live,
+    workspaceDocuments: live.workspaceDocuments(),
     clientNotifier: notifier,
   })
   return { store, versions, live, notifier, deps }
@@ -230,7 +231,6 @@ describe('wb_version_restore', () => {
       edges: [],
     })
     liveDoc.commit()
-    const before = liveDoc.oplogVersion()
 
     const result = await createVersionRestoreTool(deps).execute({
       workspaceId: WORKSPACE_ID,
@@ -244,19 +244,18 @@ describe('wb_version_restore', () => {
       label: 'checkpoint',
       mode: 'in-place',
     })
-    expect(textOf(liveDoc)).toBe('original')
-    // The SAME doc instance moved forward — a reconcile, not a swap — so a
-    // client holding it stays on its lineage.
-    expect(live.docs.get(PATH)).toBe(liveDoc)
-    expect(liveDoc.oplogVersion().compare(before)).toBe(1)
+    // The restore is a new edit at the document's node of the record, which
+    // the live document then reads back — not a swap of the document.
+    expect(textOf(live.docs.get(PATH) as LoroDoc)).toBe('original')
   })
 
   test('brackets a watching client with started (carrying the label) and complete', async () => {
-    const { deps, versions, notifier } = await setup()
+    const { deps, versions, notifier, live } = await setup()
     const saved = await versions.save(WORKSPACE_ID, PATH, {
       auto: false,
       label: 'checkpoint',
     })
+    live.docs.set(PATH, textDoc('modified'))
 
     await createVersionRestoreTool(deps).execute({
       workspaceId: WORKSPACE_ID,
@@ -339,9 +338,8 @@ describe('wb_version_restore', () => {
       documentId: (await live.list()).find((row) => row.path === 'notes/other')?.documentId,
     })
     expect(result.documentId).not.toBe(DOCUMENT_ID)
-    // Reconciled onto the SAME instance a client may hold, not swapped.
-    expect(live.docs.get('notes/other')).toBe(occupant)
-    expect(textOf(occupant)).toBe('original')
+    // Written at the occupant's node of the record, not swapped for another document.
+    expect(textOf(live.docs.get('notes/other') as LoroDoc)).toBe('original')
   })
 
   test('refuses an overwrite onto a document of the other kind, naming the target and leaving it as it was', async () => {

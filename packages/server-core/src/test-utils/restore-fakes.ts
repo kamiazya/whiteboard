@@ -5,10 +5,14 @@
  */
 import {
   bindRecordOps,
+  createWorkspaceDocumentAtPath,
   legacyRecordOps,
+  projectWorkspaceDocument,
   type RecordView,
   readSpatialCanvas,
+  readWorkspaceDocuments,
   writeSpatialCanvas,
+  writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
@@ -17,8 +21,14 @@ import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { expect } from 'vitest'
 import { type RestoreVersionResult, restoreVersion } from '../operations/restore-version.js'
-import type { LiveDocuments, RestoreProgressEvent, VersionHistory } from '../server-deps.js'
+import type {
+  LiveDocuments,
+  RestoreProgressEvent,
+  VersionHistory,
+  WorkspaceDocuments,
+} from '../server-deps.js'
 import type { VersionEntry } from '../versions/version-entry.js'
+import { unusedWorkspaceDocuments } from './unused-workspace-documents.js'
 
 export const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 // Joins a workspace id and a path into one map key. NUL cannot occur in
@@ -60,6 +70,11 @@ interface StoredDoc {
 export class FakeLive implements LiveDocuments {
   readonly docs = new Map<string, StoredDoc>()
   readonly evicted: string[] = []
+  /** The workspaces whose record was dropped unsaved, and whose per-document projections were. */
+  readonly recordsDropped: string[] = []
+  readonly projectionsDropped: string[] = []
+  /** The documents the write observer was told of. */
+  readonly written: string[] = []
   readonly calls: { method: string; lockDepth: number }[] = []
   failNextSave: Error | null = null
   private lockDepth = 0
@@ -69,6 +84,81 @@ export class FakeLive implements LiveDocuments {
   }
   private record(method: string) {
     this.calls.push({ method, lockDepth: this.lockDepth })
+  }
+
+  /**
+   * The record restore writes into, as the daemon holds one: opened over what
+   * these documents hold, saved back into them, and dropped unsaved on
+   * failure, with every call logged at the lock depth it ran at.
+   */
+  workspaceDocuments(): WorkspaceDocuments {
+    const live = this
+    return {
+      ...unusedWorkspaceDocuments(),
+      async open() {
+        live.record('open')
+        const record = new LoroDoc()
+        for (const [key, stored] of live.docs) {
+          const path = key.split(KEY_SEPARATOR)[1] as string
+          // The record holds the documents its path grammar admits; the live
+          // store here takes any path a generator names (a sibling whose path
+          // extends another's), and a restore never writes to one of those.
+          try {
+            createWorkspaceDocumentAtPath(record, {
+              path,
+              documentId: stored.id,
+              kind: stored.kind,
+            })
+          } catch {
+            continue
+          }
+          writeWorkspaceDocumentContent(record, stored.id, stored.doc)
+        }
+        return bindRecordOps(legacyRecordOps, record, async () => {
+          live.record('save')
+          if (live.failNextSave !== null) {
+            const err = live.failNextSave
+            live.failNextSave = null
+            throw err
+          }
+          for (const entry of readWorkspaceDocuments(record)) {
+            const stored = live.docs.get(live.key(WS, entry.path))
+            const projected = projectWorkspaceDocument(record, entry.documentId)
+            if (stored !== undefined && projected !== null) {
+              live.docs.set(live.key(WS, entry.path), {
+                ...stored,
+                doc: projected,
+                kind: entry.kind,
+              })
+            }
+          }
+        })
+      },
+      evict(workspaceId) {
+        live.record('evictRecord')
+        live.recordsDropped.push(workspaceId)
+      },
+      evictProjections(workspaceId) {
+        live.record('evictProjections')
+        live.projectionsDropped.push(workspaceId)
+      },
+    }
+  }
+
+  /** What restore is handed over these documents and a history. */
+  deps(versions: VersionHistory) {
+    return {
+      versions,
+      liveDocuments: this,
+      workspaceDocuments: this.workspaceDocuments(),
+      documentWritten: this.documentWritten,
+    }
+  }
+
+  /** The observer a composition root hands restore, noting each document it is told of. */
+  readonly documentWritten = async ({ path }: { path?: string }) => {
+    this.record('documentWritten')
+    if (path !== undefined) this.written.push(path)
   }
 
   seed(path: string, doc: LoroDoc, kind: DocumentKind = 'spatial', id = generateDocumentId()) {
@@ -147,6 +237,9 @@ export class FakeLive implements LiveDocuments {
   }
   async withWriteLock<T>(_workspaceId: string, fn: () => Promise<T>): Promise<T> {
     this.lockDepth += 1
+    // The hold itself is a call, so a restore that reaches nothing before it
+    // answers (a version that does not exist) still shows it ran inside one.
+    this.record('withWriteLock')
     try {
       return await fn()
     } finally {
@@ -235,7 +328,7 @@ export function run(
   progress?: (event: RestoreProgressEvent) => void,
 ): Promise<RestoreVersionResult> {
   return restoreVersion(
-    { versions, liveDocuments: live },
+    live.deps(versions),
     { workspaceId: WS, path: 'canvas-a', versionId: 'v1', ...input },
     progress,
   )

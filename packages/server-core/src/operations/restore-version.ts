@@ -3,16 +3,27 @@ import {
   documentFromSnapshot,
   judgeStateWithinTextLimits,
   type RecordView,
-  reconcileDocContent,
   statedKindSplit,
   type WorkspaceNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { documentPathSchema, isSelfOrDescendant } from '@kamiazya/whiteboard-model'
+import {
+  bytesToBase64,
+  documentPathSchema,
+  isSelfOrDescendant,
+  messageOf,
+} from '@kamiazya/whiteboard-model'
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
-import type { Frontiers, LoroDoc } from 'loro-crdt'
+import type { LoroDoc } from 'loro-crdt'
+import { getLogger } from '../log.js'
 import type { LiveDocuments, RestoreProgressEvent, ServerDeps } from '../server-deps.js'
 import { DocumentKindChangedError, textBreachRefusal } from './sync-write-refusals.js'
+
+/** What a restore reaches: the history, the live documents, the record it writes into, and the write observer. */
+export type RestoreDeps = Pick<
+  ServerDeps,
+  'versions' | 'liveDocuments' | 'workspaceDocuments' | 'documentWritten'
+>
 
 export interface RestoreVersionInput {
   readonly workspaceId: string
@@ -61,13 +72,15 @@ export type RestoreVersionResult =
  * document, the past state, and how to narrate the write.
  */
 interface RestoreContext {
+  readonly deps: RestoreDeps
   readonly workspaceId: string
   /** The SOURCE document, whose history holds the version. */
   readonly path: string
   readonly versionId: string
-  /** The live doc at `path`, loaded before the version is resolved. */
-  readonly doc: LoroDoc
+  /** The past document, for what is judged of it and for a document it creates. */
   readonly past: LoroDoc
+  /** The same past document as the bytes a write at the record's node takes. */
+  readonly pastBytes: Uint8Array
   readonly label: string | undefined
   readonly progress: RestoreProgress
 }
@@ -115,14 +128,13 @@ interface RestoreContext {
  * write judged (`withinSyncLimits`).
  */
 export async function restoreVersion(
-  deps: Pick<ServerDeps, 'versions' | 'liveDocuments'>,
+  deps: RestoreDeps,
   input: RestoreVersionInput,
   progress: RestoreProgress = () => {},
 ): Promise<RestoreVersionResult> {
   const { versions, liveDocuments: live } = deps
   const { workspaceId, path, versionId } = input
   return live.withWriteLock(workspaceId, async () => {
-    const doc = await live.get(workspaceId, path)
     const pastBytes = await versions.load(workspaceId, versionId)
     if (pastBytes === null) return { kind: 'not-found' }
     const past = documentFromSnapshot(pastBytes)
@@ -136,11 +148,12 @@ export async function restoreVersion(
     if (owned === undefined) return { kind: 'not-found' }
 
     const ctx: RestoreContext = {
+      deps,
       workspaceId,
       path,
       versionId,
-      doc,
       past,
+      pastBytes,
       label: owned.label,
       progress,
     }
@@ -165,12 +178,11 @@ async function restoreInPlace(
   versions: Pick<ServerDeps, 'versions'>['versions'],
   ctx: RestoreContext,
 ): Promise<RestoreVersionResult> {
-  const { workspaceId, path, doc, past, label, progress, versionId } = ctx
-  const changed = await reconcileAndSave(live, workspaceId, path, doc, past, {
+  const { workspaceId, path, label, versionId } = ctx
+  const { changed } = await writePast(ctx, path, {
     label,
     kind: null,
     recorded: await live.kind(workspaceId, path),
-    progress,
   })
   if (changed) await recordMerge(versions, workspaceId, path, versionId)
   return { kind: 'restored-in-place' }
@@ -187,29 +199,22 @@ async function restoreOntoExisting(
   ctx: RestoreContext,
   targetPath: string,
 ): Promise<RestoreVersionResult> {
-  const { workspaceId, path, past, label, progress, versionId } = ctx
+  const { workspaceId, path, label, versionId } = ctx
   const sourceKind = await live.kind(workspaceId, path)
   const targetKind = await live.kind(workspaceId, targetPath)
   if (sourceKind !== null && targetKind !== null && sourceKind !== targetKind) {
     return { kind: 'kind-mismatch', targetPath, sourceKind, targetKind }
   }
-  const targetDoc = await live.get(workspaceId, targetPath)
   // A target that records no kind is declared by the first write that
   // reaches it, so it takes the source's — the shape the merged content
   // has — and a kind-aware consumer (editor routing) opens it correctly.
-  const changed = await reconcileAndSave(live, workspaceId, targetPath, targetDoc, past, {
+  const { changed, documentId, elementCount } = await writePast(ctx, targetPath, {
     label,
     kind: targetKind === null ? sourceKind : null,
     recorded: targetKind ?? sourceKind,
-    progress,
   })
   if (changed) await recordMerge(versions, workspaceId, targetPath, versionId)
-  return {
-    kind: 'restored-to-target',
-    targetPath,
-    documentId: await documentIdAt(live, workspaceId, targetPath),
-    elementCount: countSpatialNodes(targetDoc),
-  }
+  return { kind: 'restored-to-target', targetPath, documentId, elementCount }
 }
 
 /** Mode 2: restore the past state into a DIFFERENT document. */
@@ -309,7 +314,7 @@ async function judgedPastSubtree(pastWorkspace: RecordView, inSubtree: (path: st
   )
   const restoring = pastDocs.flatMap((node) => {
     const bytes = pastWorkspace.exportProjection(node.meta.documentId)
-    return bytes === null ? [] : [{ node, pastDoc: documentFromSnapshot(bytes) }]
+    return bytes === null ? [] : [{ node, bytes, pastDoc: documentFromSnapshot(bytes) }]
   })
   for (const { node, pastDoc } of restoring) withinSyncLimits(pastDoc, node.path, node.meta.kind)
   return { pastDocs, restoring }
@@ -351,9 +356,9 @@ async function restoreSubtree(
         await live.delete(workspaceId, row.path)
       }
     }
-    for (const { node, pastDoc } of restoring) {
+    for (const { node, bytes, pastDoc } of restoring) {
       const row = rowsById.get(node.meta.documentId)
-      const changed = await restoreOneDocument(live, workspaceId, node, pastDoc, row)
+      const changed = await restoreOneDocument(ctx, node, { bytes, pastDoc }, row)
       // Every document the rollback moved gains the point, not just the
       // one that was addressed: leaving the rest unrecorded would make
       // this the one mode whose history reads as a straight line through
@@ -372,17 +377,18 @@ async function restoreSubtree(
  * whether that changed anything.
  */
 async function restoreOneDocument(
-  live: LiveDocuments,
-  workspaceId: string,
+  ctx: RestoreContext,
   node: { readonly path: string; readonly meta: { readonly kind?: DocumentKind } },
-  pastDoc: LoroDoc,
+  past: { readonly bytes: Uint8Array; readonly pastDoc: LoroDoc },
   liveRow: { readonly path: string } | undefined,
 ): Promise<boolean> {
+  const { deps, workspaceId } = ctx
+  const live = deps.liveDocuments
   if (liveRow === undefined) {
     // Deleted since the version: recreated under the SAME documentId's row
     // lineage as far as the tree is concerned (the write-through places it
     // by path + kind).
-    await live.save(workspaceId, node.path, pastDoc, { kind: node.meta.kind })
+    await live.save(workspaceId, node.path, past.pastDoc, { kind: node.meta.kind })
     live.evict(workspaceId, node.path)
     return true
   }
@@ -390,24 +396,14 @@ async function restoreOneDocument(
   if (moved) {
     await live.rename(workspaceId, liveRow.path, node.path)
   }
-  const liveDoc = await live.get(workspaceId, node.path)
-  const before = liveDoc.frontiers()
-  reconcileDocContent(liveDoc, pastDoc)
-  await live.save(workspaceId, node.path, liveDoc, { overwrite: true, kind: node.meta.kind })
-  return moved || !sameFrontiers(before, liveDoc.frontiers())
-}
-
-/**
- * Whether a reconcile left the doc where it was: it writes only what differs,
- * so a restore onto content that already matches commits nothing. Such a
- * restore records no merge point — lineage is never retired, so one per
- * repeat would grow the history by a row that says nothing.
- */
-function sameFrontiers(a: Frontiers, b: Frontiers): boolean {
-  return (
-    a.length === b.length &&
-    a.every((id, i) => id.peer === b[i]?.peer && id.counter === b[i]?.counter)
+  const written = await writePastAtNode(
+    deps,
+    workspaceId,
+    node.path,
+    past.bytes,
+    node.meta.kind ?? null,
   )
+  return moved || written.changed
 }
 
 /**
@@ -453,26 +449,125 @@ async function recordMerge(
   }
 }
 
-// Reconciles `past` onto `doc` (the LIVE doc for workspaceId/targetPath),
-// then persists — shared by the in-place restore and the overwrite-an-
-// existing-document restore, because both must mutate the same document
-// instance any connected client already holds. Answers whether the reconcile
-// moved the document.
-async function reconcileAndSave(
-  live: LiveDocuments,
+/** What writing the past state at a document's node left: whether it moved the content, and the document's size. */
+interface Written {
+  readonly changed: boolean
+  readonly documentId: string
+  readonly elementCount: number
+}
+
+interface NodeEntry {
+  readonly documentId: string
+  readonly kind: DocumentKind
+}
+
+// The engine answers in the shapes the loro-adapter readers return; this
+// package asserts the type and holds no schema of its own for it.
+const assertedAs = <T>() => ({ parse: (value: unknown) => value as T })
+
+/**
+ * Writes the past state as the content of the document at `path`, at its node
+ * of the workspace record, then saves the record and drops the per-document
+ * projections cut from it. Every part runs inside the hold the caller has on
+ * the workspace write lock, and a throw anywhere after the record is opened
+ * drops the record unsaved: the write already landed in it, and kept it would
+ * ride the next ordinary save by anyone.
+ *
+ * Content and name are the keeper's one whole-content write — the content, then
+ * the name a note at a generated path takes from its heading — split only so
+ * that "changed" answers whether the CONTENT moved: an identical past writes no
+ * operation, and a restore repeated over it records no merge point.
+ */
+async function writePastAtNode(
+  deps: RestoreDeps,
   workspaceId: string,
+  path: string,
+  pastBytes: Uint8Array,
+  requestedKind: DocumentKind | null,
+): Promise<Written> {
+  const { workspaceDocuments } = deps
+  const record = await workspaceDocuments.open(workspaceId)
+  let documentId: string
+  let written: Omit<Written, 'documentId'>
+  try {
+    const entry = await record.read(
+      { query: 'workspaceDocumentEntry', args: { path } },
+      assertedAs<NodeEntry | null>(),
+    )
+    if (entry === null) throw new RestoredDocumentIdMissingError(path)
+    documentId = entry.documentId
+    // An EXPLICIT kind is an intentional sync request (a different-kind source's
+    // content onto a target that records none); a plain restore leaves it.
+    if (requestedKind !== null && entry.kind !== requestedKind) {
+      record.write([
+        { op: 'updateWorkspaceDocumentMeta', args: { documentId, patch: { kind: requestedKind } } },
+      ])
+    }
+    const content = record.write([
+      {
+        op: 'writeWorkspaceDocumentContent',
+        args: { documentId, source: bytesToBase64(pastBytes) },
+      },
+    ])
+    record.write([{ op: 'seedNameFromTitle', args: { documentId } }])
+    written = {
+      changed: content.localUpdate !== undefined,
+      elementCount: await record.read(
+        { query: 'spatialNodeCount', args: { documentId } },
+        assertedAs<number>(),
+      ),
+    }
+    await record.save()
+  } catch (err) {
+    workspaceDocuments.evict(workspaceId)
+    workspaceDocuments.evictProjections(workspaceId)
+    throw err
+  }
+  workspaceDocuments.evictProjections(workspaceId)
+  await announceWritten(deps, workspaceId, documentId, path)
+  return { documentId, ...written }
+}
+
+/**
+ * Tells the composition root a document was written, as a save does. After the
+ * bytes are safe and never allowed to undo them: a scheduler that throws must
+ * not turn a restore that landed into a failed one.
+ */
+async function announceWritten(
+  deps: RestoreDeps,
+  workspaceId: string,
+  documentId: string,
+  path: string,
+): Promise<void> {
+  try {
+    await deps.documentWritten({ workspaceId, documentId, path })
+  } catch (err) {
+    getLogger('restore-version').warning(
+      'the document-written observer failed after a successful restore',
+      { workspaceId, documentId, err: messageOf(err) },
+    )
+  }
+}
+
+/**
+ * Writes the past onto the document at `targetPath` for a restore in place or
+ * onto an existing target, narrating it with progress events: `complete` is
+ * sent from a `finally`, or a client overlay can stay locked forever. A past
+ * that breaks a limit is refused before anything is written, and the record is
+ * dropped as for any failure here.
+ */
+async function writePast(
+  ctx: RestoreContext,
   targetPath: string,
-  doc: LoroDoc,
-  past: LoroDoc,
   options: {
     label: string | undefined
     kind: DocumentKind | null
     /** The kind the target will record once saved, which the past envelope is held to. */
     recorded: DocumentKind | null
-    progress: RestoreProgress
   },
-): Promise<boolean> {
-  const { label, kind, recorded, progress } = options
+): Promise<Written> {
+  const { deps, workspaceId, past, pastBytes, progress } = ctx
+  const { label, kind, recorded } = options
   await progress({
     workspaceId,
     path: targetPath,
@@ -482,23 +577,13 @@ async function reconcileAndSave(
   try {
     try {
       withinSyncLimits(past, targetPath, recorded)
-      const before = doc.frontiers()
-      reconcileDocContent(doc, past)
-      await live.save(workspaceId, targetPath, doc, {
-        overwrite: true,
-        ...(kind !== null ? { kind } : {}),
-      })
-      return !sameFrontiers(before, doc.frontiers())
     } catch (err) {
-      // reconcileDocContent mutates the live doc in place before the save
-      // runs, so any failure here leaves the cache ahead of durable state.
-      // Evict it so the next read reloads the last persisted snapshot.
-      live.evict(workspaceId, targetPath)
+      deps.workspaceDocuments.evict(workspaceId)
+      deps.workspaceDocuments.evictProjections(workspaceId)
       throw err
     }
+    return await writePastAtNode(deps, workspaceId, targetPath, pastBytes, kind)
   } finally {
-    // Always send complete, even on error, or a client overlay can stay
-    // locked forever.
     await progress({ workspaceId, path: targetPath, phase: 'complete' })
   }
 }
