@@ -1,6 +1,7 @@
 // @vitest-environment node
 import {
   createWorkspaceDocumentAtPath,
+  type RecordLease,
   readMarkdownBody,
   readSpatialCanvas,
   writeMarkdownBody,
@@ -10,7 +11,7 @@ import {
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { leaseOf } from '../test-utils/replica-lease.js'
 import type { BrowserVersionStore } from './browser-version-store.js'
 import { createBrowserVersionsBackend } from './browser-versions-backend.js'
@@ -58,20 +59,28 @@ const pastLoan = async (
 }
 
 /** A workspace record holding the documents the seam is asked about, as the live page's does. */
-function recordHolding(...documents: Array<{ documentId: string; path: string }>) {
+async function recordHolding(...documents: Array<{ documentId: string; path: string }>) {
   const doc = new LoroDoc()
   for (const each of documents) createWorkspaceDocumentAtPath(doc, { ...each, kind: 'spatial' })
   doc.commit()
-  return (read: (doc: LoroDoc, documentId: string) => unknown) => read(doc, NOTE_ID) as never
+  const held = await leaseOf(doc)
+  return {
+    held,
+    readRecord: (read: (record: RecordLease, documentId: string) => unknown) =>
+      read(held, NOTE_ID) as never,
+  }
 }
 
+const live = await recordHolding(
+  { documentId: NOTE_ID, path: 'note' },
+  { documentId: SKETCH_ID, path: 'sketch' },
+)
+afterAll(() => live.held.release())
+
 const seamOver = (
-  applyRestore: (past: LoroDoc, label?: string) => Promise<void> = async () => {},
+  applyRestore: (past: Uint8Array, label?: string) => Promise<void> = async () => {},
 ) => ({
-  readRecord: recordHolding(
-    { documentId: NOTE_ID, path: 'note' },
-    { documentId: SKETCH_ID, path: 'sketch' },
-  ),
+  readRecord: live.readRecord,
   applyRestore,
 })
 
@@ -119,7 +128,7 @@ function recordingBackend({ bookmarkFails = false } = {}) {
     list: async () => [{ id: 'v1', label: 'Before the rewrite' }],
     withPast: pastLoan,
   } as unknown as BrowserVersionStore
-  const applyRestore = vi.fn(async (_past: LoroDoc, _label?: string) => {})
+  const applyRestore = vi.fn(async (_past: Uint8Array, _label?: string) => {})
   const backend = createBrowserVersionsBackend({
     store,
     record: seamOver(applyRestore),
@@ -155,8 +164,10 @@ describe('the browser versions backend files saves and restores', () => {
   it('hands a restore the past state as a document of its own', async () => {
     const { backend, applyRestore } = recordingBackend()
     await backend.restore('ignored', SKETCH_ID, 'v1')
-    const past = applyRestore.mock.calls[0]?.[0]
-    if (past === undefined) throw new Error('nothing was restored')
+    const bytes = applyRestore.mock.calls[0]?.[0]
+    if (bytes === undefined) throw new Error('nothing was restored')
+    const past = new LoroDoc()
+    past.import(bytes)
     expect(readSpatialCanvas(past).nodes.map((node) => node.id)).toEqual(['n1'])
     expect(readMarkdownBody(past)).toBe('# plan')
   })

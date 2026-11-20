@@ -9,47 +9,15 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { InMemoryRecordDocs } from '../test-utils/in-memory-record-docs.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserBackend } from './browser-backend.js'
 
 claimIsolatedWhiteboardDb('browserbackendrestore')
 
 const DOC_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
-
-/** One snapshot, no log — enough to stand in for the record here. */
-class InMemoryWorkspaceDocs implements WorkspaceDocs {
-  private stored: Uint8Array | null = null
-  async open(): Promise<LoroDoc | null> {
-    if (this.stored === null) return null
-    const doc = new LoroDoc()
-    doc.import(this.stored)
-    return doc
-  }
-  async create(workspaceId: string): Promise<LoroDoc> {
-    const existing = await this.open()
-    if (existing !== null) return existing
-    const doc = new LoroDoc()
-    await this.save(workspaceId, doc)
-    return doc
-  }
-  async save(_workspaceId: string, doc: LoroDoc): Promise<Uint8Array | null> {
-    this.stored = new Uint8Array(doc.export({ mode: 'snapshot' }))
-    return this.stored
-  }
-  async readCursor(): Promise<never> {
-    throw new Error('not implemented')
-  }
-  async catchUp(): Promise<never> {
-    throw new Error('not implemented')
-  }
-
-  async storedVersion(): Promise<never> {
-    throw new Error('not implemented')
-  }
-}
 
 function textDoc(text: string): LoroDoc {
   const doc = new LoroDoc()
@@ -106,7 +74,7 @@ function textOf(doc: LoroDoc, documentId: string): string | undefined {
 
 describe('BrowserBackend.applyRestore', () => {
   it('reconciles the record to the past state, persists it, and delivers the ops to the session', async () => {
-    const docs = new InMemoryWorkspaceDocs()
+    const docs = new InMemoryRecordDocs()
     const backend = new BrowserBackend(
       { documentId: DOC_ID, path: 'canvas-a', kind: 'spatial' },
       docs,
@@ -121,20 +89,20 @@ describe('BrowserBackend.applyRestore', () => {
     await backend.pushLocalUpdate(session.export({ mode: 'update', from: before }))
     expect(textOf(session, DOC_ID)).toBe('after the checkpoint')
 
-    await backend.applyRestore(textDoc('the checkpoint'), 'v1')
+    await backend.applyRestore(textDoc('the checkpoint').export({ mode: 'snapshot' }), 'v1')
 
     // The session saw it as a peer's edit, bracketed like a daemon restore.
     expect(events).toEqual(['restore-started:v1', 'remote-update', 'restore-complete'])
     expect(textOf(session, DOC_ID)).toBe('the checkpoint')
     // And the record on disk agrees, so a reload lands on the restored state.
-    const reopened = await docs.open()
+    const reopened = docs.openDoc()
     expect(reopened && textOf(reopened, DOC_ID)).toBe('the checkpoint')
   })
 
   // The daemon's restore names the note after the heading it was restored to
   // (`name-from-heading.daemon.test.ts`); the browser's must name it the same.
   it('names an unnamed note after the heading it was restored to', async () => {
-    const docs = new InMemoryWorkspaceDocs()
+    const docs = new InMemoryRecordDocs()
     const backend = new BrowserBackend(
       { documentId: DOC_ID, path: 'untitled', kind: 'markdown' },
       docs,
@@ -145,15 +113,15 @@ describe('BrowserBackend.applyRestore', () => {
     writeMarkdownBody(past, '# Weekly review\n\nbody')
     past.commit()
 
-    await backend.applyRestore(past, 'v1')
+    await backend.applyRestore(past.export({ mode: 'snapshot' }), 'v1')
 
     expect(readWorkspaceDocumentName(session, DOC_ID)).toBe('Weekly review')
-    const reopened = await docs.open()
+    const reopened = docs.openDoc()
     expect(reopened && readWorkspaceDocumentName(reopened, DOC_ID)).toBe('Weekly review')
   })
 
   it('completes the bracket when persistence fails, and the failure reaches the caller', async () => {
-    const docs = new InMemoryWorkspaceDocs()
+    const docs = new InMemoryRecordDocs()
     const backend = new BrowserBackend(
       { documentId: DOC_ID, path: 'canvas-a', kind: 'spatial' },
       docs,
@@ -164,7 +132,9 @@ describe('BrowserBackend.applyRestore', () => {
       throw new Error('disk full')
     }
 
-    await expect(backend.applyRestore(textDoc('the checkpoint'), 'v1')).rejects.toThrow('disk full')
+    await expect(
+      backend.applyRestore(textDoc('the checkpoint').export({ mode: 'snapshot' }), 'v1'),
+    ).rejects.toThrow('disk full')
     expect(events).toEqual(['restore-started:v1', 'restore-complete'])
   })
 })

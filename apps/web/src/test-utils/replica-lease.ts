@@ -59,3 +59,23 @@ export async function watchEngineHandles() {
     },
   }
 }
+
+/**
+ * A store whose `create` answers one lease over `seed`, for a test about what a
+ * keeper does with a record it was handed. `onSave` sees the record each save
+ * is asked to persist; `stored()` reads the record's present state.
+ */
+export async function docsOverRecord(
+  seed: LoroDoc,
+  onSave: (record: RecordLease) => void = () => {},
+) {
+  const held = await leaseOf(seed)
+  const docs = {
+    create: async () => held,
+    save: async (_workspaceId: string, record: RecordLease) => {
+      onSave(record)
+      return null
+    },
+  } as unknown as import('@kamiazya/whiteboard-workspace-index').WorkspaceDocs<RecordLease>
+  return { docs, held, stored: () => docOf(held) }
+}

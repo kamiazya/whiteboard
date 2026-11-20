@@ -14,7 +14,7 @@ import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { withLeaseOf } from '../test-utils/replica-lease.js'
-import { recordFrontier, withSavedVersionReads } from './browser-version-store.js'
+import { recordFrontier, recordPointOf, withSavedVersionReads } from './browser-version-store.js'
 
 const DOCUMENT = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const holder = { documentId: DOCUMENT, path: 'page', trashed: false } as const
@@ -116,16 +116,19 @@ describe('withSavedVersionReads', () => {
 })
 
 describe('recordFrontier', () => {
-  it('names the operations the live record holds: equal while nothing is added, changed by an edit', () => {
-    const { record } = history()
-    const before = recordFrontier(record)
+  const frontierOf = (doc: LoroDoc) =>
+    withLeaseOf(doc, (lent) => recordFrontier(recordPointOf(lent)))
 
-    expect(recordFrontier(record)).toEqual(before)
-    expect(recordFrontier(LoroDoc.fromSnapshot(record.export({ mode: 'snapshot' })))).toEqual(
+  it('names the operations the live record holds: equal while nothing is added, changed by an edit', async () => {
+    const { record } = history()
+    const before = await frontierOf(record)
+
+    expect(await frontierOf(record)).toEqual(before)
+    expect(await frontierOf(LoroDoc.fromSnapshot(record.export({ mode: 'snapshot' })))).toEqual(
       before,
     )
 
     writeWorkspaceDocumentContent(record, DOCUMENT, drawing('img-four'))
-    expect(recordFrontier(record)).not.toEqual(before)
+    expect(await frontierOf(record)).not.toEqual(before)
   })
 })

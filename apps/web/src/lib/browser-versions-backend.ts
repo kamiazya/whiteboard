@@ -1,11 +1,8 @@
 import { restorePointOptions } from '@kamiazya/whiteboard-history'
-import {
-  type LegacyRecord,
-  loroDocKind,
-  resolveWorkspaceDocumentById,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { lease, type RecordLease } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
+import { z } from 'zod'
 import type { BrowserVersionStore } from './browser-version-store.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import type { VersionsBackend } from './versions-backend.js'
@@ -20,10 +17,13 @@ import type { VersionsBackend } from './versions-backend.js'
  * without standing one up.
  */
 export interface VersionsRecordSeam {
-  readonly readRecord: <T>(read: (doc: LegacyRecord, documentId: string) => T) => T | null
-  /** `past` is the document's content as a document of its own, content at the root. */
-  readonly applyRestore: (past: LegacyRecord, label?: string) => Promise<void>
+  readonly readRecord: <T>(read: (record: RecordLease, documentId: string) => T) => T | null
+  /** `past` is the projection's bytes: the document's content as a document of its own, content at the root. */
+  readonly applyRestore: (past: Uint8Array, label?: string) => Promise<void>
 }
+
+// The engine answers the entry the reader produced; only its path is read here.
+const placedShape = z.custom<{ path: string } | null>()
 
 /**
  * The path the version store keys `documentId`'s rows by: from the live
@@ -38,14 +38,16 @@ async function documentPathOf(
   },
   documentId: string,
 ): Promise<string> {
-  const held = deps.record.readRecord((doc) => ({
-    path: resolveWorkspaceDocumentById(doc, documentId)?.path,
-  }))
+  // The read has begun by the time `readRecord` returns, so the record's holder
+  // may let go of it while the answer is awaited.
+  const held = deps.record.readRecord((record) =>
+    lease.read(record, { query: 'workspaceDocumentEntry', args: { documentId } }, placedShape),
+  )
   const path =
     held === null
       ? (await deps.index.resolveDocumentById({ workspaceId: getBrowserWorkspaceId(), documentId }))
           ?.path
-      : held.path
+      : (await held)?.path
   if (path === undefined) throw new Error(`no such document: ${documentId}`)
   return path
 }
@@ -127,16 +129,15 @@ export function createBrowserVersionsBackend(deps: {
       const workspaceId = getBrowserWorkspaceId()
       const path = await pathOf(documentId)
       // The live record's reconcile reads a document of its own, so the past
-      // state leaves the engine as the projection's bytes and opens as one.
+      // state leaves the engine as the projection's bytes.
       const projection = await deps.store.withPast(workspaceId, path, versionId, (past) =>
         past.projection(),
       )
       if (projection === null) throw new Error(`no such version: ${versionId}`)
-      const past = await loroDocKind.load(projection, [])
       const label = (await deps.store.list(workspaceId, path)).find(
         (v) => v.id === versionId,
       )?.label
-      await deps.record.applyRestore(past, label)
+      await deps.record.applyRestore(projection, label)
       await bookmarkRestore(deps.store, workspaceId, path, versionId)
     },
   }

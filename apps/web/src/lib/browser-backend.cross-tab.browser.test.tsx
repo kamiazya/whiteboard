@@ -6,6 +6,7 @@
 import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   documentContainers,
+  type RecordLease,
   readMarkdownBody,
   readSpatialCanvas,
   resolveWorkspaceDocumentById,
@@ -25,8 +26,8 @@ import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { linkifyBrowserMentions } from './browser-linkify.js'
-import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { announceVersion, listenToWorkspace } from './workspace-broadcast.js'
 
 claimIsolatedWhiteboardDb('browser-backend-cross-tab')
@@ -243,8 +244,8 @@ it('a save landing between reading the record and listening still reaches the ta
     release = resolve
   })
   let read = false
-  class HeldAfterRead extends BrowserWorkspaceDocs {
-    override async create(workspaceId: string): Promise<LoroDoc> {
+  class HeldAfterRead extends BrowserWorkspaceRecords {
+    override async create(workspaceId: string): Promise<RecordLease> {
       const doc = await super.create(workspaceId)
       read = true
       await gate

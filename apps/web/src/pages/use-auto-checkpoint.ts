@@ -4,14 +4,37 @@ import { useEffect, useMemo } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import {
   type BrowserVersionStore,
+  type RecordPoint,
   recordFrontier,
-  type WorkspaceRecordDoc,
+  recordPointOf,
 } from '../lib/browser-version-store.js'
 import type { VersionsRecordSeam } from '../lib/browser-versions-backend.js'
 import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { listenToWorkspace, type WorkspaceBroadcast } from '../lib/workspace-broadcast.js'
 
 const log = getAppLogger('browser-document-page')
+
+/**
+ * Where the record stands when it is asked. A checkpoint is armed by an edit
+ * the keeper has not taken into the record yet, and taken minutes later, so
+ * the point to compare is the record's at that later moment. The keeper may
+ * have let the record go by then (the page left the document): the point then
+ * is the one the edit was signalled at.
+ */
+type RecordPointSource = () => RecordPoint
+
+function pointSourceOf(
+  recordSource: VersionsRecordSeam,
+  signalled: RecordPoint,
+): RecordPointSource {
+  return () => {
+    try {
+      return recordSource.readRecord?.(recordPointOf) ?? signalled
+    } catch {
+      return signalled
+    }
+  }
+}
 
 /**
  * The two ways an automatic checkpoint lands, handed to whoever can trigger
@@ -33,7 +56,7 @@ interface LivePath {
  * document returning: it comes back under the path it was deleted from.
  */
 function followBroadcast(
-  checkpoints: CheckpointScheduler<WorkspaceRecordDoc>,
+  checkpoints: CheckpointScheduler<RecordPointSource>,
   workspaceId: string,
   live: LivePath,
   message: WorkspaceBroadcast,
@@ -54,7 +77,7 @@ function followBroadcast(
 }
 
 function useLivePath(
-  checkpoints: CheckpointScheduler<WorkspaceRecordDoc>,
+  checkpoints: CheckpointScheduler<RecordPointSource>,
   documentPath: string | null,
   listen: typeof listenToWorkspace,
 ): LivePath {
@@ -86,7 +109,7 @@ function useLivePath(
 
 function armCheckpoint(
   recordSource: VersionsRecordSeam | null,
-  checkpoints: CheckpointScheduler<WorkspaceRecordDoc>,
+  checkpoints: CheckpointScheduler<RecordPointSource>,
   live: { readonly path: string | null },
 ): () => void {
   return () => {
@@ -101,8 +124,10 @@ function armCheckpoint(
     // not worth that, and nothing here is worth failing an edit for either:
     // a seam that cannot answer for a record has no record to bookmark.
     try {
-      const record = recordSource?.readRecord?.((doc) => doc) ?? null
-      if (record !== null) checkpoints(getBrowserWorkspaceId(), path, record)
+      const signalled = recordSource?.readRecord?.(recordPointOf) ?? null
+      if (recordSource !== null && signalled !== null) {
+        checkpoints(getBrowserWorkspaceId(), path, pointSourceOf(recordSource, signalled))
+      }
     } catch (err) {
       log.warn('could not arm an automatic checkpoint', err)
     }
@@ -134,7 +159,7 @@ function createBrowserCheckpoints(
   versionStore: Pick<BrowserVersionStore, 'save' | 'isUnchangedSinceLastVersion'>,
 ) {
   return createCheckpointScheduler({
-    frontierOf: recordFrontier,
+    frontierOf: (point: RecordPointSource) => recordFrontier(point()),
     alreadyCheckpointed: (w, p) => versionStore.isUnchangedSinceLastVersion(w, p),
     save: (workspaceId, path) =>
       versionStore.save(workspaceId, path, {

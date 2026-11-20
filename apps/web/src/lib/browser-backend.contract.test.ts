@@ -23,55 +23,15 @@ import {
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { describe } from 'vitest'
+import { InMemoryRecordDocs } from '../test-utils/in-memory-record-docs.js'
 import { BrowserBackend } from './browser-backend.js'
 
 const DOC_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
-class InMemoryWorkspaceDocs implements WorkspaceDocs {
-  private stored: Uint8Array | null = null
-
-  async open(_workspaceId: string): Promise<LoroDoc | null> {
-    if (this.stored === null) return null
-    const doc = new LoroDoc()
-    doc.import(this.stored)
-    return doc
-  }
-
-  async create(workspaceId: string): Promise<LoroDoc> {
-    const existing = await this.open(workspaceId)
-    if (existing !== null) return existing
-    const doc = new LoroDoc()
-    await this.save(workspaceId, doc)
-    return doc
-  }
-
-  async save(_workspaceId: string, doc: LoroDoc): Promise<Uint8Array | null> {
-    this.stored = new Uint8Array(doc.export({ mode: 'snapshot' }))
-    return this.stored
-  }
-
-  // This double keeps one snapshot and no log, so there is no position to
-  // hold and nothing to tail. Rejecting rather than answering an empty
-  // cursor: a silent no-op would let a tailing test pass against a double
-  // that cannot tail.
-  async readCursor(): Promise<never> {
-    throw new Error('not implemented')
-  }
-
-  async catchUp(): Promise<never> {
-    throw new Error('not implemented')
-  }
-
-  async storedVersion(): Promise<never> {
-    throw new Error('not implemented')
-  }
-}
-
 function createStores() {
-  const docs = new InMemoryWorkspaceDocs()
+  const docs = new InMemoryRecordDocs()
 
   return { docs }
 }
@@ -96,7 +56,7 @@ describe('DocumentBackend contract: BrowserBackend', () => {
         return {
           bytes: doc.export({ mode: 'update', from }),
           landed: async () => {
-            const stored = await docs.open(DOC_ID)
+            const stored = docs.openDoc()
             if (stored === null) return false
             const canvas = readSpatialCanvas(documentContainers(stored, DOC_ID))
             return canvas.nodes.some((n) => n.id === 'n-last')
