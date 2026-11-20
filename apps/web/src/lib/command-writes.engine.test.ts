@@ -24,14 +24,9 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
-const warn = vi.hoisted(() => vi.fn())
-vi.mock('./app-logger.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./app-logger.js')>()
-  return { ...actual, getAppLogger: (name: string) => ({ ...actual.getAppLogger(name), warn }) }
-})
-
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { commandTargetKey, commitToDoc } from './command-writes.js'
 import type { EditorCommand } from './spatial/commands.js'
 import { applyCommand } from './spatial/commands.js'
@@ -112,9 +107,6 @@ const commit = (
 }
 
 let open: number[] = []
-beforeEach(() => {
-  warn.mockClear()
-})
 afterEach(() => {
   for (const handle of open) engine.close({ handle })
   open = []
@@ -221,7 +213,7 @@ describe('a command whose write fails', () => {
   const command: EditorCommand = { kind: 'move-node', id: 'a', x: 5, y: 5 }
   const next = applyCommand(prev, command)
 
-  it('is retried as the whole-canvas reconcile, and the failure is warned about', () => {
+  it('is retried as the whole-canvas reconcile, and the failure is warned about', async () => {
     const applied: string[] = []
     let calls = 0
     const target: WriteTarget = {
@@ -238,10 +230,10 @@ describe('a command whose write fails', () => {
     commitToDoc(target, prev, next, command)
 
     expect(applied).toEqual(['reconcileSpatialCanvas'])
-    expect(warn).toHaveBeenCalledTimes(1)
+    await expectLoggedFailure('fine-grained write failed')
   })
 
-  it('rethrows when the reconcile fails too, leaving the target usable for the next command', () => {
+  it('rethrows when the reconcile fails too, leaving the target usable for the next command', async () => {
     const { target, stored } = track(opened())
     let failing = true
     const flaky: WriteTarget = {
@@ -257,9 +249,10 @@ describe('a command whose write fails', () => {
     commitToDoc(flaky, prev, next, command)
 
     expect(readSpatialCanvas(stored()).nodes[0]).toMatchObject({ x: 5, y: 5 })
+    await expectLoggedFailure('fine-grained write failed')
   })
 
-  it('reconciles instead of planning when a read the plan needs throws', () => {
+  it('reconciles instead of planning when a read the plan needs throws', async () => {
     const applied: string[] = []
     const target: WriteTarget = {
       documentId: undefined,
@@ -279,9 +272,10 @@ describe('a command whose write fails', () => {
     commitToDoc(target, prev, applyCommand(prev, decide), decide)
 
     expect(applied).toEqual(['reconcileSpatialCanvas'])
+    await expectLoggedFailure('planning a command failed')
   })
 
-  it('warns once, and reconciles, for a target the next canvas does not hold', () => {
+  it('warns, and reconciles, for a target the next canvas does not hold', async () => {
     const target = capturing()
 
     commitToDoc(target, prev, prev, { kind: 'move-node', id: 'ghost', x: 1, y: 1 })
@@ -289,7 +283,7 @@ describe('a command whose write fails', () => {
     expect(target.applied.map((writes) => writes.map((w) => JSON.parse(w).op))).toEqual([
       ['reconcileSpatialCanvas'],
     ])
-    expect(warn).toHaveBeenCalledTimes(1)
+    await expectLoggedFailure('editor command target missing from next canvas')
   })
 })
 
