@@ -79,9 +79,7 @@ const LORO_DIRECT: Readonly<Record<string, string>> = {
 }
 
 /** Shipped files outside loro-adapter that hold a LoroDoc without importing `loro-crdt`. Shrink-only. */
-const LORO_SHAPED: Readonly<Record<string, string>> = {
-  'apps/web/src/lib/apply-adopted-passages.ts': 'M5: browser keeper',
-}
+const LORO_SHAPED: Readonly<Record<string, string>> = {}
 
 const SCANNED = /^(?:apps|packages)\/[^/]+\/src\//
 const ADAPTER = 'packages/loro-adapter/src/'
