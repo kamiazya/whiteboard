@@ -122,7 +122,8 @@
         "fileReferences",
         "workspaceDocumentEntry",
         "workspaceDocumentProjection",
-        "containerPlace"
+        "containerPlace",
+        "documentJudgement"
       ]
     },
     "BreachShape": {

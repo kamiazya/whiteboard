@@ -69,7 +69,7 @@ macro_rules! wire_enum_covered {
 }
 
 wire_enum_covered!(every_breach_shape_round_trips, BreachShape, 28);
-wire_enum_covered!(every_query_name_round_trips, QueryName, 36);
+wire_enum_covered!(every_query_name_round_trips, QueryName, 38);
 
 #[test]
 fn the_combined_content_read_is_its_own_query_beside_the_content_read() {

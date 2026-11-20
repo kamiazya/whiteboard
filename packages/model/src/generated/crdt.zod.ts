@@ -105,6 +105,7 @@ export const queryNameSchema = z.enum([
   'workspaceDocumentEntry',
   'workspaceDocumentProjection',
   'containerPlace',
+  'documentJudgement',
 ])
 export type QueryName = z.infer<typeof queryNameSchema>
 

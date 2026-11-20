@@ -72,6 +72,7 @@ const ARGS: Record<documentEngine.QueryName, Record<string, unknown>> = {
   containerPlace: { container: 'cid:root-absent:Map' },
   workspaceDocumentEntry: document,
   workspaceDocumentProjection: document,
+  documentJudgement: document,
 }
 
 function seen(doc: LoroDoc) {
