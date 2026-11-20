@@ -159,12 +159,7 @@ describe('a remote update arriving while typed body text is inside its window', 
     const tally = { runs: 0, samePosition: 0 }
 
     fcTest.prop(
-      [
-        fc.integer({ min: 0, max: 5 }),
-        fc.integer({ min: 0, max: 5 }),
-        fc.boolean(),
-        fc.boolean(),
-      ],
+      [fc.integer({ min: 0, max: 5 }), fc.integer({ min: 0, max: 5 }), fc.boolean(), fc.boolean()],
       withDefaults({ numRuns: 30 }),
     )(
       'a second replica given the pushes and the remote update converges with the tab',
@@ -186,9 +181,12 @@ describe('a remote update arriving while typed body text is inside its window', 
       },
     )
 
-    afterAllFloor(['a second replica given the pushes and the remote update converges with the tab'], () => {
-      expect(tally.runs).toBeGreaterThanOrEqual(30)
-      expect(tally.samePosition).toBeGreaterThan(0)
-    })
+    afterAllFloor(
+      ['a second replica given the pushes and the remote update converges with the tab'],
+      () => {
+        expect(tally.runs).toBeGreaterThanOrEqual(30)
+        expect(tally.samePosition).toBeGreaterThan(0)
+      },
+    )
   })
 })
