@@ -90,7 +90,7 @@ export async function seed(
 }
 
 /** Every plane the tools write, as the Loro readers answer it. */
-export function contentOf(doc: LoroDoc) {
+function contentOf(doc: LoroDoc) {
   const { canvas, skipped } = readSpatialCanvasWithSkipped(doc)
   return {
     kind: readDocumentKind(doc) ?? null,
@@ -107,7 +107,7 @@ export function contentOf(doc: LoroDoc) {
   }
 }
 
-export async function stored(store: FakeDocumentStore, documentId: string = DOCUMENT_ID) {
+async function stored(store: FakeDocumentStore, documentId: string = DOCUMENT_ID) {
   const saved = await store.loadSnapshot({ docRef: docRefOf(documentId) })
   if (saved === null) throw new Error('nothing saved')
   const doc = new LoroDoc()
