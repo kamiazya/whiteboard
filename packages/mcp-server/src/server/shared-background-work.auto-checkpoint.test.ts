@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { subjectOf } from './store/_test-checkpoint-subject.js'
 import { globalStoreScope } from './store/store-scope.js'
 
 let tempDir: string
@@ -60,11 +61,11 @@ describe('the auto-checkpoint declaration both kinds of root arm', () => {
     const { scheduler, signalled, flush } = fakeScheduler()
     const worker = httpDeclaration(() => scheduler)
 
-    checkpointAfterWrite('ws-1', 'before-start', new LoroDoc())
+    checkpointAfterWrite('ws-1', 'before-start', subjectOf(new LoroDoc()))
     expect(signalled).toEqual([])
 
     worker.start()
-    checkpointAfterWrite('ws-1', 'after-start', new LoroDoc())
+    checkpointAfterWrite('ws-1', 'after-start', subjectOf(new LoroDoc()))
     expect(signalled).toEqual(['ws-1/after-start'])
 
     await worker.stop()

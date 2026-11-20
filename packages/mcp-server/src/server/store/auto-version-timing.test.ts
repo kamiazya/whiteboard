@@ -1,6 +1,7 @@
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from '../routes/_test-helpers.js'
+import { subjectOf } from './_test-checkpoint-subject.js'
 
 const tmp = withTempDataDir('whiteboard-auto-version-timing-')
 
@@ -70,7 +71,7 @@ describe('a checkpoint is taken when the document goes quiet', () => {
 
     for (let i = 0; i < 8; i++) {
       edit(doc, i)
-      trigger('ws', 'doc', doc)
+      trigger('ws', 'doc', subjectOf(doc))
       await sleep(30)
     }
     // Still editing: nothing has landed yet.
@@ -90,13 +91,13 @@ describe('a checkpoint is taken when the document goes quiet', () => {
     const doc = editableDoc()
 
     edit(doc, 1)
-    trigger('ws', 'doc', doc)
+    trigger('ws', 'doc', subjectOf(doc))
     await sleep(200)
     expect(saves).toEqual(['doc'])
 
     // A signal with no edit behind it — a save that reports the same state
     // twice is a row nobody can tell from its neighbour.
-    trigger('ws', 'doc', doc)
+    trigger('ws', 'doc', subjectOf(doc))
     await sleep(200)
     expect(saves).toEqual(['doc'])
     trigger.stop()
@@ -112,7 +113,7 @@ describe('a checkpoint is taken when the document goes quiet', () => {
 
     for (let i = 0; i < 12; i++) {
       edit(doc, i)
-      trigger('ws', 'doc', doc)
+      trigger('ws', 'doc', subjectOf(doc))
       await sleep(30)
     }
     expect(saves.length).toBeGreaterThanOrEqual(1)
@@ -128,7 +129,7 @@ describe('a checkpoint is taken when the document goes quiet', () => {
     const doc = editableDoc()
 
     edit(doc, 1)
-    trigger('ws', 'doc', doc)
+    trigger('ws', 'doc', subjectOf(doc))
     expect(saves).toEqual([])
 
     await trigger.flush()
@@ -147,7 +148,7 @@ describe('a checkpoint is taken when the document goes quiet', () => {
     const doc = editableDoc()
 
     edit(doc, 1)
-    trigger('ws', 'doc', doc)
+    trigger('ws', 'doc', subjectOf(doc))
     await sleep(200)
     expect(seen).toEqual(['ws/doc:v1'])
     trigger.stop()

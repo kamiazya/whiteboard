@@ -51,28 +51,29 @@ function updateCreating(count: number): Uint8Array {
 }
 
 describe('a workspace-document update that edits many documents', () => {
-  it('loads the edited documents for their checkpoints one at a time', async () => {
-    let inFlight = 0
-    let mostInFlight = 0
-    const realGet = serverDeps.liveDocuments.get.bind(serverDeps.liveDocuments)
-    const liveDocuments = {
-      ...serverDeps.liveDocuments,
-      get: async (workspaceId: string, path: string) => {
-        inFlight += 1
-        mostInFlight = Math.max(mostInFlight, inFlight)
-        try {
-          return await realGet(workspaceId, path)
-        } finally {
-          inFlight -= 1
-        }
-      },
+  it('signals each edited document for its checkpoint, cutting no copy of any', async () => {
+    let projectionsCut = 0
+    const workspaceDocuments = {
+      ...serverDeps.workspaceDocuments,
+      withRecord: serverDeps.workspaceDocuments.withRecord.bind(serverDeps.workspaceDocuments),
     }
-    const signalled: string[] = []
+    const realWithRecord = workspaceDocuments.withRecord
+    workspaceDocuments.withRecord = (workspaceId, fn) =>
+      realWithRecord(workspaceId, (record) =>
+        fn({
+          ...record,
+          exportProjection: (documentId) => {
+            projectionsCut += 1
+            return record.exportProjection(documentId)
+          },
+        }),
+      )
+    const signalled: { path: string; frontier: () => Promise<Uint8Array> }[] = []
     const app = createWorkspaceDocumentRouter({
-      serverDeps: { ...serverDeps, liveDocuments },
+      serverDeps: { ...serverDeps, workspaceDocuments },
       mayPlaceDocuments: () => true,
-      triggerAutoVersion: (_workspaceId, path) => {
-        signalled.push(path)
+      triggerAutoVersion: (_workspaceId, path, frontier) => {
+        signalled.push({ path, frontier })
       },
     })
 
@@ -84,7 +85,14 @@ describe('a workspace-document update that edits many documents', () => {
 
     expect(res.status).toBe(200)
     await vi.waitFor(() => expect(signalled).toHaveLength(EDITED))
-    expect(new Set(signalled).size).toBe(EDITED)
-    expect(mostInFlight).toBe(1)
+    expect(new Set(signalled.map((each) => each.path)).size).toBe(EDITED)
+    expect(projectionsCut).toBe(0)
+    // What each checkpoint would stand at is the record's stored frontier, read when it is asked.
+    const stored = await serverDeps.documentStore.readFrontier({
+      docRef: { kind: 'workspace-tree', workspaceId: WS },
+    })
+    for (const { frontier } of signalled) {
+      expect(await frontier()).toEqual(stored?.frontier)
+    }
   })
 })

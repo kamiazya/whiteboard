@@ -9,6 +9,7 @@ import {
   measureSchedulingFloor,
 } from '../../shared/test-utils/loop-availability.js'
 import { withTempDataDir } from '../routes/_test-helpers.js'
+import { subjectOf } from './_test-checkpoint-subject.js'
 
 const tmp = withTempDataDir('whiteboard-auto-version-loop-')
 
@@ -193,7 +194,7 @@ async function runOnce(
       saved += 1
     },
   })
-  trigger('01M8BBN7JS60N0ZAR13NP8SXBF', path, doc)
+  trigger('01M8BBN7JS60N0ZAR13NP8SXBF', path, subjectOf(doc))
   const { availability } = await measureLoopAvailability(() => trigger.flush(), { intervalMs: 5 })
   return { saved, availability }
 }

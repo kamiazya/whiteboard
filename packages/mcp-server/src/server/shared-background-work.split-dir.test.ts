@@ -13,6 +13,7 @@
  * Both dirs are seeded, so a worker that follows the global works on a real
  * directory and answers with the wrong contents rather than failing loudly.
  */
+
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -23,6 +24,7 @@ import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
 import { resetDataDirForTests, setDataDirForTests } from '../shared/data-dir-secure.js'
 import type { BackgroundWork } from './background-work.js'
 import { captureLogsForTests } from './log.js'
+import { documentOf } from './routes/_test-helpers.js'
 import {
   createSharedWorkers,
   type SharedWorkerFactories,
@@ -133,7 +135,7 @@ describe('the shared workers over a dir the process global does not name', () =>
 
   it('folds the served workspace record once a save has been quiet', async () => {
     const { boot } = await bootBoth()
-    const doc = await boot.serverDeps.liveDocuments.get(WS, 'note')
+    const doc = await documentOf(boot.serverDeps, WS, 'note')
     // A version is what makes the record worth folding. The ambient dir holds
     // none, so a fold of THAT record declines `no-versions`.
     await boot.serverDeps.versions.save(WS, 'note', { auto: false })

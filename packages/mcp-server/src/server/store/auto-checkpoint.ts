@@ -1,21 +1,18 @@
 import type { CheckpointScheduler } from '@kamiazya/whiteboard-history'
-import { encodeFrontiers, type LoroDoc } from 'loro-crdt'
 
 /**
- * What a pending checkpoint carries to say what state it would record: the
- * live document a signaller holds, or — for one that holds none, as an agent
- * write that stored bytes and kept no copy — a read of the keeper for the
- * frontier. Either is asked when the checkpoint is about to be taken, never
- * when the signal arrives.
+ * What a pending checkpoint carries to say what state it would record: a read
+ * of the keeper for the frontier, asked when the checkpoint is about to be
+ * taken, never when the signal arrives.
  */
-type CheckpointSubject = LoroDoc | (() => Uint8Array | Promise<Uint8Array>)
+type CheckpointSubject = () => Uint8Array | Promise<Uint8Array>
 
 /** The scheduler over the daemon's documents. */
 export type DocumentCheckpointScheduler = CheckpointScheduler<CheckpointSubject>
 
 /** A subject's frontier as the bytes the scheduler compares and never decodes. */
 export function documentFrontier(subject: CheckpointSubject): Uint8Array | Promise<Uint8Array> {
-  return typeof subject === 'function' ? subject() : encodeFrontiers(subject.oplogFrontiers())
+  return subject()
 }
 
 /**

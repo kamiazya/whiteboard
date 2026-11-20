@@ -6,14 +6,14 @@ import {
   saveVersionRequestSchema,
   type VersionDocumentResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { documentFromSnapshot, readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
+import { openStandalone } from '@kamiazya/whiteboard-loro-adapter'
 import {
   errorBody,
   invalidRequestBody,
+  readRestoringRefusal,
   TooManyVersionsError,
 } from '@kamiazya/whiteboard-server-core'
 import { type Context, Hono } from 'hono'
-import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { CallerName } from '../../security/membership-gate.js'
 import { listDocuments } from '../../store/document-store.js'
@@ -82,7 +82,7 @@ const SAVE_VERSION_ANSWERS: readonly ErrorAnswer[] = [
  * empty canvas.
  */
 async function pastContent(
-  past: LoroDoc,
+  past: Uint8Array,
   workspaceId: string,
   path: string,
   scope: StoreScope,
@@ -90,7 +90,21 @@ async function pastContent(
   const entryKind = (await listDocuments(workspaceId, scope)).find(
     (entry) => entry.path === path,
   )?.kind
-  return readDocumentContent(past, entryKind)
+  const { session, release } = await openStandalone(past)
+  try {
+    // The engine reads the content as the document says it, or as the entry's
+    // kind where the document records none.
+    return await readRestoringRefusal(
+      session,
+      {
+        query: 'documentContent',
+        ...(entryKind === undefined ? {} : { args: { kind: entryKind } }),
+      },
+      { parse: (value) => value as VersionDocumentResponse },
+    )
+  } finally {
+    release()
+  }
 }
 
 /**
@@ -162,7 +176,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
           404,
         )
 
-      const response = await pastContent(documentFromSnapshot(past), workspaceId, path, scope)
+      const response = await pastContent(past, workspaceId, path, scope)
       return c.json(response)
     } catch (err) {
       const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)

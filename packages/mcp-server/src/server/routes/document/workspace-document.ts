@@ -19,7 +19,6 @@ import {
 } from '@kamiazya/whiteboard-server-core'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
-import type { LoroDoc } from 'loro-crdt'
 import type { ZodError } from 'zod'
 import { getLogger } from '../../log.js'
 import type { CallerName } from '../../security/membership-gate.js'
@@ -30,7 +29,12 @@ import { type ReadJsonBodyOptions, readJsonBody } from '../read-json-body.js'
 import { personOperator } from './_shared.js'
 
 export interface WorkspaceDocumentRouterOptions {
-  triggerAutoVersion: (workspaceId: string, path: string, doc: LoroDoc) => void
+  /** `frontier` reads what state the checkpoint would record, when it is about to be taken. */
+  triggerAutoVersion: (
+    workspaceId: string,
+    path: string,
+    frontier: () => Promise<Uint8Array>,
+  ) => void
   // The workspace-document seam the routes read and write through, handed
   // down from document.ts.
   serverDeps: ServerDeps
@@ -271,6 +275,18 @@ function answerPromoted(
 }
 
 /**
+ * The frontier the keeper last stored for the workspace record: what a
+ * checkpoint of any of its documents stands at. Asked when the checkpoint is
+ * about to be taken, so a burst of edits pays for one read.
+ */
+async function storedFrontier(deps: ServerDeps, workspaceId: string): Promise<Uint8Array> {
+  const stored = await deps.documentStore.readFrontier({
+    docRef: { kind: 'workspace-tree', workspaceId },
+  })
+  return stored === null ? new Uint8Array() : stored.frontier
+}
+
+/**
  * Signals every document an update edited, as the per-document route signals
  * the one it wrote; the checkpoint lands once each goes quiet. One document at
  * a time, after the response: an update may edit as many documents as a
@@ -286,8 +302,7 @@ async function signalEdited(
 ): Promise<void> {
   for (const { path } of edited) {
     try {
-      const doc = await deps.liveDocuments.get(workspaceId, path)
-      options.triggerAutoVersion(workspaceId, path, doc)
+      options.triggerAutoVersion(workspaceId, path, () => storedFrontier(deps, workspaceId))
     } catch (err: unknown) {
       getLogger('document').error(
         { workspaceId, path, err: err as Error },
@@ -339,9 +354,12 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
     const admitted = await admittedWorkspace(c, options.serverDeps)
     if ('refusal' in admitted) return admitted.refusal
     const { workspaceId, deps } = admitted
-    const doc = await deps.workspaceDocuments.get(workspaceId)
-    const snapshot = doc.export({ mode: 'snapshot' }) as Uint8Array<ArrayBuffer>
-    return c.body(snapshot, 200, { 'Content-Type': 'application/octet-stream' })
+    const snapshot = await deps.workspaceDocuments.withRecord(workspaceId, async (record) =>
+      record.exportSnapshot(),
+    )
+    return c.body(snapshot as Uint8Array<ArrayBuffer>, 200, {
+      'Content-Type': 'application/octet-stream',
+    })
   })
 
   app.post(

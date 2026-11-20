@@ -7,6 +7,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { workspaceFilesDir } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
+import { subjectOf } from './_test-checkpoint-subject.js'
 
 /**
  * How many times the history plane decodes the WHOLE workspace record.
@@ -135,7 +136,7 @@ describe('whole-record decodes on the history plane', () => {
       trigger(
         '014VX1BVE7G963KJC6SQ4BHKF3',
         path,
-        await loadDocument('014VX1BVE7G963KJC6SQ4BHKF3', path),
+        subjectOf(await loadDocument('014VX1BVE7G963KJC6SQ4BHKF3', path)),
       )
 
     const decodes = countRecordDecodes()

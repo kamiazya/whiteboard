@@ -4,8 +4,10 @@
  * scheduler `createApp` hands back. Both roots used to hand-copy each, and a
  * copy that dropped the cap or never captured the scheduler failed nothing.
  */
+
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { subjectOf } from './store/_test-checkpoint-subject.js'
 
 vi.mock('./config.js', () => ({
   get DATA_DIR() {
@@ -100,7 +102,7 @@ describe('the checkpoint holder the shared set builds', () => {
     // createApp runs after the declarations are built, and before they start.
     shared.checkpoints.capture(scheduler)
     worker.start()
-    checkpointAfterWrite('ws-1', 'a-document', new LoroDoc())
+    checkpointAfterWrite('ws-1', 'a-document', subjectOf(new LoroDoc()))
     expect(signalled).toEqual(['ws-1/a-document'])
 
     await worker.stop()

@@ -18,6 +18,7 @@ import {
   readSpatialCanvas,
   resolveWorkspaceDocument,
   writeSpatialCanvas,
+  writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
@@ -193,7 +194,15 @@ it('a PER-DOCUMENT update reaches a workspace-document subscriber', async () => 
         ).arrayBuffer(),
       ),
     )
-    await pushDoc(app, client, ['n-a', 'n-b'])
+    // A copy cut before the edit carries operations of its own, so what is sent
+    // is the document as it now reads, not an update the live document lacks the base of.
+    for (const id of ['n-b']) {
+      writeSpatialNode(client, textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 }))
+    }
+    client.commit()
+    await serverDeps.liveDocuments.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'c', client, {
+      overwrite: true,
+    })
   } finally {
     unsubscribe()
   }

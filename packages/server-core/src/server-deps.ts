@@ -341,8 +341,6 @@ export interface WorkspaceDocuments {
  * implementations may take the same lock again.
  */
 export interface LiveDocuments {
-  /** The live (cached) doc at `path`; an unknown path answers an empty doc. */
-  get(workspaceId: string, path: string): Promise<LoroDoc>
   /**
    * Persists `doc` at `path`. Without `overwrite`, a path already held —
    * checked again inside the store, not only by the caller's `exists` —

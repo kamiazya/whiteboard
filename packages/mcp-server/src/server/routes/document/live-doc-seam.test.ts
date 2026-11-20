@@ -45,10 +45,11 @@ function updateBytes(nodeIds: readonly string[]): Uint8Array<ArrayBuffer> {
 }
 
 describe('live-doc routes and the deps they were handed', () => {
-  it('GET /snapshot reads through the INJECTED liveDocuments', async () => {
+  it('GET /snapshot reads through the INJECTED liveDocuments and workspaceDocuments', async () => {
     const deps = await resolveTestServerDeps(tmp.dir)
     await deps.documentIndex.createWorkspace({ workspaceId: '01FCF6YZ7AZ4K20T4QCA9JJ9QM' })
     const real = deps.liveDocuments
+    const realRecords = deps.workspaceDocuments
     await writeDocumentUpdate(deps, '01FCF6YZ7AZ4K20T4QCA9JJ9QM', 'canvas-a', updateBytes(['n1']))
     const recorded: string[] = []
     deps.liveDocuments = {
@@ -57,9 +58,13 @@ describe('live-doc routes and the deps they were handed', () => {
         recorded.push(`exists ${workspaceId}/${path}`)
         return real.exists(workspaceId, path)
       },
-      get: async (workspaceId, path) => {
-        recorded.push(`get ${workspaceId}/${path}`)
-        return real.get(workspaceId, path)
+    }
+
+    deps.workspaceDocuments = {
+      ...realRecords,
+      withRecord: (workspaceId, fn) => {
+        recorded.push(`withRecord ${workspaceId}`)
+        return realRecords.withRecord(workspaceId, fn)
       },
     }
 
@@ -80,7 +85,7 @@ describe('live-doc routes and the deps they were handed', () => {
     // and leaves this empty.
     expect(recorded).toEqual([
       'exists 01FCF6YZ7AZ4K20T4QCA9JJ9QM/canvas-a',
-      'get 01FCF6YZ7AZ4K20T4QCA9JJ9QM/canvas-a',
+      'withRecord 01FCF6YZ7AZ4K20T4QCA9JJ9QM',
     ])
   })
 })

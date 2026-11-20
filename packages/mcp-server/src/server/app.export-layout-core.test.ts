@@ -17,7 +17,7 @@ import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
 import { resetDataDirForTests, setDataDirForTests } from '../shared/data-dir-secure.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
-import { documentIdAt } from './routes/_test-helpers.js'
+import { documentIdAt, documentOf } from './routes/_test-helpers.js'
 import { disposeAutoCompact, uninstallAutoCompact } from './store/auto-compact.js'
 import { clearDbCacheForTests, closeDb } from './store/db/index.js'
 import { clearDocCacheForTests } from './store/doc-cache.js'
@@ -47,7 +47,7 @@ async function appAskingForTheCore() {
   const boot = await bootSelfHostDeps(dataDir)
   await boot.serverDeps.documentIndex.createWorkspace({ workspaceId: WS })
   await wbDocumentCreate(boot.serverDeps, { workspaceId: WS, path: 'board', kind: 'spatial' })
-  const doc = await boot.serverDeps.liveDocuments.get(WS, 'board')
+  const doc = await documentOf(boot.serverDeps, WS, 'board')
   writeSpatialNode(doc, textNode({ id: 'n1', x: 0, y: 0, width: 120, height: 40, text: 'hi' }))
   await boot.serverDeps.liveDocuments.save(WS, 'board', doc, { overwrite: true })
   const real = boot.serverDeps.layoutCore

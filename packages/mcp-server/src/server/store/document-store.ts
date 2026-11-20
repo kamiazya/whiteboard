@@ -58,6 +58,7 @@ import {
   getWorkspaceDoc,
   openWorkspaceDocIfStored,
   saveWorkspaceDoc,
+  withStoredWorkspaceRecord,
 } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -376,6 +377,30 @@ export async function loadDocument(
   scope: StoreScope = globalStoreScope,
 ): Promise<LoroDoc> {
   return (await loadPlacedDocument(workspaceId, path, scope)) ?? new LoroDoc()
+}
+
+/**
+ * How many canvas nodes the document at `path` holds, read off the record
+ * without cutting a copy of the document; 0 for a path the record does not hold.
+ */
+export async function countDocumentNodes(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope = globalStoreScope,
+): Promise<number> {
+  return withStoredWorkspaceRecord(workspaceId, scope, async (record) => {
+    if (record === null) return 0
+    const asserted = <T>() => ({ parse: (value: unknown) => value as T })
+    const entry = await record.read(
+      { query: 'workspaceDocumentEntry', args: { path } },
+      asserted<{ documentId: string } | null>(),
+    )
+    if (entry === null) return 0
+    return record.read(
+      { query: 'spatialNodeCount', args: { documentId: entry.documentId } },
+      asserted<number>(),
+    )
+  })
 }
 
 /** The document the tree places at `path`, or `null` when it places none there. */

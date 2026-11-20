@@ -24,10 +24,11 @@ import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
 import { resetDataDirForTests, setDataDirForTests } from '../shared/data-dir-secure.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
-import { documentIdAt } from './routes/_test-helpers.js'
+import { documentIdAt, documentOf } from './routes/_test-helpers.js'
 import { disposeAutoCompact, uninstallAutoCompact } from './store/auto-compact.js'
 import { clearDbCacheForTests, closeDb } from './store/db/index.js'
 import { clearDocCacheForTests } from './store/doc-cache.js'
+import { getDoc } from './store/document-store.js'
 import { loadWorkspaceNames } from './store/names-store.js'
 import { storeScope } from './store/store-scope.js'
 import { _clearWorkspaceDocCacheForTests } from './store/workspace-doc-cache.js'
@@ -77,7 +78,7 @@ async function bootBoth() {
   await boot.serverDeps.documentIndex.createWorkspace({ workspaceId: SERVED_ONLY_WORKSPACE })
   // The served `note` carries a node, so a read that landed on the ambient
   // one is told apart from one that did not by what it drew or counted.
-  const doc = await boot.serverDeps.liveDocuments.get(WS, 'note')
+  const doc = await documentOf(boot.serverDeps, WS, 'note')
   writeSpatialNode(doc, textNode({ id: 'n1', x: 0, y: 0, width: 120, height: 40, text: MARK }))
   await boot.serverDeps.liveDocuments.save(WS, 'note', doc, { overwrite: true })
   const version = await boot.serverDeps.versions.save(WS, 'note', { auto: false })
@@ -182,9 +183,9 @@ describe('createApp over a dir the process global does not name', () => {
   })
 
   it('reports the served workspaces, documents and cache on the debug dump', async () => {
-    const { app, boot } = await bootBoth()
+    const { app, scope } = await bootBoth()
     // Resident in the served cache, and nowhere in the ambient one.
-    await boot.serverDeps.liveDocuments.get(WS, MARK)
+    await getDoc(WS, MARK, scope)
     const res = await app.request('/api/debug')
     const body = (await res.json()) as {
       workspaces: { workspaceId: string; documents: { path: string; cached: boolean }[] }[]

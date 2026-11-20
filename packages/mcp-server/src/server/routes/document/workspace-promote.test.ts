@@ -51,6 +51,7 @@ import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import {
   documentIdAt,
+  documentOf,
   resolveTestServerDeps,
   seedWorkspaceRow,
   testDocumentRouterOptions,
@@ -684,7 +685,7 @@ it('answers a restore of a saved state past a sync limit with 413 in the sync re
   const version = await serverDeps.versions.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', {
     auto: false,
   })
-  const live = await serverDeps.liveDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
+  const live = await documentOf(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
   writeSpatialCanvas(live, {
     nodes: [textNode({ id: 'kept', text: 'k', x: 0, y: 0, width: 1, height: 1 })],
     edges: [],
@@ -700,6 +701,6 @@ it('answers a restore of a saved state past a sync limit with 413 in the sync re
   )
   expect(res.status).toBe(413)
   expect(await res.json()).toMatchObject({ error: 'too_many_nodes_or_edges' })
-  const after = await serverDeps.liveDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
+  const after = await documentOf(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
   expect(readSpatialCanvas(after).nodes.map((node) => node.id)).toEqual(['kept'])
 })
