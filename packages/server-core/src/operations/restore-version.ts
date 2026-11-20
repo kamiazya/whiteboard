@@ -2,6 +2,7 @@ import {
   countSpatialNodes,
   documentFromSnapshot,
   judgeStateWithinTextLimits,
+  type RecordSession,
   type RecordView,
   statedKindSplit,
   type WorkspaceNode,
@@ -216,6 +217,7 @@ async function restoreOntoExisting(
     label,
     kind: targetKind === null ? sourceKind : null,
     recorded: targetKind ?? sourceKind,
+    countElements: true,
   })
   if (written === null) return { kind: 'not-found' }
   const { changed, documentId, elementCount } = written
@@ -461,6 +463,7 @@ async function recordMerge(
 interface Written {
   readonly changed: boolean
   readonly documentId: string
+  /** Counted only when the caller answers it: a restore in place does not. */
   readonly elementCount: number
 }
 
@@ -492,49 +495,58 @@ async function writePastAtNode(
   path: string,
   pastBytes: Uint8Array,
   requestedKind: DocumentKind | null,
+  countElements = false,
 ): Promise<Written | null> {
   const { workspaceDocuments } = deps
   const record = await workspaceDocuments.open(workspaceId)
-  let documentId: string
-  let written: Omit<Written, 'documentId'>
+  let written: Written | null
   try {
-    const entry = await record.read(
-      { query: 'workspaceDocumentEntry', args: { path } },
-      assertedAs<NodeEntry | null>(),
-    )
-    // Nothing to write into: nothing was changed, and the record is as it was.
-    if (entry === null) return null
-    documentId = entry.documentId
-    // An EXPLICIT kind is an intentional sync request (a different-kind source's
-    // content onto a target that records none); a plain restore leaves it.
-    if (requestedKind !== null && entry.kind !== requestedKind) {
-      record.write([
-        { op: 'updateWorkspaceDocumentMeta', args: { documentId, patch: { kind: requestedKind } } },
-      ])
-    }
-    const content = record.write([
-      {
-        op: 'writeWorkspaceDocumentContent',
-        args: { documentId, source: bytesToBase64(pastBytes) },
-      },
-    ])
-    record.write([{ op: 'seedNameFromTitle', args: { documentId } }])
-    written = {
-      changed: content.localUpdate !== undefined,
-      elementCount: await record.read(
-        { query: 'spatialNodeCount', args: { documentId } },
-        assertedAs<number>(),
-      ),
-    }
-    await record.save()
+    written = await writeIntoRecord(record, path, pastBytes, requestedKind, countElements)
+    if (written !== null) await record.save()
   } catch (err) {
     workspaceDocuments.evict(workspaceId)
     workspaceDocuments.evictProjections(workspaceId)
     throw err
   }
+  // Nothing to write into: nothing was changed, and the record is as it was.
+  if (written === null) return null
   workspaceDocuments.evictProjections(workspaceId)
-  await announceWritten(deps, workspaceId, documentId, path)
-  return { documentId, ...written }
+  await announceWritten(deps, workspaceId, written.documentId, path)
+  return written
+}
+
+/** The writes into the opened record: the kind when asked, the content, then the name; `null` when no document holds `path`. */
+async function writeIntoRecord(
+  record: RecordSession,
+  path: string,
+  pastBytes: Uint8Array,
+  requestedKind: DocumentKind | null,
+  countElements: boolean,
+): Promise<Written | null> {
+  const entry = await record.read(
+    { query: 'workspaceDocumentEntry', args: { path } },
+    assertedAs<NodeEntry | null>(),
+  )
+  if (entry === null) return null
+  const { documentId } = entry
+  // An EXPLICIT kind is an intentional sync request (a different-kind source's
+  // content onto a target that records none); a plain restore leaves it.
+  if (requestedKind !== null && entry.kind !== requestedKind) {
+    record.write([
+      { op: 'updateWorkspaceDocumentMeta', args: { documentId, patch: { kind: requestedKind } } },
+    ])
+  }
+  const content = record.write([
+    {
+      op: 'writeWorkspaceDocumentContent',
+      args: { documentId, source: bytesToBase64(pastBytes) },
+    },
+  ])
+  record.write([{ op: 'seedNameFromTitle', args: { documentId } }])
+  const elementCount = countElements
+    ? await record.read({ query: 'spatialNodeCount', args: { documentId } }, assertedAs<number>())
+    : 0
+  return { documentId, changed: content.localUpdate !== undefined, elementCount }
 }
 
 /**
@@ -573,10 +585,12 @@ async function writePast(
     kind: DocumentKind | null
     /** The kind the target will record once saved, which the past envelope is held to. */
     recorded: DocumentKind | null
+    /** Whether the answer carries the size of the restored document. */
+    countElements?: boolean
   },
 ): Promise<Written | null> {
   const { deps, workspaceId, past, pastBytes, progress } = ctx
-  const { label, kind, recorded } = options
+  const { label, kind, recorded, countElements } = options
   await progress({
     workspaceId,
     path: targetPath,
@@ -591,7 +605,7 @@ async function writePast(
       deps.workspaceDocuments.evictProjections(workspaceId)
       throw err
     }
-    return await writePastAtNode(deps, workspaceId, targetPath, pastBytes, kind)
+    return await writePastAtNode(deps, workspaceId, targetPath, pastBytes, kind, countElements)
   } finally {
     await progress({ workspaceId, path: targetPath, phase: 'complete' })
   }

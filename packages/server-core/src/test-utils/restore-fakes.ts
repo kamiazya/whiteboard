@@ -92,56 +92,55 @@ export class FakeLive implements LiveDocuments {
    * failure, with every call logged at the lock depth it ran at.
    */
   workspaceDocuments(): WorkspaceDocuments {
-    const live = this
     return {
       ...unusedWorkspaceDocuments(),
-      async open() {
-        live.record('open')
-        const record = new LoroDoc()
-        for (const [key, stored] of live.docs) {
-          const path = key.split(KEY_SEPARATOR)[1] as string
-          // The record holds the documents its path grammar admits; the live
-          // store here takes any path a generator names (a sibling whose path
-          // extends another's), and a restore never writes to one of those.
-          try {
-            createWorkspaceDocumentAtPath(record, {
-              path,
-              documentId: stored.id,
-              kind: stored.kind,
-            })
-          } catch {
-            continue
-          }
-          writeWorkspaceDocumentContent(record, stored.id, stored.doc)
-        }
-        return bindRecordOps(legacyRecordOps, record, async () => {
-          live.record('save')
-          if (live.failNextSave !== null) {
-            const err = live.failNextSave
-            live.failNextSave = null
-            throw err
-          }
-          for (const entry of readWorkspaceDocuments(record)) {
-            const stored = live.docs.get(live.key(WS, entry.path))
-            const projected = projectWorkspaceDocument(record, entry.documentId)
-            if (stored !== undefined && projected !== null) {
-              live.docs.set(live.key(WS, entry.path), {
-                ...stored,
-                doc: projected,
-                kind: entry.kind,
-              })
-            }
-          }
-        })
+      open: async () => {
+        this.record('open')
+        const record = this.recordOfDocuments()
+        return bindRecordOps(legacyRecordOps, record, () => this.saveRecord(record))
       },
-      evict(workspaceId) {
-        live.record('evictRecord')
-        live.recordsDropped.push(workspaceId)
+      evict: (workspaceId) => {
+        this.record('evictRecord')
+        this.recordsDropped.push(workspaceId)
       },
-      evictProjections(workspaceId) {
-        live.record('evictProjections')
-        live.projectionsDropped.push(workspaceId)
+      evictProjections: (workspaceId) => {
+        this.record('evictProjections')
+        this.projectionsDropped.push(workspaceId)
       },
+    }
+  }
+
+  /** A workspace record holding the documents its path grammar admits; a restore never writes to the rest. */
+  private recordOfDocuments(): LoroDoc {
+    const record = new LoroDoc()
+    for (const [key, stored] of this.docs) {
+      const path = key.split(KEY_SEPARATOR)[1] as string
+      // The live store here takes any path a generator names (a sibling whose
+      // path extends another's); the record refuses the ones the grammar does.
+      try {
+        createWorkspaceDocumentAtPath(record, { path, documentId: stored.id, kind: stored.kind })
+      } catch {
+        continue
+      }
+      writeWorkspaceDocumentContent(record, stored.id, stored.doc)
+    }
+    return record
+  }
+
+  /** The save of an opened record: what it holds is what these documents hold afterwards. */
+  private async saveRecord(record: LoroDoc): Promise<void> {
+    this.record('save')
+    if (this.failNextSave !== null) {
+      const err = this.failNextSave
+      this.failNextSave = null
+      throw err
+    }
+    for (const entry of readWorkspaceDocuments(record)) {
+      const stored = this.docs.get(this.key(WS, entry.path))
+      const projected = projectWorkspaceDocument(record, entry.documentId)
+      if (stored !== undefined && projected !== null) {
+        this.docs.set(this.key(WS, entry.path), { ...stored, doc: projected, kind: entry.kind })
+      }
     }
   }
 
