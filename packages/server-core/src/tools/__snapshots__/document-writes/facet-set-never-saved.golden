@@ -51,7 +51,6 @@
       "documentId": "doc1",
       "path": "doc",
       "keys": [
-        "doc",
         "documentId",
         "path",
         "workspaceId"

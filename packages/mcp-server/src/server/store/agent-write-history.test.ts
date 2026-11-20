@@ -139,12 +139,7 @@ describe('what an agent write leaves in the history', () => {
       { ws: workspaceId, id: documentId, path: 'board' },
     ])
     // The seam hands over no open document: what the observer needs it reads from the keeper.
-    expect(Object.keys(events[0] ?? {}).sort()).toEqual([
-      'doc',
-      'documentId',
-      'path',
-      'workspaceId',
-    ])
+    expect(Object.keys(events[0] ?? {}).sort()).toEqual(['documentId', 'path', 'workspaceId'])
   })
 
   describe('the automatic checkpoint', () => {

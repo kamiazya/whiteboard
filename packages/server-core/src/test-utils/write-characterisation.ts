@@ -124,12 +124,10 @@ export async function record(rigged: Rig, documentIds: readonly string[] = [DOCU
   // Named by position, so a document whose id was minted still has a stable golden.
   const aliasOf = (documentId: string) => `doc${documentIds.indexOf(documentId) + 1}`
   const content: Record<string, ReturnType<typeof contentOf>> = {}
-  const decoded: Record<string, ReturnType<typeof contentOf>> = {}
   for (const documentId of documentIds) {
     const present = await rigged.store.loadSnapshot({ docRef: docRefOf(documentId) })
     if (present === null) continue
     const read = contentOf(await stored(rigged.store, documentId))
-    decoded[documentId] = read
     content[aliasOf(documentId)] = read
   }
   const saves = rigged.store.saved.map((save) => {
@@ -152,10 +150,6 @@ export async function record(rigged: Rig, documentIds: readonly string[] = [DOCU
     path: event.path ?? null,
     keys: Object.keys(event).sort(),
   }))
-  for (const documentId of documentIds) {
-    const last = rigged.written.filter((event) => event.documentId === documentId).at(-1)
-    if (last !== undefined) expect(contentOf(last.doc)).toEqual(decoded[documentId])
-  }
   return { content, saves, events }
 }
 

@@ -176,9 +176,9 @@ describe('documentWritten', () => {
     expect(seen).toEqual([DOCUMENT_ID])
   })
 
-  // What an observer needs to take a history checkpoint: the doc just
-  // written and the path the index places it at.
-  test('the observer is handed the doc written and the path the index places it at', async () => {
+  // What an observer needs to take a history checkpoint: the document and the
+  // path the index places it at; the state it reads from the keeper.
+  test('the observer is handed the document written and the path the index places it at', async () => {
     const documentIndex = new InMemoryDocumentIndex()
     await documentIndex.createWorkspace({ workspaceId: WORKSPACE_ID })
     const entry = await documentIndex.createDocument({
@@ -186,24 +186,33 @@ describe('documentWritten', () => {
       path: 'placed/here',
       kind: 'spatial',
     })
-    const heard: { path?: string; doc: LoroDoc }[] = []
-    const doc = new LoroDoc()
+    const heard: { documentId: string; keys: string[]; path?: string }[] = []
 
     await saveDocumentBodySnapshot(
       {
         ...makeTestDeps({ documentStore: new FakeDocumentStore(), documentIndex }),
         documentWritten: async (input) => {
-          heard.push({ doc: input.doc, ...(input.path === undefined ? {} : { path: input.path }) })
+          heard.push({
+            documentId: input.documentId,
+            keys: Object.keys(input).sort(),
+            ...(input.path === undefined ? {} : { path: input.path }),
+          })
         },
       },
       WORKSPACE_ID,
       entry.documentId,
-      doc,
+      new LoroDoc(),
       EMPTY,
       EMPTY,
     )
 
-    expect(heard).toEqual([{ doc, path: 'placed/here' }])
+    expect(heard).toEqual([
+      {
+        documentId: entry.documentId,
+        keys: ['documentId', 'path', 'workspaceId'],
+        path: 'placed/here',
+      },
+    ])
   })
 
   test('an index that cannot place the document still notifies, without a path', async () => {

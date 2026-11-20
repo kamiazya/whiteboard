@@ -78,7 +78,7 @@ it('the whole document surface works with no documents table at all, across a re
   await setDocumentDisplayName(WS, 'boards/main', 'Main Board')
   await setDocumentPinned(WS, 'notes/readme', true)
   const versionStore = new FileVersionStore()
-  const version = await versionStore.save(WS, 'boards/main', canvasDoc('the canvas'), {
+  const version = await versionStore.save(WS, 'boards/main', {
     auto: false,
     label: 'checkpoint',
   })

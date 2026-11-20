@@ -136,9 +136,7 @@ async function record(rigged: Rig) {
     documentId: event.documentId,
     path: event.path ?? null,
     keys: Object.keys(event).sort(),
-    contentOfDoc: contentOf(event.doc),
   }))
-  expect(events.at(-1)?.contentOfDoc).toEqual(content)
   return { content, saves, events }
 }
 

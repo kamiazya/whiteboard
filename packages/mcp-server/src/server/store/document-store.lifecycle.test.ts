@@ -111,7 +111,7 @@ describe('deleting a document', () => {
     await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc)
     await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-b', doc)
     const store = new FileVersionStore()
-    await store.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc, { auto: true })
+    await store.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', { auto: true })
 
     const db = await getDb(tempDir)
     const { resolveDocumentIdAtPath } = await import('./document-store.js')
@@ -169,7 +169,7 @@ describe('deleting a document', () => {
     const doc = new LoroDoc()
     await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted', doc)
     const store = new FileVersionStore()
-    const version = await store.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted', doc, {
+    const version = await store.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted', {
       auto: true,
     })
     // Populate the doc cache the way a read would, so eviction has something
@@ -241,7 +241,7 @@ describe('renameDocumentPath', () => {
     const doc = new LoroDoc()
     await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', doc)
     const store = new FileVersionStore()
-    const version = await store.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', doc, { auto: true })
+    const version = await store.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', { auto: true })
 
     const db = await getDb(tempDir)
     const beforeId = await (await import('./document-store.js')).resolveDocumentIdAtPath(

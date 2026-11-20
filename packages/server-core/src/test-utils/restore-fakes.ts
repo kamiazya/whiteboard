@@ -163,7 +163,6 @@ export class FakeVersions implements VersionHistory {
   async save(
     _workspaceId: string,
     path: string,
-    _doc: LoroDoc,
     options: { auto: boolean; label?: string; restoredFrom?: string },
   ): Promise<VersionEntry> {
     this.saved.push({ path, options })

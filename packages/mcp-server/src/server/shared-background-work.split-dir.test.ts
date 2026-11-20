@@ -136,7 +136,7 @@ describe('the shared workers over a dir the process global does not name', () =>
     const doc = await boot.serverDeps.liveDocuments.get(WS, 'note')
     // A version is what makes the record worth folding. The ambient dir holds
     // none, so a fold of THAT record declines `no-versions`.
-    await boot.serverDeps.versions.save(WS, 'note', doc, { auto: false })
+    await boot.serverDeps.versions.save(WS, 'note', { auto: false })
     const logs = captureLogsForTests('info')
     try {
       const work = declared(

@@ -4,7 +4,6 @@
  * scheduler `createApp` hands back. Both roots used to hand-copy each, and a
  * copy that dropped the cap or never captured the scheduler failed nothing.
  */
-import type { CheckpointScheduler } from '@kamiazya/whiteboard-history'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
@@ -19,7 +18,11 @@ vi.mock('./config.js', () => ({
 
 import { FILE_GC_STOP_TIMEOUT_MS } from '../shared/stop-timeouts.js'
 import { createSharedWorkers, sharedBackgroundWork } from './shared-background-work.js'
-import { checkpointAfterWrite, uninstallAutoCheckpointForTests } from './store/auto-checkpoint.js'
+import {
+  checkpointAfterWrite,
+  type DocumentCheckpointScheduler,
+  uninstallAutoCheckpointForTests,
+} from './store/auto-checkpoint.js'
 import type { FileGcSweeper } from './store/file-gc-sweeper.js'
 import { globalStoreScope } from './store/store-scope.js'
 
@@ -35,7 +38,7 @@ function fakeSweeper() {
 function fakeScheduler() {
   const signalled: string[] = []
   const flush = vi.fn(async () => undefined)
-  const scheduler: CheckpointScheduler<LoroDoc> = Object.assign(
+  const scheduler: DocumentCheckpointScheduler = Object.assign(
     (workspaceId: string, path: string) => {
       signalled.push(`${workspaceId}/${path}`)
     },

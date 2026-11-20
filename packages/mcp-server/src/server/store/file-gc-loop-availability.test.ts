@@ -71,7 +71,7 @@ async function seedWorkspace(
     await saveDocument(workspaceId, path, makeSpatialDoc(canvasReferencing(`r${round}d${d}`, 40)))
     for (let v = 0; v < versionsEach; v++) {
       const doc = await loadDocument(workspaceId, path)
-      await store.save(workspaceId, path, doc, { auto: false, label: `v${v}` })
+      await store.save(workspaceId, path, { auto: false, label: `v${v}` })
       // Move the document on, so each version is a distinct point in the
       // record's history rather than the same state saved twice.
       writeSpatialCanvas(doc, canvasReferencing(`r${round}d${d}v${v}`, 40))

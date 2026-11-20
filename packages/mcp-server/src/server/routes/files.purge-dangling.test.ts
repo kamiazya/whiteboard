@@ -65,12 +65,7 @@ function purge() {
 describe('POST purge-dangling against the real store', () => {
   it('answers 503 and deletes nothing when a saved version is corrupt', async () => {
     await saveDocument(WORKSPACE, 'page', makeSpatialDocWithImage('only-then'))
-    const saved = await new FileVersionStore().save(
-      WORKSPACE,
-      'page',
-      makeSpatialDocWithImage('only-then'),
-      { auto: false },
-    )
+    const saved = await new FileVersionStore().save(WORKSPACE, 'page', { auto: false })
     await saveDocument(WORKSPACE, 'page', makeSpatialDocWithImage('now'), { overwrite: true })
     await handle.db
       .updateTable('versions')

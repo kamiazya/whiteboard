@@ -22,7 +22,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { deleteWorkspaceNodeAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import { hasDocumentTrash } from '@kamiazya/whiteboard-ports'
-import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
@@ -83,7 +82,7 @@ describe('wbDocumentDelete', () => {
     const writer = withWorkspaceWriteLock('01ZVM89A4A1V9FS03Z9J64KEK1', async () => {
       writerAcquired()
       await mayWrite
-      const entry = await versions.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'doomed', new LoroDoc(), {
+      const entry = await versions.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'doomed', {
         auto: false,
       })
       return entry.id
@@ -124,7 +123,7 @@ describe('wbDocumentDelete', () => {
       path: 'gone',
       kind: 'spatial',
     })
-    await new FileVersionStore().save('01ZVM89A4A1V9FS03Z9J64KEK1', 'gone', new LoroDoc(), {
+    await new FileVersionStore().save('01ZVM89A4A1V9FS03Z9J64KEK1', 'gone', {
       auto: false,
     })
 

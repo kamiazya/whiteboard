@@ -80,7 +80,7 @@ async function bootBoth() {
   const doc = await boot.serverDeps.liveDocuments.get(WS, 'note')
   writeSpatialNode(doc, textNode({ id: 'n1', x: 0, y: 0, width: 120, height: 40, text: MARK }))
   await boot.serverDeps.liveDocuments.save(WS, 'note', doc, { overwrite: true })
-  const version = await boot.serverDeps.versions.save(WS, 'note', doc, { auto: false })
+  const version = await boot.serverDeps.versions.save(WS, 'note', { auto: false })
   const app = createApp({
     authMode: 'local-daemon',
     serverDeps: boot.serverDeps,

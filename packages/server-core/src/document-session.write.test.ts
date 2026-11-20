@@ -197,21 +197,20 @@ describe('writing through a document session', () => {
       session.write(BATCH)
       await session.save()
       expect(written).toHaveLength(1)
+      expect(readNodeLocks(await stored(store)).has('n1')).toBe(true)
       session.write([{ op: 'setNodeLock', args: { id: 'n1', locked: false } }])
       await session.save()
     })
 
     expect(written).toHaveLength(2)
-    const [first, second] = written
-    expect(Object.keys(first ?? {}).sort()).toEqual(['doc', 'documentId', 'path', 'workspaceId'])
+    const [first] = written
+    expect(Object.keys(first ?? {}).sort()).toEqual(['documentId', 'path', 'workspaceId'])
     expect(first).toMatchObject({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       path: 'where',
     })
-    expect(readNodeLocks(first?.doc as LoroDoc).has('n1')).toBe(true)
-    expect(readNodeLocks(second?.doc as LoroDoc).has('n1')).toBe(false)
-    expect(contentOf(second?.doc as LoroDoc)).toEqual(contentOf(await stored(store)))
+    expect(readNodeLocks(await stored(store)).has('n1')).toBe(false)
   })
 
   it('does not undo a save when the observer throws', async () => {

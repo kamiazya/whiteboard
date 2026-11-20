@@ -116,7 +116,7 @@ async function buildCompactableCanvas(path: string): Promise<{
   }
   await saveDocument(SESSION1, path, doc)
   const store = new FileVersionStore()
-  const version = await store.save(SESSION1, path, doc, { auto: true })
+  const version = await store.save(SESSION1, path, { auto: true })
   for (let i = 0; i < 30; i++) {
     const m = list.insertContainer(list.length, new LoroMap())
     m.set('id', `extra-${i}`)
@@ -176,7 +176,7 @@ describe('compactWorkspace', () => {
     const doc = new LoroDoc()
     const store = new FileVersionStore()
     await saveDocument(SESSION1, 'broken', doc)
-    await store.save(SESSION1, 'broken', doc, { auto: true })
+    await store.save(SESSION1, 'broken', { auto: true })
     const db = await getDb(tempDir)
     // Corrupt the workspace record's snapshot rows directly — the
     // beforeBytes read succeeds (the header is intact), but re-opening the
@@ -287,7 +287,7 @@ describe('compactWorkspace', () => {
     await saveDocument(SESSION1, 'test', doc)
 
     const store = new FileVersionStore()
-    await store.save(SESSION1, 'test', doc, { auto: true })
+    await store.save(SESSION1, 'test', { auto: true })
 
     for (let i = 0; i < 30; i++) {
       const m = list.insertContainer(list.length, new LoroMap())
@@ -472,7 +472,7 @@ describe('auto-compact', () => {
     doc.commit()
     await saveDocument(SESSION1, 'cached', doc)
     const store = new FileVersionStore()
-    await store.save(SESSION1, 'cached', doc, { auto: true })
+    await store.save(SESSION1, 'cached', { auto: true })
     for (let i = 0; i < 30; i++) {
       const m = list.insertContainer(list.length, new LoroMap())
       m.set('id', `x-${i}`)
@@ -878,7 +878,7 @@ describe('auto-compact disposal', () => {
     // Compaction refuses to cut history nothing pins, so the workspace needs
     // a version before the fold is even attempted.
     const store = new FileVersionStore()
-    await store.save(SESSION1, 'page', await loadDocument(SESSION1, 'page'), { auto: false })
+    await store.save(SESSION1, 'page', { auto: false })
 
     // Another instance appends, straight to the store — this instance's
     // cached workspace document knows nothing about it.

@@ -119,8 +119,7 @@ describe('what each storage category holds on the daemon', () => {
 
   it('keeps a document, its history and its index in the database, not in blobs', async () => {
     const { boot, documentId } = await bootDaemon()
-    const doc = await boot.serverDeps.liveDocuments.get(WS, 'note')
-    await boot.serverDeps.versions.save(WS, 'note', doc, { auto: false })
+    await boot.serverDeps.versions.save(WS, 'note', { auto: false })
 
     const report = await bytesByCategory()
 

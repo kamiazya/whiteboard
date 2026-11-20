@@ -109,7 +109,7 @@ it('reaches the verdict every keeper reaches on the shared scenario', async () =
         break
       }
       case 'save-version':
-        await versions.save(WORKSPACE, step.path, await loadDocument(WORKSPACE, step.path), {
+        await versions.save(WORKSPACE, step.path, {
           auto: false,
         })
         break

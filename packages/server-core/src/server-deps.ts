@@ -384,7 +384,6 @@ export interface VersionHistory {
   save(
     workspaceId: string,
     path: string,
-    doc: LoroDoc,
     options: {
       auto: boolean
       label?: string
@@ -438,16 +437,16 @@ export type AdoptedVersion = Readonly<
 // bare documentId back to its workspace would mean scanning every workspace
 // record, while every tool write already knows which workspace it wrote.
 //
-// `doc` and `path` are what a history checkpoint is taken from — the version
-// store addresses a document by path and reads the state off the doc — and
-// the writer already holds both, where an observer would have to reopen the
-// workspace record to find them. `path` is absent when the index does not
-// place the document, which an observer that needs one treats as nothing to
-// checkpoint.
+// `path` is what a history checkpoint is addressed by — the version store
+// addresses a document by path and reads its state from the stored record —
+// and the writer already holds it, where an observer would have to ask the
+// index. It is absent when the index does not place the document, which an
+// observer that needs one treats as nothing to checkpoint. No open document
+// is handed over: the bytes are already stored, and an observer that wants
+// state reads it from the keeper.
 export type DocumentWritten = (input: {
   workspaceId: string
   documentId: DocumentId
-  doc: LoroDoc
   path?: string
 }) => Promise<void>
 

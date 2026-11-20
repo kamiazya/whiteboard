@@ -15,7 +15,7 @@ import {
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 import {
-  announceSavedSnapshot,
+  announceDocumentWritten,
   SnapshotNotFoundError,
   storeSnapshot,
   withEngineTrapReported,
@@ -66,18 +66,15 @@ function sessionOver(
       if (batch.length > 0) lease.write(held, batch, { judge: 'none' })
     },
     async save() {
-      let snapshot: Uint8Array | undefined
-      await withEngineTrapReported(workspaceId, documentId, 'saving', async () => {
-        snapshot = lease.exportSnapshot(held)
-        await storeSnapshot(
+      await withEngineTrapReported(workspaceId, documentId, 'saving', () =>
+        storeSnapshot(
           deps,
           { workspaceId, documentId },
-          snapshot,
+          lease.exportSnapshot(held),
           lease.versionOf(held).encoded,
-        )
-      })
-      if (snapshot !== undefined)
-        await announceSavedSnapshot(deps, workspaceId, documentId, snapshot)
+        ),
+      )
+      await announceDocumentWritten(deps, workspaceId, documentId)
     },
     release: () => held.release(),
   }

@@ -1,8 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { type CheckpointScheduler, createCheckpointScheduler } from '@kamiazya/whiteboard-history'
-import { encodeFrontiers, type LoroDoc } from 'loro-crdt'
+import { createCheckpointScheduler } from '@kamiazya/whiteboard-history'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
@@ -18,9 +17,11 @@ vi.mock('../config.js', () => ({
 
 const { getDb } = await import('./db/index.js')
 const { prepareDataDir } = await import('./db/prepare.js')
-const { installAutoCheckpoint, uninstallAutoCheckpointForTests } = await import(
+const { documentFrontier, installAutoCheckpoint, uninstallAutoCheckpointForTests } = await import(
   './auto-checkpoint.js'
 )
+type CheckpointSubject = import('./auto-checkpoint.js').CheckpointSubject
+type DocumentCheckpointScheduler = import('./auto-checkpoint.js').DocumentCheckpointScheduler
 const { disposeAutoCompact } = await import('./auto-compact.js')
 const { createContainer, resolveServerDeps } = await import('../../di/container.js')
 const { createSelfHostStoreLocalModule } = await import('../../di/store-local.module.js')
@@ -36,14 +37,14 @@ const { wbDocumentCreate, wbDocumentMove, wbDocumentDelete, createCanvasEditTool
 describe('a pending automatic checkpoint when its document moves or is deleted', () => {
   const saved: string[] = []
   const failed: string[] = []
-  let scheduler: CheckpointScheduler<LoroDoc>
+  let scheduler: DocumentCheckpointScheduler
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'wb-checkpoint-path-'))
     saved.length = 0
     failed.length = 0
-    scheduler = createCheckpointScheduler<LoroDoc, void>({
-      frontierOf: (doc) => encodeFrontiers(doc.oplogFrontiers()),
+    scheduler = createCheckpointScheduler<CheckpointSubject, void>({
+      frontierOf: documentFrontier,
       quietMs: 60_000,
       save: async (_workspaceId, path) => {
         saved.push(path)

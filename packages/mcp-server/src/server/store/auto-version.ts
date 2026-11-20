@@ -45,7 +45,7 @@ export function createAutoVersionTrigger(
     // restore), and both write a row over an unchanged document.
     alreadyCheckpointed: (workspaceId, path) =>
       versionStore.isUnchangedSinceLastVersion(workspaceId, path),
-    save: (workspaceId, path, doc) => {
+    save: (workspaceId, path) => {
       const opts: { auto: boolean; operator: OperatorInfo } = {
         auto: true,
         operator: {
@@ -54,7 +54,7 @@ export function createAutoVersionTrigger(
           displayName: 'auto-save',
         },
       }
-      return versionStore.save(workspaceId, path, doc, opts)
+      return versionStore.save(workspaceId, path, opts)
     },
     onError: (err, { workspaceId, path }) => {
       getLogger('auto-version').error({ workspaceId, path, err: err as Error }, 'save failed')

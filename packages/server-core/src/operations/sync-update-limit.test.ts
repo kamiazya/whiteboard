@@ -28,11 +28,12 @@ import {
 import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
-import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
+import type { LiveDocuments, VersionHistory, WorkspaceDocuments } from '../server-deps.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { contentOf, recordHolding, sendRecordEdit } from '../test-utils/record-sync.js'
 import { StoredDoc } from '../test-utils/stored-doc.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
+import { unusedVersionHistory } from '../test-utils/unused-version-history.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 import { promoteWorkspace } from './promote-workspace.js'
@@ -64,10 +65,10 @@ function workspaceDeps(store: StoredDoc) {
     evict: () => store.evict(),
     evictProjections: () => {},
   }
-  const liveDocuments: LiveDocuments = {
-    ...unusedLiveDocuments(),
-    ...lock,
-    get: async () => {
+  const liveDocuments: LiveDocuments = { ...unusedLiveDocuments(), ...lock }
+  const versions: VersionHistory = {
+    ...unusedVersionHistory(),
+    save: async () => {
       throw new Error('a refused promote reached the per-document checkpoint pass')
     },
   }
@@ -75,7 +76,7 @@ function workspaceDeps(store: StoredDoc) {
   return {
     liveDocuments,
     workspaceDocuments,
-    versions: new FakeVersionHistory(),
+    versions,
     blobStore: {} as never,
   }
 }
@@ -309,10 +310,13 @@ describe('a promoted record whose history once held a run past the limit', () =>
     const target = new StoredDoc(new LoroDoc())
     const deps = workspaceDeps(target)
     const checkpointed: string[] = []
-    deps.liveDocuments.get = async (_workspaceId, path) => {
-      checkpointed.push(path)
-      return new LoroDoc()
+    class RecordingHistory extends FakeVersionHistory {
+      override async save(...args: Parameters<FakeVersionHistory['save']>) {
+        checkpointed.push(args[1])
+        return await super.save(...args)
+      }
     }
+    deps.versions = new RecordingHistory()
 
     await expect(
       promoteWorkspace(deps, {

@@ -36,7 +36,6 @@
       "documentId": "doc1",
       "path": "board",
       "keys": [
-        "doc",
         "documentId",
         "path",
         "workspaceId"

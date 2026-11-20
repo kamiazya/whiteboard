@@ -56,7 +56,6 @@
       "documentId": "doc1",
       "path": "note",
       "keys": [
-        "doc",
         "documentId",
         "path",
         "workspaceId"
@@ -67,7 +66,6 @@
       "documentId": "doc1",
       "path": "note",
       "keys": [
-        "doc",
         "documentId",
         "path",
         "workspaceId"

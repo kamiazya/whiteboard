@@ -77,7 +77,7 @@ async function seedDataDir(dir: string): Promise<{
 
   // Version metadata.
   const versions = new FileVersionStore()
-  const created = await versions.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc, {
+  const created = await versions.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', {
     auto: false,
     label: 'drill-seed',
   })

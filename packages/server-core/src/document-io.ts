@@ -259,7 +259,7 @@ export async function saveDocumentSnapshot(
       doc.oplogVersion().encode(),
     ),
   )
-  await announceDocumentWritten(deps, workspaceId, documentId, () => doc)
+  await announceDocumentWritten(deps, workspaceId, documentId)
 }
 
 /** Chunks snapshot bytes and hands them to the store under the frontier they were exported at. */
@@ -279,32 +279,19 @@ export async function storeSnapshot(
 }
 
 /**
- * Tells the composition root a save landed, with the document the bytes just
- * saved open as a `LoroDoc`: the seam still hands its observer one.
+ * Tells the composition root a save landed. After the bytes are safe, and
+ * never allowed to undo them: what the composition root does here (the daemon
+ * schedules a debounced compaction and a history checkpoint) is not part of
+ * this write's correctness, so a scheduler that throws must not turn a
+ * successful save into a failed one. It is logged rather than rethrown, so a
+ * scheduler that keeps failing stops compacting on the record instead of in
+ * silence.
  */
-export function announceSavedSnapshot(
+export async function announceDocumentWritten(
   deps: ServerDeps,
   workspaceId: string,
   documentId: DocumentId,
-  snapshot: Uint8Array,
 ): Promise<void> {
-  return announceDocumentWritten(deps, workspaceId, documentId, () =>
-    LoroDoc.fromSnapshot(snapshot),
-  )
-}
-
-async function announceDocumentWritten(
-  deps: ServerDeps,
-  workspaceId: string,
-  documentId: DocumentId,
-  doc: () => LoroDoc,
-): Promise<void> {
-  // After the bytes are safe, and never allowed to undo them: what the
-  // composition root does here (the daemon schedules a debounced
-  // compaction) is not part of this write's correctness, so a scheduler
-  // that throws must not turn a successful save into a failed one. It is
-  // logged rather than rethrown, so a scheduler that keeps failing stops
-  // compacting on the record instead of in silence.
   try {
     // A lookup that fails costs the observer its path, not the notification:
     // compaction is addressed by workspace and needs none.
@@ -312,7 +299,6 @@ async function announceDocumentWritten(
     await deps.documentWritten({
       workspaceId,
       documentId,
-      doc: doc(),
       ...(path === undefined ? {} : { path }),
     })
   } catch (err) {

@@ -170,7 +170,7 @@ async function restoreInPlace(
     recorded: await live.kind(workspaceId, path),
     progress,
   })
-  if (changed) await recordMerge(versions, workspaceId, path, doc, versionId)
+  if (changed) await recordMerge(versions, workspaceId, path, versionId)
   return { kind: 'restored-in-place' }
 }
 
@@ -201,7 +201,7 @@ async function restoreOntoExisting(
     recorded: targetKind ?? sourceKind,
     progress,
   })
-  if (changed) await recordMerge(versions, workspaceId, targetPath, targetDoc, versionId)
+  if (changed) await recordMerge(versions, workspaceId, targetPath, versionId)
   return {
     kind: 'restored-to-target',
     targetPath,
@@ -252,7 +252,7 @@ async function restoreToTarget(
   // Guard against a stale cache entry from a since-deleted document at
   // this path being served instead of the just-written snapshot.
   live.evict(workspaceId, targetPath)
-  await recordMerge(versions, workspaceId, targetPath, past, versionId)
+  await recordMerge(versions, workspaceId, targetPath, versionId)
   return {
     kind: 'restored-to-target',
     targetPath,
@@ -350,7 +350,7 @@ async function restoreSubtree(
       // one that was addressed: leaving the rest unrecorded would make
       // this the one mode whose history reads as a straight line through
       // a merge. One it did not move gains none.
-      if (changed) await recordMerge(versions, workspaceId, node.path, pastDoc, versionId)
+      if (changed) await recordMerge(versions, workspaceId, node.path, versionId)
     }
   } finally {
     await progress({ workspaceId, path, phase: 'complete' })
@@ -436,11 +436,10 @@ async function recordMerge(
   versions: Pick<ServerDeps, 'versions'>['versions'],
   workspaceId: string,
   path: string,
-  doc: LoroDoc,
   restoredFrom: string,
 ): Promise<void> {
   try {
-    await versions.save(workspaceId, path, doc, { auto: true, restoredFrom })
+    await versions.save(workspaceId, path, { auto: true, restoredFrom })
   } catch {
     // See above.
   }

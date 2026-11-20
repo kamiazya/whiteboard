@@ -71,66 +71,10 @@
       "documentId": "01H8XJZ9K5N4M3P2Q1R0S9T8V7",
       "path": "doc",
       "keys": [
-        "doc",
         "documentId",
         "path",
         "workspaceId"
-      ],
-      "contentOfDoc": {
-        "kind": "markdown",
-        "canvas": {
-          "nodes": [],
-          "edges": []
-        },
-        "skipped": 0,
-        "body": "a note about migration",
-        "threads": [
-          {
-            "id": "t1",
-            "anchor": {
-              "kind": "document"
-            },
-            "status": "resolved",
-            "createdAt": "2026-01-02T03:04:05.000Z",
-            "messages": [
-              {
-                "id": "t1-m1",
-                "body": "old",
-                "createdAt": "2026-01-02T03:04:05.000Z"
-              },
-              {
-                "id": "t1-m2",
-                "body": "newer",
-                "createdAt": "2026-01-02T03:04:05.000Z"
-              }
-            ]
-          },
-          {
-            "id": "t2",
-            "anchor": {
-              "kind": "text",
-              "quote": {
-                "exact": "migration"
-              },
-              "start": 13,
-              "end": 22
-            },
-            "status": "open",
-            "createdAt": "2026-01-02T03:04:05.000Z",
-            "messages": [
-              {
-                "id": "t2-m1",
-                "body": "why",
-                "createdAt": "2026-01-02T03:04:05.000Z"
-              }
-            ]
-          }
-        ],
-        "proposals": [],
-        "nodeLocks": [],
-        "edgeLocks": [],
-        "facets": {}
-      }
+      ]
     }
   ]
 }

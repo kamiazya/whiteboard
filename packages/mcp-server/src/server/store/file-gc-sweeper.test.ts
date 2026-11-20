@@ -641,7 +641,7 @@ describe('createFileGcSweeper default purge / versionStore wiring', () => {
     // into purgeDanglingFiles, not just that a caller-supplied stub works.
     await saveDocument(WS_V, 'evolving', makeSpatialDocWithImage('version-only'))
     const store = new FileVersionStore()
-    await store.save(WS_V, 'evolving', await loadDocument(WS_V, 'evolving'), { auto: false })
+    await store.save(WS_V, 'evolving', { auto: false })
 
     const live = await loadDocument(WS_V, 'evolving')
     writeSpatialCanvas(live, { nodes: [], edges: [] })

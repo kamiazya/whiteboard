@@ -17,8 +17,8 @@ import type { VersionStore } from '../server/store/version-store.js'
  */
 export function agentVersionHistory(store: VersionStore, daemonActor?: string): VersionHistory {
   return {
-    save: (workspaceId, path, doc, options) =>
-      store.save(workspaceId, path, doc, {
+    save: (workspaceId, path, options) =>
+      store.save(workspaceId, path, {
         ...options,
         operator: options.operator ?? {
           kind: 'ai',

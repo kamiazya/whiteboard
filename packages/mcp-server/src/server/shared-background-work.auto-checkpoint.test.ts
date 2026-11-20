@@ -1,7 +1,6 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { CheckpointScheduler } from '@kamiazya/whiteboard-history'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { globalStoreScope } from './store/store-scope.js'
@@ -24,11 +23,12 @@ const { checkpointAfterWrite, uninstallAutoCheckpointForTests } = await import(
   './store/auto-checkpoint.js'
 )
 const { disposeAutoCompact } = await import('./store/auto-compact.js')
+type DocumentCheckpointScheduler = import('./store/auto-checkpoint.js').DocumentCheckpointScheduler
 
 function fakeScheduler() {
   const signalled: string[] = []
   const flush = vi.fn(async () => undefined)
-  const scheduler: CheckpointScheduler<LoroDoc> = Object.assign(
+  const scheduler: DocumentCheckpointScheduler = Object.assign(
     (workspaceId: string, path: string) => {
       signalled.push(`${workspaceId}/${path}`)
     },
@@ -47,7 +47,7 @@ describe('the auto-checkpoint declaration both kinds of root arm', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  function httpDeclaration(scheduler: () => CheckpointScheduler<LoroDoc> | undefined) {
+  function httpDeclaration(scheduler: () => DocumentCheckpointScheduler | undefined) {
     const declared = sharedBackgroundWork(createSharedWorkers('instance-a', globalStoreScope), {
       checkpointScheduler: scheduler,
       fileGc: { start: () => {}, stop: async () => {} },

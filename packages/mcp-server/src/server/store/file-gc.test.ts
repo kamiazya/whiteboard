@@ -266,7 +266,7 @@ describe('purgeDanglingFiles', () => {
     // Step 1: live state references "version-only" via a file node.
     await saveDocument(WS_V, 'evolving', makeSpatialDocWithImage('version-only'))
     const store = new FileVersionStore()
-    await store.save(WS_V, 'evolving', await loadDocument(WS_V, 'evolving'), { auto: false })
+    await store.save(WS_V, 'evolving', { auto: false })
 
     // Step 2: live state changes — the original node is replaced by a
     // brand-new one. After this the live doc references only "live-now",

@@ -8,6 +8,7 @@ import {
 } from '@kamiazya/whiteboard-history'
 import {
   countSpatialNodes,
+  documentContainers,
   projectWorkspaceDocument,
   resolveWorkspaceDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -209,7 +210,7 @@ function parseStoredAttestation(
 }
 
 /** What `save` takes beyond the document itself. */
-type SaveVersionOpts = Parameters<FileVersionStore['save']>[3]
+type SaveVersionOpts = Parameters<FileVersionStore['save']>[2]
 
 /**
  * The row a saved version becomes. Every optional field is written as NULL
@@ -302,7 +303,6 @@ export class FileVersionStore implements VersionStore {
   async save(
     workspaceId: string,
     path: string,
-    doc: LoroDoc,
     opts: {
       auto: boolean
       label?: string
@@ -323,8 +323,6 @@ export class FileVersionStore implements VersionStore {
       const id = nanoid(12)
       validateVersionId(id)
 
-      const elementCount = countSpatialNodes(doc)
-
       const createdAt = Date.now()
       const operator = opts.operator
 
@@ -342,6 +340,9 @@ export class FileVersionStore implements VersionStore {
         throw new DocumentNotFoundError(workspaceId, path)
       }
       const documentId = entry.documentId
+      // Counted off the record the frontier below names, so the row says how
+      // many nodes the state it points at holds.
+      const elementCount = countSpatialNodes(documentContainers(storedWorkspace, documentId))
       if (!opts.auto) await refusePastManualCeiling(db, workspaceId, documentId)
       if (opts.restoredFrom !== undefined) {
         await refusePastRestorePointCeiling(db, workspaceId, documentId)

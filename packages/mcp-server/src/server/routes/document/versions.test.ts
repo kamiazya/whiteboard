@@ -546,7 +546,7 @@ async function carryManualRows(
   path: string,
   count: number,
 ): Promise<void> {
-  const { id } = await versionStore.save('01M8BBN7JS60N0ZAR13NP8SXBF', path, new LoroDoc(), {
+  const { id } = await versionStore.save('01M8BBN7JS60N0ZAR13NP8SXBF', path, {
     auto: true,
   })
   const db = await testStoreScope().db()

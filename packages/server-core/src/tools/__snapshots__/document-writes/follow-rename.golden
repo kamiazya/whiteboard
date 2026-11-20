@@ -102,7 +102,6 @@
       "documentId": "doc2",
       "path": "board",
       "keys": [
-        "doc",
         "documentId",
         "path",
         "workspaceId"
@@ -113,7 +112,6 @@
       "documentId": "doc1",
       "path": "doc",
       "keys": [
-        "doc",
         "documentId",
         "path",
         "workspaceId"

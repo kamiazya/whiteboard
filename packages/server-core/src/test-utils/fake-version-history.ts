@@ -1,8 +1,10 @@
 import { countSpatialNodes } from '@kamiazya/whiteboard-loro-adapter'
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
+import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import type { AdoptedVersion, VersionHistory } from '../server-deps.js'
 import type { VersionEntry } from '../versions/version-entry.js'
+import type { FakeDocumentStore } from './fake-document-store.js'
 
 /**
  * The history as the tools see it: rows keyed by path, each holding a
@@ -13,22 +15,43 @@ import type { VersionEntry } from '../versions/version-entry.js'
  * the version verbs to WORK rather than to be observed: without a history,
  * `wb_version_save` reaches `deps.versions.save` on `undefined` and answers a
  * tool error, which an errand scoreboard counts as one cheap call. A row
- * carries what the store would — the live element count — so an assertion
- * about a saved version means the same against either.
+ * carries what the store would — the element count of the document as STORED
+ * — so an assertion about a saved version means the same against either.
+ * Given the document store the tools write to, the fake reads the stored
+ * document the way a keeper reads its record; given none, every document it is
+ * asked about is empty.
  */
 export class FakeVersionHistory implements VersionHistory {
-  readonly saves: { path: string; options: Parameters<VersionHistory['save']>[3] }[] = []
+  readonly saves: { path: string; options: Parameters<VersionHistory['save']>[2] }[] = []
   /** Rows another keeper saved, by id — a second adopt of one id keeps the first. */
   readonly adopted = new Map<string, AdoptedVersion>()
   private readonly rows = new Map<string, { entry: VersionEntry; snapshot: Uint8Array }>()
   private next = 0
 
+  constructor(private readonly store?: FakeDocumentStore) {}
+
+  /** The document at `path` as the store holds it, empty when nothing is stored. */
+  private async storedAt(workspaceId: string, path: string): Promise<LoroDoc> {
+    const doc = new LoroDoc()
+    const entry = await this.store?.documentIndex.resolveDocument({ workspaceId, path })
+    const saved =
+      entry === null || entry === undefined
+        ? null
+        : await this.store?.loadSnapshot({
+            docRef: { kind: 'document', workspaceId, documentId: entry.documentId },
+          })
+    if (saved !== null && saved !== undefined) {
+      doc.import(reassembleSnapshot(saved.manifest, saved.chunks))
+    }
+    return doc
+  }
+
   async save(
-    _workspaceId: string,
+    workspaceId: string,
     path: string,
-    doc: LoroDoc,
-    options: Parameters<VersionHistory['save']>[3],
+    options: Parameters<VersionHistory['save']>[2],
   ): Promise<VersionEntry> {
+    const doc = await this.storedAt(workspaceId, path)
     this.saves.push({ path, options })
     this.next += 1
     const entry: VersionEntry = {

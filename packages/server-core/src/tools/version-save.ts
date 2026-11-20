@@ -1,6 +1,5 @@
 import { documentIdSchema, versionLabelSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import { loadOrCreateDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { versionEntryForAgent, versionEntryForAgentSchema } from '../versions/version-entry.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
@@ -96,11 +95,7 @@ async function saveVersions(deps: ServerDeps, input: VersionSaveInput): Promise<
 
   const saved: VersionSaveOutput['saved'] = []
   for (const { documentId, path } of placements) {
-    // The doc is read only for the row's advisory element count; the
-    // checkpoint itself is the stored record's frontier, which the history
-    // reads for itself.
-    const doc = await loadOrCreateDocument(deps, workspaceId, documentId)
-    const version = await deps.versions.save(workspaceId, path, doc, { auto: false, label })
+    const version = await deps.versions.save(workspaceId, path, { auto: false, label })
     deps.clientNotifier?.versionCreated({ workspaceId, documentId, version })
     saved.push({ documentId, version: versionEntryForAgent(version) })
   }
