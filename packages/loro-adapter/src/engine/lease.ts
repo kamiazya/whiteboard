@@ -84,6 +84,16 @@ export function exportSnapshot(lease: RecordLease): Uint8Array {
   return bytesOf(exportedBytes(lease.engine.export({ handle: lease.handle, mode: 'snapshot' })))
 }
 
+/**
+ * One document of a workspace record as a document of its own, content at the
+ * root; `null` when the record holds no such document. The bytes open to the
+ * same content each time, not to the same bytes.
+ */
+export function exportProjection(lease: RecordLease, documentId: string): Uint8Array | null {
+  const { bytes } = lease.engine.export({ handle: lease.handle, mode: 'projection', documentId })
+  return bytes === undefined ? null : bytesOf(bytes)
+}
+
 /** The operations after a version `versionOf` encoded; the whole history for `null`. */
 export function exportUpdateSince(lease: RecordLease, since: Uint8Array | null): Uint8Array {
   const { engine, handle } = lease

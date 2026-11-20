@@ -12,7 +12,7 @@ import { type Frontiers, LoroDoc, VersionVector } from 'loro-crdt'
 
 /**
  * The bytes of an export that must hold some: a snapshot, an update and a
- * shallow snapshot always do, and only a subtree export finds nothing.
+ * shallow snapshot always do, and only a subtree or projection export finds nothing.
  */
 export function exportedBytes(answer: documentEngine.ExportResponse): string {
   if (answer.bytes === undefined) throw new RangeError('the export holds no bytes')

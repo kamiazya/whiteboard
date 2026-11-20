@@ -6,13 +6,14 @@
 use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_model::Value;
 use whiteboard_model::crdt::{
-    Breach, BreachShape, CloseRequest, DecodeKind, DecodeRequest, DecodeResponse, ExportRequest,
-    ExportResponse, ExportShallowSnapshotRequest, ExportSnapshotRequest, ExportSubtreeRequest,
-    ExportUpdateRequest, ForkRequest, ImportJudge, ImportRequest, ImportSubtreeRequest,
-    MutationApplied, MutationRefused, MutationResult, OpenRequest, OpenResponse, PlacedRoot, Query,
-    QueryName, ReadRequest, ReadResponse, RedoRequest, TextRun, TextSpliceRequest, TrimRequest,
-    UndoClearRequest, UndoRequest, UndoStateRequest, UndoStateResponse, VersionEntry,
-    VersionRequest, VersionResponse, Write, WriteJudge, WriteRequest, WriterName,
+    Breach, BreachShape, CloseRequest, DecodeKind, DecodeRequest, DecodeResponse,
+    ExportProjectionRequest, ExportRequest, ExportResponse, ExportShallowSnapshotRequest,
+    ExportSnapshotRequest, ExportSubtreeRequest, ExportUpdateRequest, ForkRequest, ImportJudge,
+    ImportRequest, ImportSubtreeRequest, MutationApplied, MutationRefused, MutationResult,
+    OpenRequest, OpenResponse, PlacedRoot, Query, QueryName, ReadRequest, ReadResponse,
+    RedoRequest, TextRun, TextSpliceRequest, TrimRequest, UndoClearRequest, UndoRequest,
+    UndoStateRequest, UndoStateResponse, VersionEntry, VersionRequest, VersionResponse, Write,
+    WriteJudge, WriteRequest, WriterName,
 };
 use whiteboard_model::json::parse;
 
@@ -87,6 +88,7 @@ fn a_union_defaults_to_its_first_member_and_each_constant_is_the_contract_tag() 
     assert_eq!(ExportSnapshotRequest::MODE, "snapshot");
     assert_eq!(ExportUpdateRequest::MODE, "update");
     assert_eq!(ExportSubtreeRequest::MODE, "subtree");
+    assert_eq!(ExportProjectionRequest::MODE, "projection");
     assert_eq!(ExportShallowSnapshotRequest::MODE, "shallow-snapshot");
     assert_eq!(MutationApplied::OUTCOME, "applied");
     assert_eq!(MutationRefused::OUTCOME, "refused");
@@ -120,6 +122,12 @@ fn every_message_defaults_empty_and_clones_equal_with_an_unsigned_index() {
         ExportRequest::ExportSubtreeRequest(subtree.clone())
     );
     assert_ne!(subtree, ExportSubtreeRequest::default());
+    let projection = ExportProjectionRequest { handle: 1, document_id: "doc".into() };
+    assert_eq!(
+        ExportRequest::ExportProjectionRequest(projection.clone()).clone(),
+        ExportRequest::ExportProjectionRequest(projection.clone())
+    );
+    assert_ne!(projection, ExportProjectionRequest::default());
     let shallow =
         ExportShallowSnapshotRequest { handle: 1, frontiers: vec![VersionEntry::default()] };
     assert_ne!(shallow, ExportShallowSnapshotRequest::default());
