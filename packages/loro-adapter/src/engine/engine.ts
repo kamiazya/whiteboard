@@ -29,6 +29,7 @@ import { judgeWorkspaceSyncImport, type WorkspaceSyncBreach } from '../workspace
 import {
   exportWorkspaceSubtree,
   importWorkspaceSubtree,
+  projectWorkspaceDocument,
   WORKSPACE_TREE_KEY,
 } from '../workspace-tree.js'
 import { frontierPairs, versionOfPairs, versionPairs } from './answers.js'
@@ -273,6 +274,12 @@ function exportFrom(doc: LoroDoc, request: wire.ExportRequest): wire.ExportRespo
   if (request.mode === 'subtree') {
     const bytes = exportWorkspaceSubtree(doc, request.path)
     return bytes === null ? {} : { bytes: bytesToBase64(bytes) }
+  }
+  if (request.mode === 'projection') {
+    const projected = projectWorkspaceDocument(doc, request.documentId)
+    return projected === null
+      ? {}
+      : { bytes: bytesToBase64(projected.export({ mode: 'snapshot' })) }
   }
   if (request.mode === 'snapshot') return { bytes: bytesToBase64(doc.export({ mode: 'snapshot' })) }
   if (request.mode === 'update') {

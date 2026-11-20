@@ -666,10 +666,24 @@ pub struct DecodeRequest {
     pub bytes: Bytes,
 }
 
+/// Export one document of a workspace record as a document of its own.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExportProjectionRequest {
+    /// The workspace record.
+    pub handle: Handle,
+    /// The document to project, by id; its content comes at the root of the bytes, none of the keys the record keeps for itself, and the bytes open to the same content each time but are built fresh under a peer the engine picks.
+    pub document_id: String,
+}
+
+impl ExportProjectionRequest {
+    /// What `mode` is always written as.
+    pub const MODE: &str = "projection";
+}
+
 /// What an export produced.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExportResponse {
-    /// The exported bytes; absent when a subtree export finds no node at its path.
+    /// The exported bytes; absent when a subtree export finds no node at its path and when a projection export finds no document by its id.
     pub bytes: Option<Bytes>,
 }
 
@@ -960,6 +974,8 @@ pub enum ExportRequest {
     ExportShallowSnapshotRequest(ExportShallowSnapshotRequest),
     /// A `ExportSubtreeRequest`.
     ExportSubtreeRequest(ExportSubtreeRequest),
+    /// A `ExportProjectionRequest`.
+    ExportProjectionRequest(ExportProjectionRequest),
 }
 
 impl Default for ExportRequest {

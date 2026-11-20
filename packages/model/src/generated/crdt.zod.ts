@@ -197,6 +197,14 @@ export const decodeRequestSchema = z.strictObject({
 })
 export type DecodeRequest = z.infer<typeof decodeRequestSchema>
 
+/** Export one document of a workspace record as a document of its own. */
+export const exportProjectionRequestSchema = z.strictObject({
+  handle: handleSchema,
+  mode: z.literal('projection'),
+  documentId: z.string(),
+})
+export type ExportProjectionRequest = z.infer<typeof exportProjectionRequestSchema>
+
 /** What an export produced. */
 export const exportResponseSchema = z.strictObject({
   bytes: bytesSchema.optional(),
@@ -403,6 +411,7 @@ export const exportRequestSchema = z.discriminatedUnion('mode', [
   exportUpdateRequestSchema,
   exportShallowSnapshotRequestSchema,
   exportSubtreeRequestSchema,
+  exportProjectionRequestSchema,
 ])
 export type ExportRequest = z.infer<typeof exportRequestSchema>
 

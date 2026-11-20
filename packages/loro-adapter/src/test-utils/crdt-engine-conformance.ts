@@ -54,6 +54,7 @@ import {
   describeReadNow,
   describeTrim,
 } from './crdt-engine-conformance-lifecycle.js'
+import { describeProjectionExport } from './crdt-engine-conformance-projection.js'
 import { describeWorkspaceSyncJudging } from './crdt-engine-conformance-workspace-sync.js'
 import {
   describeIndexWrites,
@@ -770,6 +771,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeSpliceWriterHostedDocument(makeEngine)
     describeIndexWrites(makeEngine)
     describeSubtreeExport(makeEngine)
+    describeProjectionExport(makeEngine)
     describeJournal(makeEngine)
     describeJournalOfParkedUpdates(makeEngine)
     describeJournalOfViewCopy(makeEngine)

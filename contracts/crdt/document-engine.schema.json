@@ -409,6 +409,29 @@
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
+    "ExportProjectionRequest": {
+      "description": "Export one document of a workspace record as a document of its own.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The workspace record."
+        },
+        "mode": {
+          "type": "string",
+          "const": "projection",
+          "description": "Always projection."
+        },
+        "documentId": {
+          "type": "string",
+          "description": "The document to project, by id; its content comes at the root of the bytes, none of the keys the record keeps for itself, and the bytes open to the same content each time but are built fresh under a peer the engine picks."
+        }
+      },
+      "required": ["handle", "mode", "documentId"],
+      "x-wb-order": ["handle", "mode", "documentId"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
     "ExportRequest": {
       "description": "Export an open document; the mode says what it carries and what it needs.",
       "oneOf": [
@@ -423,6 +446,9 @@
         },
         {
           "$ref": "#/$defs/ExportSubtreeRequest"
+        },
+        {
+          "$ref": "#/$defs/ExportProjectionRequest"
         }
       ],
       "discriminator": {
@@ -435,7 +461,7 @@
       "properties": {
         "bytes": {
           "$ref": "#/$defs/Bytes",
-          "description": "The exported bytes; absent when a subtree export finds no node at its path."
+          "description": "The exported bytes; absent when a subtree export finds no node at its path and when a projection export finds no document by its id."
         }
       },
       "x-wb-order": ["bytes"],
