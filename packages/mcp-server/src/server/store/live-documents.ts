@@ -18,6 +18,7 @@ import {
   workspaceExists,
 } from './document-store.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
+import { withWorkspaceRecord } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 /**
@@ -70,6 +71,7 @@ export function workspaceDocuments(scope: StoreScope = globalStoreScope): Worksp
         await saveWorkspaceDoc(workspaceId, doc, scope)
       })
     },
+    withRecord: (workspaceId, fn) => withWorkspaceRecord(workspaceId, scope, fn),
     async save(workspaceId, doc) {
       // saveWorkspaceDoc answers the update bytes it fanned out; the seam
       // promises only persistence, so the value is deliberately dropped.

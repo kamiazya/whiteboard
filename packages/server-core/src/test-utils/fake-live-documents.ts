@@ -3,6 +3,7 @@ import {
   createWorkspaceDocumentAtPath,
   legacyRecordOps,
   projectWorkspaceDocument,
+  type RecordSession,
   readWorkspaceDocuments,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -72,6 +73,18 @@ export class FakeLiveDocuments implements LiveDocuments {
             live.kinds.set(entry.path, entry.kind)
           }
         })
+      },
+      async withRecord<T>(
+        this: WorkspaceDocuments,
+        workspaceId: string,
+        fn: (record: RecordSession) => Promise<T>,
+      ): Promise<T> {
+        const session = await this.open(workspaceId)
+        try {
+          return await fn(session)
+        } finally {
+          session.release()
+        }
       },
       evict() {},
       evictProjections() {},

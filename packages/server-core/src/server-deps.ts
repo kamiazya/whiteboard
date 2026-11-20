@@ -304,6 +304,13 @@ export interface WorkspaceDocuments {
    */
   open(workspaceId: string): Promise<RecordSession>
   /**
+   * `open` for the length of `fn`: the session is released when `fn` returns
+   * or throws, and answers nothing afterwards. An operation holds the record
+   * this way so a holder that counts its users (a cache holding engine leases)
+   * knows when the last one is done; it never releases the session itself.
+   */
+  withRecord<T>(workspaceId: string, fn: (record: RecordSession) => Promise<T>): Promise<T>
+  /**
    * Persists the workspace doc. Fan-out to update subscribers happens
    * INSIDE the implementation, so a caller never broadcasts separately.
    */

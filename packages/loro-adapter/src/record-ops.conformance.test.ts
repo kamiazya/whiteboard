@@ -565,6 +565,47 @@ describe('the documents removed since a version, through RecordOps', () => {
   })
 })
 
+describe('a record session given back', () => {
+  it('tells its holder once however often it is released, and answers nothing afterwards', async () => {
+    await onEachKind(async (held, record) => {
+      let released = 0
+      const session = bindRecordOps(
+        held.ops,
+        record,
+        async () => {},
+        () => {
+          released += 1
+        },
+      )
+      const version = session.version()
+      expect(released).toBe(0)
+      session.release()
+      session.release()
+      expect(released).toBe(1)
+      const afterwards: Array<[string, () => unknown]> = [
+        ['version', () => session.version()],
+        ['versionAt', () => session.versionAt(version.encodedFrontiers)],
+        ['importJudged', () => session.importJudged(new Uint8Array(), 'none')],
+        ['write', () => session.write([])],
+        ['removedSince', () => session.removedSince([])],
+        ['view', () => session.view(version.encodedFrontiers)],
+        ['exportSnapshot', () => session.exportSnapshot()],
+        ['exportUpdateSince', () => session.exportUpdateSince(null)],
+        ['exportProjection', () => session.exportProjection(BOARD)],
+        ['exportShallowSnapshotAt', () => session.exportShallowSnapshotAt(version.entries)],
+        ['shallowRootVersion', () => session.shallowRootVersion()],
+      ]
+      for (const [name, call] of afterwards) {
+        expect(call, name).toThrow(/released/)
+      }
+      await expect(session.read({ query: 'documents' }, { parse: (v) => v })).rejects.toThrow(
+        /released/,
+      )
+      await expect(session.save()).rejects.toThrow(/released/)
+    })
+  })
+})
+
 describe('a record bound to its operations and its save', () => {
   it('saves the record the session wrote to, and answers its own version and reads', async () => {
     await onEachKind(async (held, record) => {

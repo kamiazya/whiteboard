@@ -109,22 +109,52 @@ export interface RecordSession {
   shallowRootVersion(): wire.VersionEntry[]
   /** Persists what the session changed, announcing it as every save does. */
   save(): Promise<void>
+  /**
+   * Gives the session back. Every call after it throws, and releasing twice is
+   * one release. The holder that opened it releases it; an operation handed a
+   * session never does.
+   */
+  release(): void
 }
 
-/** Binds `record` to `ops` and the `save` that persists it. */
+const RELEASED =
+  'the record session was released: it is valid only inside the bracket that opened it'
+
+/**
+ * Binds `record` to `ops` and the `save` that persists it. `release` is what
+ * the holder does when the session is given back (a cache drops its hold on
+ * the record); a session answers nothing once released, so one that escaped
+ * its bracket fails where it is used rather than reading a record its holder
+ * may have closed.
+ */
 export function bindRecordOps<R>(
   ops: RecordOps<R>,
   record: R,
   save: (record: R) => Promise<void>,
+  release: () => void = () => {},
 ): RecordSession {
+  let released = false
+  const live = <A extends unknown[], T>(call: (...args: A) => T) => {
+    return (...args: A): T => {
+      if (released) throw new Error(RELEASED)
+      return call(...args)
+    }
+  }
+  // A call that answers later rejects rather than throwing, as every other failure of it does.
+  const liveLater = <A extends unknown[], T>(call: (...args: A) => Promise<T>) => {
+    return async (...args: A): Promise<T> => {
+      if (released) throw new Error(RELEASED)
+      return call(...args)
+    }
+  }
   return {
-    version: () => ops.versionOf(record),
-    versionAt: (frontiers) => ops.versionAt(record, frontiers),
-    importJudged: (bytes, judge) => ops.importJudged(record, bytes, judge),
-    read: (query, shape) => ops.read(record, query, shape),
-    write: (batch) => ops.write(record, batch),
-    removedSince: (since) => ops.removedSince(record, since),
-    view(frontiers) {
+    version: live(() => ops.versionOf(record)),
+    versionAt: live((frontiers) => ops.versionAt(record, frontiers)),
+    importJudged: live((bytes, judge) => ops.importJudged(record, bytes, judge)),
+    read: liveLater((query, shape) => ops.read(record, query, shape)),
+    write: live((batch) => ops.write(record, batch)),
+    removedSince: live((since) => ops.removedSince(record, since)),
+    view: live((frontiers) => {
       const past = ops.viewAt(record, frontiers)
       return {
         read: (query, shape) => ops.read(past, query, shape),
@@ -132,12 +162,17 @@ export function bindRecordOps<R>(
         moveTo: (point) => ops.moveView(past, point),
         release: () => ops.release(past),
       }
+    }),
+    exportSnapshot: live(() => ops.exportSnapshot(record)),
+    exportUpdateSince: live((since) => ops.exportUpdateSince(record, since)),
+    exportProjection: live((documentId) => ops.exportProjection(record, documentId)),
+    exportShallowSnapshotAt: live((version) => ops.exportShallowSnapshotAt(record, version)),
+    shallowRootVersion: live(() => ops.shallowRootVersion(record)),
+    save: liveLater(() => save(record)),
+    release() {
+      if (released) return
+      released = true
+      release()
     },
-    exportSnapshot: () => ops.exportSnapshot(record),
-    exportUpdateSince: (since) => ops.exportUpdateSince(record, since),
-    exportProjection: (documentId) => ops.exportProjection(record, documentId),
-    exportShallowSnapshotAt: (version) => ops.exportShallowSnapshotAt(record, version),
-    shallowRootVersion: () => ops.shallowRootVersion(record),
-    save: () => save(record),
   }
 }

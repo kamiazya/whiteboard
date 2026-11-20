@@ -104,6 +104,16 @@ export class FakeLive implements LiveDocuments {
         const record = this.heldRecord()
         return bindRecordOps(legacyRecordOps, record, () => this.saveRecord(record))
       },
+      withRecord: async (_workspaceId, fn) => {
+        this.record('open')
+        const record = this.heldRecord()
+        const session = bindRecordOps(legacyRecordOps, record, () => this.saveRecord(record))
+        try {
+          return await fn(session)
+        } finally {
+          session.release()
+        }
+      },
       evict: (workspaceId) => {
         this.record('evictRecord')
         this.recordsDropped.push(workspaceId)
