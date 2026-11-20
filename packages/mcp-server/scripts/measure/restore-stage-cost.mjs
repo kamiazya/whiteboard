@@ -39,7 +39,6 @@ import { resetDataDirForTests, setDataDirForTests } from '../../src/shared/data-
 
 const WORKSPACE = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const COUNT = Number(process.argv[2] ?? 90)
-const CALLS = 15
 const body = (i) => `# Note ${i}\n\n${'A sentence of ordinary prose. '.repeat(60)}`
 
 const served = await mkdtemp(join(tmpdir(), 'wb-version-cost-'))
@@ -118,7 +117,6 @@ try {
   }
   if (serverDeps.documentWritten)
     instrumented.documentWritten = timed('documentWritten', serverDeps.documentWritten)
-  const labelsOf = new Map()
   let toggle = false
   const runs = []
   for (let i = 0; i < 16; i++) {

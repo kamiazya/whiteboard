@@ -65,8 +65,6 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
 // What the history and the compaction scheduler are told by an in-place
 // restore, with the real checkpoint scheduler armed over a short quiet window:
 // the version list afterwards holds the two saves and the restore's own merge
@@ -88,12 +86,11 @@ describe('an in-place restore with the checkpoint scheduler armed', () => {
     await writeDocumentUpdate(serverDeps, WS, 'canvas-a', nodesModelDocUpdate(['after-v1']))
     await save('v2')
 
-    installAutoCheckpoint(
-      createAutoVersionTrigger(new FileVersionStore(testStoreScope()), {
-        quietMs: 40,
-        ceilingMs: 80,
-      }),
-    )
+    const scheduler = createAutoVersionTrigger(new FileVersionStore(testStoreScope()), {
+      quietMs: 40,
+      ceilingMs: 80,
+    })
+    installAutoCheckpoint(scheduler)
     // The two ways a compaction gets scheduled: the store's saved-listener,
     // and the written observer a root hands the operations.
     let compactionsScheduled = 0
@@ -109,7 +106,8 @@ describe('an in-place restore with the checkpoint scheduler armed', () => {
       { method: 'POST' },
     )
     expect(res.status).toBe(200)
-    await settle(600)
+    // Every checkpoint the restore left pending is taken now, rather than after a pause.
+    await scheduler.flush()
     const rows = await serverDeps.versions.list(WS, 'canvas-a')
     return { rows, compactionsScheduled }
   }
