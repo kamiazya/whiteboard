@@ -5,7 +5,7 @@ import { breachOf, touchedSince } from './engine/engine.js'
 import { unwrapAnswer } from './engine/read-value.js'
 import { readQuery } from './engine/readers.js'
 import { applyWriter } from './engine/writers.js'
-import type { LegacyRecord } from './legacy-record-kind.js'
+import { type LegacyRecord, loroDocKind } from './legacy-record-kind.js'
 import type { RecordOps } from './record-ops.js'
 import { documentsRemovedSince } from './removed-documents.js'
 import { importWithinTextLimits } from './sync-text-limits.js'
@@ -79,6 +79,22 @@ export const legacyRecordOps: RecordOps<LegacyRecord> = {
   release() {
     // A LoroDoc is garbage collected; nothing to give back.
   },
+  exportSnapshot: (doc) => new Uint8Array(doc.export({ mode: 'snapshot' })),
+  exportUpdateSince: (doc, since) => loroDocKind.exportUpdateSince(doc, since),
+  exportShallowSnapshotAt: (doc, version) =>
+    new Uint8Array(
+      doc.export({
+        mode: 'shallow-snapshot',
+        frontiers: doc.vvToFrontiers(
+          versionOfPairs(version.map(({ peer, counter }) => [peer, counter])),
+        ),
+      }),
+    ),
+  shallowRootVersion: (doc) =>
+    versionPairs(doc.frontiersToVV(doc.shallowSinceFrontiers())).map(([peer, counter]) => ({
+      peer,
+      counter,
+    })),
   exportProjection(doc, documentId) {
     const projected = projectWorkspaceDocument(doc, documentId)
     if (projected === null) return null

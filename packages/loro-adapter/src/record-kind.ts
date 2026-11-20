@@ -1,3 +1,14 @@
+/** How a record's operations relate to a stored version vector: what each side holds the other lacks. */
+export type VersionOrder =
+  /** The same operations. */
+  | 'equal'
+  /** The record holds only operations the stored version has, and lacks some of them. */
+  | 'behind'
+  /** The record holds every operation the stored version names, and more. */
+  | 'ahead'
+  /** Each holds operations the other lacks. */
+  | 'concurrent'
+
 /**
  * What a keeper needs of a record to store it: load it from the bytes a store
  * holds, say what version it stands at, and export what a store writes.
@@ -21,6 +32,8 @@ export interface RecordKind<R> {
   encodedVersion(record: R): Uint8Array<ArrayBuffer>
   /** Whether the record holds exactly the operations a stored version vector names. */
   atVersion(record: R, stored: Uint8Array): boolean
+  /** How the record's operations relate to a stored version vector's. */
+  compareVersion(record: R, stored: Uint8Array): VersionOrder
   /** The operations after a stored version vector; the whole history for `null`. */
   exportUpdateSince(record: R, stored: Uint8Array | null): Uint8Array
   exportSnapshot(record: R): Uint8Array

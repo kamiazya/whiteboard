@@ -230,6 +230,169 @@ describe('the version at a point through RecordOps', () => {
   })
 })
 
+const rename = (name: string): wire.Write[] => [
+  { op: 'setWorkspaceDocumentName', args: { documentId: BOARD, name } },
+]
+
+/** A second record of the same kind standing where the first does: loaded from the same snapshot, writing as its own peer. */
+async function twin<R>(held: Held<R>) {
+  return held.kind.load(seedSnapshot(), [])
+}
+
+describe('a record against a stored version, through RecordKind', () => {
+  it('is equal to the version it stands at, and ahead of an older one, behind a newer one', async () => {
+    await onEachKind(async (held, record) => {
+      const then = held.kind.encodedVersion(record)
+      expect(held.kind.compareVersion(record, then)).toBe('equal')
+      held.ops.write(record, rename('Board'))
+      const now = held.kind.encodedVersion(record)
+      expect(held.kind.compareVersion(record, now)).toBe('equal')
+      expect(held.kind.compareVersion(record, then)).toBe('ahead')
+      const follower = await twin(held)
+      expect(held.kind.compareVersion(follower, now)).toBe('behind')
+      held.kind.release(follower)
+    })
+  })
+
+  it('is concurrent with a version of a twin that wrote something else', async () => {
+    await onEachKind(async (held, record) => {
+      const other = await twin(held)
+      held.ops.write(record, rename('Mine'))
+      held.ops.write(other, rename('Theirs'))
+      expect(held.kind.compareVersion(record, held.kind.encodedVersion(other))).toBe('concurrent')
+      expect(held.kind.compareVersion(other, held.kind.encodedVersion(record))).toBe('concurrent')
+      held.kind.release(other)
+    })
+  })
+
+  it('orders a record against an empty one both ways, and an empty one against itself as equal', async () => {
+    await onEachKind(async (held, record) => {
+      const empty = await held.kind.empty()
+      expect(held.kind.compareVersion(record, held.kind.encodedVersion(empty))).toBe('ahead')
+      expect(held.kind.compareVersion(empty, held.kind.encodedVersion(record))).toBe('behind')
+      expect(held.kind.compareVersion(empty, held.kind.encodedVersion(empty))).toBe('equal')
+      held.kind.release(empty)
+    })
+  })
+})
+
+describe('a record against the version of a peer it has never heard of', () => {
+  it('is behind a single operation of that peer when empty, and concurrent with it otherwise', async () => {
+    const stranger = new LoroDoc()
+    stranger.setPeerId(9n)
+    stranger.getText('t').insert(0, 'e')
+    stranger.commit()
+    const oneOp = new Uint8Array(stranger.oplogVersion().encode())
+    await onEachKind(async (held, record) => {
+      const empty = await held.kind.empty()
+      expect(held.kind.compareVersion(empty, oneOp)).toBe('behind')
+      expect(held.kind.compareVersion(record, oneOp)).toBe('concurrent')
+      held.kind.release(empty)
+    })
+  })
+})
+
+describe('the operations after a version, through RecordOps', () => {
+  it('brings a follower standing at that version to the record', async () => {
+    await onEachKind(async (held, record) => {
+      const follower = await twin(held)
+      held.ops.write(record, rename('Board'))
+      const update = held.ops.exportUpdateSince(record, held.kind.encodedVersion(follower))
+      // Only what the follower lacks, not the history it already holds.
+      expect(update.byteLength).toBeLessThan(held.ops.exportUpdateSince(record, null).byteLength)
+      held.kind.importInto(follower, update)
+      expect(held.kind.compareVersion(follower, held.kind.encodedVersion(record))).toBe('equal')
+      held.kind.release(follower)
+    })
+  })
+
+  it('leaves a follower already at the version where it was, and the whole history reaches an empty record', async () => {
+    await onEachKind(async (held, record) => {
+      held.ops.write(record, rename('Board'))
+      const at = held.kind.encodedVersion(record)
+      const nothing = held.ops.exportUpdateSince(record, at)
+      expect(nothing.byteLength).toBeLessThan(held.ops.exportUpdateSince(record, null).byteLength)
+      const follower = await twin(held)
+      held.kind.importInto(
+        follower,
+        held.ops.exportUpdateSince(record, held.kind.encodedVersion(follower)),
+      )
+      held.kind.importInto(follower, nothing)
+      expect(held.kind.compareVersion(follower, at)).toBe('equal')
+      const empty = await held.kind.empty()
+      held.kind.importInto(empty, held.ops.exportUpdateSince(record, null))
+      expect(held.kind.compareVersion(empty, at)).toBe('equal')
+      held.kind.release(follower)
+      held.kind.release(empty)
+    })
+  })
+
+  it('answers a version naming operations the record does not hold with what the record holds beyond it, never a refusal', async () => {
+    const stranger = new LoroDoc()
+    stranger.setPeerId(9n)
+    stranger.getText('t').insert(0, 'elsewhere')
+    stranger.commit()
+    const foreign = new Uint8Array(stranger.oplogVersion().encode())
+    await onEachKind(async (held, record) => {
+      const update = held.ops.exportUpdateSince(record, foreign)
+      const follower = await held.kind.empty()
+      held.kind.importInto(follower, update)
+      expect(held.kind.compareVersion(follower, held.kind.encodedVersion(record))).toBe('equal')
+      held.kind.release(follower)
+    })
+  })
+
+  it('exports the same record as a snapshot another replica opens, equal in version', async () => {
+    await onEachKind(async (held, record) => {
+      held.ops.write(record, rename('Board'))
+      const opened = await held.kind.load(held.ops.exportSnapshot(record), [])
+      expect(held.kind.compareVersion(opened, held.kind.encodedVersion(record))).toBe('equal')
+      held.kind.release(opened)
+    })
+  })
+})
+
+describe('a record cut at a version, through RecordOps', () => {
+  it('has no root to start from until it is cut, and then starts from the version it was cut at', async () => {
+    await onEachKind(async (held, record) => {
+      expect(held.ops.shallowRootVersion(record)).toEqual([])
+      held.ops.write(record, rename('First'))
+      const cut = held.ops.versionAt(record, held.ops.versionOf(record).encodedFrontiers).entries
+      held.ops.write(record, rename('Second'))
+      const shallow = await held.kind.load(held.ops.exportShallowSnapshotAt(record, cut), [])
+      expect(held.ops.shallowRootVersion(shallow)).toEqual(cut)
+      const cutSession = bindRecordOps(held.ops, shallow, async () => {})
+      expect(cutSession.shallowRootVersion()).toEqual(cut)
+      expect(held.kind.compareVersion(shallow, held.kind.encodedVersion(record))).toBe('equal')
+      const names = (r: typeof record) =>
+        held.ops.read(r, { query: 'documents' }, { parse: (v) => v as Array<{ name?: string }> })
+      expect(await names(shallow)).toEqual(await names(record))
+      held.kind.release(shallow)
+    })
+  })
+
+  it('answers the same root on every kind for a cut taken before the last write', async () => {
+    const roots = await Promise.all(
+      KINDS.map(async (held) => {
+        const record = await held.kind.load(seedSnapshot(), [])
+        held.ops.write(record, rename('First'))
+        const cut = held.ops.versionAt(record, held.ops.versionOf(record).encodedFrontiers).entries
+        held.ops.write(record, rename('Second'))
+        const shallow = await held.kind.load(held.ops.exportShallowSnapshotAt(record, cut), [])
+        const root = held.ops
+          .shallowRootVersion(shallow)
+          .map(({ counter }) => counter)
+          .sort((a, b) => a - b)
+        held.kind.release(shallow)
+        held.kind.release(record)
+        return root
+      }),
+    )
+    expect(roots[0]).toEqual(roots[1])
+    expect(roots[0]?.length).toBeGreaterThan(0)
+  })
+})
+
 describe('a past view through RecordOps', () => {
   it('reads the record as it stood, and moves to the head and back', async () => {
     await onEachKind(async (held, record) => {
@@ -417,6 +580,18 @@ describe('a record bound to its operations and its save', () => {
       await session.save()
       expect(saved).toEqual([record])
       expect(session.version().encoded).not.toEqual(before)
+      expect(session.exportSnapshot()).toEqual(held.ops.exportSnapshot(record))
+      expect(session.exportUpdateSince(null)).toEqual(held.ops.exportUpdateSince(record, null))
+      expect(session.exportUpdateSince(before)).toEqual(held.ops.exportUpdateSince(record, before))
+      expect(session.exportUpdateSince(before).byteLength).toBeLessThan(
+        session.exportUpdateSince(null).byteLength,
+      )
+      expect(session.exportProjection(BOARD)).toEqual(held.ops.exportProjection(record, BOARD))
+      expect(session.exportProjection('01J0000000000000000000000Z')).toBeNull()
+      expect(session.shallowRootVersion()).toEqual(held.ops.shallowRootVersion(record))
+      expect(session.exportShallowSnapshotAt(session.version().entries)).toEqual(
+        held.ops.exportShallowSnapshotAt(record, session.version().entries),
+      )
       expect(session.versionAt(session.version().encodedFrontiers).entries).toEqual(
         session.version().entries,
       )

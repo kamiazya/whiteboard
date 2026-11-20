@@ -1,11 +1,8 @@
 import {
-  bindRecordOps,
-  leaseKind,
-  leaseOps,
-  loadCrdtEngine,
-  type RecordLease,
+  openStandalone,
   type RecordSession,
   type readWorkspaceDocuments,
+  type StandaloneRecord,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { WORKSPACE_MAX_DOCUMENTS } from '@kamiazya/whiteboard-model'
 import { DocumentEngineTrapError, runEvictingOnEngineTrapLater } from '../document-io.js'
@@ -99,7 +96,7 @@ async function namedInRecord(incoming: RecordSession, err: unknown): Promise<unk
  * are not a Loro snapshot. A trap is thrown, never answered as malformed: the
  * bytes may be well-formed.
  */
-async function readIncoming(input: PromoteWorkspaceInput): Promise<RecordLease | null> {
+async function readIncoming(input: PromoteWorkspaceInput): Promise<StandaloneRecord | null> {
   try {
     return await runEvictingOnEngineTrapLater(
       {
@@ -109,7 +106,7 @@ async function readIncoming(input: PromoteWorkspaceInput): Promise<RecordLease |
         evict() {},
       },
       'importing an update into',
-      () => leaseKind(loadCrdtEngine).load(input.snapshot, []),
+      () => openStandalone(input.snapshot),
     )
   } catch (err) {
     if (err instanceof DocumentEngineTrapError) throw err
@@ -150,16 +147,12 @@ export async function promoteWorkspace(
   deps: Pick<ServerDeps, 'liveDocuments' | 'workspaceDocuments' | 'versions' | 'blobStore'>,
   input: PromoteWorkspaceInput,
 ): Promise<PromoteWorkspaceResult> {
-  const lease = await readIncoming(input)
-  if (lease === null) return { kind: 'malformed-snapshot' }
+  const incoming = await readIncoming(input)
+  if (incoming === null) return { kind: 'malformed-snapshot' }
   try {
-    return await promoteFrom(
-      deps,
-      input,
-      bindRecordOps(leaseOps, lease, async () => {}),
-    )
+    return await promoteFrom(deps, input, incoming.session)
   } finally {
-    lease.release()
+    incoming.release()
   }
 }
 

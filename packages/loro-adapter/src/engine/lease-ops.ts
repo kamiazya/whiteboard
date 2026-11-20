@@ -1,11 +1,15 @@
 import type { RecordOps } from '../record-ops.js'
 import {
   exportProjection,
+  exportShallowSnapshotAt,
+  exportSnapshot,
+  exportUpdateSince,
   importBytes,
   moveView,
   type RecordLease,
   read,
   removedSince,
+  shallowRootVersion,
   versionAt,
   versionOf,
   viewAt,
@@ -23,5 +27,9 @@ export const leaseOps: RecordOps<RecordLease> = {
   viewAt,
   moveView,
   exportProjection,
+  exportSnapshot,
+  exportUpdateSince,
+  exportShallowSnapshotAt,
+  shallowRootVersion,
   release: (record) => record.release(),
 }
