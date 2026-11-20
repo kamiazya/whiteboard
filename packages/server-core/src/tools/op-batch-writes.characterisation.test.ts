@@ -55,12 +55,12 @@ class RecordingStore extends FakeDocumentStore {
 interface Rig {
   readonly store: RecordingStore
   readonly deps: ServerDeps
-  readonly written: DocumentWritten[]
+  readonly written: Parameters<DocumentWritten>[0][]
 }
 
 function rig(): Rig {
   const store = new RecordingStore()
-  const written: DocumentWritten[] = []
+  const written: Parameters<DocumentWritten>[0][] = []
   const deps = makeTestDeps({
     documentStore: store,
     documentIndex: store.documentIndex,

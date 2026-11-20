@@ -1,4 +1,3 @@
-import { readProposals, writeProposal } from '@kamiazya/whiteboard-loro-adapter'
 import {
   compareCodeUnit,
   edgePatchFieldsSchema,
@@ -13,9 +12,8 @@ import {
   type SpatialCanvas,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
-import { saveDocumentSnapshot } from '../document-io.js'
-import type { ServerDeps } from '../server-deps.js'
+import type { DocumentSession } from '../document-session.js'
+import { proposalsOf } from '../document-session-reads.js'
 import type { CanvasEditInput } from './canvas-edit-ops.js'
 import { refuseOpenChangeGrowth } from './open-annotation-ceilings.js'
 
@@ -282,24 +280,23 @@ function proposedChangesFromDiff(before: SpatialCanvas, after: SpatialCanvas): P
 /**
  * Stores what the batch would have done, INSTEAD of doing it: the content
  * containers are left exactly as they were and only the proposals plane
- * grows. `saveDocumentSnapshot` rather than `saveDocumentBodySnapshot` is
- * what makes that true — the latter writes the canvas back.
+ * grows. Writing the proposal alone, and not the canvas back, is what makes
+ * that true.
  *
  * Answers `undefined` when the batch would change nothing. That is not an
  * error here: what to say about an empty proposal belongs to the tool, which
  * owns how a refusal is worded.
  */
 export async function storeCanvasProposal(args: {
-  readonly deps: ServerDeps
-  readonly input: Pick<CanvasEditInput, 'workspaceId' | 'documentId' | 'proposalId' | 'author'>
-  readonly doc: LoroDoc
+  readonly session: DocumentSession
+  readonly input: Pick<CanvasEditInput, 'proposalId' | 'author'>
   readonly before: SpatialCanvas
   readonly after: SpatialCanvas
 }): Promise<Proposal | undefined> {
-  const { deps, input, doc } = args
+  const { session, input } = args
   const changes = proposedChangesFromDiff(args.before, args.after)
   if (changes.length === 0) return undefined
-  const open = readProposals(doc)
+  const open = await proposalsOf(session)
   const continuing = open.find((existing) => existing.id === input.proposalId)
   const proposal: Proposal = {
     id: input.proposalId ?? mintProposalId(new Set(open.map((existing) => existing.id))),
@@ -314,11 +311,11 @@ export async function storeCanvasProposal(args: {
     changes,
   }
   refuseOpenChangeGrowth(open, proposal)
-  writeProposal(doc, proposal)
-  await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
+  session.write([{ op: 'writeProposal', args: { proposal } }])
+  await session.save()
   // Read back rather than answering with the changes this call contributed.
   // The result is typed as a whole proposal, so it has to be one — and the
   // merge that produced it belongs to the container, so recomputing it here
   // would be a second implementation free to disagree with the first.
-  return readProposals(doc).find((stored) => stored.id === proposal.id) ?? proposal
+  return (await proposalsOf(session)).find((stored) => stored.id === proposal.id) ?? proposal
 }

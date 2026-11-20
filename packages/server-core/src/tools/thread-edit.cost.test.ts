@@ -8,11 +8,11 @@
  * lock — so looking each named id up by walking the board is ops x ids x nodes
  * of work, repeatable at will because a refused batch stores nothing.
  */
-import type * as loroAdapter from '@kamiazya/whiteboard-loro-adapter'
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test, vi } from 'vitest'
+import type * as sessionReads from '../document-session-reads.js'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
@@ -35,12 +35,13 @@ function countingIds<T extends { readonly id: string }>(items: readonly T[]): T[
   )
 }
 
-vi.mock('@kamiazya/whiteboard-loro-adapter', async (importOriginal) => {
-  const real = await importOriginal<typeof loroAdapter>()
+// The board is instrumented where the tool receives it: as the session's answer.
+vi.mock('../document-session-reads.js', async (importOriginal) => {
+  const real = await importOriginal<typeof sessionReads>()
   return {
     ...real,
-    readDocumentContent: (...args: Parameters<typeof real.readDocumentContent>) => {
-      const content = real.readDocumentContent(...args)
+    documentContentOf: async (...args: Parameters<typeof real.documentContentOf>) => {
+      const content = await real.documentContentOf(...args)
       if (content.kind !== 'spatial') return content
       const { nodes, edges } = content.canvas
       return {
