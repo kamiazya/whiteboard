@@ -2,7 +2,13 @@ import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { createCrdtEngine, loadCrdtEngine, randomPeerId, readValue } from '../index.js'
+import {
+  createCrdtEngine,
+  loadCrdtEngine,
+  randomPeerId,
+  readValue,
+  sharedCrdtEngine,
+} from '../index.js'
 import { writeMarkdownBody } from '../markdown-body.js'
 import { createWorkspaceDocumentAtPath } from '../workspace-tree.js'
 import { answer, unplain } from './answers.js'
@@ -34,6 +40,25 @@ describe('the engine entry', () => {
     const [first, second] = await Promise.all([loadCrdtEngine(), loadCrdtEngine()])
     expect(first).toBe(second)
     expect(await loadCrdtEngine()).toBe(first)
+  })
+
+  it('answers the engine of the realm without waiting, and the same one every time', async () => {
+    const now = sharedCrdtEngine()
+    expect(sharedCrdtEngine()).toBe(now)
+    expect(await loadCrdtEngine()).toBe(now)
+  })
+
+  it('serves a handle opened through one accessor to the other', async () => {
+    const { handle } = sharedCrdtEngine().open({
+      peer: randomPeerId(),
+      bytes: snapshotWithBody('shared'),
+    })
+    try {
+      const loaded = await loadCrdtEngine()
+      expect(await readValue(loaded, handle, { query: 'markdownBody' }, z.string())).toBe('shared')
+    } finally {
+      sharedCrdtEngine().close({ handle })
+    }
   })
 
   it('reads a named query as the value the reader produced', async () => {
