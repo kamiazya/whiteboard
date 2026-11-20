@@ -1,9 +1,9 @@
 import { MARKDOWN_MAX_CHARS, nodeText } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { createServer } from '../create-server.js'
-import { loadDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { backlinksOutputSchema } from './backlinks.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { wbDocumentCreate } from './document-crud.js'
@@ -187,7 +187,7 @@ describe('POST /linkify-mentions', () => {
 
     expect((await h.linkify(board.documentId, target.documentId)).body).toEqual({ linked: 1 })
 
-    const { canvas } = await loadDocument(deps, WS, board.documentId)
+    const { canvas } = await readStoredDocument(deps, WS, board.documentId)
     expect(nodeText(canvas.nodes.find((n) => n.id === 'a') ?? canvas.nodes[0]!)).toBe(
       'we depend on [[target|Redis]] heavily',
     )

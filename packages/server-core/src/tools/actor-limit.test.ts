@@ -2,8 +2,8 @@ import { OKF_ACTOR_MAX_CHARS, okfActorInputSchema } from '@kamiazya/whiteboard-m
 import { describe, expect, it } from 'vitest'
 import { apiErrorReason } from '../api-errors.js'
 import { createServer } from '../create-server.js'
-import { loadDocument } from '../document-io.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { bodyEditInputSchema } from './body-edit.js'
 import { canvasEditInputSchema } from './canvas-edit-ops.js'
@@ -161,7 +161,7 @@ describe('a batch actor stamped on every op', () => {
     let total = 0
     for (const result of out.results) {
       if (!('documentId' in result) || typeof result.documentId !== 'string') continue
-      const { doc } = await loadDocument(deps, WS, result.documentId)
+      const { doc } = await readStoredDocument(deps, WS, result.documentId)
       total += doc.export({ mode: 'snapshot' }).byteLength
     }
     // The subject is present: every op wrote a document carrying the stamp.

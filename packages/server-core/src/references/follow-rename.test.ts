@@ -1,9 +1,9 @@
 import { readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { MARKDOWN_MAX_CHARS, nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { readStoredDocumentOrEmpty, writeStoredDocument } from '../test-utils/stored-document.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
 import { createDocumentSetOperation } from '../tools/document-set.js'
@@ -24,7 +24,7 @@ async function seed(deps: ServerDeps) {
   const write = (documentId: string, body: string) =>
     set.execute({ workspaceId: WS, documentId, markdown: `---\ntype: note\n---\n${body}` })
   const bodyOf = async (documentId: string) =>
-    readMarkdownBody(await loadOrCreateDocument(deps, WS, documentId as never))
+    readMarkdownBody(await readStoredDocumentOrEmpty(deps, WS, documentId as never))
   return { create, write, bodyOf }
 }
 
@@ -105,7 +105,7 @@ describe('followReferencesAfterRename', () => {
     })
 
     expect(result.updatedDocumentIds).toEqual([canvas.documentId])
-    const doc = await loadOrCreateDocument(deps, WS, canvas.documentId as never)
+    const doc = await readStoredDocumentOrEmpty(deps, WS, canvas.documentId as never)
     const spatial = readSpatialCanvas(doc)
     const rewritten = spatial.nodes.find((n) => n.id === 't1')
     expect(rewritten !== undefined && nodeText(rewritten)).toBe('see [[archive/login]]')
@@ -132,10 +132,10 @@ describe('followReferencesAfterRename', () => {
     // A document written before kinds existed records none; only its index
     // row says what it is.
     {
-      const doc = await loadOrCreateDocument(deps, WS, board.documentId as never)
+      const doc = await readStoredDocumentOrEmpty(deps, WS, board.documentId as never)
       doc.getMap('document').delete('kind')
       doc.commit()
-      await saveDocumentSnapshot(deps, WS, board.documentId as never, doc)
+      await writeStoredDocument(deps, WS, board.documentId as never, doc)
     }
 
     const before = await entriesBefore(deps)
@@ -152,7 +152,7 @@ describe('followReferencesAfterRename', () => {
 
     expect(result.updatedDocumentIds).toEqual([board.documentId])
     const canvas = readSpatialCanvas(
-      await loadOrCreateDocument(deps, WS, board.documentId as never),
+      await readStoredDocumentOrEmpty(deps, WS, board.documentId as never),
     )
     const node = canvas.nodes.find((n) => n.id === 't1')
     expect(node !== undefined && nodeText(node)).toBe('see [[archive/login]]')
@@ -212,10 +212,10 @@ describe('followReferencesAfterRename', () => {
     // A record from "another version": a shape today's spatialNodeSchema
     // rejects, planted straight into the nodes map.
     {
-      const doc = await loadOrCreateDocument(deps, WS, board.documentId as never)
+      const doc = await readStoredDocumentOrEmpty(deps, WS, board.documentId as never)
       doc.getMap('nodes').set('from-the-future', { type: 'hologram', shimmer: true })
       doc.commit()
-      await saveDocumentSnapshot(deps, WS, board.documentId as never, doc)
+      await writeStoredDocument(deps, WS, board.documentId as never, doc)
     }
 
     const before = await entriesBefore(deps)
@@ -231,7 +231,7 @@ describe('followReferencesAfterRename', () => {
     })
 
     expect(result.updatedDocumentIds).toEqual([board.documentId])
-    const doc = await loadOrCreateDocument(deps, WS, board.documentId as never)
+    const doc = await readStoredDocumentOrEmpty(deps, WS, board.documentId as never)
     const survivor = readSpatialCanvas(doc).nodes.find((n) => n.id === 't1')
     expect(survivor !== undefined && nodeText(survivor)).toBe('see [[archive/login]]')
     // The unreadable record is still there, byte-for-byte.

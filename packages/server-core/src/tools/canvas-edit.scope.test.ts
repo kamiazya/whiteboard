@@ -1,7 +1,7 @@
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { DOCUMENT_ID, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 
@@ -40,7 +40,7 @@ describe('wb_canvas_edit refuses a node.add whose id is taken', () => {
       ],
     )
     await expect(result).rejects.toThrow(/node id "a" is already on the canvas/)
-    const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id)).toEqual(['a'])
   })
 

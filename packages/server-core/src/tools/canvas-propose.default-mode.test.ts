@@ -6,8 +6,8 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { DOCUMENT_ID, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import type { CanvasEditInput } from './canvas-edit-ops.js'
@@ -146,7 +146,7 @@ describe('an explicit mode:"propose" and the verbs a proposal cannot carry', () 
     const store = new FakeDocumentStore()
     await seedCanvas(store, BOARD)
     const deps = makeDeps(store)
-    const before = (await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)).canvas
+    const before = (await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)).canvas
 
     await expect(
       createCanvasEditTool(deps).execute({
@@ -157,7 +157,7 @@ describe('an explicit mode:"propose" and the verbs a proposal cannot carry', () 
       }),
     ).rejects.toThrow(/a proposal cannot carry this verb.*Nothing was written/s)
 
-    expect((await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)).canvas).toEqual(before)
+    expect((await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)).canvas).toEqual(before)
   })
 
   test('the same batch with no mode applies, which is the only mode that does', async () => {

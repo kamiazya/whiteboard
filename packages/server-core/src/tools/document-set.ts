@@ -5,17 +5,6 @@ import {
   serializeOkf,
 } from '@kamiazya/whiteboard-codec'
 import {
-  readDocumentKind,
-  readMarkdownBody,
-  readSpatialCanvas,
-  readTrustFacets,
-  writeCoreFacets,
-  writeDocumentKind,
-  writeFacets,
-  writeMarkdownBody,
-  writeTrustFacets,
-} from '@kamiazya/whiteboard-loro-adapter'
-import {
   documentIdSchema,
   documentNameSchema,
   EXTENSION_FACET_KEY_PATTERN,
@@ -23,11 +12,17 @@ import {
   markdownInputSchema,
   okfActorInputSchema,
   tagListWriteSchema,
+  type documentEngine as wire,
   workspaceCanonicalIdSchema,
 } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
-import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
+import { type DocumentSession, withDocument } from '../document-session.js'
+import {
+  kindOf,
+  markdownBodyOf,
+  spatialCanvasOf,
+  trustFacetsOf,
+} from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
@@ -277,12 +272,15 @@ function keepsDeclaredGenerated(
  * declared markdown. One holding a canvas gets its way back from the spatial
  * side, which declares a kind without discarding anything.
  */
-function claimMarkdownDocument(doc: LoroDoc, documentId: string): void {
-  const kind = readDocumentKind(doc)
+async function claimMarkdownDocument(
+  session: DocumentSession,
+  documentId: string,
+): Promise<wire.Write[]> {
+  const kind = await kindOf(session)
   if (kind === undefined) {
     // A markdown document written today has an empty canvas: the body is a
     // CRDT text container, so any element is content this write would lose.
-    const existing = readSpatialCanvas(doc)
+    const { canvas: existing } = await spatialCanvasOf(session)
     if (existing.nodes.length > 0 || existing.edges.length > 0) {
       throw new DocumentContentLossError(
         documentId,
@@ -290,8 +288,7 @@ function claimMarkdownDocument(doc: LoroDoc, documentId: string): void {
           'Edit it through wb_canvas_edit, which records it as spatial and keeps them.',
       )
     }
-    writeDocumentKind(doc, 'markdown')
-    return
+    return [{ op: 'writeDocumentKind', args: { kind: 'markdown' } }]
   }
   if (kind !== 'markdown') {
     throw new DocumentKindMismatchError(
@@ -300,6 +297,7 @@ function claimMarkdownDocument(doc: LoroDoc, documentId: string): void {
       'This writes OKF Markdown, which would replace its nodes and edges with a markdown body. Edit a spatial document through wb_canvas_edit instead.',
     )
   }
+  return []
 }
 
 /**
@@ -360,47 +358,61 @@ export function createDocumentSetOperation(deps: ServerDeps) {
         frontmatter.facets,
       )
 
-      const doc = await loadOrCreateDocument(deps, input.workspaceId, input.documentId)
-      // Captured before anything below writes, because both are what the
-      // document said a moment ago rather than what it is about to say.
-      const storedTrust = readTrustFacets(doc)
-      const storedBody = readMarkdownBody(doc)
+      await withDocument(
+        deps,
+        input.workspaceId,
+        input.documentId,
+        async (session) => {
+          // Captured before anything below writes, because both are what the
+          // document said a moment ago rather than what it is about to say.
+          const storedTrust = await trustFacetsOf(session)
+          const storedBody = await markdownBodyOf(session)
 
-      claimMarkdownDocument(doc, input.documentId)
+          const claim = await claimMarkdownDocument(session, input.documentId)
 
-      // OKF is an export format, not the storage model: the Loro side keeps
-      // its own OKF-compatible document, and the workspace owns the name. So
-      // parsing an OKF projects it INTO that model exactly as serialising
-      // projects back out, and `title` lands on the workspace rather than
-      // becoming a second stored copy (ADR-0009 decision 2).
-      //
-      // Absent is not cleared: an OKF with no `title` says nothing about the
-      // name, so omitting it must not erase one.
-      const { facets: _sent, title, generated, verified, ...coreFacets } = frontmatter
-      await applyOkfTitle(deps, input, title)
-      writeCoreFacets(doc, coreFacets)
-      if (frontmatter.facets !== undefined) {
-        writeFacets(doc, checkedFacets ?? {})
-      }
+          // OKF is an export format, not the storage model: the Loro side keeps
+          // its own OKF-compatible document, and the workspace owns the name. So
+          // parsing an OKF projects it INTO that model exactly as serialising
+          // projects back out, and `title` lands on the workspace rather than
+          // becoming a second stored copy (ADR-0009 decision 2).
+          //
+          // Absent is not cleared: an OKF with no `title` says nothing about the
+          // name, so omitting it must not erase one.
+          const { facets: _sent, title, generated, verified, ...coreFacets } = frontmatter
+          await applyOkfTitle(deps, input, title)
 
-      // A `generated` the document already declares is the truth about how
-      // that content was produced (§5.2) — importing it did not author it —
-      // so it is honoured rather than restamped. Only content this write is
-      // the origin of gets the server's clock (ADR-0016 decision 2).
-      writeTrustFacets(doc, {
-        generated: keepsDeclaredGenerated(generated, storedTrust?.generated, storedBody, body)
-          ? (generated as NonNullable<typeof generated>)
-          : {
-              by: input.actor ?? UNATTRIBUTED_ACTOR,
-              at: new Date().toISOString(),
+          // A `generated` the document already declares is the truth about how
+          // that content was produced (§5.2) — importing it did not author it —
+          // so it is honoured rather than restamped. Only content this write is
+          // the origin of gets the server's clock (ADR-0016 decision 2).
+          const keeps = keepsDeclaredGenerated(generated, storedTrust?.generated, storedBody, body)
+          session.write([
+            ...claim,
+            { op: 'writeCoreFacets', args: { core: coreFacets } },
+            ...(frontmatter.facets === undefined
+              ? []
+              : [{ op: 'writeFacets' as const, args: { facets: checkedFacets ?? {} } }]),
+            {
+              op: 'writeTrustFacets',
+              args: {
+                trust: {
+                  generated: keeps
+                    ? (generated as NonNullable<typeof generated>)
+                    : {
+                        by: input.actor ?? UNATTRIBUTED_ACTOR,
+                        at: new Date().toISOString(),
+                      },
+                  ...(verified === undefined ? {} : { verified }),
+                },
+              },
             },
-        ...(verified === undefined ? {} : { verified }),
-      })
-
-      // The body goes in the CRDT text container (see writeMarkdownBody).
-      writeMarkdownBody(doc, body)
-
-      await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
+            // The body goes in the CRDT text container (see writeMarkdownBody).
+            { op: 'writeMarkdownBody', args: { body } },
+          ])
+          await session.save()
+        },
+        { create: true },
+      )
 
       return { documentId: input.documentId, imported: true }
     },

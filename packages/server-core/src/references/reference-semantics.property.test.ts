@@ -26,11 +26,11 @@ import type { DocumentId } from '@kamiazya/whiteboard-model'
 import { nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect } from 'vitest'
-import { loadOrCreateDocument } from '../document-io.js'
 import { DocumentVectorCache } from '../search/document-vector-cache.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { seedEmbedNode } from '../test-utils/seed-embed-node.js'
+import { readStoredDocumentOrEmpty } from '../test-utils/stored-document.js'
 import { computeBacklinks } from '../tools/backlinks.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
@@ -617,7 +617,7 @@ describe('reference semantics under command sequences', () => {
         // token-for-token — the follow pass rewrote exactly what the naive
         // plan says it should, and nothing else.
         for (const doc of model.docs.values()) {
-          const real = await loadOrCreateDocument(deps, WS, doc.id as DocumentId)
+          const real = await readStoredDocumentOrEmpty(deps, WS, doc.id as DocumentId)
           if (doc.kind === 'markdown') {
             expect(
               scanReferences(readMarkdownBody(real)).map((m) => m.target),

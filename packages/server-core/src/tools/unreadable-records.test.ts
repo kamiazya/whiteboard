@@ -13,7 +13,8 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import { loadDocument } from '../document-io.js'
+import { withDocument } from '../document-session.js'
+import { canvasOf } from '../document-session-reads.js'
 import { setLogSink } from '../log.js'
 import {
   FakeDocumentStore,
@@ -373,16 +374,17 @@ describe('a keeper edit leaves the envelope entries its reader could not parse',
   })
 })
 
-describe('loading a canvas that holds unreadable records', () => {
-  test('says how many were left out, and where, without failing the load', async () => {
+describe('reading a canvas that holds unreadable records', () => {
+  test('says how many were left out, and where, without failing the read', async () => {
     const store = await seed()
     const records: { level: string; msg: string; data?: Record<string, unknown> }[] = []
     setLogSink(({ level, msg, data }) => records.push({ level, msg, ...(data && { data }) }))
     try {
-      const { canvas } = await loadDocument(
+      const canvas = await withDocument(
         makeTestDeps({ documentStore: store, documentIndex: store.documentIndex }),
         WORKSPACE_ID,
         DOCUMENT_ID,
+        canvasOf,
       )
       expect(canvas.nodes.map((node) => node.id).sort()).toEqual(['a', 'b'])
     } finally {

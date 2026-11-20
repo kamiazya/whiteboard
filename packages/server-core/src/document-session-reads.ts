@@ -50,6 +50,10 @@ export const contentOf = (session: DocumentSession, kind: DocumentKind | undefin
     contentShape,
   )
 
+/** The document's canvas and how many stored records its schema refused. */
+export const spatialCanvasOf = (session: DocumentSession) =>
+  session.read({ query: 'spatialCanvas' }, canvasShape)
+
 /**
  * The document's canvas. Records its schema refuses are left out of the answer
  * and warned about: the cause is not knowable here (a field a newer client
@@ -58,7 +62,7 @@ export const contentOf = (session: DocumentSession, kind: DocumentKind | undefin
  * the record.
  */
 export async function canvasOf(session: DocumentSession): Promise<SpatialCanvas> {
-  const { canvas, skipped } = await session.read({ query: 'spatialCanvas' }, canvasShape)
+  const { canvas, skipped } = await spatialCanvasOf(session)
   if (skipped > 0) {
     log.warning('canvas holds records that failed validation; they are left as stored', {
       workspaceId: session.workspaceId,

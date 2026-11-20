@@ -198,3 +198,22 @@ export async function withDocument<T>(
     session.release()
   }
 }
+
+/**
+ * Runs `work` on an empty document that is not read from the store, for a
+ * document that is being BORN: nothing stored is merged into it, and its save
+ * replaces whatever a store held under the id.
+ */
+export async function withNewDocument<T>(
+  deps: ServerDeps,
+  workspaceId: WorkspaceId,
+  documentId: DocumentId,
+  work: (session: DocumentSession) => Promise<T> | T,
+): Promise<T> {
+  const session = await openOver(deps, workspaceId, documentId, null)
+  try {
+    return await work(session)
+  } finally {
+    session.release()
+  }
+}

@@ -7,7 +7,7 @@ import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
  * actually own `documentId` (stale cached id, copy-paste across two open
  * documents, client bug, or a caller probing another workspace). Without this
  * check a mismatched pair would still pass every canvas-doc-level validation —
- * `loadDocument`/`loadOrCreateDocument` address the doc purely by
+ * a document session addresses the doc purely by
  * `documentId`, and a store may fall through to one keyed by that id alone.
  * Call this before any read or mutation so the caller gets an explicit, typed
  * rejection instead of reading or writing the wrong workspace's document.

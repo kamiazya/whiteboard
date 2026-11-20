@@ -18,7 +18,6 @@ import {
 import type { AnnotationAnchor, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
-import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import {
   FakeDocumentStore,
@@ -26,6 +25,7 @@ import {
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { readStoredDocument, writeStoredDocument } from '../test-utils/stored-document.js'
 import { createThreadEditTool } from './thread-edit.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -88,7 +88,7 @@ describe('wb_thread_edit', () => {
     })
 
     expect(result.threads).toHaveLength(1)
-    const { doc } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const { doc } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     const stored = readAnnotations(doc)
     expect(stored).toHaveLength(1)
     expect(stored[0]?.messages[0]).toMatchObject({
@@ -129,7 +129,7 @@ describe('wb_thread_edit', () => {
       ops: [{ op: 'message.add', threadId, body: 'because of the migration', author: 'agent:me' }],
     })
 
-    const { doc } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const { doc } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     const stored = readAnnotations(doc)
     expect(stored).toHaveLength(1)
     expect(stored[0]?.messages.map((message) => message.body)).toEqual([
@@ -162,7 +162,7 @@ describe('wb_thread_edit', () => {
       documentId: DOCUMENT_ID,
       ops: [{ op: 'thread.resolve', threadId }],
     })
-    const afterResolve = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const afterResolve = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(readAnnotations(afterResolve.doc)[0]?.status).toBe('resolved')
 
     await tool.execute({
@@ -170,7 +170,7 @@ describe('wb_thread_edit', () => {
       documentId: DOCUMENT_ID,
       ops: [{ op: 'thread.resolve', threadId, resolved: false }],
     })
-    const afterReopen = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const afterReopen = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(readAnnotations(afterReopen.doc)[0]?.status).toBe('open')
 
     // The conversation is never deleted, by an agent or by a person. A
@@ -232,7 +232,7 @@ describe('wb_thread_edit within ONE batch', () => {
     expect(result.threads.map((thread) => [thread.id, thread.status])).toEqual([
       ['th-batch', 'open'],
     ])
-    const { doc } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const { doc } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(readAnnotations(doc)[0]?.messages.map((m) => m.body)).toEqual([
       'opened in this batch',
       'replied in the same batch',
@@ -256,7 +256,7 @@ describe('wb_thread_edit within ONE batch', () => {
       ],
     })
 
-    const { doc } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const { doc } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(readAnnotations(doc)[0]?.messages.map((m) => [m.id, m.body])).toEqual([
       ['th-2-m1', 'first'],
       ['th-2-m2', 'second'],
@@ -283,13 +283,13 @@ describe('wb_thread_edit within ONE batch', () => {
 
     // A peer's reply that merged in at m3, leaving m2 unused — exactly the
     // state the comment in `message.add` describes.
-    const { doc } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const { doc } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     writeThreadMessage(doc, 'th-1', {
       id: 'th-1-m3',
       body: 'from a peer',
       createdAt: '2026-01-01T00:00:00.000Z',
     })
-    await saveDocumentSnapshot(deps, WORKSPACE_ID, DOCUMENT_ID, doc)
+    await writeStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID, doc)
 
     await createThreadEditTool(deps).execute({
       workspaceId: WORKSPACE_ID,
@@ -297,7 +297,7 @@ describe('wb_thread_edit within ONE batch', () => {
       ops: [{ op: 'message.add', threadId: 'th-1', body: 'ours' }],
     })
 
-    const { doc: after } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const { doc: after } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     const ours = readAnnotations(after)[0]?.messages.find((m) => m.body === 'ours')
     // m2 is free, and taking it would overwrite the slot the peer is most
     // likely to fill next.
@@ -384,7 +384,7 @@ describe('wb_thread_edit refuses an anchor that names nothing on the document', 
 
     await expect(open(store, anchor)).rejects.toThrow(detail)
 
-    const { doc } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { doc } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(readAnnotations(doc)).toEqual([])
   })
 
@@ -410,7 +410,7 @@ describe('wb_thread_edit refuses an anchor that names nothing on the document', 
 
     await expect(open(store, anchor)).rejects.toThrow(detail)
 
-    const { doc } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { doc } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(readAnnotations(doc)).toEqual([])
   })
 
@@ -463,7 +463,7 @@ describe('wb_thread_edit refuses a blank message', () => {
       }),
     ).rejects.toThrow(/ops\[0\] \(thread\.add\).*blank.*Nothing was written/)
 
-    const { doc } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { doc } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(readAnnotations(doc)).toEqual([])
   })
 
@@ -483,7 +483,7 @@ describe('wb_thread_edit refuses a blank message', () => {
       }),
     ).rejects.toThrow(/ops\[1\] \(message\.add\).*blank/)
 
-    const { doc } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { doc } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     const [thread] = readAnnotations(doc)
     expect(thread?.status).toBe('open')
     expect(thread?.messages).toHaveLength(1)
@@ -506,7 +506,7 @@ describe('wb_thread_edit stores a text anchor at where its quote is', () => {
       documentId: DOCUMENT_ID,
       ops: [{ op: 'thread.add', anchor, body: 'about this' }],
     })
-    const { doc } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { doc } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(result.threads[0]?.anchor).toEqual(readAnnotations(doc)[0]?.anchor)
     return readAnnotations(doc)[0]?.anchor
   }

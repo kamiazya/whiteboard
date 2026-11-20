@@ -1,6 +1,7 @@
-import { applyDocumentEdit, readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
+import { documentEditWrites } from '@kamiazya/whiteboard-loro-adapter'
 import { planLinkifyMentions } from '@kamiazya/whiteboard-reference-graph'
-import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
+import { withDocument } from '../document-session.js'
+import { documentContentOf } from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 
@@ -56,16 +57,17 @@ export async function linkifyMentions(
   const targetName = target.name
 
   // Reached over HTTP alone, so no MCP adapter holds the lock around it.
-  return withWorkspaceWrite(deps, input.workspaceId, async () => {
-    const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
-    const { linked, edit } = planLinkifyMentions(readDocumentContent(doc, source.kind), {
-      documentId: input.targetDocumentId,
-      path: target.path,
-      name: targetName,
-    })
-    if (edit === null) return { linked }
-    applyDocumentEdit(doc, edit)
-    await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
-    return { linked }
-  })
+  return withWorkspaceWrite(deps, input.workspaceId, () =>
+    withDocument(deps, input.workspaceId, input.documentId, async (session) => {
+      const { linked, edit } = planLinkifyMentions(await documentContentOf(session, source.kind), {
+        documentId: input.targetDocumentId,
+        path: target.path,
+        name: targetName,
+      })
+      if (edit === null) return { linked }
+      session.write(documentEditWrites(edit))
+      await session.save()
+      return { linked }
+    }),
+  )
 }

@@ -1,25 +1,22 @@
 import type { FacetTarget } from '@kamiazya/whiteboard-facet-engine'
 import {
-  readCoreFacets,
-  readDocumentKind,
-  readEdgeLocks,
-  readFacets,
-  readNodeLocks,
-  readSpatialCanvas,
-  reconcileCoreFacets,
-  reconcileFacets,
-  reconcileSpatialCanvas,
-} from '@kamiazya/whiteboard-loro-adapter'
-import {
   type DocumentKind,
   type ExtensionFacets,
   growsPast,
   type SpatialCanvas,
   TAG_COUNT_LIMIT_PHRASE,
   TAGS_PER_ELEMENT_MAX,
+  type documentEngine as wire,
 } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
-import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
+import { type DocumentSession, withDocument } from '../document-session.js'
+import {
+  coreFacetsOf,
+  edgeLocksOf,
+  facetsOf,
+  kindOf,
+  nodeLocksOf,
+  spatialCanvasOf,
+} from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
 import { announceAgentActivity } from './agent-activity.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
@@ -243,14 +240,30 @@ async function refuseBeforeAnyWrite(deps: ServerDeps, input: FacetSetRequest): P
   // Only `add` can grow a set; a batch with nothing to judge loads nothing.
   if (!judgesLibrary && input.tags.add.length === 0) return
   for (const documentId of input.documentIds) {
-    const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
-    for (const { what, before, tags } of tagSetsAfter(doc, input, documentId)) {
+    const sets = await withOpened(deps, input, documentId, (session) =>
+      tagSetsAfter(session, input, documentId),
+    )
+    for (const { what, before, tags } of sets) {
       if (growsPast(TAGS_PER_ELEMENT_MAX, before, tags.length)) {
         throw new TooManyTagsError(what, tags.length)
       }
       if (judgesLibrary) refuseAgainstLibrary(library, tags, what)
     }
   }
+}
+
+/**
+ * Runs `work` on a document the tool may be the first to write: setting facets
+ * on a never-saved document is valid, unlike a patch, which needs an element to
+ * target. Opened per phase, as the refusal phases each read what they judge.
+ */
+function withOpened<T>(
+  deps: ServerDeps,
+  input: FacetSetRequest,
+  documentId: string,
+  work: (session: DocumentSession) => Promise<T>,
+): Promise<T> {
+  return withDocument(deps, input.workspaceId, documentId, work, { create: true })
 }
 
 /**
@@ -264,8 +277,8 @@ async function refuseKindMismatches(deps: ServerDeps, input: FacetSetRequest): P
   if (input.nodeId !== undefined || input.edgeId !== undefined) return
   if (input.facets === undefined && input.target !== 'canvas') return
   for (const documentId of input.documentIds) {
-    const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
-    refuseKindMismatch(input, documentId, readDocumentKind(doc))
+    const kind = await withOpened(deps, input, documentId, kindOf)
+    refuseKindMismatch(input, documentId, kind)
   }
 }
 
@@ -327,18 +340,19 @@ async function refuseLockedTargets(deps: ServerDeps, input: FacetSetRequest): Pr
     input.nodeId !== undefined || input.edgeId !== undefined || rename.size > 0
   if (!reachesAnElement) return
   for (const documentId of input.documentIds) {
-    const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
-    if (readDocumentKind(doc) !== 'markdown') refuseLockedIn(doc, input, rename)
+    await withOpened(deps, input, documentId, async (session) => {
+      if ((await kindOf(session)) !== 'markdown') await refuseLockedIn(session, input, rename)
+    })
   }
 }
 
-function refuseLockedIn(
-  doc: LoroDoc,
+async function refuseLockedIn(
+  session: DocumentSession,
   input: FacetSetRequest,
   rename: ReadonlyMap<string, string>,
-): void {
-  const nodeLocks = readNodeLocks(doc)
-  const edgeLocks = readEdgeLocks(doc)
+): Promise<void> {
+  const nodeLocks = await nodeLocksOf(session)
+  const edgeLocks = await edgeLocksOf(session)
   if (input.nodeId !== undefined) {
     if (nodeLocks.has(input.nodeId)) throw new ElementLockedError('node', input.nodeId)
     return
@@ -349,7 +363,7 @@ function refuseLockedIn(
   }
   // A board-wide rename: `target: 'canvas'` or a spatial document, the same
   // site test the write itself applies.
-  const canvas = readSpatialCanvas(doc)
+  const { canvas } = await spatialCanvasOf(session)
   const lockedNode = canvas.nodes.find(
     (node) => nodeLocks.has(node.id) && renameReaches(node.tags, rename),
   )
@@ -395,19 +409,19 @@ const ELEMENT_TARGETS = {
 async function setElementFacets(
   deps: ServerDeps,
   input: FacetSetRequest,
-  documentId: string,
-  doc: LoroDoc,
-  kind: ReturnType<typeof readDocumentKind>,
+  session: DocumentSession,
+  kind: DocumentKind | undefined,
   sets: Record<string, unknown>,
   deletions: readonly string[],
   which: keyof typeof ELEMENT_TARGETS,
 ): Promise<FacetSetOutput['updated'][number]> {
+  const { documentId } = session
   const target = ELEMENT_TARGETS[which]
   const id = (which === 'node' ? input.nodeId : input.edgeId) as string
   if (kind === undefined) throw target.notFound(documentId, id)
   if (kind !== 'spatial') throw new DocumentKindMismatchError(documentId, kind, target.mismatch)
 
-  const canvas = readSpatialCanvas(doc)
+  const { canvas } = await spatialCanvasOf(session)
   const members: readonly { id: string; facets?: ExtensionFacets; tags?: readonly string[] }[] =
     canvas[target.collection]
   const found = members.find((candidate) => candidate.id === id)
@@ -427,11 +441,13 @@ async function setElementFacets(
     ...(Object.keys(merged).length === 0 ? {} : { facets: merged }),
     ...withTags(tags ?? found.tags),
   }
-  reconcileSpatialCanvas(doc, canvas, {
-    ...canvas,
-    [target.collection]: members.map((candidate) => (candidate.id === id ? next : candidate)),
-  } as SpatialCanvas)
-  await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
+  session.write([
+    reconcileCanvas(canvas, {
+      ...canvas,
+      [target.collection]: members.map((candidate) => (candidate.id === id ? next : candidate)),
+    } as SpatialCanvas),
+  ])
+  await session.save()
   const at = { workspaceId: input.workspaceId, documentId }
   announceAgentActivity(deps, { ...at, [target.collection]: [id] }, 'changed 1')
   return { documentId, facets: merged, ...(tags === undefined ? {} : { tags }) }
@@ -444,21 +460,27 @@ async function setOne(
   sets: Record<string, unknown>,
   deletions: readonly string[],
 ): Promise<FacetSetOutput['updated'][number]> {
-  const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
-  const kind = readDocumentKind(doc)
+  return await withOpened(deps, input, documentId, async (session) => {
+    const kind = await kindOf(session)
 
-  const site = writeSiteOf(input, kind)
-  if (site === 'node' || site === 'edge') {
-    return await setElementFacets(deps, input, documentId, doc, kind, sets, deletions, site)
-  }
+    const site = writeSiteOf(input, kind)
+    if (site === 'node' || site === 'edge') {
+      return await setElementFacets(deps, input, session, kind, sets, deletions, site)
+    }
 
-  // A kind that cannot hold this write was refused for the whole batch by
-  // `refuseKindMismatches`, before the first document was written.
-  if (site === 'canvas') {
-    return await setCanvasFacets(deps, input, documentId, doc, kind, sets, deletions)
-  }
-  return await setDocumentFacets(deps, input, documentId, doc, sets, deletions)
+    // A kind that cannot hold this write was refused for the whole batch by
+    // `refuseKindMismatches`, before the first document was written.
+    if (site === 'canvas') {
+      return await setCanvasFacets(deps, input, session, kind, sets, deletions)
+    }
+    return await setDocumentFacets(input, session, sets, deletions)
+  })
 }
+
+const reconcileCanvas = (prev: SpatialCanvas, next: SpatialCanvas): wire.Write => ({
+  op: 'reconcileSpatialCanvas',
+  args: { prev, next },
+})
 
 /**
  * Write to the board's own envelope.
@@ -472,13 +494,13 @@ async function setOne(
 async function setCanvasFacets(
   deps: ServerDeps,
   input: FacetSetRequest,
-  documentId: string,
-  doc: LoroDoc,
-  kind: ReturnType<typeof readDocumentKind>,
+  session: DocumentSession,
+  kind: DocumentKind | undefined,
   sets: Record<string, unknown>,
   deletions: readonly string[],
 ): Promise<FacetSetOutput['updated'][number]> {
-  const canvas = readSpatialCanvas(doc)
+  const { documentId } = session
+  const { canvas } = await spatialCanvasOf(session)
   const merged: ExtensionFacets = { ...canvas.facets, ...sets }
   for (const key of deletions) delete merged[key]
   const tags = input.tags === undefined ? undefined : applyTagChange(canvas.tags, input.tags)
@@ -494,14 +516,16 @@ async function setCanvasFacets(
   // an empty bucket disappears, so a reverted canvas never carries a
   // redundant field forever. The comments beside it are untouched.
   const { facets: _replaced, tags: _tags, ...canvasRest } = canvas
-  reconcileSpatialCanvas(doc, canvas, {
-    ...canvasRest,
-    nodes: canvas.nodes.map((node) => renamed(node)),
-    edges: canvas.edges.map((edge) => renamed(edge)),
-    ...(Object.keys(merged).length === 0 ? {} : { facets: merged }),
-    ...withTags(tags ?? canvas.tags),
-  })
-  await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
+  session.write([
+    reconcileCanvas(canvas, {
+      ...canvasRest,
+      nodes: canvas.nodes.map((node) => renamed(node)),
+      edges: canvas.edges.map((edge) => renamed(edge)),
+      ...(Object.keys(merged).length === 0 ? {} : { facets: merged }),
+      ...withTags(tags ?? canvas.tags),
+    }),
+  ])
+  await session.save()
   // The envelope is no one element, so the chip shows and nothing is outlined.
   const at = { workspaceId: input.workspaceId, documentId }
   if (kind === 'spatial') announceAgentActivity(deps, at, 'changed the canvas')
@@ -510,30 +534,36 @@ async function setCanvasFacets(
 
 /** Write to the document's OKF frontmatter. */
 async function setDocumentFacets(
-  deps: ServerDeps,
   input: FacetSetRequest,
-  documentId: string,
-  doc: LoroDoc,
+  session: DocumentSession,
   sets: Record<string, unknown>,
   deletions: readonly string[],
 ): Promise<FacetSetOutput['updated'][number]> {
-  const storedFacets = readFacets(doc)
+  const { documentId } = session
+  const storedFacets = await facetsOf(session)
   const mergedFacets: ExtensionFacets = { ...storedFacets, ...sets }
   for (const key of deletions) delete mergedFacets[key]
+  const writes: wire.Write[] = []
   // Applied against what was read, so an entry this build's reader dropped
   // (a newer client's facet) is left alone rather than resynced away.
-  if (input.facets !== undefined) reconcileFacets(doc, storedFacets, mergedFacets)
+  if (input.facets !== undefined) {
+    writes.push({ op: 'reconcileFacets', args: { prev: storedFacets, next: mergedFacets } })
+  }
 
   let tags: string[] | undefined
   if (input.tags !== undefined) {
-    const core = readCoreFacets(doc)
+    const core = await coreFacetsOf(session)
     if (core === undefined) throw new DocumentHasNoFrontmatterError(documentId)
     tags = applyTagChange(core.tags, input.tags)
     const { tags: _previous, ...rest } = core
-    reconcileCoreFacets(doc, core, tags.length === 0 ? rest : { ...rest, tags })
+    writes.push({
+      op: 'reconcileCoreFacets',
+      args: { prev: core, next: tags.length === 0 ? rest : { ...rest, tags } },
+    })
   }
 
-  await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
+  session.write(writes)
+  await session.save()
 
   return { documentId, facets: mergedFacets, ...(tags === undefined ? {} : { tags }) }
 }
@@ -553,18 +583,26 @@ const tagSet = (what: string, current: readonly string[] | undefined, tags: stri
   tags,
 })
 
-function tagSetsAfter(doc: LoroDoc, input: FacetSetRequest, documentId: string): TagSet[] {
+async function tagSetsAfter(
+  session: DocumentSession,
+  input: FacetSetRequest,
+  documentId: string,
+): Promise<TagSet[]> {
   const change = input.tags
   if (change === undefined) return []
-  const kind = readDocumentKind(doc)
+  const kind = await kindOf(session)
   switch (writeSiteOf(input, kind)) {
     case 'node':
     case 'edge':
-      return kind === 'spatial' ? tagSetsAtElement(readSpatialCanvas(doc), input, change) : []
+      return kind === 'spatial'
+        ? tagSetsAtElement((await spatialCanvasOf(session)).canvas, input, change)
+        : []
     case 'canvas':
-      return kind === 'markdown' ? [] : tagSetsAtCanvas(readSpatialCanvas(doc), change)
+      return kind === 'markdown'
+        ? []
+        : tagSetsAtCanvas((await spatialCanvasOf(session)).canvas, change)
     case 'document':
-      return tagSetsAtDocument(doc, documentId, change)
+      return tagSetsAtDocument(await coreFacetsOf(session), documentId, change)
   }
 }
 
@@ -611,8 +649,11 @@ function tagSetsAtCanvas(canvas: SpatialCanvas, change: TagEdit): TagSet[] {
 }
 
 /** The dry run for a frontmatter write. */
-function tagSetsAtDocument(doc: LoroDoc, documentId: string, change: TagEdit): TagSet[] {
-  const core = readCoreFacets(doc)
+function tagSetsAtDocument(
+  core: Awaited<ReturnType<typeof coreFacetsOf>>,
+  documentId: string,
+  change: TagEdit,
+): TagSet[] {
   if (core === undefined) return []
   return [tagSet(`document ${documentId}`, core.tags, applyTagChange(core.tags, change))]
 }

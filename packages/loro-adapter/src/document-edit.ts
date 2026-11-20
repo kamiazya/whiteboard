@@ -1,4 +1,4 @@
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { SpatialCanvas, SpatialNode, documentEngine as wire } from '@kamiazya/whiteboard-model'
 import type { DocumentContainers } from './containers.js'
 import { MARKDOWN_BODY_KEY } from './containers.js'
 import { reconcileSpatialCanvas, writeSpatialNode } from './loro-bridge.js'
@@ -56,5 +56,36 @@ export function applyDocumentEdit(doc: DocumentContainers, edit: DocumentEdit): 
     case 'spatial-canvas':
       reconcileSpatialCanvas(doc, edit.before, edit.after)
       return
+  }
+}
+
+/**
+ * `edit` as the engine's writes: the same narrowest change `applyDocumentEdit`
+ * makes to a Loro document, so a keeper that holds a document as an engine
+ * lease applies a planner's plan without a Loro document of its own.
+ * `documentId` names the document in a workspace record; omit it for a document
+ * that is the root of its own record.
+ */
+export function documentEditWrites(edit: DocumentEdit, documentId?: string): wire.Write[] {
+  const at = documentId === undefined ? {} : { documentId }
+  switch (edit.kind) {
+    case 'markdown-splices':
+      return [{ op: 'spliceText', args: { ...at, text: MARKDOWN_BODY_KEY, runs: [...edit.runs] } }]
+    case 'markdown-body':
+      return [{ op: 'writeMarkdownBody', args: { ...at, body: edit.body } }]
+    case 'spatial-nodes':
+      return [
+        {
+          op: 'withSpatialBatch',
+          args: { ...at, steps: edit.nodes.map((node) => ({ op: 'writeNode', node })) },
+        },
+      ]
+    case 'spatial-canvas':
+      return [
+        {
+          op: 'reconcileSpatialCanvas',
+          args: { ...at, prev: edit.before, next: edit.after },
+        },
+      ]
   }
 }

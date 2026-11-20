@@ -5,12 +5,12 @@
 import { readFacets } from '@kamiazya/whiteboard-loro-adapter'
 import { VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
-import { loadOrCreateDocument } from '../document-io.js'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { readStoredDocumentOrEmpty } from '../test-utils/stored-document.js'
 import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentSetOperation } from './document-set.js'
 import { FacetWriteRejectedError } from './errors.js'
@@ -58,7 +58,7 @@ describe('whole-document writers refuse a stencil library the registry would not
     expect(refusal).toBeInstanceOf(FacetWriteRejectedError)
     expect((refusal as Error).message).toMatch(/worse/)
     expect((refusal as Error).message).toMatch(/visual\.shape\/v0/)
-    const stored = readFacets(await loadOrCreateDocument(deps, WORKSPACE_ID, DOCUMENT_ID))
+    const stored = readFacets(await readStoredDocumentOrEmpty(deps, WORKSPACE_ID, DOCUMENT_ID))
     expect(stored?.[VISUAL_STENCILS_KEY]).toBeUndefined()
   })
 
@@ -90,7 +90,7 @@ describe('whole-document writers refuse a stencil library the registry would not
       markdown: usableLibrary,
     })
 
-    const stored = readFacets(await loadOrCreateDocument(deps, WORKSPACE_ID, DOCUMENT_ID))
+    const stored = readFacets(await readStoredDocumentOrEmpty(deps, WORKSPACE_ID, DOCUMENT_ID))
     expect(
       Object.keys(stored?.[VISUAL_STENCILS_KEY] as { stencils: object }).length,
     ).toBeGreaterThan(0)

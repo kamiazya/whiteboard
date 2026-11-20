@@ -21,13 +21,13 @@ import {
   visualPlugin,
 } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { canvasEditInputSchema, createCanvasEditTool } from './canvas-edit.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -62,7 +62,7 @@ const run = async (ops: unknown[], facetRegistry?: FacetRegistry) => {
     ops,
   })
   const result = await createCanvasEditTool(deps).execute(input as never)
-  const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+  const { canvas } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
   return { result, canvas }
 }
 
@@ -293,7 +293,7 @@ describe('a workspace\u2019s own stencil library', () => {
       ops,
     })
     const result = await createCanvasEditTool(deps).execute(input as never)
-    const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     return { result, canvas }
   }
 

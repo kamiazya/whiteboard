@@ -3,8 +3,8 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { DOCUMENT_ID, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 
@@ -44,7 +44,7 @@ describe('wb_canvas_edit — line ops', () => {
 
     expect(result.applied).toBe(1)
     expect(result.touched.lines).toEqual(['l1'])
-    const stored = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    const stored = (await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
     expect(stored?.lines).toEqual([
       {
         id: 'l1',
@@ -75,7 +75,7 @@ describe('wb_canvas_edit — line ops', () => {
       ],
     })
 
-    const stored = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    const stored = (await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
     expect(stored?.lines?.[0]?.from).toEqual({ kind: 'node', node: 'a' })
   })
 
@@ -123,7 +123,7 @@ describe('wb_canvas_edit — line ops', () => {
       mode: 'apply',
       ops: [{ op: 'line.patch', id: 'l1', patch: { to: { kind: 'node', node: 'a' } } }],
     })
-    const patched = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    const patched = (await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
     expect(patched?.lines?.[0]?.to).toEqual({ kind: 'node', node: 'a' })
 
     await tool.execute({
@@ -132,7 +132,7 @@ describe('wb_canvas_edit — line ops', () => {
       mode: 'apply',
       ops: [{ op: 'line.remove', id: 'l1' }],
     })
-    const removed = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    const removed = (await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
     expect(removed?.lines ?? []).toEqual([])
   })
 
@@ -183,7 +183,7 @@ describe('wb_canvas_edit — line ops', () => {
       ops: [{ op: 'node.remove', id: 'a' }],
     })
 
-    const stored = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    const stored = (await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
     expect(stored?.lines?.map((line) => line.id)).toEqual(['free'])
   })
 })
@@ -218,7 +218,7 @@ describe('wb_canvas_edit — ink the batch never mentions', () => {
       ops: [{ op: 'node.patch', id: 'a', patch: { text: 'edited' } }],
     })
 
-    const stored = (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
+    const stored = (await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).canvas
     expect(stored?.lines?.map((line) => line.id)).toEqual(['l1'])
   })
 })

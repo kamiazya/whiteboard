@@ -1,11 +1,9 @@
-import { reconcileSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
-import { LoroDoc } from 'loro-crdt'
-import { afterEach, describe, expect, onTestFinished, test } from 'vitest'
-import { loadDocument, SnapshotNotFoundError, saveDocumentSnapshot } from './document-io.js'
+import { describe, expect, onTestFinished, test } from 'vitest'
+import { withDocument, withNewDocument } from './document-session.js'
+import { canvasOf } from './document-session-reads.js'
 import { setLogSink } from './log.js'
 import type { ServerDeps } from './server-deps.js'
 import { FakeDocumentStore, seedDoc } from './test-utils/fake-document-store.js'
@@ -15,131 +13,45 @@ import { unusedDocumentIndex } from './test-utils/unused-document-index.js'
 const WORKSPACE_ID = '01ZVM89A4A1V9FS03Z9J64KEK1'
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 
-const EMPTY: SpatialCanvas = { nodes: [], edges: [] }
-
 const canvasDeps = (documentStore: FakeDocumentStore) =>
   makeTestDeps({ documentStore, documentIndex: unusedDocumentIndex() })
 
-/** The save a patched canvas takes: the visible diff of the two canvases, then the snapshot. */
-async function saveDocumentBodySnapshot(
-  deps: ServerDeps,
-  workspaceId: string,
-  documentId: string,
-  doc: LoroDoc,
-  prev: SpatialCanvas,
-  next: SpatialCanvas,
-): Promise<void> {
-  reconcileSpatialCanvas(doc, prev, next)
-  await saveDocumentSnapshot(deps, workspaceId, documentId, doc)
-}
+/** A save of an empty document, which is what announces the write. */
+const saveEmptyDocument = (deps: ServerDeps) =>
+  withNewDocument(deps, WORKSPACE_ID, DOCUMENT_ID, (session) => session.save())
 
 describe('document-io', () => {
-  test('loadDocument throws SnapshotNotFoundError when no snapshot exists', async () => {
-    const documentStore = new FakeDocumentStore()
-    await expect(
-      loadDocument(canvasDeps(documentStore), WORKSPACE_ID, DOCUMENT_ID),
-    ).rejects.toThrow(SnapshotNotFoundError)
-  })
-
-  // Moved here with the loader: this used to live beside a second,
-  // byte-identical copy of the canvas loader, which is what made two classes
-  // for one condition look reasonable.
-  test('loadDocument returns the doc and the decoded canvas for an existing snapshot', async () => {
-    const documentStore = new FakeDocumentStore()
-    await seedDoc(documentStore, DOCUMENT_ID, (doc) => {
-      writeSpatialCanvas(doc, {
-        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hello' })],
-        edges: [],
-      })
-    })
-
-    const { doc, canvas } = await loadDocument(canvasDeps(documentStore), WORKSPACE_ID, DOCUMENT_ID)
-
-    expect(doc).toBeInstanceOf(LoroDoc)
-    expect(canvas.nodes).toEqual([
-      textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hello' }),
-    ])
-  })
-
-  // What the loader knows is that a stored record failed validation, not why:
-  // a newer client's field and a record an older writer stored over a limit
-  // look identical here, so the warning must not pick one for the operator.
-  describe('a stored record that fails validation', () => {
-    afterEach(() => setLogSink(() => {}))
-
-    test('is warned about without guessing the cause', async () => {
-      const records: { level: string; msg: string; data?: Record<string, unknown> }[] = []
-      setLogSink((record) => records.push(record))
-      const documentStore = new FakeDocumentStore()
-      await seedDoc(documentStore, DOCUMENT_ID, (doc) => {
-        writeSpatialCanvas(doc, {
-          nodes: [],
-          edges: [],
-          lines: [
-            {
-              id: 'ink-1',
-              from: { kind: 'point', point: { x: 0, y: 0 }, end: 'none' },
-              to: { kind: 'point', point: { x: 9, y: 9 }, end: 'none' },
-              bends: Array.from({ length: 65 }, (_, i) => ({ x: i, y: i })),
-            },
-          ],
-        })
-      })
-
-      const { canvas } = await loadDocument(canvasDeps(documentStore), WORKSPACE_ID, DOCUMENT_ID)
-
-      expect(canvas.lines ?? []).toEqual([])
-      const warning = records.find((record) => record.level === 'warning')
-      expect(warning?.data).toMatchObject({ documentId: DOCUMENT_ID, skipped: 1 })
-      expect(warning?.msg).toMatch(/failed validation/)
-      expect(warning?.msg).not.toMatch(/newer|this build/)
-    })
-  })
-
-  test('save then load round trip preserves nodes untouched by the patch', async () => {
+  test('a patched canvas saved and reloaded keeps the nodes the patch did not touch', async () => {
     const documentStore = new FakeDocumentStore()
     const deps = canvasDeps(documentStore)
-
-    const canvas: SpatialCanvas = {
-      nodes: [
-        textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hello' }),
-        textNode({ id: 'n2', x: 10, y: 10, width: 100, height: 50, text: 'world' }),
-      ],
-      edges: [],
-    }
-
-    // Seed the store directly (bypassing the tool under test).
-    const seedDoc = new LoroDoc()
-    writeSpatialCanvas(seedDoc, canvas)
-    const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
-    await documentStore.saveSnapshot({
-      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
-      manifest,
-      chunks,
-      frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
-    })
-
-    const loaded = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
-    expect(loaded.canvas.nodes).toHaveLength(2)
-
-    // Simulate a patch that only touches n1, passing the FULL node array back.
-    const patched: SpatialCanvas = {
-      nodes: loaded.canvas.nodes.map((node) => (node.id === 'n1' ? { ...node, x: 99 } : node)),
-      edges: loaded.canvas.edges,
-    }
-    await saveDocumentBodySnapshot(
-      deps,
-      WORKSPACE_ID,
-      DOCUMENT_ID,
-      loaded.doc,
-      loaded.canvas,
-      patched,
+    await seedDoc(documentStore, DOCUMENT_ID, (doc) =>
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hello' }),
+          textNode({ id: 'n2', x: 10, y: 10, width: 100, height: 50, text: 'world' }),
+        ],
+        edges: [],
+      }),
     )
 
-    const reloaded = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
-    expect(reloaded.canvas.nodes).toHaveLength(2)
-    const n2 = reloaded.canvas.nodes.find((node) => node.id === 'n2')
-    expect(n2).toEqual(canvas.nodes[1])
+    // A patch that touches only n1, handing the FULL node array back.
+    await withDocument(deps, WORKSPACE_ID, DOCUMENT_ID, async (session) => {
+      const canvas = await canvasOf(session)
+      expect(canvas.nodes).toHaveLength(2)
+      const patched = {
+        nodes: canvas.nodes.map((node) => (node.id === 'n1' ? { ...node, x: 99 } : node)),
+        edges: canvas.edges,
+      }
+      session.write([{ op: 'reconcileSpatialCanvas', args: { prev: canvas, next: patched } }])
+      await session.save()
+    })
+
+    const reloaded = await withDocument(deps, WORKSPACE_ID, DOCUMENT_ID, canvasOf)
+    expect(reloaded.nodes).toHaveLength(2)
+    expect(reloaded.nodes.find((node) => node.id === 'n1')?.x).toBe(99)
+    expect(reloaded.nodes.find((node) => node.id === 'n2')).toEqual(
+      textNode({ id: 'n2', x: 10, y: 10, width: 100, height: 50, text: 'world' }),
+    )
   })
 })
 
@@ -164,14 +76,7 @@ describe('documentWritten', () => {
     const documentStore = new FakeDocumentStore()
     const { seen, observer } = observed()
 
-    await saveDocumentBodySnapshot(
-      { ...canvasDeps(documentStore), documentWritten: observer },
-      WORKSPACE_ID,
-      DOCUMENT_ID,
-      new LoroDoc(),
-      EMPTY,
-      EMPTY,
-    )
+    await saveEmptyDocument({ ...canvasDeps(documentStore), documentWritten: observer })
 
     expect(seen).toEqual([DOCUMENT_ID])
   })
@@ -188,7 +93,7 @@ describe('documentWritten', () => {
     })
     const heard: { documentId: string; keys: string[]; path?: string }[] = []
 
-    await saveDocumentBodySnapshot(
+    await withNewDocument(
       {
         ...makeTestDeps({ documentStore: new FakeDocumentStore(), documentIndex }),
         documentWritten: async (input) => {
@@ -201,9 +106,7 @@ describe('documentWritten', () => {
       },
       WORKSPACE_ID,
       entry.documentId,
-      new LoroDoc(),
-      EMPTY,
-      EMPTY,
+      (session) => session.save(),
     )
 
     expect(heard).toEqual([
@@ -218,19 +121,12 @@ describe('documentWritten', () => {
   test('an index that cannot place the document still notifies, without a path', async () => {
     const heard: { path?: string }[] = []
 
-    await saveDocumentBodySnapshot(
-      {
-        ...canvasDeps(new FakeDocumentStore()),
-        documentWritten: async (input) => {
-          heard.push(input.path === undefined ? {} : { path: input.path })
-        },
+    await saveEmptyDocument({
+      ...canvasDeps(new FakeDocumentStore()),
+      documentWritten: async (input) => {
+        heard.push(input.path === undefined ? {} : { path: input.path })
       },
-      WORKSPACE_ID,
-      DOCUMENT_ID,
-      new LoroDoc(),
-      EMPTY,
-      EMPTY,
-    )
+    })
 
     expect(heard).toEqual([{}])
   })
@@ -250,19 +146,12 @@ describe('documentWritten', () => {
       },
     })
 
-    await saveDocumentBodySnapshot(
-      {
-        ...canvasDeps(documentStoreSpy as FakeDocumentStore),
-        documentWritten: async () => {
-          order.push('observed')
-        },
+    await saveEmptyDocument({
+      ...canvasDeps(documentStoreSpy as FakeDocumentStore),
+      documentWritten: async () => {
+        order.push('observed')
       },
-      WORKSPACE_ID,
-      DOCUMENT_ID,
-      new LoroDoc(),
-      EMPTY,
-      EMPTY,
-    )
+    })
 
     expect(order).toEqual(['saved', 'observed'])
   })
@@ -279,19 +168,12 @@ describe('documentWritten', () => {
     const documentStore = new FakeDocumentStore()
 
     await expect(
-      saveDocumentBodySnapshot(
-        {
-          ...canvasDeps(documentStore),
-          documentWritten: async () => {
-            throw new Error('scheduler exploded')
-          },
+      saveEmptyDocument({
+        ...canvasDeps(documentStore),
+        documentWritten: async () => {
+          throw new Error('scheduler exploded')
         },
-        WORKSPACE_ID,
-        DOCUMENT_ID,
-        new LoroDoc(),
-        EMPTY,
-        EMPTY,
-      ),
+      }),
     ).resolves.toBeUndefined()
 
     expect(

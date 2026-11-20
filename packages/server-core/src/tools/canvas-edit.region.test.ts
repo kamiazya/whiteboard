@@ -3,8 +3,8 @@
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
-import { loadDocument } from '../document-io.js'
 import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
+import { readStoredDocument } from '../test-utils/stored-document.js'
 import { DOCUMENT_ID, EMPTY, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { canvasEditInputSchema, createCanvasEditTool, PLACEMENT_GUTTER_PX } from './canvas-edit.js'
 
@@ -50,7 +50,7 @@ describe('wb_canvas_edit — region.set', () => {
       ],
     })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id).sort()).toEqual(['g', 'inside-new', 'outside'])
     expect(result.touched.nodes).toContain('inside-old')
     expect(result.touched.nodes).toContain('inside-new')
@@ -79,7 +79,7 @@ describe('wb_canvas_edit — region.set', () => {
     })
 
     expect(result.touched.nodes).not.toContain('straddling')
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id).sort()).toEqual(['g', 'straddling'])
   })
 
@@ -105,7 +105,7 @@ describe('wb_canvas_edit — region.set', () => {
     })
 
     expect(result.touched.nodes).not.toContain('straddling')
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.find((node) => node.id === 'straddling')).toMatchObject({ x: 460, y: 20 })
   })
 
@@ -121,7 +121,7 @@ describe('wb_canvas_edit — region.set', () => {
       ops: [{ op: 'region.set', within: 'g', nodes: [] }],
     })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id)).toEqual(['g'])
   })
 
@@ -158,7 +158,7 @@ describe('wb_canvas_edit — region.set', () => {
       ops: [{ op: 'region.set', within: 'g', nodes: ['a'] }],
     })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.edges.map((e) => e.id)).toEqual(['leaving'])
     // A side-effect deletion is still a change the caller is told about.
     expect(result.touched.edges).toEqual(['internal'])
@@ -200,7 +200,7 @@ describe('wb_canvas_edit — region.set', () => {
       ops: [{ op: 'region.set', within: 'g', nodes: ['a', 'b'], edges: ['keep'] }],
     })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.edges.map((e) => e.id).sort()).toEqual(['keep', 'leaving'])
     expect(result.touched.edges).toEqual(['drop'])
   })
@@ -233,7 +233,7 @@ describe('wb_canvas_edit — region.set', () => {
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id).sort()).toEqual(['g', 'pinned'])
   })
 
@@ -259,13 +259,13 @@ describe('wb_canvas_edit — region.set', () => {
     expect((moved?.y ?? 0) + (moved?.height ?? 0)).toBeLessThanOrEqual(GROUP.y + GROUP.height)
     expect(result.touched.nodes).toContain('one')
 
-    const before = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const before = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     const again = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       ops: [op],
     })
-    const after = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const after = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(after.canvas).toEqual(before.canvas)
     expect(again.touched.nodes).toEqual([])
   })
@@ -299,7 +299,7 @@ describe('wb_canvas_edit — region.set', () => {
       opIndex: 0,
       message: expect.stringMatching(/locked/),
     })
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.find((node) => node.id === 'outsider')).toMatchObject({ x: 900, y: 900 })
 
     await expect(
@@ -377,7 +377,7 @@ describe('wb_canvas_edit — region.set', () => {
       ],
     })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.edges.map((edge) => edge.id)).toEqual(['outside'])
   })
 
@@ -408,7 +408,7 @@ describe('wb_canvas_edit — region.set', () => {
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.edges.map((edge) => edge.id)).toEqual(['smuggled'])
   })
 
@@ -432,7 +432,7 @@ describe('wb_canvas_edit — region.set', () => {
       opIndex: 0,
       message: expect.stringMatching(/"g" is the group itself, not one of its members/),
     })
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.map((node) => node.id).sort()).toEqual(['a', 'g'])
   })
 
@@ -470,7 +470,7 @@ describe('wb_canvas_edit — region.set', () => {
       ],
     })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     const at = (id: string) => {
       const n = canvas.nodes.find((node) => node.id === id) as SpatialNode
       return [n.x, n.y, n.width, n.height]
@@ -513,7 +513,7 @@ describe('wb_canvas_edit — region.set', () => {
       ],
     })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     const g = canvas.nodes.find((node) => node.id === 'g') as SpatialNode
     expect([g.x, g.y, g.width, g.height]).toEqual([
       100 - PLACEMENT_GUTTER_PX,
@@ -590,7 +590,7 @@ describe('wb_canvas_edit — region.set', () => {
       ],
     })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     const at = (id: string) => {
       const n = canvas.nodes.find((node) => node.id === id) as SpatialNode
       return [n.x, n.y, n.width, n.height]
@@ -647,7 +647,7 @@ describe('wb_canvas_edit — region.set', () => {
       ],
     })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     const at = (id: string) => {
       const n = canvas.nodes.find((node) => node.id === id) as SpatialNode
       return [n.x, n.y, n.width, n.height]
@@ -734,7 +734,7 @@ describe('wb_canvas_edit — region.set', () => {
       ],
     })
 
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const { canvas } = await readStoredDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     const inner = canvas.nodes.find((node) => node.id === 'inner') as SpatialNode
     expect([inner.x, inner.y, inner.width, inner.height]).toEqual([60, 60, 580, 160])
   })

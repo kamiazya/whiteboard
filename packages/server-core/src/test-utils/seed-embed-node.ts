@@ -1,7 +1,7 @@
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
-import { loadDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
+import { readStoredDocument, writeStoredDocument } from '../test-utils/stored-document.js'
 
 /**
  * Stores a node carrying `embed` straight into a spatial document. The tool
@@ -15,7 +15,7 @@ export async function seedEmbedNode(
   documentId: string,
   node: { id: string; targetDocumentId: string },
 ): Promise<void> {
-  const { doc } = await loadDocument(deps, workspaceId, documentId)
+  const { doc } = await readStoredDocument(deps, workspaceId, documentId)
   const canvas = readSpatialCanvas(doc)
   writeSpatialCanvas(doc, {
     ...canvas,
@@ -32,5 +32,5 @@ export async function seedEmbedNode(
       }),
     ],
   })
-  await saveDocumentSnapshot(deps, workspaceId, documentId, doc)
+  await writeStoredDocument(deps, workspaceId, documentId, doc)
 }

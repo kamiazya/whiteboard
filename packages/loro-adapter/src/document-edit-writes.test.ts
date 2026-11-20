@@ -1,18 +1,14 @@
-import {
-  applyDocumentEdit,
-  createWorkspaceDocumentAtPath,
-  type DocumentEdit,
-  documentContainers,
-  lease,
-  readDocumentContent,
-  writeMarkdownBody,
-  writeSpatialCanvas,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { leaseOf } from '../test-utils/replica-lease.js'
-import { documentEditWrites } from './document-edit-writes.js'
+import { readDocumentContent } from './document-content.js'
+import { applyDocumentEdit, type DocumentEdit, documentEditWrites } from './document-edit.js'
+import { createCrdtEngine } from './engine/engine.js'
+import { ownedLease, read, write } from './engine/lease.js'
+import { writeSpatialCanvas } from './loro-bridge.js'
+import { writeMarkdownBody } from './markdown-body.js'
+import { createWorkspaceDocumentAtPath, documentContainers } from './workspace-tree.js'
 
 const MD = '01ARZ3NDEKTSV4RRFFQ69G5FB1'
 const SP = '01ARZ3NDEKTSV4RRFFQ69G5FB2'
@@ -59,21 +55,48 @@ const EDITS: ReadonlyArray<readonly [string, string, DocumentEdit]> = [
   ],
 ]
 
+const open = (doc: LoroDoc) => {
+  const engine = createCrdtEngine()
+  const bytes = bytesToBase64(doc.export({ mode: 'snapshot' }))
+  return ownedLease(engine, engine.open({ peer: '1', bytes }).handle)
+}
+
+const asIs = { parse: (value: unknown) => value }
+
 describe('documentEditWrites', () => {
-  it.each(EDITS)('leaves the document as applyDocumentEdit does: %s', async (_name, id, edit) => {
+  it.each(EDITS)('leaves a record as applyDocumentEdit does: %s', async (_name, id, edit) => {
     const direct = recordDoc()
     applyDocumentEdit(documentContainers(direct, id), edit)
-    const record = await leaseOf(recordDoc())
+    const record = open(recordDoc())
     try {
-      lease.write(record, documentEditWrites(id, edit), { judge: 'none' })
-      const through = await lease.read(
+      write(record, documentEditWrites(edit, id), { judge: 'none' })
+      const through = await read(
         record,
         { query: 'documentContent', args: { documentId: id } },
-        { parse: (value) => value },
+        asIs,
       )
       expect(through).toEqual(readDocumentContent(documentContainers(direct, id)))
     } finally {
       record.release()
+    }
+  })
+
+  it.each(
+    EDITS.filter(([, id]) => id === MD).map(([name, , edit]) => [name, edit] as const),
+  )('leaves a document that is its own record as applyDocumentEdit does: %s', async (_name, edit) => {
+    const seed = new LoroDoc()
+    writeMarkdownBody(seed, 'Beta and Beta again')
+    seed.commit()
+    const direct = LoroDoc.fromSnapshot(seed.export({ mode: 'snapshot' }))
+    applyDocumentEdit(direct, edit)
+    const held = open(seed)
+    try {
+      write(held, documentEditWrites(edit), { judge: 'none' })
+      expect(await read(held, { query: 'documentContent' }, asIs)).toEqual(
+        readDocumentContent(direct),
+      )
+    } finally {
+      held.release()
     }
   })
 })
