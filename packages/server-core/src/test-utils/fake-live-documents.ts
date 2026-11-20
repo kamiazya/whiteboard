@@ -1,7 +1,16 @@
+import {
+  bindRecordOps,
+  createWorkspaceDocumentAtPath,
+  legacyRecordOps,
+  projectWorkspaceDocument,
+  readWorkspaceDocuments,
+  writeWorkspaceDocumentContent,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
-import type { LiveDocuments } from '../server-deps.js'
+import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
+import { unusedWorkspaceDocuments } from './unused-workspace-documents.js'
 
 /** Live docs by path — what the restore operation reconciles onto. */
 export class FakeLiveDocuments implements LiveDocuments {
@@ -33,6 +42,40 @@ export class FakeLiveDocuments implements LiveDocuments {
       this.ids.set(path, documentId)
       return { documentId, path }
     })
+  }
+  /**
+   * The record a restore writes into, over these documents: opened from what
+   * they hold and saved back into them.
+   */
+  workspaceDocuments(): WorkspaceDocuments {
+    const live = this
+    return {
+      ...unusedWorkspaceDocuments(),
+      async open() {
+        const record = new LoroDoc()
+        for (const { documentId, path } of await live.list()) {
+          createWorkspaceDocumentAtPath(record, {
+            path,
+            documentId: documentId as string,
+            kind: live.kinds.get(path) ?? 'spatial',
+          })
+          writeWorkspaceDocumentContent(
+            record,
+            documentId as string,
+            live.docs.get(path) as LoroDoc,
+          )
+        }
+        return bindRecordOps(legacyRecordOps, record, async () => {
+          for (const entry of readWorkspaceDocuments(record)) {
+            const projected = projectWorkspaceDocument(record, entry.documentId)
+            if (projected !== null) live.docs.set(entry.path, projected)
+            live.kinds.set(entry.path, entry.kind)
+          }
+        })
+      },
+      evict() {},
+      evictProjections() {},
+    }
   }
   async rename(): Promise<void> {
     throw new Error('not exercised')

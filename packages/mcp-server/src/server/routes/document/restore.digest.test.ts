@@ -73,7 +73,7 @@ describe('an in-place restore', () => {
       `/api/workspaces/${WS}/documents/${documentId}/versions/${version.id}/restore`,
       { method: 'POST' },
     )
-    return { res, digestAtV1, digestAfterEdit }
+    return { res, digestAtV1, digestAfterEdit, versionId: version.id }
   }
 
   it('leaves the document with the content digest the version was saved at', async () => {
@@ -85,12 +85,13 @@ describe('an in-place restore', () => {
 
   it('answers changed for a restore that moved the content, and unchanged for one repeated', async () => {
     const app = createRouter()
-    const { res } = await restoreOnce(app)
+    const { res, versionId } = await restoreOnce(app)
     expect(res.status).toBe(200)
     const points = async () =>
       (await serverDeps.versions.list(WS, 'canvas-a')).filter((v) => v.restoredFrom !== undefined)
     expect(await points()).toHaveLength(1)
-    const versionId = (await points())[0]?.restoredFrom as string
+    // The restore point names the version that was saved and restored.
+    expect((await points())[0]?.restoredFrom).toBe(versionId)
     const again = await app.request(
       `/api/workspaces/${WS}/documents/${await documentIdAt(serverDeps, WS, 'canvas-a')}/versions/${versionId}/restore`,
       { method: 'POST' },

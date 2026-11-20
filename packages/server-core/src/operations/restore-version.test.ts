@@ -123,6 +123,17 @@ describe('restoreVersion in-place mode', () => {
     expectAllCallsLocked(live)
   })
 
+  it('answers not-found, writing nothing, for a document the record no longer holds when the write is reached', async () => {
+    // The history still names the version, but another process over the same
+    // data directory removed the document between the lookup and the write.
+    const live = new FakeLive()
+    const result = await run(live, versionsWith({ v1: { doc: spatialDoc(['n1']) } }))
+    expect(result).toEqual({ kind: 'not-found' })
+    expect(live.calls.map((c) => c.method)).not.toContain('save')
+    expect(live.recordsDropped).toEqual([])
+    expectAllCallsLocked(live)
+  })
+
   it('evicts the live doc when save fails, and the failure propagates', async () => {
     const live = new FakeLive()
     live.seed('canvas-a', spatialDoc(['n1']))
@@ -130,21 +141,27 @@ describe('restoreVersion in-place mode', () => {
     await expect(run(live, versionsWith({ v1: { doc: spatialDoc(['n2']) } }))).rejects.toThrow(
       'disk full',
     )
-    expect(live.evicted).toEqual(['canvas-a'])
+    // The record the write landed in is dropped unsaved, and the projections cut from it.
+    expect(live.recordsDropped).toEqual([WS])
+    expect(live.projectionsDropped).toEqual([WS])
+    expect(nodeIdsAt(live, 'canvas-a')).toEqual(['n1'])
+    expectAllCallsLocked(live)
   })
 
-  it('evicts the live doc when reconcile itself fails', async () => {
+  it('evicts the live doc when the past state is one the restore cannot write back', async () => {
     const live = new FakeLive()
     live.seed('canvas-a', spatialDoc(['n1']))
     // A past state holding a node in the retired shape (a kind and its own
-    // field), which the restore cannot write back: it fails inside the
-    // reconcile step, before any save runs.
+    // field), which the restore cannot write back: it is refused at the sync
+    // judge, before the reconcile and before any save. A failure AFTER the
+    // judge is held by the save-fails case above.
     const mismatched = new LoroDoc()
     mismatched.getMap('nodes').set('n1', { id: 'n1', type: 'text', text: 'old shape' })
     mismatched.commit()
     const poisoned = versionsWith({ v1: { doc: mismatched } })
     await expect(run(live, poisoned)).rejects.toThrow()
-    expect(live.evicted).toEqual(['canvas-a'])
+    expect(live.recordsDropped).toEqual([WS])
+    expect(live.projectionsDropped).toEqual([WS])
     expect(live.calls.map((c) => c.method)).not.toContain('save')
   })
 
@@ -483,10 +500,11 @@ describe('a restore records the merge point it creates', () => {
     live.seed('canvas-a', spatialDoc(['now']))
     const versions = versionsWith({ 'v-past': { doc: spatialDoc(['then']), path: 'canvas-a' } })
 
-    const result = await restoreVersion(
-      { versions, liveDocuments: live },
-      { workspaceId: WS, path: 'canvas-a', versionId: 'v-past' },
-    )
+    const result = await restoreVersion(live.deps(versions), {
+      workspaceId: WS,
+      path: 'canvas-a',
+      versionId: 'v-past',
+    })
 
     expect(result).toEqual({ kind: 'restored-in-place' })
     expect(versions.saved).toHaveLength(1)
@@ -503,10 +521,12 @@ describe('a restore records the merge point it creates', () => {
     live.seed('canvas-a', spatialDoc(['now']))
     const versions = versionsWith({ 'v-past': { doc: spatialDoc(['then']), path: 'canvas-a' } })
 
-    const result = await restoreVersion(
-      { versions, liveDocuments: live },
-      { workspaceId: WS, path: 'canvas-a', versionId: 'v-past', targetPath: 'canvas-new' },
-    )
+    const result = await restoreVersion(live.deps(versions), {
+      workspaceId: WS,
+      path: 'canvas-a',
+      versionId: 'v-past',
+      targetPath: 'canvas-new',
+    })
 
     expect(result).toMatchObject({ kind: 'restored-to-target', targetPath: 'canvas-new' })
     expect(versions.saved).toEqual([
@@ -520,16 +540,13 @@ describe('a restore records the merge point it creates', () => {
     live.seed('canvas-b', spatialDoc(['other']))
     const versions = versionsWith({ 'v-past': { doc: spatialDoc(['then']), path: 'canvas-a' } })
 
-    await restoreVersion(
-      { versions, liveDocuments: live },
-      {
-        workspaceId: WS,
-        path: 'canvas-a',
-        versionId: 'v-past',
-        targetPath: 'canvas-b',
-        overwrite: true,
-      },
-    )
+    await restoreVersion(live.deps(versions), {
+      workspaceId: WS,
+      path: 'canvas-a',
+      versionId: 'v-past',
+      targetPath: 'canvas-b',
+      overwrite: true,
+    })
 
     // The document that CHANGED is the one whose history gained a point.
     expect(versions.saved).toHaveLength(1)

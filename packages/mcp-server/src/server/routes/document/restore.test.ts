@@ -325,7 +325,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:documentId/versions/:id/r
     expect(ids).toEqual(['added-after-v1', 'keep-me'])
   })
 
-  it('evicts the cached doc when reconcile/commit itself fails during in-place restore, not only when saveDocument fails', async () => {
+  it('drops the record unsaved when the write at the document node itself fails during in-place restore, not only when the save fails', async () => {
     const app = createRouter()
 
     const initial = new LoroDoc()
@@ -350,13 +350,14 @@ describe('POST /api/workspaces/:workspaceId/documents/:documentId/versions/:id/r
 
     expect(peekDoc(SESSION1, 'canvas-a')).toBeDefined()
 
-    // The reconcile has already mutated the live cached doc by the time its
-    // commit() runs, so a throw here must still evict the cache -- not only
-    // the saveDocument failure path further down. Spied on the cached
-    // INSTANCE, not the prototype: version machinery commits its own clones
-    // and projections first, and those must pass through.
-    const cachedLive = peekDoc(SESSION1, 'canvas-a')!
-    const commitSpy = vi.spyOn(cachedLive, 'commit').mockImplementationOnce(() => {
+    // The write at the document's node has already mutated the cached record
+    // by the time its commit() runs, so a throw here must still drop the
+    // record unsaved — not only the save failure path above. Spied on the
+    // cached INSTANCE, not the prototype: version machinery commits its own
+    // clones and projections first, and those must pass through.
+    const { getWorkspaceDoc } = await import('../../store/workspace-doc-cache.js')
+    const cachedRecord = await getWorkspaceDoc(SESSION1)
+    const commitSpy = vi.spyOn(cachedRecord, 'commit').mockImplementationOnce(() => {
       throw new Error('simulated commit failure')
     })
 
@@ -368,6 +369,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:documentId/versions/:id/r
 
     expect(restoreRes.status).toBe(500)
     expect(peekDoc(SESSION1, 'canvas-a')).toBeUndefined()
+    expect(await getWorkspaceDoc(SESSION1)).not.toBe(cachedRecord)
 
     const reloaded = await getDoc(SESSION1, 'canvas-a')
     const ids = Object.keys(reloaded.getMap('nodes').toJSON()).sort()
@@ -402,7 +404,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:documentId/versions/:id/r
 // instead of replacing persistence, so connected clients stay on the same
 // CRDT lineage and converge through the normal update broadcast.
 describe('overwrite restore reconciles instead of replacing', () => {
-  it('targetPath === path with overwrite:true reconciles the live doc in place and broadcasts an update', async () => {
+  it('targetPath === path with overwrite:true writes the past at the document node and broadcasts an update', async () => {
     const app = createRouter()
 
     // v1: one element.
@@ -427,8 +429,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     initial.commit()
     await seed('canvas-a', initial.export({ mode: 'update', from: vv1 }) as Uint8Array<ArrayBuffer>)
 
-    const docBefore = peekDoc(SESSION1, 'canvas-a')
-    expect(docBefore).toBeDefined()
+    expect(peekDoc(SESSION1, 'canvas-a')).toBeDefined()
 
     // The restore persists through the workspace record; its funnel — the
     // only fan-out left — carries the persisted bytes to subscribers.
@@ -452,9 +453,9 @@ describe('overwrite restore reconciles instead of replacing', () => {
     }
     expect(restoreRes.status).toBe(200)
 
-    // Same object identity: the cached doc was mutated in place, not
-    // replaced by a differently-lineaged document loaded from `past`.
-    expect(peekDoc(SESSION1, 'canvas-a')).toBe(docBefore)
+    // The projection cut before the restore is dropped, so the next reader
+    // gets the record's content and no stale copy can write the old one back.
+    expect(peekDoc(SESSION1, 'canvas-a')).toBeUndefined()
 
     expect(funnelUpdates).toHaveLength(1)
     expect(funnelUpdates[0]?.workspaceId).toBe(SESSION1)
