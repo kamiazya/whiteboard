@@ -17,7 +17,7 @@ import { bytesToBase64Url, newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { leaseOf } from '../test-utils/replica-lease.js'
+import { withLeaseOf } from '../test-utils/replica-lease.js'
 import { versionsWithinJudgedBudget } from './carried-planes.js'
 
 const KNOWN = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -76,15 +76,11 @@ describe('versionsWithinJudgedBudget prices a version as the keeper charges it',
     expect(smallSize).toBeLessThan(largeSize)
     const versions = [version('old', KNOWN, small, 1), version('new', KNOWN, large, 2)]
 
-    const exact = await versionsWithinJudgedBudget(
-      await leaseOf(record),
-      versions,
-      largeSize + smallSize,
+    const exact = await withLeaseOf(record, (held) =>
+      versionsWithinJudgedBudget(held, versions, largeSize + smallSize),
     )
-    const short = await versionsWithinJudgedBudget(
-      await leaseOf(record),
-      versions,
-      largeSize + smallSize - 1,
+    const short = await withLeaseOf(record, (held) =>
+      versionsWithinJudgedBudget(held, versions, largeSize + smallSize - 1),
     )
 
     expect(exact).toEqual({ kept: versions, dropped: 0 })
@@ -95,7 +91,9 @@ describe('versionsWithinJudgedBudget prices a version as the keeper charges it',
     const { record, large, largeSize } = history()
     const versions = [version('a', KNOWN, large, 1), version('b', KNOWN, large, 2)]
 
-    const fitted = await versionsWithinJudgedBudget(await leaseOf(record), versions, largeSize)
+    const fitted = await withLeaseOf(record, (held) =>
+      versionsWithinJudgedBudget(held, versions, largeSize),
+    )
 
     expect(fitted).toEqual({ kept: versions, dropped: 0 })
   })
@@ -112,7 +110,9 @@ describe('versionsWithinJudgedBudget prices a version as the keeper charges it',
       version('not-base64', KNOWN, '!!', 4),
     ]
 
-    const fitted = await versionsWithinJudgedBudget(await leaseOf(record), versions, 0)
+    const fitted = await withLeaseOf(record, (held) =>
+      versionsWithinJudgedBudget(held, versions, 0),
+    )
 
     expect(fitted).toEqual({ kept: versions, dropped: 0 })
   })
@@ -120,21 +120,29 @@ describe('versionsWithinJudgedBudget prices a version as the keeper charges it',
   it('gives the one view it moved back, and opens none when it prices nothing', async () => {
     const { record, small, large, smallSize, largeSize } = history()
     const engine = await loadCrdtEngine()
-    const lent = await leaseOf(record)
     const fork = vi.spyOn(engine, 'fork')
     const close = vi.spyOn(engine, 'close')
 
-    await versionsWithinJudgedBudget(lent, [], 1)
-    expect(fork).not.toHaveBeenCalled()
+    await withLeaseOf(record, async (lent) => {
+      await versionsWithinJudgedBudget(lent, [], 1)
+      expect(fork).not.toHaveBeenCalled()
 
-    await versionsWithinJudgedBudget(
-      lent,
-      [version('old', KNOWN, small, 1), version('new', KNOWN, large, 2)],
-      smallSize + largeSize,
-    )
+      await versionsWithinJudgedBudget(
+        lent,
+        [version('old', KNOWN, small, 1), version('new', KNOWN, large, 2)],
+        smallSize + largeSize,
+      )
 
-    expect(fork).toHaveBeenCalledOnce()
-    // The view, and the standalone document each version's projection opens.
-    expect(close).toHaveBeenCalledTimes(3)
+      expect(fork).toHaveBeenCalledOnce()
+      const forkedHandle = fork.mock.results.flatMap((result) =>
+        result.type === 'return' ? [result.value.handle] : [],
+      )[0]
+      // The view is given back, and so is the standalone document each version's
+      // projection opens; the lent record is not the view's to close.
+      expect(close).toHaveBeenCalledWith({ handle: forkedHandle })
+      expect(close).not.toHaveBeenCalledWith({ handle: lent.handle })
+      expect(close).toHaveBeenCalledTimes(3)
+      expect(() => lent.engine.version({ handle: lent.handle })).not.toThrow()
+    })
   })
 })

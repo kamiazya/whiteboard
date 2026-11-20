@@ -4,7 +4,6 @@
  * entry or a saved version does.
  */
 import {
-  loadCrdtEngine,
   projectWorkspaceDocument,
   writeProposal,
   writeSpatialCanvas,
@@ -23,6 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { watchEngineHandles } from '../test-utils/replica-lease.js'
 import { putRawSyncRow } from '../test-utils/seed-retired-sync-row.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { sweepUnreferencedFiles } from './browser-file-sweep.js'
@@ -385,15 +385,9 @@ describe('sweepUnreferencedFiles stands down rather than delete what it could no
  * down: a handle left open holds a whole workspace in memory for the page's life.
  */
 async function handlesOpenedAndClosed(run: () => Promise<unknown>) {
-  const engine = await loadCrdtEngine()
-  const opened = vi.spyOn(engine, 'open')
-  const forked = vi.spyOn(engine, 'fork')
-  const closed = vi.spyOn(engine, 'close')
+  const watched = await watchEngineHandles()
   await run()
-  // A call that threw made no handle, so only the ones that returned count.
-  const made = (spy: { mock: { results: Array<{ type: string }> } }) =>
-    spy.mock.results.filter((result) => result.type === 'return').length
-  return { opened: made(opened) + made(forked), closed: closed.mock.calls.length }
+  return { opened: watched.minted().length, unaccounted: watched.unaccounted() }
 }
 
 describe('sweepUnreferencedFiles gives back every engine handle it opens', () => {
@@ -414,7 +408,7 @@ describe('sweepUnreferencedFiles gives back every engine handle it opens', () =>
     const handles = await handlesOpenedAndClosed(() => sweepUnreferencedFiles())
 
     expect(handles.opened).toBeGreaterThan(3)
-    expect(handles.closed).toBe(handles.opened)
+    expect(handles.unaccounted).toEqual([])
   })
 
   it('after a pass that stood down on a version it could not read', async () => {
@@ -437,7 +431,7 @@ describe('sweepUnreferencedFiles gives back every engine handle it opens', () =>
     const handles = await handlesOpenedAndClosed(() => sweepUnreferencedFiles())
 
     expect(handles.opened).toBeGreaterThan(0)
-    expect(handles.closed).toBe(handles.opened)
+    expect(handles.unaccounted).toEqual([])
   })
 })
 

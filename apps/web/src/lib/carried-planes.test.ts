@@ -24,7 +24,7 @@ import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { leaseOf } from '../test-utils/replica-lease.js'
+import { withLeaseOf } from '../test-utils/replica-lease.js'
 import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
@@ -151,7 +151,9 @@ describe('versionsWithinJudgedBudget', () => {
     setTimeout(() => {
       ranBetween = true
     }, 0)
-    const fitted = await versionsWithinJudgedBudget(await leaseOf(new LoroDoc()), versions, 1_000)
+    const fitted = await withLeaseOf(new LoroDoc(), (held) =>
+      versionsWithinJudgedBudget(held, versions, 1_000),
+    )
     expect(ranBetween).toBe(true)
     expect(fitted).toEqual({ kept: versions, dropped: 0 })
   })
@@ -229,7 +231,7 @@ describe('readCarriedPlanes', () => {
       frontiers,
     })
 
-    const planes = await readCarriedPlanes(await leaseOf(record), workspaceId)
+    const planes = await withLeaseOf(record, (held) => readCarriedPlanes(held, workspaceId))
 
     expect(planes.leftBehind).toEqual([])
     expect(planes.trash.map((each) => each.documentId)).toEqual([gone.documentId])
@@ -265,7 +267,7 @@ describe('readCarriedPlanes', () => {
       frontiers: new Uint8Array(encodeFrontiers(record.oplogFrontiers())),
     })
 
-    const { versions } = await readCarriedPlanes(await leaseOf(record), workspaceId)
+    const { versions } = await withLeaseOf(record, (held) => readCarriedPlanes(held, workspaceId))
 
     expect(versions).toEqual([
       {
@@ -292,7 +294,9 @@ describe('readCarriedPlanes', () => {
       frontiers: new Uint8Array(encodeFrontiers(record.oplogFrontiers())),
     })
 
-    const { versions, leftBehind } = await readCarriedPlanes(await leaseOf(record), workspaceId)
+    const { versions, leftBehind } = await withLeaseOf(record, (held) =>
+      readCarriedPlanes(held, workspaceId),
+    )
 
     expect(leftBehind).toEqual([])
     expect(versions[0]?.label).toBe('a'.repeat(VERSION_LABEL_MAX_LENGTH - 1))
@@ -312,7 +316,7 @@ describe('readCarriedPlanes', () => {
       frontiers: new Uint8Array(encodeFrontiers(record.oplogFrontiers())),
     })
 
-    const { versions } = await readCarriedPlanes(await leaseOf(record), workspaceId)
+    const { versions } = await withLeaseOf(record, (held) => readCarriedPlanes(held, workspaceId))
 
     expect(versions).toHaveLength(1)
     expect(versions[0]).not.toHaveProperty('label')
@@ -331,7 +335,7 @@ describe('readCarriedPlanes', () => {
       frontiers: new Uint8Array(encodeFrontiers(elsewhere.oplogFrontiers())),
     })
 
-    const planes = await readCarriedPlanes(await leaseOf(record), workspaceId)
+    const planes = await withLeaseOf(record, (held) => readCarriedPlanes(held, workspaceId))
 
     expect(planes.versions).toEqual([])
     expect(planes.leftBehind).toEqual(['1 saved version could not be read'])
@@ -355,7 +359,7 @@ describe('readCarriedPlanes', () => {
       frontiers,
     })
 
-    const planes = await readCarriedPlanes(await leaseOf(record), workspaceId)
+    const planes = await withLeaseOf(record, (held) => readCarriedPlanes(held, workspaceId))
 
     expect(planes.versions).toEqual([])
     expect(planes.leftBehind).toEqual([])
@@ -374,7 +378,7 @@ describe('readCarriedPlanes', () => {
     node.data.set('kind', 'future-kind')
     record.commit()
 
-    const planes = await readCarriedPlanes(await leaseOf(record), workspaceId)
+    const planes = await withLeaseOf(record, (held) => readCarriedPlanes(held, workspaceId))
 
     expect(planes.leftBehind).toContain(
       'part of the workspace could not be read by this version of the app',
@@ -387,7 +391,7 @@ describe('readCarriedPlanes', () => {
     if (entry === undefined) throw new Error('no trash entry')
     await new IdbBlobStore().delete({ ref: entry.blob })
 
-    const planes = await readCarriedPlanes(await leaseOf(record), workspaceId)
+    const planes = await withLeaseOf(record, (held) => readCarriedPlanes(held, workspaceId))
 
     expect(planes.trash).toEqual([])
     expect(planes.trashPaths.size).toBe(0)
@@ -409,7 +413,7 @@ describe('readCarriedPlanes', () => {
       ),
     )
 
-    const planes = await readCarriedPlanes(await leaseOf(record), workspaceId)
+    const planes = await withLeaseOf(record, (held) => readCarriedPlanes(held, workspaceId))
 
     expect(planes.trash).toEqual([])
     expect(planes.leftBehind).toEqual([

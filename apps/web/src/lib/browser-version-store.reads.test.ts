@@ -13,7 +13,7 @@ import { newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { leaseOf } from '../test-utils/replica-lease.js'
+import { withLeaseOf } from '../test-utils/replica-lease.js'
 import { recordFrontier, withSavedVersionReads } from './browser-version-store.js'
 
 const DOCUMENT = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -57,15 +57,16 @@ describe('withSavedVersionReads', () => {
     const { record, rows } = history()
     const engine = await loadCrdtEngine()
     const fork = vi.spyOn(engine, 'fork')
-    const lent = await leaseOf(record)
 
-    const seen = await withSavedVersionReads(lent, rows, async (versions) => ({
-      listed: await versions.list(holder),
-      other: await versions.list({ ...holder, documentId: 'someone-else' }),
-      first: await versions.imageRefIds(holder, 'v1'),
-      second: await versions.imageRefIds(holder, 'v2'),
-      back: await versions.imageRefIds(holder, 'v1'),
-    }))
+    const seen = await withLeaseOf(record, (lent) =>
+      withSavedVersionReads(lent, rows, async (versions) => ({
+        listed: await versions.list(holder),
+        other: await versions.list({ ...holder, documentId: 'someone-else' }),
+        first: await versions.imageRefIds(holder, 'v1'),
+        second: await versions.imageRefIds(holder, 'v2'),
+        back: await versions.imageRefIds(holder, 'v1'),
+      })),
+    )
 
     expect(seen).toEqual({
       listed: ['v1', 'v2'],
@@ -80,8 +81,8 @@ describe('withSavedVersionReads', () => {
   it('answers null for a version it was never given', async () => {
     const { record, rows } = history()
 
-    const answer = await withSavedVersionReads(await leaseOf(record), rows, (versions) =>
-      versions.imageRefIds(holder, 'v-unknown'),
+    const answer = await withLeaseOf(record, (lent) =>
+      withSavedVersionReads(lent, rows, (versions) => versions.imageRefIds(holder, 'v-unknown')),
     )
 
     expect(answer).toBeNull()
@@ -90,19 +91,27 @@ describe('withSavedVersionReads', () => {
   it('gives the view back when the scan throws, and makes none when nothing is read', async () => {
     const { record, rows } = history()
     const engine = await loadCrdtEngine()
-    const lent = await leaseOf(record)
+    const fork = vi.spyOn(engine, 'fork')
     const close = vi.spyOn(engine, 'close')
 
-    await withSavedVersionReads(lent, rows, async () => 'no version read')
-    expect(close).not.toHaveBeenCalled()
+    await withLeaseOf(record, async (lent) => {
+      await withSavedVersionReads(lent, rows, async () => 'no version read')
+      expect(close).not.toHaveBeenCalled()
 
-    await expect(
-      withSavedVersionReads(lent, rows, async (versions) => {
-        await versions.imageRefIds(holder, 'v1')
-        throw new Error('the scan failed')
-      }),
-    ).rejects.toThrow('the scan failed')
-    expect(close).toHaveBeenCalledOnce()
+      await expect(
+        withSavedVersionReads(lent, rows, async (versions) => {
+          await versions.imageRefIds(holder, 'v1')
+          throw new Error('the scan failed')
+        }),
+      ).rejects.toThrow('the scan failed')
+
+      const [view] = fork.mock.results.flatMap((result) =>
+        result.type === 'return' ? [result.value.handle] : [],
+      )
+      expect(close).toHaveBeenCalledOnce()
+      expect(close).toHaveBeenCalledWith({ handle: view })
+      expect(view).not.toBe(lent.handle)
+    })
   })
 })
 

@@ -12,7 +12,6 @@
 import 'fake-indexeddb/auto'
 import type { PromoteWorkspaceRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import {
-  loadCrdtEngine,
   type RecordLease,
   readTrashEntries,
   writeSpatialCanvas,
@@ -27,6 +26,7 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { watchEngineHandles } from '../test-utils/replica-lease.js'
 import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
@@ -395,14 +395,9 @@ describe('promoteWorkspace failure reasons', () => {
  * lands or fails: a handle left open holds the whole record in memory.
  */
 async function handlesOpenedAndClosed(run: () => Promise<unknown>) {
-  const engine = await loadCrdtEngine()
-  const opened = vi.spyOn(engine, 'open')
-  const forked = vi.spyOn(engine, 'fork')
-  const closed = vi.spyOn(engine, 'close')
+  const watched = await watchEngineHandles()
   await run()
-  const made = (spy: { mock: { results: Array<{ type: string }> } }) =>
-    spy.mock.results.filter((result) => result.type === 'return').length
-  return { opened: made(opened) + made(forked), closed: closed.mock.calls.length }
+  return { opened: watched.minted().length, unaccounted: watched.unaccounted() }
 }
 
 describe('promoteWorkspace gives back every engine handle it opens', () => {
@@ -430,7 +425,7 @@ describe('promoteWorkspace gives back every engine handle it opens', () => {
 
     expect(daemon.promotes).toHaveLength(1)
     expect(handles.opened).toBeGreaterThanOrEqual(3)
-    expect(handles.closed).toBe(handles.opened)
+    expect(handles.unaccounted).toEqual([])
   })
 
   it('when the destination cannot be reached', async () => {
@@ -442,7 +437,7 @@ describe('promoteWorkspace gives back every engine handle it opens', () => {
     const handles = await handlesOpenedAndClosed(() => promote(offline))
 
     expect(handles.opened).toBeGreaterThanOrEqual(1)
-    expect(handles.closed).toBe(handles.opened)
+    expect(handles.unaccounted).toEqual([])
   })
 
   it('when the planes cannot be read', async () => {
@@ -454,7 +449,7 @@ describe('promoteWorkspace gives back every engine handle it opens', () => {
     )
 
     expect(handles.opened).toBeGreaterThanOrEqual(1)
-    expect(handles.closed).toBe(handles.opened)
+    expect(handles.unaccounted).toEqual([])
     await expectLoggedFailure('carried planes could not be read')
   })
 })
