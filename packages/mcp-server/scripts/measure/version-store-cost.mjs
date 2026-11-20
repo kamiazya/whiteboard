@@ -8,7 +8,8 @@
  *   node --import tsx/esm scripts/measure/version-store-cost.mjs [documents]
  *
  * Interleave two checkouts by running this in each, alternately, and compare
- * the medians: a single run is one process's allocation history.
+ * the medians: a single run is one process's allocation history. `loadMs` is
+ * the past state of one document, which is a copy of the record at a version.
  */
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -44,6 +45,7 @@ try {
   }
   const store = new FileVersionStore(storeScope(served))
   const target = `notes/n${COUNT - 1}`
+  const saved = await store.save(WORKSPACE, target, { auto: false })
   const time = async (call) => {
     await call()
     const samples = []
@@ -62,6 +64,7 @@ try {
       saveMs: await time(() => store.save(WORKSPACE, target, { auto: true })),
       unchangedMs: await time(() => store.isUnchangedSinceLastVersion(WORKSPACE, target)),
       listMs: await time(() => store.list(WORKSPACE, target)),
+      loadMs: await time(() => store.load(WORKSPACE, saved.id)),
     }),
   )
 } finally {

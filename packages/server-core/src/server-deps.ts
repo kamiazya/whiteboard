@@ -1,6 +1,6 @@
 import type { LayoutCore, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
-import type { RecordSession } from '@kamiazya/whiteboard-loro-adapter'
+import type { RecordSession, RecordView } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
 import type { HonoRequest } from 'hono'
@@ -402,18 +402,18 @@ export interface VersionHistory {
     },
   ): Promise<VersionEntry>
   /**
-   * The past state of ONE document, as an independent doc — the stored
-   * record checked out at this version's frontiers. Null only when the
-   * version does not exist.
+   * The past state of ONE document, as the bytes of a document of its own —
+   * the stored record at this version's frontiers, projected. Null only when
+   * the version does not exist, or the document is not in the record at it.
    */
-  load(workspaceId: string, id: string): Promise<LoroDoc | null>
+  load(workspaceId: string, id: string): Promise<Uint8Array | null>
   /**
    * The whole WORKSPACE at this version, which is what a subtree rollback
-   * walks. Null when the version exists but is not workspace-scoped, which
-   * is a real answer and not an error: a per-document version cannot say
-   * where its siblings were.
+   * walks: a view the caller releases. Null when the version exists but is not
+   * workspace-scoped, which is a real answer and not an error: a per-document
+   * version cannot say where its siblings were.
    */
-  loadWorkspaceAt(workspaceId: string, id: string): Promise<LoroDoc | null>
+  loadWorkspaceAt(workspaceId: string, id: string): Promise<RecordView | null>
   /** Saved versions of the document at `path`, newest first. */
   list(workspaceId: string, path: string): Promise<readonly VersionEntry[]>
   /**

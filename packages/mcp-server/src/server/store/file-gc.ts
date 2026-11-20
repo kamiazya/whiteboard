@@ -4,6 +4,7 @@ import { setImmediate as yieldToLoop } from 'node:timers/promises'
 import type { purgeResultSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   DEFAULT_FILE_GRACE_MS,
+  documentFromSnapshot,
   type FileReferenceReads,
   scanFileReferences,
   type UnjudgedFileHolder,
@@ -229,17 +230,23 @@ async function collectReferencedFileIds(
   const record = await openWorkspaceDocIfStored(workspaceId, scope)
   if (record === null) return new Set()
   const blobs = daemonBlobStore(scope.dataDir, scope.layout.tenantId)
-  const scan = await scanFileReferences(record, {
-    between: () => yieldToLoop(),
-    trashBytes: async (entry) => {
-      const stored = await blobs.get({ ref: entry.blob })
-      if (stored === null) {
-        log.warning({ workspaceId, documentId: entry.documentId }, 'trash entry has no bytes')
-      }
-      return stored?.bytes ?? null
-    },
-    versions: versionReads(workspaceId, versionStore),
-  })
+  const versions = versionReads(workspaceId, versionStore)
+  let scan: Awaited<ReturnType<typeof scanFileReferences>>
+  try {
+    scan = await scanFileReferences(record, {
+      between: () => yieldToLoop(),
+      trashBytes: async (entry) => {
+        const stored = await blobs.get({ ref: entry.blob })
+        if (stored === null) {
+          log.warning({ workspaceId, documentId: entry.documentId }, 'trash entry has no bytes')
+        }
+        return stored?.bytes ?? null
+      },
+      versions: versions.reads,
+    })
+  } finally {
+    await versions.release()
+  }
   if (scan.unjudged.length > 0) {
     for (const target of scan.unjudged) logUnjudged(workspaceId, target)
     throw new IncompleteFileGcScanError(workspaceId, scan.unjudged)
@@ -255,16 +262,20 @@ async function collectReferencedFileIds(
 function versionReads(
   workspaceId: string,
   versionStore: GcVersionReader,
-): NonNullable<FileReferenceReads['versions']> {
+): { reads: NonNullable<FileReferenceReads['versions']>; release: () => Promise<void> } {
   // One copy of the record for the whole pass, opened on the first version:
   // a copy per version costs the workspace once per version walked.
   let checkouts: Promise<VersionCheckouts> | null = null
   return {
-    list: (holder) => versionStore.listIdsByDocument(workspaceId, holder.documentId),
-    load: async (_holder, versionId) => {
-      checkouts ??= versionStore.openCheckouts(workspaceId)
-      return (await checkouts).load(versionId)
+    reads: {
+      list: (holder) => versionStore.listIdsByDocument(workspaceId, holder.documentId),
+      load: async (_holder, versionId) => {
+        checkouts ??= versionStore.openCheckouts(workspaceId)
+        const bytes = await (await checkouts).load(versionId)
+        return bytes === null ? null : documentFromSnapshot(bytes)
+      },
     },
+    release: async () => (await checkouts)?.release(),
   }
 }
 

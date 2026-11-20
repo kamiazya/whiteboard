@@ -6,7 +6,7 @@ import {
   saveVersionRequestSchema,
   type VersionDocumentResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
+import { documentFromSnapshot, readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
 import {
   errorBody,
   invalidRequestBody,
@@ -162,7 +162,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
           404,
         )
 
-      const response = await pastContent(past, workspaceId, path, scope)
+      const response = await pastContent(documentFromSnapshot(past), workspaceId, path, scope)
       return c.json(response)
     } catch (err) {
       const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)

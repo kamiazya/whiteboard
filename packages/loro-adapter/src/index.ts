@@ -63,7 +63,7 @@ export {
 } from './file-references.js'
 export { collectImageRefIds } from './image-refs.js'
 export { type LegacyRecord, loroDocKind } from './legacy-record-kind.js'
-export { legacyRecordOps } from './legacy-record-ops.js'
+export { documentFromSnapshot, legacyRecordOps } from './legacy-record-ops.js'
 export {
   CONTENT_CONTAINER_KEYS,
   deleteSpatialEdge,
@@ -99,6 +99,7 @@ export {
   type RecordOps,
   type RecordSession,
   type RecordVersion,
+  type RecordView,
 } from './record-ops.js'
 export { documentsRemovedSince, type RemovedDocument } from './removed-documents.js'
 export { ReservedKeyWriteError } from './reserved-key-write.js'

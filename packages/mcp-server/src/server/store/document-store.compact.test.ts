@@ -208,9 +208,9 @@ describe('compactWorkspace', () => {
     expect(live.getMovableList('elements').length).toBe(60)
 
     // Restoring the oldest version should still work at the cut point.
-    const past = await store.load(SESSION1, v.id)
-    expect(past).not.toBeNull()
-    expect(past!.getMovableList('elements').length).toBe(30)
+    const pastBytes = await store.load(SESSION1, v.id)
+    expect(pastBytes).not.toBeNull()
+    expect(LoroDoc.fromSnapshot(pastBytes!).getMovableList('elements').length).toBe(30)
 
     // Compaction prunes history, not state, so the frontier written for the
     // shallow workspace record must still match the live workspace doc's

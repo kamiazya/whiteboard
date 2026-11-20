@@ -43,6 +43,21 @@ export interface RecordOps<R> {
   moveView(view: R, frontiers: Uint8Array): void
   /** One document as a document of its own, or `null` when the record holds none. */
   exportProjection(record: R, documentId: string): Uint8Array | null
+  /** Gives back a record a view made; a `LoroDoc` needs nothing and a lease frees its handle. */
+  release(record: R): void
+}
+
+/**
+ * A read-only copy of a record as it stood at a point, bound to its operations
+ * like a session. The caller releases it; a caller that reads many points moves
+ * one view with `moveTo`, because making one copies the whole record.
+ */
+export interface RecordView {
+  read<T>(query: wire.Query, shape: AnswerShape<T>): Promise<T>
+  /** One document as a document of its own, or `null` when the view holds none. */
+  exportProjection(documentId: string): Uint8Array | null
+  moveTo(frontiers: Uint8Array): void
+  release(): void
 }
 
 /**
@@ -57,6 +72,8 @@ export interface RecordSession {
   read<T>(query: wire.Query, shape: AnswerShape<T>): Promise<T>
   write(batch: wire.Write[]): wire.MutationApplied
   removedSince(since: readonly wire.VersionEntry[]): RemovedDocument[]
+  /** The record as it stood at `frontiers` (bytes `version().encodedFrontiers` answered). */
+  view(frontiers: Uint8Array): RecordView
   /** Persists what the session changed, announcing it as every save does. */
   save(): Promise<void>
 }
@@ -73,6 +90,15 @@ export function bindRecordOps<R>(
     read: (query, shape) => ops.read(record, query, shape),
     write: (batch) => ops.write(record, batch),
     removedSince: (since) => ops.removedSince(record, since),
+    view(frontiers) {
+      const past = ops.viewAt(record, frontiers)
+      return {
+        read: (query, shape) => ops.read(past, query, shape),
+        exportProjection: (documentId) => ops.exportProjection(past, documentId),
+        moveTo: (point) => ops.moveView(past, point),
+        release: () => ops.release(past),
+      }
+    },
     save: () => save(record),
   }
 }

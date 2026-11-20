@@ -390,3 +390,36 @@ describe('a record bound to its operations and its save', () => {
     })
   })
 })
+
+describe('a record viewed through its session', () => {
+  it('reads the record as it stood, projects a document of it, and moves to another point', async () => {
+    await onEachKind(async (held, record) => {
+      const session = bindRecordOps(held.ops, record, async () => {})
+      const then = session.version().encodedFrontiers
+      session.write([
+        { op: 'setWorkspaceDocumentName', args: { documentId: BOARD, name: 'Board' } },
+      ])
+      const now = session.version().encodedFrontiers
+      const nameIn = async (read: typeof session.read) =>
+        (
+          await read(
+            { query: 'documents' },
+            {
+              parse: (value) => value as Array<{ documentId: string; name?: string }>,
+            },
+          )
+        ).find((entry) => entry.documentId === BOARD)?.name
+      const view = session.view(then)
+      try {
+        expect(await nameIn(view.read)).toBeUndefined()
+        expect(view.exportProjection(BOARD)).not.toBeNull()
+        expect(view.exportProjection('01BRWAAAAAAAAAAAAAAAAAAAZZ')).toBeNull()
+        view.moveTo(now)
+        expect(await nameIn(view.read)).toBe('Board')
+      } finally {
+        view.release()
+      }
+      expect(await nameIn(session.read)).toBe('Board')
+    })
+  })
+})
