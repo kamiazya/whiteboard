@@ -120,6 +120,18 @@ export function describeFork(makeEngine: () => CrdtEngine) {
       expect(await bodyOf(engine, view.handle)).toBe('one')
     })
 
+    it('refuses a closed handle and a frontier the document never held', () => {
+      const engine = makeEngine()
+      const handle = openWith(engine, 'x')
+      expect(() => engine.fork({ handle, peer: '2', at: [{ peer: '99', counter: 5 }] })).toThrow()
+      engine.close({ handle })
+      expect(() => engine.fork({ handle, peer: '2' })).toThrow()
+    })
+  })
+}
+
+export function describeViewMove(makeEngine: () => CrdtEngine) {
+  describe('a view moved between versions', () => {
     it('moves a view between versions, forward and back, without a copy per version', async () => {
       const engine = makeEngine()
       const handle = openWith(engine, 'one')
@@ -148,14 +160,6 @@ export function describeFork(makeEngine: () => CrdtEngine) {
       ).toThrow()
       engine.close({ handle: view.handle })
       expect(() => engine.checkout({ handle: view.handle, at })).toThrow()
-    })
-
-    it('refuses a closed handle and a frontier the document never held', () => {
-      const engine = makeEngine()
-      const handle = openWith(engine, 'x')
-      expect(() => engine.fork({ handle, peer: '2', at: [{ peer: '99', counter: 5 }] })).toThrow()
-      engine.close({ handle })
-      expect(() => engine.fork({ handle, peer: '2' })).toThrow()
     })
   })
 }
