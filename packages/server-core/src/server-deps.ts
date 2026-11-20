@@ -4,7 +4,7 @@ import type { RecordSession, RecordView } from '@kamiazya/whiteboard-loro-adapte
 import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
 import type { HonoRequest } from 'hono'
-import type { Frontiers, LoroDoc } from 'loro-crdt'
+import type { LoroDoc } from 'loro-crdt'
 import type { AgentActivityTouched } from './agent-activity-touched.js'
 import type { Embedder } from './search/embedder.js'
 import type { ThemeFontSource } from './theme-font.js'
@@ -436,7 +436,7 @@ export interface VersionHistory {
  */
 export type AdoptedVersion = Readonly<
   Omit<PromotedVersion, 'frontiers'> & {
-    readonly frontiers: Frontiers
+    readonly frontiers: Uint8Array
     readonly elementCount: number
     readonly contentDigest: string
   }

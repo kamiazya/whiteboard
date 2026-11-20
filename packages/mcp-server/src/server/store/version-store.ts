@@ -22,7 +22,6 @@ import type { DatabaseSchema } from './db/schema.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { insertAdoptedRows } from './version-adopt-rows.js'
 import { refusePastManualCeiling, refusePastRestorePointCeiling } from './version-ceilings.js'
-import { frontiersToText } from './version-store-legacy.js'
 import { withPersistedWorkspaceRecord, withStoredWorkspaceRecord } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -420,7 +419,7 @@ export class FileVersionStore implements VersionStore {
             opts: row,
             operator: row.operator,
             elementCount: row.elementCount,
-            frontiers: frontiersToText(row.frontiers),
+            frontiers: frontiersToBase64(row.frontiers),
             contentDigest: row.contentDigest,
             createdAt: row.createdAt,
           }),

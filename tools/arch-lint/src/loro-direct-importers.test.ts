@@ -53,13 +53,9 @@ const LORO_DIRECT: Readonly<Record<string, string>> = {
   'packages/mcp-server/src/server/store/doc-cache.ts': 'M8: daemon store',
   'packages/mcp-server/src/server/store/document-store.ts': 'M8: daemon store',
   'packages/mcp-server/src/server/store/moved-paths.ts': 'M8: daemon store',
-  'packages/mcp-server/src/server/store/version-store-legacy.ts':
-    'M8: the version store answers a LoroDoc until restore-version and promote-carried take bytes',
   'packages/mcp-server/src/server/store/workspace-doc-cache.ts': 'M8: daemon store',
   'packages/mcp-server/src/server/store/workspace-plane.ts': 'M8: daemon store',
   'packages/mcp-server/src/server/store/workspace-tail.ts': 'M8: daemon store',
-  'packages/server-core/src/operations/promote-carried.ts': 'M7: server-core',
-  'packages/server-core/src/operations/promote-workspace.ts': 'M7: server-core',
   'packages/server-core/src/operations/restore-version.ts': 'M7: server-core',
   'packages/server-core/src/server-deps.ts': 'M7: server-core',
 }

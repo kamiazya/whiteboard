@@ -115,7 +115,7 @@ describe('restore points stay bounded', () => {
         createdAt: 1 + i,
         auto: true,
         restoredFrom: v1,
-        frontiers: [],
+        frontiers: new Uint8Array(),
         elementCount: 0,
         contentDigest: 'x',
       })),

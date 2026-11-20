@@ -562,7 +562,7 @@ async function carryManualRows(
       documentId,
       createdAt: 1 + i,
       auto: false,
-      frontiers: [],
+      frontiers: new Uint8Array(),
       elementCount: 0,
       contentDigest: 'x',
     })),

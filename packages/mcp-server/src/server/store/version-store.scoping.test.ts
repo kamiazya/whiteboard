@@ -95,7 +95,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
           documentId: 'doc-a',
           createdAt: 1,
           auto: false,
-          frontiers: [],
+          frontiers: new Uint8Array(),
           elementCount: 0,
           contentDigest: 'x',
         },
@@ -198,7 +198,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
         documentId: 'doc-a',
         createdAt: 1 + i,
         auto: true,
-        frontiers: [],
+        frontiers: new Uint8Array(),
         elementCount: 0,
         contentDigest: 'x',
       }))
@@ -229,7 +229,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
         documentId,
         createdAt: now + i,
         auto: true,
-        frontiers: [],
+        frontiers: new Uint8Array(),
         elementCount: 0,
         contentDigest: 'x',
       }))
@@ -332,7 +332,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
           documentId: 'doc-a',
           createdAt: 1,
           auto: false,
-          frontiers: [],
+          frontiers: new Uint8Array(),
           elementCount: 2,
           contentDigest: 'x',
         },
@@ -441,7 +441,9 @@ describe('FileVersionStore workspace scoping and ordering', () => {
         .executeTakeFirstOrThrow()
       // Dated before every other row while standing at the HEAD: oldest by
       // time, newest in the history.
-      const head = (await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')).frontiers()
+      const head = encodeFrontiers(
+        (await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')).frontiers(),
+      )
       const carried = { id: 'carried-at-head', documentId, createdAt: 0, auto: false }
       await store.adopt('01PAW75F73PVC402Y3V151KT6R', [
         { ...carried, frontiers: head, elementCount: 1, contentDigest: 'x' },

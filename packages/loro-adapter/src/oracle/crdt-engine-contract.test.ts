@@ -67,6 +67,8 @@ const DERIVED_READERS: Record<string, string> = {
     'how many rows the retired plane holds: the annotations read throws exactly when that is above zero',
   containerPlace:
     'which document a container belongs to, from the nodes read and the container itself: its path, and its length when it is text',
+  documentJudgement:
+    'the answers of stateSize, contentDigest, textLimitBreach, spatialNodeCount and documentKind for one document, from one projection',
 }
 
 const sorted = (values: Iterable<string>) => [...values].sort()

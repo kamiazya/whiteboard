@@ -625,7 +625,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
         documentId,
         createdAt: 1 + i,
         auto: false,
-        frontiers: [],
+        frontiers: new Uint8Array(),
         elementCount: 0,
         contentDigest: 'x',
       })),
@@ -643,7 +643,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
         documentId,
         createdAt: 1 + i,
         auto: false,
-        frontiers: [],
+        frontiers: new Uint8Array(),
         elementCount: 0,
         contentDigest: 'x',
       }))

@@ -9,6 +9,7 @@ import type { CrdtEngine } from '../engine/types.js'
 import { describeActivationJudging } from './crdt-engine-conformance-activation.js'
 import { describeBreachDetail } from './crdt-engine-conformance-breach-detail.js'
 import { describeContainerPlace } from './crdt-engine-conformance-container-place.js'
+import { describeDocumentJudgement } from './crdt-engine-conformance-document-judgement.js'
 import { describeDocumentReaders } from './crdt-engine-conformance-document-readers.js'
 import { describeShallowRoot } from './crdt-engine-conformance-shallow.js'
 import { describeVersionAt } from './crdt-engine-conformance-version-at.js'
@@ -16,6 +17,7 @@ import { describeVersionAt } from './crdt-engine-conformance-version-at.js'
 export function describeEngineAnswers(makeEngine: () => CrdtEngine) {
   describeBreachDetail(makeEngine)
   describeDocumentReaders(makeEngine)
+  describeDocumentJudgement(makeEngine)
   describeContainerPlace(makeEngine)
   describeVersionAt(makeEngine)
   describeShallowRoot(makeEngine)
