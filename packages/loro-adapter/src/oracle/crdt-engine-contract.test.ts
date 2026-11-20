@@ -208,13 +208,14 @@ describe('the CRDT document-engine contract', () => {
     ).toBe(false)
   })
 
-  it('asks an export for what its mode needs: a shallow snapshot names its frontiers', () => {
+  it('asks an export for what its mode needs: a shallow snapshot names its frontiers, or the version it is cut at', () => {
     const frontiers = [{ peer: '1', counter: 4 }]
     const requests = [
       { handle: 0, mode: 'snapshot' },
       { handle: 0, mode: 'update' },
       { handle: 0, mode: 'update', from: frontiers },
       { handle: 0, mode: 'shallow-snapshot', frontiers },
+      { handle: 0, mode: 'shallow-snapshot-at-version', version: frontiers },
     ]
     for (const request of requests) {
       expect(
@@ -224,6 +225,8 @@ describe('the CRDT document-engine contract', () => {
     }
     for (const bad of [
       { handle: 0, mode: 'shallow-snapshot' },
+      { handle: 0, mode: 'shallow-snapshot-at-version' },
+      { handle: 0, mode: 'shallow-snapshot-at-version', frontiers },
       { handle: 0, mode: 'snapshot', frontiers },
       { handle: 0, mode: 'snapshot', from: frontiers },
       { handle: 0, mode: 'update', frontiers },

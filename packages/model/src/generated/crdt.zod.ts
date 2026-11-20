@@ -346,6 +346,14 @@ export const decodeResponseSchema = z.strictObject({
 })
 export type DecodeResponse = z.infer<typeof decodeResponseSchema>
 
+/** Export the current state, keeping history only from a version on. */
+export const exportShallowAtVersionRequestSchema = z.strictObject({
+  handle: handleSchema,
+  mode: z.literal('shallow-snapshot-at-version'),
+  version: z.array(versionEntrySchema),
+})
+export type ExportShallowAtVersionRequest = z.infer<typeof exportShallowAtVersionRequestSchema>
+
 /** Export the current state, keeping history only from a frontier on. */
 export const exportShallowSnapshotRequestSchema = z.strictObject({
   handle: handleSchema,
@@ -407,6 +415,7 @@ export const versionResponseSchema = z.strictObject({
   frontiers: z.array(versionEntrySchema),
   encodedVersion: bytesSchema,
   encodedFrontiers: bytesSchema,
+  shallowRoot: z.array(versionEntrySchema),
 })
 export type VersionResponse = z.infer<typeof versionResponseSchema>
 
@@ -423,6 +432,7 @@ export const exportRequestSchema = z.discriminatedUnion('mode', [
   exportSnapshotRequestSchema,
   exportUpdateRequestSchema,
   exportShallowSnapshotRequestSchema,
+  exportShallowAtVersionRequestSchema,
   exportSubtreeRequestSchema,
   exportProjectionRequestSchema,
 ])

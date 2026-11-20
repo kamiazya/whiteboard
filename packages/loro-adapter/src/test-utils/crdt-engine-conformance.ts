@@ -61,6 +61,7 @@ import {
   describeTrim,
 } from './crdt-engine-conformance-lifecycle.js'
 import { describeProjectionExport } from './crdt-engine-conformance-projection.js'
+import { describeShallowRoot } from './crdt-engine-conformance-shallow.js'
 import { describeThreadMessageCounts } from './crdt-engine-conformance-threads.js'
 import { describeVersionAt } from './crdt-engine-conformance-version-at.js'
 import { describeWorkspaceSyncJudging } from './crdt-engine-conformance-workspace-sync.js'
@@ -772,6 +773,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeDocumentReaders(makeEngine)
     describeContainerPlace(makeEngine)
     describeVersionAt(makeEngine)
+    describeShallowRoot(makeEngine)
     describeSubtreeImport(makeEngine)
     describeSubtreeRoot(makeEngine)
     describeReadNow(makeEngine)

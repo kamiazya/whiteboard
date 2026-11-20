@@ -881,6 +881,20 @@ pub struct DecodeResponse {
     pub entries: Vec<VersionEntry>,
 }
 
+/// Export the current state, keeping history only from a version on.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExportShallowAtVersionRequest {
+    /// The document.
+    pub handle: Handle,
+    /// A version vector of operations the document holds, as a version response names one: where the kept history starts; the state exported is still the current one.
+    pub version: Vec<VersionEntry>,
+}
+
+impl ExportShallowAtVersionRequest {
+    /// What `mode` is always written as.
+    pub const MODE: &str = "shallow-snapshot-at-version";
+}
+
 /// Export the current state, keeping history only from a frontier on.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExportShallowSnapshotRequest {
@@ -979,6 +993,8 @@ pub struct VersionResponse {
     pub encoded_version: Bytes,
     /// The frontiers in the engine encoding, what a keeper stores.
     pub encoded_frontiers: Bytes,
+    /// The frontiers the document keeps its history from, the oldest point it can still be checked out at; empty for a document that keeps every operation.
+    pub shallow_root: Vec<VersionEntry>,
 }
 
 /// Apply writes to an open document as one batch.
@@ -1001,6 +1017,8 @@ pub enum ExportRequest {
     ExportUpdateRequest(ExportUpdateRequest),
     /// A `ExportShallowSnapshotRequest`.
     ExportShallowSnapshotRequest(ExportShallowSnapshotRequest),
+    /// A `ExportShallowAtVersionRequest`.
+    ExportShallowAtVersionRequest(ExportShallowAtVersionRequest),
     /// A `ExportSubtreeRequest`.
     ExportSubtreeRequest(ExportSubtreeRequest),
     /// A `ExportProjectionRequest`.

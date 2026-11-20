@@ -236,6 +236,7 @@ fn the_calls_for_judging_versions_forks_and_undo_state_carry_their_fields() {
         frontiers: entries.clone(),
         encoded_version: "AA==".into(),
         encoded_frontiers: "AQ==".into(),
+        shallow_root: entries.clone(),
     };
     assert_ne!(version.clone(), VersionResponse::default());
     assert_eq!(VersionRequest::default(), VersionRequest { handle: 0, at: None });

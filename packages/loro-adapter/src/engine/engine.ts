@@ -295,11 +295,13 @@ function exportFrom(doc: LoroDoc, request: wire.ExportRequest): wire.ExportRespo
         : versionOfPairs(request.from.map(({ peer, counter }) => [peer, counter]))
     return { bytes: bytesToBase64(doc.export({ mode: 'update', from: since })) }
   }
-  const kept = request.frontiers.map(({ peer, counter }) => ({
-    peer: peer as `${number}`,
-    counter,
-  }))
-  return { bytes: bytesToBase64(doc.export({ mode: 'shallow-snapshot', frontiers: kept })) }
+  const cut =
+    request.mode === 'shallow-snapshot-at-version'
+      ? doc.vvToFrontiers(
+          versionOfPairs(request.version.map(({ peer, counter }) => [peer, counter])),
+        )
+      : frontiersAt(request.frontiers)
+  return { bytes: bytesToBase64(doc.export({ mode: 'shallow-snapshot', frontiers: cut })) }
 }
 
 function applyBatch(doc: LoroDoc, batch: wire.WriteRequest['batch']) {
@@ -407,12 +409,14 @@ function forkOf(source: Held, request: wire.ForkRequest): Held {
 function versionOf(doc: LoroDoc, at?: wire.VersionEntry[]): wire.VersionResponse {
   const entries = (pairs: Array<[string, number]>) =>
     pairs.map(([peer, counter]) => ({ peer, counter }))
+  const shallowRoot = entries(frontierPairs(doc.shallowSinceFrontiers()))
   if (at === undefined) {
     return {
       version: entries(versionPairs(doc.oplogVersion())),
       frontiers: entries(frontierPairs(doc.oplogFrontiers())),
       encodedVersion: bytesToBase64(doc.oplogVersion().encode()),
       encodedFrontiers: bytesToBase64(encodeFrontiers(doc.oplogFrontiers())),
+      shallowRoot,
     }
   }
   const seen = doc.frontiersToVV(frontiersAt(at))
@@ -422,6 +426,7 @@ function versionOf(doc: LoroDoc, at?: wire.VersionEntry[]): wire.VersionResponse
     frontiers: entries(frontierPairs(reached)),
     encodedVersion: bytesToBase64(seen.encode()),
     encodedFrontiers: bytesToBase64(encodeFrontiers(reached)),
+    shallowRoot,
   }
 }
 

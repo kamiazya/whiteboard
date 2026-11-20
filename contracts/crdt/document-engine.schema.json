@@ -394,6 +394,32 @@
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
+    "ExportShallowAtVersionRequest": {
+      "description": "Export the current state, keeping history only from a version on.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The document."
+        },
+        "mode": {
+          "type": "string",
+          "const": "shallow-snapshot-at-version",
+          "description": "Always shallow-snapshot-at-version."
+        },
+        "version": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "description": "A version vector of operations the document holds, as a version response names one: where the kept history starts; the state exported is still the current one."
+        }
+      },
+      "required": ["handle", "mode", "version"],
+      "x-wb-order": ["handle", "mode", "version"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
     "ExportSubtreeRequest": {
       "description": "Export the node at a path of a workspace record, with all under it, as a record.",
       "type": "object",
@@ -451,6 +477,9 @@
         },
         {
           "$ref": "#/$defs/ExportShallowSnapshotRequest"
+        },
+        {
+          "$ref": "#/$defs/ExportShallowAtVersionRequest"
         },
         {
           "$ref": "#/$defs/ExportSubtreeRequest"
@@ -522,10 +551,17 @@
         "encodedFrontiers": {
           "$ref": "#/$defs/Bytes",
           "description": "The frontiers in the engine encoding, what a keeper stores."
+        },
+        "shallowRoot": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "description": "The frontiers the document keeps its history from, the oldest point it can still be checked out at; empty for a document that keeps every operation."
         }
       },
-      "required": ["version", "frontiers", "encodedVersion", "encodedFrontiers"],
-      "x-wb-order": ["version", "frontiers", "encodedVersion", "encodedFrontiers"],
+      "required": ["version", "frontiers", "encodedVersion", "encodedFrontiers", "shallowRoot"],
+      "x-wb-order": ["version", "frontiers", "encodedVersion", "encodedFrontiers", "shallowRoot"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
