@@ -11,7 +11,7 @@
  * under the same body ceiling and say afterwards, in the same words, what did
  * not go.
  *
- * Loaded lazily by every caller, like the modules above: it reaches loro.
+ * Loaded lazily by every caller, like the modules above: it reaches the engine.
  */
 import {
   PROMOTE_MAX_TRASH,
@@ -22,11 +22,13 @@ import {
   type PromoteWorkspaceRequest,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
 import {
-  projectWorkspaceDocument,
-  readTrashEntries,
-  readWorkspaceDocuments,
-  scanFileReferences,
-  stateSize,
+  lease,
+  leaseKind,
+  loadCrdtEngine,
+  type RecordLease,
+  scanFileReferencesOfLease,
+  type TrashEntry,
+  type WorkspaceDocumentEntry,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   base64UrlToBytes,
@@ -35,12 +37,20 @@ import {
   fitToLength,
   VERSION_LABEL_MAX_LENGTH,
 } from '@kamiazya/whiteboard-model'
-import { decodeFrontiers, type LoroDoc } from 'loro-crdt'
-import { savedVersionReads, savedVersionRows, type VersionRow } from './browser-version-store.js'
+import { z } from 'zod'
+import {
+  savedVersionRows,
+  type VersionRow,
+  withSavedVersionReads,
+} from './browser-version-store.js'
 import { countOf, planeCounts } from './count-wording.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 
-type FileReferenceScan = Awaited<ReturnType<typeof scanFileReferences>>
+type FileReferenceScan = Awaited<ReturnType<typeof scanFileReferencesOfLease>>
+
+// The readers are total over these shapes; the parse asserts the type only.
+const trashShape = z.custom<TrashEntry[]>()
+const documentsShape = z.custom<WorkspaceDocumentEntry[]>()
 
 /** What travels beside the record, and what is left behind with a reason. */
 export interface CarriedPlanes {
@@ -86,6 +96,30 @@ function promotedVersion(row: VersionRow): PromotedVersion {
   }
 }
 
+/** The trash entries whose bytes were read and judged, and a sentence for each that was not. */
+async function trashPlane(
+  record: RecordLease,
+  trashBytes: ReadonlyMap<string, Uint8Array>,
+  scan: FileReferenceScan,
+): Promise<Pick<CarriedPlanes, 'trash' | 'trashPaths'> & { readonly leftBehind: string[] }> {
+  const unjudged = new Set(
+    scan.unjudged.flatMap((held) => (held.kind === 'trash' ? [held.documentId] : [])),
+  )
+  const leftBehind: string[] = []
+  const trash: PromotedTrashBytes[] = []
+  const trashPaths = new Map<string, string>()
+  for (const entry of await lease.read(record, { query: 'trash' }, trashShape)) {
+    const bytes = trashBytes.get(entry.documentId)
+    if (bytes === undefined || unjudged.has(entry.documentId)) {
+      leftBehind.push(`the trashed document "${entry.path}" cannot be read in this browser`)
+    } else {
+      trash.push({ documentId: entry.documentId, bytes: bytesToBase64Url(bytes) })
+      trashPaths.set(entry.documentId, entry.path)
+    }
+  }
+  return { trash, trashPaths, leftBehind }
+}
+
 /**
  * Reads the planes the record only points at — each trash entry's bytes and
  * the saved versions — through the same scan that finds the images, so what
@@ -93,35 +127,23 @@ function promotedVersion(row: VersionRow): PromotedVersion {
  * entry the scan could not read is left behind and named, never sent.
  */
 export async function readCarriedPlanes(
-  record: LoroDoc,
+  record: RecordLease,
   sourceWorkspaceId: string,
 ): Promise<CarriedPlanes> {
   const blobStore = new IdbBlobStore()
   const trashBytes = new Map<string, Uint8Array>()
   const rows = await savedVersionRows(sourceWorkspaceId)
-  const scan = await scanFileReferences(record, {
-    trashBytes: async (entry) => {
-      const bytes = (await blobStore.get({ ref: entry.blob }))?.bytes ?? null
-      if (bytes !== null) trashBytes.set(entry.documentId, bytes)
-      return bytes
-    },
-    versions: savedVersionReads(record, rows),
-  })
-  const leftBehind: string[] = []
-  const unjudgedTrash = new Set(
-    scan.unjudged.flatMap((held) => (held.kind === 'trash' ? [held.documentId] : [])),
+  const scan = await withSavedVersionReads(record, rows, (versions) =>
+    scanFileReferencesOfLease(record, {
+      trashBytes: async (entry) => {
+        const bytes = (await blobStore.get({ ref: entry.blob }))?.bytes ?? null
+        if (bytes !== null) trashBytes.set(entry.documentId, bytes)
+        return bytes
+      },
+      versions,
+    }),
   )
-  const trash: PromotedTrashBytes[] = []
-  const trashPaths = new Map<string, string>()
-  for (const entry of readTrashEntries(record)) {
-    const bytes = trashBytes.get(entry.documentId)
-    if (bytes === undefined || unjudgedTrash.has(entry.documentId)) {
-      leftBehind.push(`the trashed document "${entry.path}" cannot be read in this browser`)
-    } else {
-      trash.push({ documentId: entry.documentId, bytes: bytesToBase64Url(bytes) })
-      trashPaths.set(entry.documentId, entry.path)
-    }
-  }
+  const { trash, trashPaths, leftBehind } = await trashPlane(record, trashBytes, scan)
   const unjudgedVersions = new Set(
     scan.unjudged.flatMap((held) => (held.kind === 'version' ? [held.versionId] : [])),
   )
@@ -134,7 +156,9 @@ export async function readCarriedPlanes(
     leftBehind.push('part of the workspace could not be read by this version of the app')
   }
   const holders = new Set([
-    ...readWorkspaceDocuments(record).map((entry) => entry.documentId),
+    ...(await lease.read(record, { query: 'documents' }, documentsShape)).map(
+      (entry) => entry.documentId,
+    ),
     ...trash.map((carried) => carried.documentId),
   ])
   const versions = rows
@@ -243,30 +267,47 @@ export function unconfirmedPlanes(
   return planeCounts({ trash, versions }).map((phrase) => `${phrase} did not reach ${keeper}`)
 }
 
+const standaloneDocuments = leaseKind(loadCrdtEngine)
+
+/** The size of one document's state at the view's point, as the keeper charges it; 0 where the view holds none. */
+async function judgedSize(view: RecordLease, documentId: string): Promise<number> {
+  const bytes = lease.exportProjection(view, documentId)
+  if (bytes === null) return 0
+  const standalone = await standaloneDocuments.load(bytes, [])
+  return lease.withLease(standalone, (held) => lease.read(held, { query: 'stateSize' }, z.number()))
+}
+
 /**
  * What judging each version costs the keeper, in its unit: the elements of
  * the document's state at the version's point (`stateSize` of the
  * projection), each distinct (point, document) once — the keeper's charge,
  * computed the keeper's way over this browser's copy of the same record. A
  * point this record cannot reach costs nothing here; the keeper refuses it
- * on its own terms.
+ * on its own terms. One view of the record is moved between points rather
+ * than one made per version, and `release` gives it back.
  */
-function judgedCost(record: LoroDoc): (version: PromotedVersion) => number {
-  const past = record.fork()
+function judgedCost(record: RecordLease): {
+  readonly cost: (version: PromotedVersion) => Promise<number>
+  readonly release: () => void
+} {
+  const view: { past: RecordLease | null } = { past: null }
   const charged = new Set<string>()
-  return (version) => {
-    const key = `${version.frontiers}\u0000${version.documentId}`
-    if (charged.has(key)) return 0
-    charged.add(key)
-    const bytes = base64UrlToBytes(version.frontiers)
-    if (bytes === null) return 0
-    try {
-      past.checkout(decodeFrontiers(bytes))
-    } catch {
-      return 0
-    }
-    const content = projectWorkspaceDocument(past, version.documentId)
-    return content === null ? 0 : stateSize(content)
+  return {
+    async cost(version) {
+      const key = `${version.frontiers}\u0000${version.documentId}`
+      if (charged.has(key)) return 0
+      charged.add(key)
+      const bytes = base64UrlToBytes(version.frontiers)
+      if (bytes === null) return 0
+      try {
+        if (view.past === null) view.past = lease.viewAt(record, bytes)
+        else lease.moveView(view.past, bytes)
+      } catch {
+        return 0
+      }
+      return judgedSize(view.past, version.documentId)
+    },
+    release: () => view.past?.release(),
   }
 }
 
@@ -280,27 +321,31 @@ const FIT_SLICE_MS = 10
  * left behind is exactly the oldest. Kept in the order they were read.
  */
 export async function versionsWithinJudgedBudget(
-  record: LoroDoc,
+  record: RecordLease,
   versions: readonly PromotedVersion[],
   limit: number,
 ): Promise<{ readonly kept: PromotedVersion[]; readonly dropped: number }> {
-  const cost = judgedCost(record)
+  const priced = judgedCost(record)
   const newestFirst = [...versions].sort(
     (a, b) => b.createdAt - a.createdAt || compareCodeUnit(a.id, b.id),
   )
   const keep = new Set<PromotedVersion>()
   let spent = 0
   let sliceStarted = Date.now()
-  for (const version of newestFirst) {
-    // Pricing a version projects it, and this runs on the page's thread for
-    // as long as the keeper's own budget: hand the thread back between slices.
-    if (Date.now() - sliceStarted >= FIT_SLICE_MS) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 0))
-      sliceStarted = Date.now()
+  try {
+    for (const version of newestFirst) {
+      // Pricing a version reads it, and this runs on the page's thread for
+      // as long as the keeper's own budget: hand the thread back between slices.
+      if (Date.now() - sliceStarted >= FIT_SLICE_MS) {
+        await new Promise<void>((resolve) => setTimeout(resolve, 0))
+        sliceStarted = Date.now()
+      }
+      spent += await priced.cost(version)
+      if (spent > limit) break
+      keep.add(version)
     }
-    spent += cost(version)
-    if (spent > limit) break
-    keep.add(version)
+  } finally {
+    priced.release()
   }
   return {
     kept: versions.filter((version) => keep.has(version)),

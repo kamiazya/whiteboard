@@ -34,6 +34,7 @@ import {
   describeUndoHistory,
   describeVersion,
   describeVersionDecoding,
+  describeViewMove,
 } from './crdt-engine-conformance-calls.js'
 import {
   applied,
@@ -750,6 +751,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeVersion(makeEngine)
     describeVersionDecoding(makeEngine)
     describeFork(makeEngine)
+    describeViewMove(makeEngine)
     describeImportJudging(makeEngine)
     describeImportPending(makeEngine)
     describeWorkspaceSyncJudging(makeEngine)

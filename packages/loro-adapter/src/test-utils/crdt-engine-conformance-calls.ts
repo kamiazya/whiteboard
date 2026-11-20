@@ -130,6 +130,40 @@ export function describeFork(makeEngine: () => CrdtEngine) {
   })
 }
 
+export function describeViewMove(makeEngine: () => CrdtEngine) {
+  describe('a view moved between versions', () => {
+    it('moves a view between versions, forward and back, without a copy per version', async () => {
+      const engine = makeEngine()
+      const handle = openWith(engine, 'one')
+      const first = engine.version({ handle }).frontiers
+      splice(engine, handle, 3, 0, ' two')
+      const second = engine.version({ handle }).frontiers
+      splice(engine, handle, 7, 0, ' three')
+      const view = engine.fork({ handle, peer: '2', at: first })
+      expect(await bodyOf(engine, view.handle)).toBe('one')
+      engine.checkout({ handle: view.handle, at: second })
+      expect(await bodyOf(engine, view.handle)).toBe('one two')
+      engine.checkout({ handle: view.handle, at: first })
+      expect(await bodyOf(engine, view.handle)).toBe('one')
+      expect(await bodyOf(engine, handle)).toBe('one two three')
+      expect(() => splice(engine, view.handle, 0, 0, 'x')).toThrow()
+    })
+
+    it('refuses to move a document that is not a view, and to move one to a frontier never held', () => {
+      const engine = makeEngine()
+      const handle = openWith(engine, 'x')
+      const at = engine.version({ handle }).frontiers
+      expect(() => engine.checkout({ handle, at })).toThrow()
+      const view = engine.fork({ handle, peer: '2', at })
+      expect(() =>
+        engine.checkout({ handle: view.handle, at: [{ peer: '99', counter: 5 }] }),
+      ).toThrow()
+      engine.close({ handle: view.handle })
+      expect(() => engine.checkout({ handle: view.handle, at })).toThrow()
+    })
+  })
+}
+
 export function describeImportJudging(makeEngine: () => CrdtEngine) {
   describe('what judges an import', () => {
     const oversize = (engine: CrdtEngine, handle: number) => {

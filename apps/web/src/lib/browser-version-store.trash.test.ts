@@ -29,6 +29,7 @@ import { VERSIONS_STORE, whiteboardDbName } from './browser-idb.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { inTransaction, request } from './idb-tx.js'
 
 claimIsolatedWhiteboardDb('browserversiontrash')
@@ -69,7 +70,10 @@ describe('a browser document delete and its saved versions', () => {
     if (record === null) throw new Error('no record')
     writeWorkspaceDocumentContent(record, documentId, canvasDoc('kept'))
     await docs.save(workspaceId, record)
-    const saved = await new BrowserVersionStore({ docs, index }).save(workspaceId, 'canvas-a', {
+    const saved = await new BrowserVersionStore({
+      docs: new BrowserWorkspaceRecords(),
+      index,
+    }).save(workspaceId, 'canvas-a', {
       label: 'before delete',
     })
 
@@ -94,7 +98,11 @@ describe('a browser document delete and its saved versions', () => {
       if (record === null) throw new Error('no record')
       writeWorkspaceDocumentContent(record, documentId, canvasDoc(path))
       await docs.save(workspaceId, record)
-      await new BrowserVersionStore({ docs, index }).save(workspaceId, path, { label: path })
+      await new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index }).save(
+        workspaceId,
+        path,
+        { label: path },
+      )
     }
     await index.deleteDocument({ workspaceId, path: 'purged' })
 
@@ -117,7 +125,10 @@ describe('a browser document delete and its saved versions', () => {
     if (record === null) throw new Error('no record')
     writeWorkspaceDocumentContent(record, documentId, canvasDoc('live'))
     await docs.save(workspaceId, record)
-    await new BrowserVersionStore({ docs, index }).save(workspaceId, 'live')
+    await new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index }).save(
+      workspaceId,
+      'live',
+    )
 
     expect(await index.purgeTrashEntry({ workspaceId, documentId })).toBe(false)
 

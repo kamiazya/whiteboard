@@ -335,6 +335,13 @@ export const writeSchema = z.strictObject({
 })
 export type Write = z.infer<typeof writeSchema>
 
+/** Move a view made by a fork at frontiers to the state at other frontiers. */
+export const checkoutRequestSchema = z.strictObject({
+  handle: handleSchema,
+  at: z.array(versionEntrySchema),
+})
+export type CheckoutRequest = z.infer<typeof checkoutRequestSchema>
+
 /** What encoded version bytes held. */
 export const decodeResponseSchema = z.strictObject({
   entries: z.array(versionEntrySchema),

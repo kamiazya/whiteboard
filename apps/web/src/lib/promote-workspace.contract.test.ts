@@ -1,12 +1,13 @@
 // @vitest-environment node
 // The move reads the trash bytes and version rows from IndexedDB before it posts.
 import 'fake-indexeddb/auto'
-import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
+import { createWorkspaceDocumentAtPath, type RecordLease } from '@kamiazya/whiteboard-loro-adapter'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { leaseOf } from '../test-utils/replica-lease.js'
 import {
   resetBrowserWorkspaceIdForTests,
   setBrowserWorkspaceIdForTests,
@@ -35,7 +36,9 @@ describe('promoteWorkspace, answered with a promote body its contract refuses', 
       fetch: (async () => jsonResponse({ ok: true, recorded: 'yes' })) as typeof fetch,
       keeperBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws-daemon',
-      workspaceDocs: { open: async () => record } as unknown as WorkspaceDocs,
+      workspaceDocs: {
+        open: async () => await leaseOf(record),
+      } as unknown as WorkspaceDocs<RecordLease>,
     })
 
     expect(result).toEqual({

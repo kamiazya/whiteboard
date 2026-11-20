@@ -20,6 +20,7 @@ import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { promoteWorkspace } from './promote-workspace.js'
@@ -91,14 +92,16 @@ async function seedWorkspace() {
   const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   const workspaceId = getBrowserWorkspaceId()
-  const docs = new BrowserWorkspaceDocs()
   const sketch = await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
   const gone = await index.createDocument({ workspaceId, path: 'gone', kind: 'spatial' })
   await storePicture('only-in-a-version')
   await storePicture('only-in-the-trash')
   await seedTreeContent(sketch.documentId, canvasWith([picture('only-in-a-version')]))
   await seedTreeContent(gone.documentId, canvasWith([picture('only-in-the-trash')]))
-  const drafted = await new BrowserVersionStore({ docs, index }).save(workspaceId, 'sketch', {
+  const drafted = await new BrowserVersionStore({
+    docs: new BrowserWorkspaceRecords(),
+    index,
+  }).save(workspaceId, 'sketch', {
     label: 'as drafted',
     operator: { kind: 'human', displayName: 'Yuki' },
   })
@@ -123,7 +126,7 @@ describe('promoteWorkspace, what travels beside the record', () => {
       fetch: daemon.fetch,
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
@@ -154,7 +157,7 @@ describe('promoteWorkspace, what travels beside the record', () => {
       fetch: daemon.fetch,
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
@@ -168,7 +171,7 @@ describe('promoteWorkspace, what travels beside the record', () => {
       fetch: daemonStub({ confirms: false }).fetch,
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
@@ -189,7 +192,7 @@ describe('promoteWorkspace, what travels beside the record', () => {
       fetch: daemon.fetch,
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
@@ -207,7 +210,7 @@ describe('promoteWorkspace, what travels beside the record', () => {
       fetch: daemon.fetch,
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return

@@ -3,7 +3,7 @@
  * into a workspace of the daemon on this machine, identity and history
  * intact. Settings > Connections' "This workspace" section
  * (`PromoteWorkspaceSection`) is the caller, and it loads this module lazily:
- * it reaches loro-crdt, which stays out of the entry closure
+ * it reaches the CRDT engine, which stays out of the entry closure
  * (entry-graph-loro-free.test.ts guards it).
  *
  * The destination is a parameter, `keeperBaseUrl`, named for the keeper axis
@@ -31,13 +31,13 @@
 
 import { documentFileByIdApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
-  collectImageRefIds,
-  documentContainers,
-  readWorkspaceDocuments,
+  lease,
+  type RecordLease,
+  type WorkspaceDocumentEntry,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64Url, newImageRef } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
-import type { LoroDoc } from 'loro-crdt'
+import { z } from 'zod'
 import { getAppLogger } from './app-logger.js'
 import { BrowserStorageRefusedError } from './browser-storage-refusal.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
@@ -68,8 +68,8 @@ export interface PromoteWorkspaceOptions {
   keeperBaseUrl: string
   /** The TARGET workspace at that keeper — promotion merges into an existing one. */
   workspaceId: string
-  /** The browser keeper's records (production: `new BrowserWorkspaceDocs()`). */
-  workspaceDocs: WorkspaceDocs
+  /** The browser keeper's records (production: `new BrowserWorkspaceRecords()`). */
+  workspaceDocs: WorkspaceDocs<RecordLease>
   /**
    * Called as each real phase starts — 'record' before the CRDT merge POST,
    * 'blobs' before the image uploads. The progress UI narrates from these
@@ -84,7 +84,7 @@ export interface PromoteWorkspaceOptions {
  * request leaves the browser. 0 both for an empty record and for no record.
  */
 export async function countBrowserWorkspaceDocuments(
-  workspaceDocs: WorkspaceDocs,
+  workspaceDocs: WorkspaceDocs<RecordLease>,
   registry: Pick<
     IdbDocumentIndex,
     'holdsPreTreeRecords' | 'holdsPreTreeContentRecords'
@@ -101,8 +101,15 @@ export async function countBrowserWorkspaceDocuments(
   }
   const record = await workspaceDocs.open(workspaceId)
   if (record === null) return 0
-  return readWorkspaceDocuments(record).length
+  return lease.withLease(record, async (held) => (await documentsOf(held)).length)
 }
+
+// The reader is total over this shape; the parse asserts the type only.
+const documentsShape = z.custom<WorkspaceDocumentEntry[]>()
+const imageRefIdsShape = z.array(z.string())
+
+const documentsOf = (record: RecordLease) =>
+  lease.read(record, { query: 'documents' }, documentsShape)
 
 export type PromoteWorkspaceResult =
   | {
@@ -197,14 +204,19 @@ export async function promoteWorkspace(
  * first live document's. With no live document at all there is nothing to
  * address it through, and the image maps to `undefined` so the move reports it.
  */
-function imageAddresses(
-  record: LoroDoc,
-  entries: ReturnType<typeof readWorkspaceDocuments>,
+async function imageAddresses(
+  record: RecordLease,
+  entries: readonly WorkspaceDocumentEntry[],
   scan: CarriedPlanes['scan'],
-): Map<string, string | undefined> {
+): Promise<Map<string, string | undefined>> {
   const refs = new Map<string, string | undefined>()
   for (const entry of entries) {
-    for (const fileId of collectImageRefIds(documentContainers(record, entry.documentId))) {
+    const ids = await lease.read(
+      record,
+      { query: 'imageRefIds', args: { documentId: entry.documentId } },
+      imageRefIdsShape,
+    )
+    for (const fileId of ids) {
       if (!refs.has(fileId)) refs.set(fileId, entry.documentId)
     }
   }
@@ -301,31 +313,45 @@ async function transferImages(
 async function promoteWorkspaceUnsafe(
   options: PromoteWorkspaceOptions,
 ): Promise<PromoteWorkspaceResult> {
-  const { fetch, keeperBaseUrl, workspaceId, workspaceDocs, onProgress } = options
-  // The keeper's own store, like BrowserWorkspaceDocs above: both address
-  // the same claimed database, so tests seed through the production path.
-  const fileStore = new DocumentFileStore()
-
   const sourceWorkspaceId = getBrowserWorkspaceId()
-  const record = await workspaceDocs.open(sourceWorkspaceId)
+  const record = await options.workspaceDocs.open(sourceWorkspaceId)
   if (record === null) {
     return { kind: 'failed', reason: 'This browser keeps no workspace record to promote.' }
   }
-  // Read from the record ITSELF, not echoed back from the daemon: identity
-  // preservation means these exact ids resolve on the other side, and the
-  // acceptance tests hold the route to that.
-  const entries = readWorkspaceDocuments(record)
-  const promotedDocumentIds = entries.map((entry) => entry.documentId)
-  // Its own failure, not the network one the outer catch reports: nothing
-  // has left the browser yet, and a retry would not be cured by a connection.
-  const planes = await readCarriedPlanes(record, sourceWorkspaceId).catch((err: unknown) => {
+  return lease.withLease(record, (held) => promoteRecord(options, held, sourceWorkspaceId))
+}
+
+/**
+ * The planes beside the record, or null when this browser could not read them.
+ * Its own failure, not the network one the outer catch reports: nothing has
+ * left the browser yet, and a retry would not be cured by a connection.
+ */
+function readPlanesOrNull(record: RecordLease, sourceWorkspaceId: string) {
+  return readCarriedPlanes(record, sourceWorkspaceId).catch((err: unknown) => {
     log.warn('carried planes could not be read', { sourceWorkspaceId, name: errorName(err) })
     return null
   })
+}
+
+async function promoteRecord(
+  options: PromoteWorkspaceOptions,
+  record: RecordLease,
+  sourceWorkspaceId: string,
+): Promise<PromoteWorkspaceResult> {
+  const { fetch, keeperBaseUrl, workspaceId, onProgress } = options
+  // The keeper's own store, like BrowserWorkspaceRecords: both address the
+  // same claimed database, so tests seed through the production path.
+  const fileStore = new DocumentFileStore()
+  // Read from the record ITSELF, not echoed back from the daemon: identity
+  // preservation means these exact ids resolve on the other side, and the
+  // acceptance tests hold the route to that.
+  const entries = await documentsOf(record)
+  const promotedDocumentIds = entries.map((entry) => entry.documentId)
+  const planes = await readPlanesOrNull(record, sourceWorkspaceId)
   if (planes === null) {
     return { kind: 'failed', reason: 'This browser could not read its workspace to move it.' }
   }
-  const snapshot = bytesToBase64Url(new Uint8Array(record.export({ mode: 'snapshot' })))
+  const snapshot = bytesToBase64Url(lease.exportSnapshot(record))
   const fitted = fitCarriedPlanes(snapshot, planes)
 
   onProgress?.('record')
@@ -343,9 +369,8 @@ async function promoteWorkspaceUnsafe(
   // upload lands in the report instead of failing the merge that already
   // happened.
   onProgress?.('blobs')
-  const blobs = await transferImages(fetch, keeperBaseUrl, workspaceId, fileStore, [
-    ...imageAddresses(record, entries, planes.scan),
-  ])
+  const addresses = await imageAddresses(record, entries, planes.scan)
+  const blobs = await transferImages(fetch, keeperBaseUrl, workspaceId, fileStore, [...addresses])
 
   return {
     kind: 'ok',
@@ -369,7 +394,7 @@ async function promoteWorkspaceUnsafe(
  * was fitted to its own number is not a refusal another fitting would cure.
  */
 async function promoteWithinBudget(
-  record: LoroDoc,
+  record: RecordLease,
   fitted: FittedPlanes,
   request: Omit<PromoteRequestOptions, 'planes'>,
 ): Promise<{ promoted: PromoteRequestResult; sent: FittedPlanes }> {

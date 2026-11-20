@@ -38,8 +38,8 @@ import {
 } from '../test-utils/seed-workspace-content.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
-import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { BROWSER_FILE_ADAPTER } from './document-embed-content.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { countBrowserWorkspaceDocuments, promoteWorkspace } from './promote-workspace.js'
@@ -155,7 +155,7 @@ describe('promoteWorkspace', () => {
 
     // The confirmation UI states the document count BEFORE promoting, from
     // the same record the transfer will read.
-    expect(await countBrowserWorkspaceDocuments(new BrowserWorkspaceDocs())).toBe(2)
+    expect(await countBrowserWorkspaceDocuments(new BrowserWorkspaceRecords())).toBe(2)
 
     const target = targetDaemonRecord()
     const putFiles: Array<{ url: string; contentType: string; bytes: Uint8Array }> = []
@@ -164,7 +164,7 @@ describe('promoteWorkspace', () => {
       fetch: daemonStub(target, putFiles),
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
       onProgress: (phase) => phases.push(phase),
     })
     // Real progress, not staged: the record phase precedes the blob phase.
@@ -205,7 +205,7 @@ describe('promoteWorkspace', () => {
       fetch: daemonStub(targetDaemonRecord(), [], promotes),
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('ok')
     expect(promotes).toHaveLength(1)
@@ -234,7 +234,7 @@ describe('promoteWorkspace', () => {
       fetch: daemonStub(new LoroDoc()),
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
@@ -265,7 +265,7 @@ describe('promoteWorkspace', () => {
       fetch: daemonStub(new LoroDoc(), putFiles),
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
@@ -328,7 +328,7 @@ describe('promoteWorkspace', () => {
       fetch: daemonStub(new LoroDoc(), putFiles),
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
 
     expect(result.kind).toBe('ok')
@@ -360,7 +360,7 @@ describe('promoteWorkspace', () => {
       fetch: refusing,
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
 
     expect(result.kind).toBe('ok')
@@ -386,7 +386,7 @@ describe('promoteWorkspace', () => {
       fetch: fetch404,
       keeperBaseUrl: BASE,
       workspaceId: 'ws-gone',
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('failed')
     if (result.kind !== 'failed') return
@@ -408,7 +408,7 @@ describe('promoteWorkspace', () => {
       fetch: fetch502,
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result).toEqual({ kind: 'failed', reason: 'Request failed (502).' })
   })
@@ -429,7 +429,7 @@ describe('promoteWorkspace', () => {
       fetch: fetchDown,
       keeperBaseUrl: BASE,
       workspaceId: 'ws-a',
-      workspaceDocs: new BrowserWorkspaceDocs(),
+      workspaceDocs: new BrowserWorkspaceRecords(),
     })
     expect(result.kind).toBe('failed')
   })
@@ -437,7 +437,9 @@ describe('promoteWorkspace', () => {
   it('refuses to count a workspace that still holds a per-document content record', async () => {
     await seedPreTreeContentRow(generateDocumentId())
 
-    await expect(countBrowserWorkspaceDocuments(new BrowserWorkspaceDocs())).rejects.toMatchObject({
+    await expect(
+      countBrowserWorkspaceDocuments(new BrowserWorkspaceRecords()),
+    ).rejects.toMatchObject({
       name: 'BrowserStorageRefusedError',
       reason: 'pre-tree-records',
     })

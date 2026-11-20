@@ -30,9 +30,9 @@ export function useTransferToKeeper(openWindow?: (url: string) => PopupHandle | 
     // the destination loads.
     const payload = Promise.all([
       import('../lib/transfer-payload.js'),
-      import('../lib/browser-workspace-docs.js'),
-    ]).then(([{ readTransferPayload }, { BrowserWorkspaceDocs }]) =>
-      readTransferPayload(new BrowserWorkspaceDocs()),
+      import('../lib/browser-workspace-records.js'),
+    ]).then(([{ readTransferPayload }, { BrowserWorkspaceRecords }]) =>
+      readTransferPayload(new BrowserWorkspaceRecords()),
     )
     void sendTransfer({
       keeperBaseUrl: destination.keeperBaseUrl,

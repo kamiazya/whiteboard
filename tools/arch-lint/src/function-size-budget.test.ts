@@ -352,7 +352,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // which several authenticators decide there rather than at assertion time.
   // One property on the options object; its reasoning is a named constant
   // beside the function rather than a comment inside it.
-  'apps/web/src/lib/promote-workspace.ts#promoteWorkspaceUnsafe': 79,
   'apps/web/src/lib/spatial/commands.ts#applyCommand': 132,
   'apps/web/src/lib/spatial/fragment-insert.ts#buildFragmentInsertCommand': 84,
   'apps/web/src/lib/spatial/freehand.ts#freehandLine': 58,

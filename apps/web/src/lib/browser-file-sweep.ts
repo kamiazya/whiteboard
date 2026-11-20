@@ -26,14 +26,18 @@
  * long as it is stored; nothing in this build clears one, so only clearing
  * the site's data lets them run.
  */
-import { DEFAULT_FILE_GRACE_MS, scanFileReferences } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  DEFAULT_FILE_GRACE_MS,
+  lease,
+  type RecordLease,
+  scanFileReferencesOfLease,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { imageRefId, isImageRef } from '@kamiazya/whiteboard-model'
 import { workspaceIdOfStoredDocKey } from '@kamiazya/whiteboard-ports'
-import type { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { SYNC_DOCUMENTS_STORE } from './browser-idb.js'
-import { savedVersionReads, savedVersionRows } from './browser-version-store.js'
-import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { savedVersionRows, withSavedVersionReads } from './browser-version-store.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
@@ -78,8 +82,8 @@ function browserKeptWorkspaceIds(keys: readonly string[]): string[] {
   })
 }
 
-function signatureOf(record: LoroDoc): string {
-  return JSON.stringify(record.oplogFrontiers())
+function signatureOf(record: RecordLease): string {
+  return JSON.stringify(lease.versionOf(record).frontiers)
 }
 
 /**
@@ -90,6 +94,38 @@ function yieldToPage(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0))
 }
 
+type WorkspaceScan =
+  | { kind: 'scanned'; referenced: ReadonlySet<string>; signature: string }
+  | { kind: 'stood-down'; reason: 'unreadable-record' | 'unjudged' }
+
+/** What one workspace record names, or why it cannot say. The record is released either way. */
+async function scanWorkspace(
+  record: RecordLease,
+  workspaceId: string,
+  blobs: IdbBlobStore,
+  dbName: string | undefined,
+): Promise<WorkspaceScan> {
+  return lease.withLease(record, async (held) => {
+    const signature = signatureOf(held)
+    const rows = await savedVersionRows(workspaceId, dbName)
+    const scan = await withSavedVersionReads(held, rows, (versions) =>
+      scanFileReferencesOfLease(held, {
+        trashBytes: async (entry) => (await blobs.get({ ref: entry.blob }))?.bytes ?? null,
+        versions,
+        between: yieldToPage,
+      }),
+    )
+    if (scan.unjudged.length > 0) {
+      log.warn('file sweep stood down: part of a workspace could not be read', {
+        workspaceId,
+        unjudged: scan.unjudged.map((target) => target.kind),
+      })
+      return { kind: 'stood-down', reason: 'unjudged' }
+    }
+    return { kind: 'scanned', referenced: scan.referenced, signature }
+  })
+}
+
 /** What every workspace this browser keeps names, or why it cannot say. */
 async function scanBrowserWorkspaces(
   workspaceIds: readonly string[],
@@ -98,7 +134,7 @@ async function scanBrowserWorkspaces(
   | { kind: 'scanned'; referenced: Set<string>; signatures: Map<string, string> }
   | { kind: 'stood-down'; reason: 'unreadable-record' | 'unjudged' }
 > {
-  const docs = new BrowserWorkspaceDocs(dbName)
+  const docs = new BrowserWorkspaceRecords(dbName)
   const blobs = new IdbBlobStore(dbName)
   const referenced = new Set<string>()
   const signatures = new Map<string, string>()
@@ -109,20 +145,9 @@ async function scanBrowserWorkspaces(
     })
     if (record === undefined) return { kind: 'stood-down', reason: 'unreadable-record' }
     if (record === null) continue
-    signatures.set(workspaceId, signatureOf(record))
-    const rows = await savedVersionRows(workspaceId, dbName)
-    const scan = await scanFileReferences(record, {
-      trashBytes: async (entry) => (await blobs.get({ ref: entry.blob }))?.bytes ?? null,
-      versions: savedVersionReads(record, rows),
-      between: yieldToPage,
-    })
-    if (scan.unjudged.length > 0) {
-      log.warn('file sweep stood down: part of a workspace could not be read', {
-        workspaceId,
-        unjudged: scan.unjudged.map((target) => target.kind),
-      })
-      return { kind: 'stood-down', reason: 'unjudged' }
-    }
+    const scan = await scanWorkspace(record, workspaceId, blobs, dbName)
+    if (scan.kind === 'stood-down') return scan
+    signatures.set(workspaceId, scan.signature)
     for (const id of scan.referenced) referenced.add(id)
   }
   return { kind: 'scanned', referenced, signatures }
@@ -136,10 +161,11 @@ async function recordsUnmoved(
 ): Promise<boolean> {
   const keys = await storedRecordKeys(dbName)
   if (keys.join('\n') !== before.join('\n')) return false
-  const docs = new BrowserWorkspaceDocs(dbName)
+  const docs = new BrowserWorkspaceRecords(dbName)
   for (const [workspaceId, signature] of signatures) {
     const record = await docs.open(workspaceId).catch(() => null)
-    if (record === null || signatureOf(record) !== signature) return false
+    if (record === null) return false
+    if ((await lease.withLease(record, (held) => signatureOf(held))) !== signature) return false
   }
   return true
 }

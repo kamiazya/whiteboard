@@ -20,8 +20,8 @@ import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { BrowserVersionStore } from './browser-version-store.js'
-import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { promoteWorkspace } from './promote-workspace.js'
 
 claimIsolatedWhiteboardDb('promote-workspace-judged-budget-node')
@@ -71,9 +71,8 @@ async function noteWithThreeVersions(): Promise<string[]> {
   const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   const workspaceId = getBrowserWorkspaceId()
-  const docs = new BrowserWorkspaceDocs()
   const note = await index.createDocument({ workspaceId, path: 'note', kind: 'markdown' })
-  const store = new BrowserVersionStore({ docs, index })
+  const store = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
   const ids: string[] = []
   const now = vi.spyOn(Date, 'now')
   for (const [at, body] of [
@@ -94,7 +93,7 @@ const promote = (fetch: typeof globalThis.fetch) =>
     fetch,
     keeperBaseUrl: BASE,
     workspaceId: 'ws-a',
-    workspaceDocs: new BrowserWorkspaceDocs(),
+    workspaceDocs: new BrowserWorkspaceRecords(),
   })
 
 describe('promoteWorkspace past the daemon budget for checking saved versions', () => {

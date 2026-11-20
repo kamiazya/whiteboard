@@ -19,6 +19,7 @@ import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from '../lib/browser-workspace-records.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
@@ -150,7 +151,7 @@ describe('BrowserDocumentPage version history (browser)', () => {
     await userEvent.keyboard('{Enter}')
 
     // The row reaches the store the panel reads…
-    const store = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+    const store = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
     await waitFor(async () => expect((await store.list(workspaceId, 'canvas-a')).length).toBe(1), {
       timeout: 5000,
     })
@@ -334,7 +335,7 @@ describe('BrowserDocumentPage version history (browser)', () => {
       kind: 'spatial',
     })
     await writeContent(documentId, 'first')
-    const store = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+    const store = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
     await store.save(workspaceId, 'canvas-a', { label: 'first draft' })
     await writeContent(documentId, 'second')
 

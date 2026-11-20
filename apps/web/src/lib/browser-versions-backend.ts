@@ -1,11 +1,11 @@
 import { restorePointOptions } from '@kamiazya/whiteboard-history'
 import {
-  readDocumentContent,
+  type LegacyRecord,
+  loroDocKind,
   resolveWorkspaceDocumentById,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
-import type { LoroDoc } from 'loro-crdt'
 import type { BrowserVersionStore } from './browser-version-store.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import type { VersionsBackend } from './versions-backend.js'
@@ -20,8 +20,9 @@ import type { VersionsBackend } from './versions-backend.js'
  * without standing one up.
  */
 export interface VersionsRecordSeam {
-  readonly readRecord: <T>(read: (doc: LoroDoc, documentId: string) => T) => T | null
-  readonly applyRestore: (past: LoroDoc, label?: string) => Promise<void>
+  readonly readRecord: <T>(read: (doc: LegacyRecord, documentId: string) => T) => T | null
+  /** `past` is the document's content as a document of its own, content at the root. */
+  readonly applyRestore: (past: LegacyRecord, label?: string) => Promise<void>
 }
 
 /**
@@ -47,6 +48,27 @@ async function documentPathOf(
       : held.path
   if (path === undefined) throw new Error(`no such document: ${documentId}`)
   return path
+}
+
+/**
+ * The point a restore produced, recorded as the daemon's operation records it
+ * — automatic, naming what it restored: a restore reconciles a past state onto
+ * the live one, and a restore that leaves no row is one nobody can find
+ * afterwards. Best effort for the same reason as there — the content has
+ * already landed, so a failed row costs the history a point and the document
+ * nothing.
+ */
+async function bookmarkRestore(
+  store: BrowserVersionStore,
+  workspaceId: string,
+  path: string,
+  versionId: string,
+): Promise<void> {
+  try {
+    await store.save(workspaceId, path, restorePointOptions(versionId))
+  } catch {
+    // See above.
+  }
 }
 
 /**
@@ -91,37 +113,31 @@ export function createBrowserVersionsBackend(deps: {
       })
     },
     async loadPast(_workspaceId, documentId, versionId) {
-      // The store answers a LoroDoc; the seam answers something to draw. The
-      // projection happens here so the seam stays free of CRDT types and a
-      // keeper that never held one could still implement it.
-      const past = await deps.store.loadPast(
+      // The store lends the past state; the seam answers something to draw, so
+      // the seam stays free of CRDT types and a keeper that never held one
+      // could still implement it.
+      return deps.store.withPast(
         getBrowserWorkspaceId(),
         await pathOf(documentId),
         versionId,
+        (past) => past.content(deps.kind),
       )
-      if (past === null) return null
-      return readDocumentContent(past, deps.kind)
     },
     async restore(_workspaceId, documentId, versionId) {
       const workspaceId = getBrowserWorkspaceId()
       const path = await pathOf(documentId)
-      const past = await deps.store.loadPast(workspaceId, path, versionId)
-      if (past === null) throw new Error(`no such version: ${versionId}`)
+      // The live record's reconcile reads a document of its own, so the past
+      // state leaves the engine as the projection's bytes and opens as one.
+      const projection = await deps.store.withPast(workspaceId, path, versionId, (past) =>
+        past.projection(),
+      )
+      if (projection === null) throw new Error(`no such version: ${versionId}`)
+      const past = await loroDocKind.load(projection, [])
       const label = (await deps.store.list(workspaceId, path)).find(
         (v) => v.id === versionId,
       )?.label
       await deps.record.applyRestore(past, label)
-      // The point the restore produced, recorded as the daemon's operation
-      // records it — automatic, naming what it restored: a restore reconciles
-      // a past state onto the live one, and a restore that leaves no row is
-      // one nobody can find afterwards. Best effort for the same reason as there — the content
-      // has already landed, so a failed row costs the history a point and the
-      // document nothing.
-      try {
-        await deps.store.save(workspaceId, path, restorePointOptions(versionId))
-      } catch {
-        // See above.
-      }
+      await bookmarkRestore(deps.store, workspaceId, path, versionId)
     },
   }
 }

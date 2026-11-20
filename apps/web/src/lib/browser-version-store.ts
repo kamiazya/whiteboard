@@ -5,19 +5,20 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { autoVersionsOverCap } from '@kamiazya/whiteboard-history'
 import {
-  contentDigestOfDocument,
-  countSpatialNodes,
-  type FileReferenceReads,
-  projectWorkspaceDocument,
+  type LeaseFileReferenceReads,
+  type LegacyRecord,
+  lease,
+  loroDocKind,
+  type RecordLease,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { compareCodeUnit, generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
-import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import { VERSIONS_BY_DOCUMENT_INDEX, VERSIONS_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
 import { announceVersion } from './workspace-broadcast.js'
+import { type HeldDocument, withHeldDocument } from './workspace-content.js'
 
 /**
  * One saved version, as the `versions` store holds it. The frontier is the
@@ -68,19 +69,73 @@ export type VersionRow = z.infer<typeof versionRowSchema>
 
 export interface BrowserVersionStoreDeps {
   /** The workspace record — where a frontier points and what a restore checks out. */
-  readonly docs: WorkspaceDocs
+  readonly docs: WorkspaceDocs<RecordLease>
   /** Placement: path -> documentId, so a rename does not orphan a history. */
   readonly index: Pick<DocumentIndex, 'resolveDocument'>
   /** Only tests pass this; see `openWhiteboardDb`'s note on why it exists. */
   readonly dbName?: string
 }
 
-/** The workspace record a keeper's checkpoints are taken against. */
-export type WorkspaceRecordDoc = LoroDoc
+/**
+ * The live workspace record a keeper's checkpoints are taken against. It is
+ * the editor session's own document, so it stays the Loro-held record until
+ * the session holds a lease.
+ */
+export type WorkspaceRecordDoc = LegacyRecord
 
-/** A record's frontier as the bytes the checkpoint scheduler compares and never decodes. */
+/**
+ * What the live record holds, as the bytes the checkpoint scheduler compares
+ * and never decodes. The version vector names the same set of operations a
+ * frontier does, so two equal answers mean nothing was added in between.
+ */
 export function recordFrontier(record: WorkspaceRecordDoc): Uint8Array {
-  return new Uint8Array(encodeFrontiers(record.oplogFrontiers()))
+  return loroDocKind.encodedVersion(record)
+}
+
+const fingerprintShape = z.custom<{
+  contentDigest: { ok: string } | { err: string }
+} | null>()
+
+/**
+ * The identity of the content a document holds in the record, read from the
+ * record through the projection a keeper stores — never from the index, which
+ * may not hold the content to derive one. `null` when the record holds no such
+ * document.
+ */
+async function contentDigestIn(record: RecordLease, documentId: string): Promise<string | null> {
+  const projection = await lease.read(
+    record,
+    { query: 'workspaceDocumentProjection', args: { documentId } },
+    fingerprintShape,
+  )
+  if (projection === null) return null
+  if ('err' in projection.contentDigest) {
+    throw new Error(`the content of ${documentId} could not be digested`)
+  }
+  return projection.contentDigest.ok
+}
+
+/**
+ * What a version row records of the stored record as it stands: the document's
+ * content identity and size, and the frontiers that name this point. The
+ * record is released whether it answers or not.
+ */
+async function pointOfRecord(record: RecordLease, documentId: string, path: string) {
+  return lease.withLease(record, async (held) => {
+    const contentDigest = await contentDigestIn(held, documentId)
+    if (contentDigest === null) throw new Error(`no content for ${path} in the workspace record`)
+    return {
+      contentDigest,
+      elementCount: await lease.read(
+        held,
+        { query: 'spatialNodeCount', args: { documentId } },
+        z.number(),
+      ),
+      // The STORED record's frontier, never a live doc's: a checkpoint has to
+      // point at ops that are on disk, and `open` reads what is.
+      frontiers: new Uint8Array(lease.versionOf(held).encodedFrontiers),
+    }
+  })
 }
 
 /**
@@ -93,9 +148,9 @@ export function recordFrontier(record: WorkspaceRecordDoc): Uint8Array {
  * out after them. A per-document copy would be the second place to keep a
  * version, which is the defect the daemon's store had and removed.
  *
- * `loadPast` answers the past state of ONE document as a standalone doc,
- * which is what a restore reconciles from; who reconciles it onto the live
- * document is the backend's business (`BrowserBackend.applyRestore`).
+ * `withPast` lends the past state of ONE document, which is what a restore
+ * reconciles from; who reconciles it onto the live document is the backend's
+ * business (`BrowserBackend.applyRestore`).
  */
 export class BrowserVersionStore {
   constructor(private readonly deps: BrowserVersionStoreDeps) {}
@@ -116,8 +171,11 @@ export class BrowserVersionStore {
     if (placement === null) throw new Error(`no document at ${path}`)
     const record = await this.deps.docs.open(workspaceId)
     if (record === null) throw new Error(`no workspace record for ${workspaceId}`)
-    const projection = projectWorkspaceDocument(record, placement.documentId)
-    if (projection === null) throw new Error(`no content for ${path} in the workspace record`)
+    const { contentDigest, elementCount, frontiers } = await pointOfRecord(
+      record,
+      placement.documentId,
+      path,
+    )
     const row: VersionRow = {
       id: generateDocumentId(),
       workspaceId,
@@ -125,25 +183,21 @@ export class BrowserVersionStore {
       path,
       ...(input.label === undefined || input.label === '' ? {} : { label: input.label }),
       createdAt: Date.now(),
-      elementCount: countSpatialNodes(projection),
+      elementCount,
       ...(input.operator === undefined ? {} : { operator: input.operator }),
       ...(input.restoredFrom === undefined ? {} : { restoredFrom: input.restoredFrom }),
       // Written only when true, so a manual save keeps writing exactly the
       // row it wrote before `auto` existed.
       ...(input.auto === true ? { auto: true } : {}),
-      // The STORED record's frontier, never a live doc's: a checkpoint has to
-      // point at ops that are on disk, and `open` reads what is.
-      frontiers: new Uint8Array(encodeFrontiers(record.oplogFrontiers())),
-      // Taken from the RECORD, through the projection this save already made
-      // for the element count — never from the index. `DocumentEntry`'s
-      // digest is optional because an index that does not hold the content
-      // cannot derive one, and this app's legacy rows were exactly that;
-      // depending on it here meant a markdown note could not be checkpointed
-      // at all. The
+      frontiers,
+      // Taken from the RECORD, never from the index. `DocumentEntry`'s digest
+      // is optional because an index that does not hold the content cannot
+      // derive one, and this app's legacy rows were exactly that; depending on
+      // it here meant a markdown note could not be checkpointed at all. The
       // record is the one place that always holds the content, and
       // `content-digest.hosts.test.ts` pins that a projection and the tree
       // node it came from answer the same digest.
-      contentDigest: contentDigestOfDocument(projection),
+      contentDigest,
     }
     await inTransaction(this.deps.dbName, [VERSIONS_STORE], 'readwrite', async (tx) => {
       await request(tx.objectStore(VERSIONS_STORE).put(versionRowSchema.parse(row)))
@@ -224,9 +278,10 @@ export class BrowserVersionStore {
     if (newest === undefined) return false
     const record = await this.deps.docs.open(workspaceId)
     if (record === null) return false
-    const projection = projectWorkspaceDocument(record, placement.documentId)
-    if (projection === null) return false
-    return newest.contentDigest === contentDigestOfDocument(projection)
+    const digest = await lease.withLease(record, (held) =>
+      contentDigestIn(held, placement.documentId),
+    )
+    return digest !== null && newest.contentDigest === digest
   }
 
   /** Newest first, as the History panel lists them. */
@@ -240,26 +295,33 @@ export class BrowserVersionStore {
   }
 
   /**
-   * The past state of the document the version belongs to, as an
-   * independent doc — the record checked out at the version's frontier and
-   * projected. Null only when the version does not exist. A version whose
-   * document is not `path` is answered as absent, for the reason the
-   * daemon's operation refuses it: the id alone would let another
-   * document's history be restored onto this one.
+   * `use` over the past state of the document the version belongs to — the
+   * record viewed at the version's frontier — or null when the version does not
+   * exist, or its document did not yet. A version whose document is not `path`
+   * is answered as absent, for the reason the daemon's operation refuses it:
+   * the id alone would let another document's history be restored onto this
+   * one. The view is released whether `use` returns or throws.
    */
-  async loadPast(workspaceId: string, path: string, versionId: string): Promise<LoroDoc | null> {
+  async withPast<T>(
+    workspaceId: string,
+    path: string,
+    versionId: string,
+    use: (held: HeldDocument) => Promise<T>,
+  ): Promise<T | null> {
     const row = await this.ownedRow(workspaceId, path, versionId)
     if (row === null) return null
     const record = await this.deps.docs.open(workspaceId)
     if (record === null) return null
-    const clone = LoroDoc.fromSnapshot(record.export({ mode: 'snapshot' }))
-    clone.checkout(decodeFrontiers(row.frontiers))
-    return projectWorkspaceDocument(clone, row.documentId)
+    return lease.withLease(record, (held) =>
+      lease.withLease(lease.viewAt(held, row.frontiers), (past) =>
+        withHeldDocument({ record: past, read: true }, row.documentId, use),
+      ),
+    )
   }
 
   /**
    * The row, but only if `path` is the document whose history it belongs to
-   * — the refusal `loadPast` makes, kept in one place so an id alone can
+   * — the refusal `withPast` makes, kept in one place so an id alone can
    * never reach another document's history through whichever reader was
    * written second.
    */
@@ -385,31 +447,44 @@ export async function savedVersionRows(
   })
 }
 
+const imageRefIdsShape = z.array(z.string())
+
 /**
- * The saved versions as `scanFileReferences` reads them — what the file sweep
- * and a promotion check out to learn which images a past state draws. Each
- * frontier is checked out of ONE fork of the record rather than a fork per
- * version: a fork copies the whole workspace, and a checkout moves the one it
- * has.
+ * `use` over the saved versions as `scanFileReferencesOfLease` reads them —
+ * what the file sweep and a promotion check out to learn which images a past
+ * state draws. One view of the record is moved from frontier to frontier
+ * rather than one made per version: a view copies the whole workspace, and a
+ * move re-reads the state of the one it has. The view is released whether
+ * `use` returns or throws.
  */
-export function savedVersionReads(
-  record: LoroDoc,
+export async function withSavedVersionReads<T>(
+  record: RecordLease,
   rows: ReadonlyArray<Pick<VersionRow, 'id' | 'documentId' | 'frontiers'>>,
-): NonNullable<FileReferenceReads['versions']> {
-  let past: LoroDoc | null = null
-  return {
-    list: (holder) =>
-      Promise.resolve(
-        rows.filter((row) => row.documentId === holder.documentId).map((row) => row.id),
-      ),
-    // Through `then`, so a checkout that throws rejects the way an async read would.
-    load: (holder, versionId) =>
-      Promise.resolve().then(() => {
-        const row = rows.find((candidate) => candidate.id === versionId)
-        if (row === undefined) return null
-        past ??= record.fork()
-        past.checkout(decodeFrontiers(row.frontiers))
-        return projectWorkspaceDocument(past, holder.documentId)
-      }),
+  use: (versions: NonNullable<LeaseFileReferenceReads['versions']>) => Promise<T>,
+): Promise<T> {
+  // Held in an object: the closure below assigns it, which narrowing cannot follow.
+  const view: { past: RecordLease | null } = { past: null }
+  try {
+    return await use({
+      list: (holder) =>
+        Promise.resolve(
+          rows.filter((row) => row.documentId === holder.documentId).map((row) => row.id),
+        ),
+      // Through `then`, so a move that throws rejects the way an async read would.
+      imageRefIds: (holder, versionId) =>
+        Promise.resolve().then(() => {
+          const row = rows.find((candidate) => candidate.id === versionId)
+          if (row === undefined) return null
+          if (view.past === null) view.past = lease.viewAt(record, row.frontiers)
+          else lease.moveView(view.past, row.frontiers)
+          return lease.read(
+            view.past,
+            { query: 'imageRefIds', args: { documentId: holder.documentId } },
+            imageRefIdsShape,
+          )
+        }),
+    })
+  } finally {
+    view.past?.release()
   }
 }

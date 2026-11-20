@@ -165,4 +165,35 @@ describe('a cold walk over a browser workspace', () => {
       expect(() => held?.engine.version({ handle: held.handle })).toThrow()
     }
   })
+
+  // A page that switches documents asks again before the first ask has
+  // answered. Each ask reads through the record it opened and gives it back.
+  it('answers two overlapping backlink asks, and gives every record back', {
+    timeout: SEEDED_WALK_TIMEOUT_MS,
+  }, async () => {
+    const { index, documentIds } = await seedWorkspace()
+    const open = BrowserWorkspaceRecords.prototype.open
+    const leases: Awaited<ReturnType<typeof open>>[] = []
+    vi.spyOn(BrowserWorkspaceRecords.prototype, 'open').mockImplementation(async function (
+      this: BrowserWorkspaceRecords,
+      workspaceId: string,
+    ) {
+      const opened = await open.call(this, workspaceId)
+      leases.push(opened)
+      return opened
+    })
+    const read = browserBacklinksReader(index)
+
+    const [first, second] = await Promise.all([
+      read(documentIds[0] as string),
+      read(documentIds[1] as string),
+    ])
+
+    expect(first.backlinks).toHaveLength(DOCUMENTS - 1)
+    expect(second.backlinks).toHaveLength(0)
+    expect(leases.length).toBeGreaterThan(0)
+    for (const held of leases) {
+      expect(() => held?.engine.version({ handle: held.handle })).toThrow()
+    }
+  })
 })

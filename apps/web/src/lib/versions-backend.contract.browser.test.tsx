@@ -22,6 +22,7 @@ import { BrowserVersionStore } from './browser-version-store.js'
 import { createBrowserVersionsBackend } from './browser-versions-backend.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { createDaemonVersionsBackend } from './versions-backend.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
@@ -61,7 +62,7 @@ async function browserHarness(): Promise<VersionsBackendHarness> {
   const other = await index.createDocument({ workspaceId, path: 'canvas-b', kind: 'spatial' })
 
   const docs = new BrowserWorkspaceDocs()
-  const store = new BrowserVersionStore({ docs, index })
+  const store = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
   const backend = new BrowserBackend({ documentId, path: 'canvas-a', kind: 'spatial' }, docs)
 
   // The restore path reconciles onto the record the BACKEND holds and

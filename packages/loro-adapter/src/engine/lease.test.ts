@@ -1,4 +1,4 @@
-import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
+import { bytesToBase64, MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
@@ -7,10 +7,12 @@ import {
   exportSnapshot,
   exportUpdateSince,
   importBytes,
+  moveView,
   ownedLease,
   read,
   readNow,
   versionOf,
+  viewAt,
   WriteRefusedError,
   withLease,
   write,
@@ -125,5 +127,55 @@ describe('the host kit over a lease', () => {
     const { lease } = leased()
     write(lease, body('hello'))
     expect(() => readNow(lease, BODY, z.number())).toThrow()
+  })
+})
+
+describe('a view of a record at a stored version', () => {
+  function history() {
+    const { lease } = leased()
+    write(lease, body('one'))
+    const first = versionOf(lease).encodedFrontiers
+    write(lease, body('one two'))
+    const second = versionOf(lease).encodedFrontiers
+    write(lease, body('one two three'))
+    return { lease, first, second }
+  }
+
+  it('reads the record as it stood at the frontiers a keeper stored, and moves between them', async () => {
+    const { lease, first, second } = history()
+    const view = viewAt(lease, first)
+    expect(await read(view, BODY, text)).toBe('one')
+    moveView(view, second)
+    expect(await read(view, BODY, text)).toBe('one two')
+    moveView(view, first)
+    expect(await read(view, BODY, text)).toBe('one')
+    expect(await read(lease, BODY, text)).toBe('one two three')
+  })
+
+  it('is its own handle to give back, and giving it back leaves the record open', () => {
+    const { engine, lease, first } = (() => {
+      const made = history()
+      return { ...made, engine: made.lease.engine }
+    })()
+    const close = vi.spyOn(engine, 'close')
+    const view = viewAt(lease, first)
+    expect(view.handle).not.toBe(lease.handle)
+    view.release()
+    expect(close).toHaveBeenCalledWith({ handle: view.handle })
+    expect(readNow(lease, BODY, text)).toBe('one two three')
+  })
+
+  it('refuses bytes that are not frontiers a record holds, and a record that is not a view', () => {
+    const { lease, first } = history()
+    expect(() => viewAt(lease, new Uint8Array([1, 2, 3]))).toThrow()
+    expect(() => moveView(lease, first)).toThrow(/view/)
+  })
+
+  it('answers the frontiers a keeper stores in the engine encoding', () => {
+    const { lease } = history()
+    const { encodedFrontiers, frontiers } = versionOf(lease)
+    expect(
+      lease.engine.decode({ kind: 'frontiers', bytes: bytesToBase64(encodedFrontiers) }).entries,
+    ).toEqual(frontiers)
   })
 })

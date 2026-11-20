@@ -13,6 +13,7 @@ import {
   type documentEngine as wire,
 } from '@kamiazya/whiteboard-model'
 import { exportedBytes } from './answers.js'
+import { randomPeerId } from './peer.js'
 import { type AnswerShape, readValue, unwrapAnswer } from './read-value.js'
 import type { CrdtEngine } from './types.js'
 
@@ -67,6 +68,8 @@ function bytesOf(encoded: string): Uint8Array {
 export interface LeaseVersion {
   /** The version vector in the engine's encoding. */
   readonly encoded: Uint8Array
+  /** The frontiers in the engine's encoding: what a keeper stores to name this point. */
+  readonly encodedFrontiers: Uint8Array
   readonly entries: wire.VersionEntry[]
   readonly frontiers: wire.VersionEntry[]
 }
@@ -75,9 +78,31 @@ export function versionOf(lease: RecordLease): LeaseVersion {
   const answer = lease.engine.version({ handle: lease.handle })
   return {
     encoded: bytesOf(answer.encodedVersion),
+    encodedFrontiers: bytesOf(answer.encodedFrontiers),
     entries: answer.version,
     frontiers: answer.frontiers,
   }
+}
+
+function entriesOfFrontiers(lease: RecordLease, frontiers: Uint8Array): wire.VersionEntry[] {
+  return lease.engine.decode({ kind: 'frontiers', bytes: bytesToBase64(frontiers) }).entries
+}
+
+/**
+ * A read-only view of the record as it stood at `frontiers` (the bytes
+ * `versionOf` answered when the point was taken). The view is a copy the caller
+ * releases; a caller that reads many points moves one view with `moveView`,
+ * because making one copies the whole record.
+ */
+export function viewAt(lease: RecordLease, frontiers: Uint8Array): RecordLease {
+  const { engine } = lease
+  const at = entriesOfFrontiers(lease, frontiers)
+  return ownedLease(engine, engine.fork({ handle: lease.handle, peer: randomPeerId(), at }).handle)
+}
+
+/** Moves a view `viewAt` made to another point of the record's history. */
+export function moveView(view: RecordLease, frontiers: Uint8Array): void {
+  view.engine.checkout({ handle: view.handle, at: entriesOfFrontiers(view, frontiers) })
 }
 
 export function exportSnapshot(lease: RecordLease): Uint8Array {

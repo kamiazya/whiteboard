@@ -23,6 +23,12 @@ export interface CrdtEngine {
    */
   fork(request: wire.ForkRequest): wire.OpenResponse
   /**
+   * Moves a view made by a fork at frontiers to the state at other frontiers.
+   * A host that reads many past states moves one view rather than forking the
+   * document per state, which copies it whole each time.
+   */
+  checkout(request: wire.CheckoutRequest): void
+  /**
    * Merges bytes an engine exported; a breach refuses them and changes
    * nothing. The answer says whether the bytes build on operations the
    * document lacks.

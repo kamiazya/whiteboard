@@ -33,8 +33,8 @@ import { acceptTransferredRecord } from './accept-transferred-record.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { BrowserVersionStore } from './browser-version-store.js'
-import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { CROSS_ORIGIN_TRANSFER_PROTOCOL } from './cross-origin-transfer-protocol.js'
 import { readOfferedTransfer } from './receive-transfer.js'
 import { type PopupHandle, sendTransfer } from './send-transfer.js'
@@ -63,7 +63,7 @@ async function seedWorkspace() {
   const gone = await index.createDocument({ workspaceId, path: 'gone', kind: 'spatial' })
   await seedTreeContent(gone.documentId, canvasSaying('bin me'))
   const drafted = await new BrowserVersionStore({
-    docs: new BrowserWorkspaceDocs(),
+    docs: new BrowserWorkspaceRecords(),
     index,
   }).save(workspaceId, 'sketch', { label: 'as drafted' })
   await index.deleteDocument({ workspaceId, path: 'gone' })
@@ -84,7 +84,7 @@ async function offerAsReceived() {
     keeperBaseUrl: KEEPER,
     senderOrigin: SELF,
     nonce: NONCE,
-    payload: readTransferPayload(new BrowserWorkspaceDocs()),
+    payload: readTransferPayload(new BrowserWorkspaceRecords()),
     openWindow: () => popup,
     closedPollMs: 10,
   })

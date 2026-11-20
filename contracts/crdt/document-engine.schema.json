@@ -580,6 +580,27 @@
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
+    "CheckoutRequest": {
+      "description": "Move a view made by a fork at frontiers to the state at other frontiers.",
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/Handle",
+          "description": "The view; a document that is not one is refused."
+        },
+        "at": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/VersionEntry"
+          },
+          "description": "The frontiers to move the view to; the view stays detached and read-only."
+        }
+      },
+      "required": ["handle", "at"],
+      "x-wb-order": ["handle", "at"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
     "WriteRequest": {
       "description": "Apply writes to an open document as one batch.",
       "type": "object",

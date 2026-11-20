@@ -4,6 +4,7 @@
  * entry or a saved version does.
  */
 import {
+  loadCrdtEngine,
   projectWorkspaceDocument,
   writeProposal,
   writeSpatialCanvas,
@@ -17,7 +18,7 @@ import {
 import { newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES } from '@kamiazya/whiteboard-ports'
-import { LoroDoc } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
@@ -29,6 +30,7 @@ import { DOCUMENT_FILES_STORE, openWhiteboardDb, VERSIONS_STORE } from './browse
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { openDocumentStore } from './replica-store.js'
@@ -165,10 +167,10 @@ async function plantRow(store: string, value: unknown, key?: string): Promise<vo
  * write landing while the scan is judging what it read.
  */
 function writeDuringScan(write: () => Promise<void>): void {
-  const open = BrowserWorkspaceDocs.prototype.open
+  const open = BrowserWorkspaceRecords.prototype.open
   let fired = false
-  vi.spyOn(BrowserWorkspaceDocs.prototype, 'open').mockImplementation(async function (
-    this: BrowserWorkspaceDocs,
+  vi.spyOn(BrowserWorkspaceRecords.prototype, 'open').mockImplementation(async function (
+    this: BrowserWorkspaceRecords,
     workspaceId: string,
   ) {
     const record = await open.call(this, workspaceId)
@@ -221,7 +223,7 @@ describe('sweepUnreferencedFiles', () => {
   it('keeps an image only a saved version draws', async () => {
     await upload('img-then')
     const { index, workspaceId, documentId } = await seedDocument('page', ['img-then'])
-    await new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index }).save(
+    await new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index }).save(
       workspaceId,
       'page',
     )
@@ -234,7 +236,7 @@ describe('sweepUnreferencedFiles', () => {
   it('keeps what each of several saved versions draws', async () => {
     for (const id of ['img-v1', 'img-v2', 'img-v3']) await upload(id)
     const { index, workspaceId, documentId } = await seedDocument('page', ['img-v1'])
-    const versions = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+    const versions = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
     await versions.save(workspaceId, 'page')
     await draw(documentId, ['img-v2'])
     await versions.save(workspaceId, 'page')
@@ -315,6 +317,30 @@ describe('sweepUnreferencedFiles stands down rather than delete what it could no
     expect(logged.some((line) => line.includes('could not be read'))).toBe(true)
   })
 
+  it('stands down when a saved version cannot be checked out, deleting nothing', async () => {
+    const logged = expectLoggedFailures()
+    await upload('img-orphan')
+    const { workspaceId, documentId } = await seedDocument('page', [])
+    // Frontiers of a history the record never held: the point cannot be reached.
+    const foreign = new LoroDoc()
+    foreign.getText('t').insert(0, 'x')
+    foreign.commit()
+    await plantRow(VERSIONS_STORE, {
+      id: 'v-unreachable',
+      workspaceId,
+      documentId,
+      path: 'page',
+      createdAt: 1,
+      elementCount: 0,
+      contentDigest: 'digest',
+      frontiers: new Uint8Array(encodeFrontiers(foreign.oplogFrontiers())),
+    })
+
+    expect(await sweepUnreferencedFiles()).toEqual({ kind: 'stood-down', reason: 'unjudged' })
+    expect(await bytesHeld('img-orphan')).toBe(true)
+    expect(logged.some((line) => line.includes('could not be read'))).toBe(true)
+  })
+
   it('stands down when a judged record moves during the scan', async () => {
     await upload('img-late')
     const { documentId } = await seedDocument('page', [])
@@ -353,6 +379,68 @@ describe('sweepUnreferencedFiles stands down rather than delete what it could no
   })
 })
 
+/**
+ * Every engine handle a pass opens (a record, a version view, a scratch
+ * document for trash bytes) is given back, whether the pass sweeps or stands
+ * down: a handle left open holds a whole workspace in memory for the page's life.
+ */
+async function handlesOpenedAndClosed(run: () => Promise<unknown>) {
+  const engine = await loadCrdtEngine()
+  const opened = vi.spyOn(engine, 'open')
+  const forked = vi.spyOn(engine, 'fork')
+  const closed = vi.spyOn(engine, 'close')
+  await run()
+  // A call that threw made no handle, so only the ones that returned count.
+  const made = (spy: { mock: { results: Array<{ type: string }> } }) =>
+    spy.mock.results.filter((result) => result.type === 'return').length
+  return { opened: made(opened) + made(forked), closed: closed.mock.calls.length }
+}
+
+describe('sweepUnreferencedFiles gives back every engine handle it opens', () => {
+  beforeEach(clearWhiteboardDb)
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('after a sweep that walked saved versions of a deleted document', async () => {
+    await upload('img-then')
+    const { index, workspaceId, documentId } = await seedDocument('page', ['img-then'])
+    const versions = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
+    await versions.save(workspaceId, 'page')
+    await draw(documentId, ['img-other'])
+    await versions.save(workspaceId, 'page')
+    await index.deleteDocument({ workspaceId, path: 'page' })
+
+    const handles = await handlesOpenedAndClosed(() => sweepUnreferencedFiles())
+
+    expect(handles.opened).toBeGreaterThan(3)
+    expect(handles.closed).toBe(handles.opened)
+  })
+
+  it('after a pass that stood down on a version it could not read', async () => {
+    expectLoggedFailures()
+    const { workspaceId, documentId } = await seedDocument('page', [])
+    const foreign = new LoroDoc()
+    foreign.getText('t').insert(0, 'x')
+    foreign.commit()
+    await plantRow(VERSIONS_STORE, {
+      id: 'v-unreachable',
+      workspaceId,
+      documentId,
+      path: 'page',
+      createdAt: 1,
+      elementCount: 0,
+      contentDigest: 'digest',
+      frontiers: new Uint8Array(encodeFrontiers(foreign.oplogFrontiers())),
+    })
+
+    const handles = await handlesOpenedAndClosed(() => sweepUnreferencedFiles())
+
+    expect(handles.opened).toBeGreaterThan(0)
+    expect(handles.closed).toBe(handles.opened)
+  })
+})
+
 describe('sweepUnreferencedFiles steps over a row it cannot parse', () => {
   beforeEach(clearWhiteboardDb)
 
@@ -387,7 +475,7 @@ describe('sweepUnreferencedFiles on the cross-keeper scenario', () => {
     const index = new BrowserDocumentIndex()
     const workspaceId = getBrowserWorkspaceId()
     await index.createWorkspace({ workspaceId })
-    const versions = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+    const versions = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
     const ids = new Map<string, string>()
     for (const step of FILE_COLLECTION_CONFORMANCE.steps) {
       switch (step.op) {

@@ -6,7 +6,7 @@
 use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_model::Value;
 use whiteboard_model::crdt::{
-    Breach, BreachShape, CloseRequest, DecodeKind, DecodeRequest, DecodeResponse,
+    Breach, BreachShape, CheckoutRequest, CloseRequest, DecodeKind, DecodeRequest, DecodeResponse,
     ExportProjectionRequest, ExportRequest, ExportResponse, ExportShallowSnapshotRequest,
     ExportSnapshotRequest, ExportSubtreeRequest, ExportUpdateRequest, ForkRequest, ImportJudge,
     ImportRequest, ImportSubtreeRequest, MutationApplied, MutationRefused, MutationResult,
@@ -221,8 +221,11 @@ fn the_calls_for_judging_versions_forks_and_undo_state_carry_their_fields() {
     };
     assert_ne!(version.clone(), VersionResponse::default());
     assert_eq!(VersionRequest::default(), VersionRequest { handle: 0 });
-    let fork = ForkRequest { handle: 1, peer: "9".into(), at: Some(entries) };
+    let fork = ForkRequest { handle: 1, peer: "9".into(), at: Some(entries.clone()) };
     assert_ne!(fork.clone(), ForkRequest::default());
+    let checkout = CheckoutRequest { handle: 1, at: entries };
+    assert_ne!(checkout.clone(), CheckoutRequest::default());
+    assert_eq!(CheckoutRequest::default().at, Vec::<VersionEntry>::new());
     assert_eq!(UndoStateRequest::default(), UndoStateRequest { handle: 0 });
     assert_eq!(UndoClearRequest::default(), UndoClearRequest { handle: 0 });
     assert_eq!(

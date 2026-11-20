@@ -38,7 +38,7 @@ export function browserBacklinksReader(index: DocumentIndex): (documentId: strin
         held.contentWithTags(entry.kind),
       ),
   })
-  return async (documentId) => {
+  const ask = async (documentId: string) => {
     // Extraction and the excerpts are the search core's.
     await searchReady()
     const asked = lazyContentRecord()
@@ -50,5 +50,13 @@ export function browserBacklinksReader(index: DocumentIndex): (documentId: strin
     } finally {
       await asked.release()
     }
+  }
+  // One ask at a time: `loadContent` reads `record`, so an ask that overlapped
+  // another could read through, or open, a record the other one gives back.
+  let queued: Promise<unknown> = Promise.resolve()
+  return (documentId) => {
+    const answer = queued.then(() => ask(documentId))
+    queued = answer.catch(() => undefined)
+    return answer
   }
 }
