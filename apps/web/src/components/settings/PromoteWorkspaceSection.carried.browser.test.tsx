@@ -22,6 +22,7 @@ import { ensureBrowserWorkspace } from '../../lib/browser-document-summary.js'
 import { BrowserVersionStore } from '../../lib/browser-version-store.js'
 import { BrowserWorkspaceDocs } from '../../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from '../../lib/browser-workspace-records.js'
 import { connectReplicaKeeper } from '../../lib/replica-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
@@ -88,7 +89,7 @@ async function seedVersionAndTrash(): Promise<void> {
   const content = new LoroDoc()
   writeCanvasText(content, 'as drafted')
   await seedTreeContent(sketch.documentId, new Uint8Array(content.export({ mode: 'snapshot' })))
-  await new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index }).save(
+  await new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index }).save(
     workspaceId,
     'sketch',
     { label: 'as drafted' },

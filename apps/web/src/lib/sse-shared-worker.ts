@@ -116,7 +116,12 @@ type ReplicaVersion = LeaseVersion
 type Replica = RecordLease
 
 /** What a replica that was never opened holds: nothing is exported from it, so no encoding is needed. */
-const NO_VERSION: ReplicaVersion = { encoded: new Uint8Array(), entries: [], frontiers: [] }
+const NO_VERSION: ReplicaVersion = {
+  encoded: new Uint8Array(),
+  encodedFrontiers: new Uint8Array(),
+  entries: [],
+  frontiers: [],
+}
 
 function openReplica(bytes?: Uint8Array): Replica | undefined {
   if (loaded === undefined) return undefined

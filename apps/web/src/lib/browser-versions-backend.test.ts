@@ -1,19 +1,24 @@
 // @vitest-environment node
 import {
   createWorkspaceDocumentAtPath,
+  readMarkdownBody,
+  readSpatialCanvas,
   writeMarkdownBody,
   writeSpatialCanvas,
+  writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { leaseOf } from '../test-utils/replica-lease.js'
 import type { BrowserVersionStore } from './browser-version-store.js'
 import { createBrowserVersionsBackend } from './browser-versions-backend.js'
 import {
   resetBrowserWorkspaceIdForTests,
   setBrowserWorkspaceIdForTests,
 } from './browser-workspace-id.js'
+import { withHeldDocument } from './workspace-content.js'
 
 // A past state as the browser store answers it: content only, so it names no
 // kind of its own and carries both halves, as a markdown note's record does.
@@ -30,6 +35,27 @@ function pastState(): LoroDoc {
 
 const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const SKETCH_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
+
+/**
+ * `withPast` as the store answers it: the past state is lent as a document of
+ * the record it was viewed in, so the fixture holds `pastState()` in a record.
+ */
+const pastLoan = async (
+  _workspaceId: string,
+  _path: string,
+  _versionId: string,
+  use: Parameters<BrowserVersionStore['withPast']>[3],
+) => {
+  const record = new LoroDoc()
+  createWorkspaceDocumentAtPath(record, { path: 'past', documentId: NOTE_ID, kind: 'spatial' })
+  writeWorkspaceDocumentContent(record, NOTE_ID, pastState())
+  const held = await leaseOf(record)
+  try {
+    return await withHeldDocument({ record: held, read: true }, NOTE_ID, use)
+  } finally {
+    held.release()
+  }
+}
 
 /** A workspace record holding the documents the seam is asked about, as the live page's does. */
 function recordHolding(...documents: Array<{ documentId: string; path: string }>) {
@@ -59,7 +85,7 @@ const indexHolding = (held: Record<string, string> = {}) => ({
 })
 
 function backendOf(kind: DocumentKind) {
-  const store = { loadPast: async () => pastState() } as unknown as BrowserVersionStore
+  const store = { withPast: pastLoan } as unknown as BrowserVersionStore
   return createBrowserVersionsBackend({ store, record: seamOver(), index: indexHolding(), kind })
 }
 
@@ -91,7 +117,7 @@ function recordingBackend({ bookmarkFails = false } = {}) {
   const store = {
     save,
     list: async () => [{ id: 'v1', label: 'Before the rewrite' }],
-    loadPast: async () => pastState(),
+    withPast: pastLoan,
   } as unknown as BrowserVersionStore
   const applyRestore = vi.fn(async (_past: LoroDoc, _label?: string) => {})
   const backend = createBrowserVersionsBackend({
@@ -122,6 +148,17 @@ describe('the browser versions backend files saves and restores', () => {
     const { backend, applyRestore } = recordingBackend()
     await backend.restore('ignored', SKETCH_ID, 'v1')
     expect(applyRestore.mock.calls.map(([, label]) => label)).toEqual(['Before the rewrite'])
+  })
+
+  // The live record reconciles from a document of its own, so the past state
+  // has to arrive as that document: content at the root, nothing of the record.
+  it('hands a restore the past state as a document of its own', async () => {
+    const { backend, applyRestore } = recordingBackend()
+    await backend.restore('ignored', SKETCH_ID, 'v1')
+    const past = applyRestore.mock.calls[0]?.[0]
+    if (past === undefined) throw new Error('nothing was restored')
+    expect(readSpatialCanvas(past).nodes.map((node) => node.id)).toEqual(['n1'])
+    expect(readMarkdownBody(past)).toBe('# plan')
   })
 
   // The content has already landed when the bookmark is written, so failing

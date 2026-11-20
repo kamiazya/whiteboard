@@ -11,7 +11,12 @@
  */
 import 'fake-indexeddb/auto'
 import type { PromoteWorkspaceRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/promotion'
-import { readTrashEntries, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  loadCrdtEngine,
+  type RecordLease,
+  readTrashEntries,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
@@ -28,6 +33,7 @@ import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { readCarriedPlanes } from './carried-planes.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { IdbBlobStore } from './idb-blob-store.js'
@@ -113,7 +119,7 @@ const promote = (fetch: typeof globalThis.fetch) =>
     fetch,
     keeperBaseUrl: BASE,
     workspaceId: 'ws-a',
-    workspaceDocs: new BrowserWorkspaceDocs(),
+    workspaceDocs: new BrowserWorkspaceRecords(),
   })
 
 describe('promoteWorkspace, the planes beside the record', () => {
@@ -150,11 +156,13 @@ describe('promoteWorkspace, the planes beside the record', () => {
 
   it('uploads an image only a saved version names under the id of the first live document', async () => {
     const { index, workspaceId } = await newWorkspace()
-    const docs = new BrowserWorkspaceDocs()
     const sketch = await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
     await storePicture('only-in-a-version')
     await seedTreeContent(sketch.documentId, canvasWith('only-in-a-version'))
-    const drafted = await new BrowserVersionStore({ docs, index }).save(workspaceId, 'sketch', {
+    const drafted = await new BrowserVersionStore({
+      docs: new BrowserWorkspaceRecords(),
+      index,
+    }).save(workspaceId, 'sketch', {
       label: 'as drafted',
     })
     await seedTreeContent(sketch.documentId, canvasWith('redrawn'))
@@ -175,11 +183,14 @@ describe('promoteWorkspace, the planes beside the record', () => {
   it('lists what could not be read before what the daemon did not confirm', async () => {
     const { index, workspaceId } = await newWorkspace()
     await trashedCanvas(index, 'gone', 'only-in-the-trash')
-    const docs = new BrowserWorkspaceDocs()
     const sketch = await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
     await seedTreeContent(sketch.documentId, canvasWith('live'))
-    await new BrowserVersionStore({ docs, index }).save(workspaceId, 'sketch', { label: 'one' })
-    const record = await docs.open(workspaceId)
+    await new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index }).save(
+      workspaceId,
+      'sketch',
+      { label: 'one' },
+    )
+    const record = await new BrowserWorkspaceDocs().open(workspaceId)
     const entry = record === null ? undefined : readTrashEntries(record)[0]
     if (entry === undefined) throw new Error('no trash entry')
     await new IdbBlobStore().delete({ ref: entry.blob })
@@ -275,13 +286,13 @@ describe('promoteWorkspace, the planes beside the record', () => {
 
 const NETWORK_SENTENCE = 'Could not reach the destination (network error).'
 
-function openThrowing(err: unknown): WorkspaceDocs {
-  const docs = new BrowserWorkspaceDocs()
+function openThrowing(err: unknown): WorkspaceDocs<RecordLease> {
+  const docs = new BrowserWorkspaceRecords()
   vi.spyOn(docs, 'open').mockRejectedValue(err)
   return docs
 }
 
-const promoteFrom = (fetch: typeof globalThis.fetch, workspaceDocs: WorkspaceDocs) =>
+const promoteFrom = (fetch: typeof globalThis.fetch, workspaceDocs: WorkspaceDocs<RecordLease>) =>
   promoteWorkspace({ fetch, keeperBaseUrl: BASE, workspaceId: 'ws-a', workspaceDocs })
 
 describe('promoteWorkspace failure reasons', () => {
@@ -375,5 +386,75 @@ describe('promoteWorkspace failure reasons', () => {
     })
     expect(daemon.putFiles).toEqual([])
     await expectLoggedFailure('image could not be read for the move')
+  })
+})
+
+/**
+ * Every engine handle a move opens (the record, a version view, a scratch
+ * document for each trash entry's bytes) is given back, whether the move
+ * lands or fails: a handle left open holds the whole record in memory.
+ */
+async function handlesOpenedAndClosed(run: () => Promise<unknown>) {
+  const engine = await loadCrdtEngine()
+  const opened = vi.spyOn(engine, 'open')
+  const forked = vi.spyOn(engine, 'fork')
+  const closed = vi.spyOn(engine, 'close')
+  await run()
+  const made = (spy: { mock: { results: Array<{ type: string }> } }) =>
+    spy.mock.results.filter((result) => result.type === 'return').length
+  return { opened: made(opened) + made(forked), closed: closed.mock.calls.length }
+}
+
+describe('promoteWorkspace gives back every engine handle it opens', () => {
+  beforeEach(clearWhiteboardDb)
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  async function workspaceWithTrashAndVersion() {
+    const { index, workspaceId } = await newWorkspace()
+    await trashedCanvas(index, 'gone', 'only-in-the-trash')
+    const sketch = await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
+    await seedTreeContent(sketch.documentId, canvasWith('live'))
+    await new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index }).save(
+      workspaceId,
+      'sketch',
+    )
+  }
+
+  it('when the move lands', async () => {
+    await workspaceWithTrashAndVersion()
+    const daemon = daemonStub({ confirms: true })
+
+    const handles = await handlesOpenedAndClosed(() => promote(daemon.fetch))
+
+    expect(daemon.promotes).toHaveLength(1)
+    expect(handles.opened).toBeGreaterThanOrEqual(3)
+    expect(handles.closed).toBe(handles.opened)
+  })
+
+  it('when the destination cannot be reached', async () => {
+    await workspaceWithTrashAndVersion()
+    const offline = (async () => {
+      throw new TypeError('Failed to fetch')
+    }) as typeof globalThis.fetch
+
+    const handles = await handlesOpenedAndClosed(() => promote(offline))
+
+    expect(handles.opened).toBeGreaterThanOrEqual(1)
+    expect(handles.closed).toBe(handles.opened)
+  })
+
+  it('when the planes cannot be read', async () => {
+    await workspaceWithTrashAndVersion()
+    vi.mocked(readCarriedPlanes).mockRejectedValueOnce(new Error('the database closed'))
+
+    const handles = await handlesOpenedAndClosed(() =>
+      promote(daemonStub({ confirms: true }).fetch),
+    )
+
+    expect(handles.opened).toBeGreaterThanOrEqual(1)
+    expect(handles.closed).toBe(handles.opened)
+    await expectLoggedFailure('carried planes could not be read')
   })
 })

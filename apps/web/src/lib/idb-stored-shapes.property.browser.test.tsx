@@ -18,7 +18,6 @@
  */
 import { operatorInfoSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
-  readSpatialCanvas,
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -40,6 +39,7 @@ import { BrowserDocumentIndex } from './browser-document-index.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
@@ -227,7 +227,7 @@ describe('BrowserVersionStore', () => {
     doc.commit()
     writeWorkspaceDocumentContent(record, documentId, doc)
     await docs.save(workspaceId, record)
-    versions = new BrowserVersionStore({ docs, index })
+    versions = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
   })
 
   const saveInputArb = fc.record(
@@ -253,10 +253,11 @@ describe('BrowserVersionStore', () => {
       expect(saved.operator).toEqual(input.operator)
       expect(saved.restoredFrom).toBe(input.restoredFrom)
       expect(await versions.list(workspaceId, PATH)).toContainEqual(saved)
-      const past = await versions.loadPast(workspaceId, PATH, saved.id)
-      expect(past).not.toBeNull()
-      const node = readSpatialCanvas(past as LoroDoc).nodes[0]
-      expect(node === undefined ? undefined : nodeText(node)).toBe('saved')
+      const past = await versions.withPast(workspaceId, PATH, saved.id, async (held) => {
+        const node = (await held.canvas()).nodes[0]
+        return node === undefined ? undefined : nodeText(node)
+      })
+      expect(past).toBe('saved')
     },
   )
 })

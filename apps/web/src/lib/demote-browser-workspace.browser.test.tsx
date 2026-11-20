@@ -32,6 +32,7 @@ import {
   resetBrowserWorkspaceIdForTests,
   resolveBrowserWorkspaceId,
 } from './browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { touchContentTimestamp } from './content-timestamp.js'
 import { demoteBrowserWorkspace, replicaCarriesAll } from './demote-browser-workspace.js'
 import { IdbBlobStore } from './idb-blob-store.js'
@@ -93,7 +94,7 @@ describe('demoteBrowserWorkspace', () => {
 async function seedTwoWorkspaces() {
   const index = new BrowserDocumentIndex()
   const docs = new BrowserWorkspaceDocs()
-  const versions = new BrowserVersionStore({ docs, index })
+  const versions = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
   const sourceId = await resolveBrowserWorkspaceId()
   await index.createWorkspace({ workspaceId: sourceId })
   const sketch = await index.createDocument({

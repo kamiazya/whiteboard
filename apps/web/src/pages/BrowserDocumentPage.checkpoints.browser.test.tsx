@@ -13,6 +13,7 @@ import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from '../lib/browser-workspace-records.js'
 import { listenToWorkspace, type WorkspaceBroadcast } from '../lib/workspace-broadcast.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -135,7 +136,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
       },
     )
 
-    const store = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+    const store = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
     const workspaceId = getBrowserWorkspaceId()
     // Nothing yet: an untouched document has no checkpoint, which is what
     // makes the row below evidence of the edit rather than of mounting.
@@ -187,7 +188,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
         { timeout: 10_000 },
       )
 
-      const store = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+      const store = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
       const workspaceId = getBrowserWorkspaceId()
       expect(await store.list(workspaceId, 'canvas-a')).toEqual([])
 
@@ -228,7 +229,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
         },
       )
 
-      const store = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+      const store = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
       const workspaceId = getBrowserWorkspaceId()
       expect(await store.list(workspaceId, 'canvas-a')).toEqual([])
 
@@ -272,7 +273,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
         return el as HTMLElement
       })
 
-      const store = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+      const store = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
       const workspaceId = getBrowserWorkspaceId()
       expect(await store.list(workspaceId, 'note')).toEqual([])
 
@@ -336,7 +337,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
       vi.useFakeTimers({ shouldAdvanceTime: true })
       try {
         await mountAndEdit()
-        const store = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+        const store = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
         const workspaceId = getBrowserWorkspaceId()
 
         // Listening opens AFTER the page's own end, so the page has heard it
@@ -389,7 +390,7 @@ describe('BrowserDocumentPage automatic checkpoints (browser)', () => {
       vi.useFakeTimers({ shouldAdvanceTime: true })
       try {
         await mountAndEdit()
-        const store = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
+        const store = new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index })
         const workspaceId = getBrowserWorkspaceId()
 
         const removed = nextBroadcast('document-removed')

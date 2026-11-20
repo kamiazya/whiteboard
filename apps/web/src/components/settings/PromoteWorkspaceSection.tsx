@@ -350,13 +350,13 @@ export function PromoteWorkspaceSection({
     if (!daemon) return
     const fetchImpl = daemonFetch(daemon, baseFetch)
     try {
-      const [{ countBrowserWorkspaceDocuments }, { BrowserWorkspaceDocs }, workspaces] =
+      const [{ countBrowserWorkspaceDocuments }, { BrowserWorkspaceRecords }, workspaces] =
         await Promise.all([
           import('../../lib/promote-workspace.js'),
-          import('../../lib/browser-workspace-docs.js'),
+          import('../../lib/browser-workspace-records.js'),
           listWorkspaces(fetchImpl, daemon.baseUrl),
         ])
-      const documentCount = await countBrowserWorkspaceDocuments(new BrowserWorkspaceDocs())
+      const documentCount = await countBrowserWorkspaceDocuments(new BrowserWorkspaceRecords())
       const targets: WorkspaceIdentity[] = workspaces.workspaces.map((ws) => ({
         workspaceId: ws.workspaceId,
         ...(ws.segment === undefined ? {} : { segment: ws.segment }),
@@ -391,15 +391,15 @@ export function PromoteWorkspaceSection({
       let record: PromotionResultRecord
       try {
         const fetchImpl = daemonFetch(daemon, baseFetch)
-        const [{ promoteWorkspace }, { BrowserWorkspaceDocs }] = await Promise.all([
+        const [{ promoteWorkspace }, { BrowserWorkspaceRecords }] = await Promise.all([
           import('../../lib/promote-workspace.js'),
-          import('../../lib/browser-workspace-docs.js'),
+          import('../../lib/browser-workspace-records.js'),
         ])
         const outcome = await promoteWorkspace({
           fetch: fetchImpl,
           keeperBaseUrl: daemon.baseUrl, // the new KEEPER; today, this daemon
           workspaceId: targetId,
-          workspaceDocs: new BrowserWorkspaceDocs(),
+          workspaceDocs: new BrowserWorkspaceRecords(),
           onProgress: (phase) => setFlow({ step: 'running', phase }),
         })
         const after =

@@ -10,8 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { BrowserDocumentIndex } from '../../lib/browser-document-index.js'
 import { ensureBrowserWorkspace } from '../../lib/browser-document-summary.js'
-import { BrowserWorkspaceDocs } from '../../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from '../../lib/browser-workspace-records.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../../test-utils/browser-setup.js'
@@ -93,7 +93,7 @@ describe('PromoteWorkspaceSection preparing the move', () => {
 
   it('names an unreadable browser copy while the daemon answers the listing', async () => {
     const logged = expectLoggedFailures()
-    vi.spyOn(BrowserWorkspaceDocs.prototype, 'open').mockRejectedValue(
+    vi.spyOn(BrowserWorkspaceRecords.prototype, 'open').mockRejectedValue(
       new StoredDocumentUnreadableError('malformed', 'a delta does not decode'),
     )
     const notice = await openAndReadNotice(listsOne)

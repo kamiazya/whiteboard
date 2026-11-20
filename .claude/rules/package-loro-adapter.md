@@ -59,8 +59,10 @@ implementations live in the composition roots.
   `FileReferenceReads` — each read through `collectImageRefIds`, which counts
   what an OPEN proposed change would draw (a decided one protects nothing) —
   and reports what it could not read as `unjudged` so
-  a deleting caller fails closed. The daemon's `file-gc.ts` and the browser's
-  `browser-file-sweep.ts` both judge by it;
+  a deleting caller fails closed. The daemon's `file-gc.ts` judges by it over a
+  `LoroDoc`, the browser's `browser-file-sweep.ts` over an engine lease
+  (`scanFileReferencesOfLease`, `engine/lease-file-references.ts`); both are
+  one walk (`walkFileReferences`) over a `FileReferenceSource`;
   `test-utils/file-collection-conformance` is the scenario both run; a
   verdict one keeper is known to reach differently is a `knownDivergences`
   entry with its reason, never an omitted step (today there are none).

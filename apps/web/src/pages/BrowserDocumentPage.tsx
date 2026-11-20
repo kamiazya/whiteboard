@@ -30,12 +30,12 @@ import type { ContentClock, DefaultDocumentPointer } from '../lib/browser-docume
 import { createBrowserFilesSource } from '../lib/browser-files-source.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js'
-import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import {
   browserWorkspaceHandleOrNull,
   browserWorkspaceIdOrNull,
   getBrowserWorkspaceId,
 } from '../lib/browser-workspace-id.js'
+import { BrowserWorkspaceRecords } from '../lib/browser-workspace-records.js'
 import type { ConnectionState } from '../lib/connection-state.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { documentLabel } from '../lib/document-label.js'
@@ -292,7 +292,7 @@ function useBrowserDocument(
   // `save` carries a label and nothing else, while a checkpoint has to say it
   // is automatic. So it is built once here and handed to both.
   const versionStore = useMemo(
-    () => new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index: store }),
+    () => new BrowserVersionStore({ docs: new BrowserWorkspaceRecords(), index: store }),
     [store],
   )
 
