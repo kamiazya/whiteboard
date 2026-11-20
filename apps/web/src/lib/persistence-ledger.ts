@@ -49,8 +49,13 @@ export class PersistenceLedger {
     this.report({ kind: 'pending', lastSavedAt: this.lastSavedAt })
   }
 
-  /** A push began; call one of the returned functions when it settles. */
+  /**
+   * A push began; call one of the returned functions when it settles. A push
+   * no edit announced (an undo, a redo, a re-send) is a write in flight all
+   * the same, so a document that read saved reads pending until it lands.
+   */
   pushStarted(): { resolved(): void; rejected(): void; dropped(): void } {
+    this.edited()
     this.inFlightPushes++
     this.written = true
     const epochAtPush = this.failureEpoch
