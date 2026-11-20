@@ -9,7 +9,7 @@ import type {
   DocumentBackend,
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { writeMarkdownBody, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { vi } from 'vitest'
@@ -109,4 +109,24 @@ export function openTestSession(options: TestSessionOptions = {}) {
   session.connect()
   if (options.snapshot !== undefined) keeper().onSnapshot(options.snapshot)
   return { session, handlers: keeper, statuses, persistence, persistenceStates }
+}
+
+/** A snapshot of a standalone markdown document holding `body`. */
+export function markdownSnapshotOf(body: string): Uint8Array {
+  const doc = new LoroDoc()
+  writeMarkdownBody(doc, body)
+  doc.commit()
+  return doc.export({ mode: 'snapshot' })
+}
+
+/**
+ * Types `text` at `at` the way the editor's binding does: into the body text
+ * the session hands out, then telling the session its window has an edit.
+ */
+export function typeIntoBody(session: DocumentSyncSession, at: number, text: string): void {
+  const binding = session.getBodyBinding()
+  const body = binding?.readText(binding.doc)
+  if (!binding || !body) throw new Error('the session holds no body to type into')
+  body.insert(at, text)
+  binding.commit()
 }
