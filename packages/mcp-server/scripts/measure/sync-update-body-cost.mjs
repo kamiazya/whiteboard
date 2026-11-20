@@ -80,6 +80,9 @@ async function cpu(run) {
   return { cpuMs: Math.round((spent.user + spent.system) / 1000), outcome }
 }
 
+/** A workspace id the store accepts: it validates one as a ULID. */
+const WORKSPACE = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
 /** A fresh daemon store per row, so no row inherits another's record. */
 async function withStore(work) {
   const served = await mkdtemp(join(tmpdir(), 'wb-sync-cost-'))
@@ -87,7 +90,7 @@ async function withStore(work) {
   setDataDirForTests(ambient)
   try {
     const { serverDeps } = await bootSelfHostDeps(served)
-    await serverDeps.documentIndex.createWorkspace({ workspaceId: 'ws' })
+    await serverDeps.documentIndex.createWorkspace({ workspaceId: WORKSPACE })
     return await work(serverDeps)
   } finally {
     uninstallAutoCompact()
@@ -104,7 +107,7 @@ async function withStore(work) {
 
 async function seeded(deps) {
   const { documentId } = await wbDocumentCreate(deps, {
-    workspaceId: 'ws',
+    workspaceId: WORKSPACE,
     path: 'notes',
     kind: 'markdown',
     markdown: BASE_BODY,
@@ -114,20 +117,20 @@ async function seeded(deps) {
 
 /** The body as stored, read the way every reader reads it. */
 async function storedBodyLength(deps) {
-  return readMarkdownBody(await deps.liveDocuments.get('ws', 'notes')).length
+  return readMarkdownBody(await deps.liveDocuments.get(WORKSPACE, 'notes')).length
 }
 
 async function workspaceRow(chars) {
   return withStore(async (deps) => {
     const documentId = await seeded(deps)
-    const client = (await deps.workspaceDocuments.get('ws')).fork()
+    const client = (await deps.workspaceDocuments.get(WORKSPACE)).fork()
     const from = client.oplogVersion()
     documentContainers(client, documentId).getText('body').insert(0, prose(chars))
     client.commit()
     const update = client.export({ mode: 'update', from })
     const bodyBefore = await storedBodyLength(deps)
     const { cpuMs, outcome } = await cpu(() =>
-      applyWorkspaceDocumentUpdate(deps, { workspaceId: 'ws', update }),
+      applyWorkspaceDocumentUpdate(deps, { workspaceId: WORKSPACE, update }),
     )
     return {
       cpuMs,
@@ -150,14 +153,14 @@ async function promoteRow(chars) {
     const snapshot = record.export({ mode: 'snapshot' })
     const { cpuMs, outcome } = await cpu(async () => {
       const result = await promoteWorkspace(deps, {
-        workspaceId: 'ws',
+        workspaceId: WORKSPACE,
         snapshot,
         operator: OPERATOR,
       })
       return result.kind
     })
-    const promoted = (await deps.liveDocuments.exists('ws', 'promoted'))
-      ? readMarkdownBody(await deps.liveDocuments.get('ws', 'promoted')).length
+    const promoted = (await deps.liveDocuments.exists(WORKSPACE, 'promoted'))
+      ? readMarkdownBody(await deps.liveDocuments.get(WORKSPACE, 'promoted')).length
       : 0
     return { cpuMs, outcome, bodyBefore: 0, bodyAfter: promoted, bytes: snapshot.length }
   })
