@@ -61,6 +61,8 @@ const NOT_ENGINE_WRITERS: Record<string, string> = {
  */
 const DERIVED_READERS: Record<string, string> = {
   documentContentWithTags: 'the answers of documentContent and coreFacets, in one read',
+  retiredCommentPlane:
+    'whether annotations refuses the document: that read throws exactly when the retired plane holds a row',
 }
 
 const sorted = (values: Iterable<string>) => [...values].sort()

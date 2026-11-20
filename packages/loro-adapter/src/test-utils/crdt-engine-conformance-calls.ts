@@ -9,7 +9,11 @@ import { decodeFrontiers, LoroDoc, VersionVector } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { exportedBytes, frontierPairs, versionPairs } from '../engine/answers.js'
 import type { CrdtEngine } from '../engine/types.js'
-import { exportWorkspaceSubtree } from '../workspace-tree.js'
+import {
+  createWorkspaceDocumentAtPath,
+  documentContainers,
+  exportWorkspaceSubtree,
+} from '../workspace-tree.js'
 import {
   applied,
   ask,
@@ -441,6 +445,79 @@ export function describeDocumentContentWithTags(makeEngine: () => CrdtEngine) {
       })
       expect(combined).toEqual(await ask(engine, handle, 'documentContent', { documentId: FIRST }))
       expect(combined).toHaveProperty('err')
+    })
+  })
+}
+
+/** A snapshot of a document the pre-threads writer left comments in, as base64. */
+function retiredPlaneSnapshot(hostId?: string): string {
+  const doc = new LoroDoc()
+  if (hostId !== undefined) {
+    createWorkspaceDocumentAtPath(doc, {
+      path: 'board',
+      documentId: hostId,
+      kind: 'spatial',
+      name: 'Board',
+    })
+  }
+  const host = hostId === undefined ? doc : documentContainers(doc, hostId)
+  host.getMap('comments').set('c1', { id: 'c1', x: 1, y: 2, text: 'from before threads' })
+  doc.commit()
+  return Buffer.from(doc.export({ mode: 'snapshot' })).toString('base64')
+}
+
+export function describeRetiredCommentPlane(makeEngine: () => CrdtEngine) {
+  describe('the retired comment plane read', () => {
+    const askPlane = async (bytes: string | undefined, args?: Record<string, unknown>) => {
+      const engine = makeEngine()
+      const { handle } = engine.open({ peer: '1', ...(bytes === undefined ? {} : { bytes }) })
+      return ask(engine, handle, 'retiredCommentPlane', args)
+    }
+
+    it('answers true for a document that still holds comments in the retired plane', async () => {
+      expect(await askPlane(retiredPlaneSnapshot())).toEqual({ ok: true })
+    })
+
+    it('answers false for a document without them, and for an empty retired plane', async () => {
+      expect(await askPlane(undefined)).toEqual({ ok: false })
+      const doc = new LoroDoc()
+      doc.getMap('comments')
+      doc.commit()
+      const bytes = Buffer.from(doc.export({ mode: 'snapshot' })).toString('base64')
+      expect(await askPlane(bytes)).toEqual({ ok: false })
+    })
+
+    it('answers for the document a workspace record hosts', async () => {
+      const bytes = retiredPlaneSnapshot(FIRST)
+      expect(await askPlane(bytes, { documentId: FIRST })).toEqual({ ok: true })
+      const engine = makeEngine()
+      const { handle } = engine.open({ peer: '1' })
+      write(engine, handle, 'createWorkspaceDocumentAtPath', {
+        path: 'note',
+        documentId: SECOND,
+        kind: 'markdown',
+      })
+      expect(await ask(engine, handle, 'retiredCommentPlane', { documentId: SECOND })).toEqual({
+        ok: false,
+      })
+    })
+
+    it('refuses a document the workspace record does not host, as the content reads do', async () => {
+      const engine = makeEngine()
+      const { handle } = engine.open({ peer: '1' })
+      const answer = await ask(engine, handle, 'retiredCommentPlane', { documentId: FIRST })
+      expect(answer).toEqual(await ask(engine, handle, 'retiredStoredShape', { documentId: FIRST }))
+      expect(answer).toHaveProperty('err')
+    })
+
+    it('is the plane the annotations read refuses, and nothing else', async () => {
+      for (const bytes of [retiredPlaneSnapshot(), undefined]) {
+        const engine = makeEngine()
+        const { handle } = engine.open({ peer: '1', ...(bytes === undefined ? {} : { bytes }) })
+        const plane = (await ask(engine, handle, 'retiredCommentPlane')) as { ok: boolean }
+        const annotations = (await ask(engine, handle, 'annotations')) as object
+        expect('err' in annotations).toBe(plane.ok)
+      }
     })
   })
 }
