@@ -3,7 +3,7 @@ import {
   type SseStreamSource,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { workspaceDocKey } from '@kamiazya/whiteboard-daemon-client/sync-key'
-import { readWorkspaceNodes } from '@kamiazya/whiteboard-loro-adapter'
+import type { SessionDocument } from './session-document.js'
 import { listenToWorkspace } from './workspace-broadcast.js'
 
 /**
@@ -102,16 +102,18 @@ export function followBrowserWorkspaceWrites(
   }
 }
 
-/** The workspace record, named through the adapter so pages never import the CRDT. */
-export type WorkspaceRecord = Parameters<typeof readWorkspaceNodes>[0]
+/** What following a workspace record asks of it: its nodes, and to be told of a peer's import. */
+export type WorkspaceRecord = Pick<SessionDocument, 'nodes' | 'subscribeImports'>
 
 /** What a list shows of each document the record holds, as one comparable value. */
 function listedShapeOf(record: WorkspaceRecord): string {
-  const rows = readWorkspaceNodes(record).flatMap((node) =>
-    node.type === 'document'
-      ? [[node.meta.documentId, node.path, node.meta.kind, node.meta.name, node.meta.updatedAt]]
-      : [],
-  )
+  const rows = record
+    .nodes()
+    .flatMap((node) =>
+      node.type === 'document'
+        ? [[node.meta.documentId, node.path, node.meta.kind, node.meta.name, node.meta.updatedAt]]
+        : [],
+    )
   return JSON.stringify(rows)
 }
 
@@ -146,9 +148,7 @@ export function followRecordWrites(
   const { soon, cancel } = inBursts(compare)
   if (last === null) compare()
   else soon()
-  const unsubscribe = record.subscribe((event) => {
-    if (event.by === 'import') soon()
-  })
+  const unsubscribe = record.subscribeImports(soon)
   return {
     seen: () => last,
     stop() {

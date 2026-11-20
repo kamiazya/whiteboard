@@ -47,8 +47,6 @@ function namesShapedSurface(source: ts.SourceFile): boolean {
  * contract). Shrink-only.
  */
 const LORO_DIRECT: Readonly<Record<string, string>> = {
-  'apps/web/src/lib/document-sync-session.ts': 'M6: editor session',
-  'apps/web/src/lib/unreadable-snapshot.ts': 'M5: browser keeper',
   'packages/mcp-server/src/server/routes/document/versions.ts': 'M8: daemon store',
   'packages/mcp-server/src/server/routes/document/workspace-document.ts': 'M8: daemon store',
   'packages/mcp-server/src/server/store/auto-checkpoint.ts': 'M8: daemon store',

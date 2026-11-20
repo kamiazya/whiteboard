@@ -18,6 +18,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { flushMicrotasks, openTestSession } from '../test-utils/document-sync-session.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { docsOverRecord } from '../test-utils/replica-lease.js'
+import type { BodyTextPort } from './body-text-port.js'
 import { BrowserBackend } from './browser-backend.js'
 import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import {
@@ -69,7 +70,7 @@ async function openOnBrowserKeeper(body: string) {
     onWriteRefused: (refusal) => refusals.push(refusal),
   })
   session.connect()
-  const typed = (edit: (text: ReturnType<LoroDoc['getText']>) => void) => {
+  const typed = (edit: (text: BodyTextPort) => void) => {
     const binding = session?.getBodyBinding()
     const text = binding?.readText(binding.doc)
     if (!binding || !text) throw new Error('no body binding yet')

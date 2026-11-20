@@ -27,6 +27,7 @@ import {
 } from '../test-utils/capturing-spatial-editor.js'
 import { renderInRouter } from '../test-utils/daemon-page-harness.js'
 import { jsonResponse } from '../test-utils/json-response.js'
+import { recordPortOf } from '../test-utils/loro-record-port.js'
 
 const MAIN = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const PLAN = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
@@ -249,14 +250,14 @@ describe('useListFollowsRecord', () => {
 
   it('re-reads on its first look, since the list was read before the record was bound', () => {
     const refresh = vi.fn()
-    renderHook(() => useListFollowsRecord({ doc: record }, refresh))
+    renderHook(() => useListFollowsRecord({ doc: recordPortOf(record) }, refresh))
 
     expect(refresh).toHaveBeenCalledTimes(1)
   })
 
   it('leaves the list alone for an import that changes no listed document', async () => {
     const refresh = vi.fn()
-    renderHook(() => useListFollowsRecord({ doc: record }, refresh))
+    renderHook(() => useListFollowsRecord({ doc: recordPortOf(record) }, refresh))
     refresh.mockClear()
 
     peerWrites(record, (doc) =>
@@ -275,7 +276,7 @@ describe('useListFollowsRecord', () => {
 
   it('re-reads once for a burst of imports inside the settle window', async () => {
     const refresh = vi.fn()
-    renderHook(() => useListFollowsRecord({ doc: record }, refresh))
+    renderHook(() => useListFollowsRecord({ doc: recordPortOf(record) }, refresh))
     refresh.mockClear()
 
     peerWrites(record, createsPlan)
@@ -289,7 +290,7 @@ describe('useListFollowsRecord', () => {
   // row, so the name and the path are each the only thing that changed.
   it('re-reads when a document is renamed elsewhere', async () => {
     const refresh = vi.fn()
-    renderHook(() => useListFollowsRecord({ doc: record }, refresh))
+    renderHook(() => useListFollowsRecord({ doc: recordPortOf(record) }, refresh))
     refresh.mockClear()
 
     peerWrites(record, (doc) =>
@@ -302,7 +303,7 @@ describe('useListFollowsRecord', () => {
 
   it('re-reads when a document is moved elsewhere', async () => {
     const refresh = vi.fn()
-    renderHook(() => useListFollowsRecord({ doc: record }, refresh))
+    renderHook(() => useListFollowsRecord({ doc: recordPortOf(record) }, refresh))
     refresh.mockClear()
 
     peerWrites(record, (doc) => moveWorkspaceNodeToPath(doc, 'main', 'archive/main'))
@@ -314,7 +315,7 @@ describe('useListFollowsRecord', () => {
   it('compares a record a snapshot replaced against the one before it', async () => {
     const refresh = vi.fn()
     const { rerender } = renderHook(
-      ({ doc }: { doc: LoroDoc }) => useListFollowsRecord({ doc }, refresh),
+      ({ doc }: { doc: LoroDoc }) => useListFollowsRecord({ doc: recordPortOf(doc) }, refresh),
       { initialProps: { doc: record } },
     )
     refresh.mockClear()
@@ -332,7 +333,7 @@ describe('useListFollowsRecord', () => {
   it('leaves the list alone when a snapshot replaces the record with one showing the same', async () => {
     const refresh = vi.fn()
     const { rerender } = renderHook(
-      ({ doc }: { doc: LoroDoc }) => useListFollowsRecord({ doc }, refresh),
+      ({ doc }: { doc: LoroDoc }) => useListFollowsRecord({ doc: recordPortOf(doc) }, refresh),
       { initialProps: { doc: record } },
     )
     refresh.mockClear()

@@ -2,33 +2,7 @@ import type {
   DocumentBackend,
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import {
-  type DocumentContainers,
-  directTarget,
-  documentContainers,
-  MARKDOWN_BODY_KEY,
-  markThreadPassages,
-  type PassageRange,
-  readAnnotations,
-  readCoreFacets,
-  readEdgeLocks,
-  readFacets,
-  readMarkdownBody,
-  readNodeLocks,
-  readProposals,
-  readSpatialCanvas,
-  readThreadMarks,
-  readWorkspaceDocumentName,
-  resolveWorkspaceDocumentById,
-  setEdgeLock as workspaceSetEdgeLock,
-  setNodeLock as workspaceSetNodeLock,
-} from '@kamiazya/whiteboard-loro-adapter'
-
-/**
- * One identity for "this document has no marks", so a publish that found
- * none does not hand every subscriber a fresh map to diff against.
- */
-const NO_THREAD_MARKS: ReadonlyMap<string, PassageRange> = new Map()
+import type { PassageRange } from '@kamiazya/whiteboard-loro-adapter'
 
 /**
  * Why a backend read or write failed: the published contract's own union, and
@@ -52,13 +26,11 @@ import type {
   SpatialCanvas,
   StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
-import { LoroDoc, type LoroText, UndoManager } from 'loro-crdt'
 import { sameAnnotations, sameThreadMarks } from './annotations-equal.js'
 import { getAppLogger } from './app-logger.js'
 import type { BrowserPersistenceState } from './browser-persistence-state.js'
-import { commandTargetKey, commitToDoc } from './command-writes.js'
+import { commandTargetKey } from './command-writes.js'
 import { createCommitDebounce } from './commit-debounce.js'
-import { contentStateOf } from './document-state.js'
 import {
   DOCUMENT_SYNC_CHANGED_EVENT,
   type SyncStatus,
@@ -66,10 +38,12 @@ import {
 } from './document-sync-types.js'
 import { PersistenceLedger } from './persistence-ledger.js'
 import { type BodyBinding, bodyBindingFor } from './session-body-binding.js'
+import type { SessionBodyText } from './session-body-text.js'
+import { type ChangedBy, SessionDocument } from './session-document.js'
 import type { EditorCommand } from './spatial/commands.js'
 import { threadsAfterCommand } from './spatial/thread-commands.js'
 import { createSubscribers } from './subscribers.js'
-import { missingThreadMarks } from './text-anchor.js'
+import { createThreadMarksRefresher, NO_THREAD_MARKS } from './thread-marks-refresher.js'
 import { unreadableContent, unreadableSnapshot } from './unreadable-snapshot.js'
 
 const log = getAppLogger('document-sync')
@@ -158,9 +132,9 @@ export interface SessionDeps {
    * per-document backend today), which keeps all existing behavior unchanged.
    *
    * Fixed for the session's lifetime, like the backend itself — a different
-   * document is a different session. The CRDT plumbing (import/export,
-   * UndoManager, subscribeLocalUpdates) stays on the real LoroDoc either way;
-   * only WHERE content containers are found changes.
+   * document is a different session. The CRDT plumbing (import/export, undo,
+   * local updates) stays on the one engine document either way; only WHERE
+   * content is found changes.
    */
   contentDocumentId?: string
   /**
@@ -240,7 +214,7 @@ export interface DocumentSyncSession {
    * first snapshot. One object per doc — a new one only when a snapshot
    * replaces the doc — so an editor keyed on it remounts exactly then.
    */
-  getBodyBinding(): BodyBinding<LoroDoc, LoroText> | null
+  getBodyBinding(): BodyBinding<SessionDocument, SessionBodyText> | null
   /**
    * OKF core facets from the doc's `core` map. `undefined` until hydrated,
    * when none were ever written, and — by `readCoreFacets`' own rule — for
@@ -350,20 +324,6 @@ export interface DocumentSyncSession {
 }
 
 /**
- * The state a LISTING names the document by. A workspace-scoped session holds
- * the whole workspace record, whose own roots hold none of the document's
- * content, so digesting the record would name a state no list ever shows; the
- * tree node's digest is the one the index compares.
- */
-function listedContentState(
-  changed: LoroDoc,
-  contentDocumentId: string | undefined,
-): string | null {
-  if (contentDocumentId === undefined) return contentStateOf(changed)
-  return resolveWorkspaceDocumentById(changed, contentDocumentId)?.contentDigest ?? null
-}
-
-/**
  * One DocumentSyncSession = one live connection to one DocumentBackend. Owns
  * every piece of state that only makes sense for the lifetime of that single
  * connection (the LoroDoc, its UndoManager, the debounced commit pipeline,
@@ -379,14 +339,13 @@ export function createDocumentSyncSession(
   let disposed = false
   // See `documentRemoved`.
   let removed = false
-  let doc: LoroDoc | null = null
-  let undoManager: UndoManager | null = null
+  let doc: SessionDocument | null = null
   const historyChanged = createSubscribers()
   const locksChanged = createSubscribers()
   const bodyChanged = createSubscribers()
-  // Microtask defer: onPush fires inside Loro's commit, and a listener that
-  // synchronously setStates mid-commit would re-enter React from a doc
-  // mutation path.
+  // Microtask defer: a history change is announced from inside a document
+  // mutation, and a listener that synchronously setStates there would
+  // re-enter React from a doc mutation path.
   function notifyHistoryChanged(): void {
     queueMicrotask(() => {
       historyChanged.emit()
@@ -396,16 +355,11 @@ export function createDocumentSyncSession(
   let currentAnnotations: readonly CommentThread[] = []
   let currentProposals: readonly Proposal[] = []
   let currentThreadMarks: ReadonlyMap<string, PassageRange> = NO_THREAD_MARKS
-  // Which doc the quote has already been asked about. Compared by identity
-  // to the doc itself rather than kept as a boolean: `onSnapshot` mints a
-  // fresh LoroDoc for every reconnect, and a boolean would leave the second
-  // one un-backfilled forever.
-  let backfilledMarksFor: LoroDoc | null = null
   const annotationsChanged =
     createSubscribers<[readonly CommentThread[], ReadonlyMap<string, PassageRange>]>()
   const proposalsChanged = createSubscribers<[readonly Proposal[]]>()
   const canvasChanged = createSubscribers<[SpatialCanvas, 'local' | 'external']>()
-  // Chains every onChange firing's commit so firings apply to the Loro doc
+  // Chains every onChange firing's commit so firings apply to the document
   // strictly in schedule order, never in async-settle order.
   // Set once a snapshot or a live update brought in a shape this build does
   // not read whole (the page shows a read failure over the stale canvas);
@@ -425,19 +379,19 @@ export function createDocumentSyncSession(
     (state) => deps.onPersistenceChange?.(state),
     () => debounce.isArmed() || pendingTargets.size > 0 || pendingCommitCount > 0,
   )
-  // Loro delivers subscribeLocalUpdates on a later microtask than the commit
-  // (see the subscription below), so "the commit drained" is not yet "the
-  // push was issued". Two turns are what drainBeforePushHasFired gives it
-  // too; only then can a quiet session honestly be called saved.
+  // A push is issued on a later microtask than the commit that made it (see
+  // `send`), so "the commit drained" is not yet "the push was issued". Two
+  // turns are what drainBeforePushHasFired gives it too; only then can a quiet
+  // session honestly be called saved.
   async function settleAfterCommitDrained(): Promise<void> {
     await Promise.resolve()
     await Promise.resolve()
     persistence.settle()
   }
 
-  function announceOwnEdit(changed: LoroDoc, by: string): void {
+  function announceOwnEdit(changed: SessionDocument, by: ChangedBy): void {
     if (by === 'import' || removed || deps.onOwnEditContentState === undefined) return
-    const state = listedContentState(changed, deps.contentDocumentId)
+    const state = changed.listedContentState()
     if (state !== null) deps.onOwnEditContentState(state)
   }
 
@@ -461,67 +415,22 @@ export function createDocumentSyncSession(
       })
   }
 
-  /**
-   * Where each conversation's passage is now, and — once per body — the
-   * marks a document arrived without.
-   *
-   * Marks do not travel through a markdown file, and a thread an MCP peer
-   * wrote never had one, so the quote is asked ONCE at the moment the body
-   * is known and its answer written down for the CRDT to carry. Once,
-   * because this runs on every external update: re-asking would pay a body
-   * search per update for every thread whose passage is genuinely gone, and
-   * would keep re-deriving nothing.
-   *
-   * Guarded, and the read is what matters: a body the backfill cannot write
-   * to must still publish the marks it already has, rather than costing the
-   * whole annotation channel its value.
-   */
-  function refreshThreadMarks(
-    targetDoc: LoroDoc,
-    content: DocumentContainers,
-    threads: readonly CommentThread[],
-  ): ReadonlyMap<string, PassageRange> {
-    let marks: ReadonlyMap<string, PassageRange>
-    try {
-      marks = readThreadMarks(content)
-    } catch (err) {
-      log.warn('reading thread marks failed', err)
-      return NO_THREAD_MARKS
-    }
-    if (backfilledMarksFor === targetDoc) return marks
-    backfilledMarksFor = targetDoc
-    try {
-      const missing = missingThreadMarks(readMarkdownBody(content), threads, marks)
-      if (missing.size === 0) return marks
-      markThreadPassages(targetDoc, content, missing)
-      return readThreadMarks(content)
-    } catch (err) {
-      log.warn('backfilling thread marks failed', err)
-      return marks
-    }
-  }
+  const refreshThreadMarks = createThreadMarksRefresher()
 
   /**
-   * Where this session's content containers live: the doc's roots, or — when
-   * a content scope is set — the workspace tree node carrying
-   * `contentDocumentId`. Resolved per call, never cached: a restore re-mints
-   * the node under a NEW TreeID for the same documentId, and a cached handle
-   * would keep pointing at the deleted node.
-   *
-   * Null while the document is removed: the one place every content read and
-   * write learns it, since resolving a gone node throws, and the type makes
-   * each caller say what it answers instead.
+   * The document to read or write content through, null while it is removed:
+   * the one place every content read and write learns it, since reading a
+   * gone node throws, and the type makes each caller say what it answers
+   * instead. The document itself resolves its node per call, because a
+   * restore re-mints the node under a NEW TreeID for the same documentId.
    */
-  function contentOf(targetDoc: LoroDoc): DocumentContainers | null {
-    if (removed) return null
-    return deps.contentDocumentId === undefined
-      ? targetDoc
-      : documentContainers(targetDoc, deps.contentDocumentId)
+  function contentOf(targetDoc: SessionDocument): SessionDocument | null {
+    return removed ? null : targetDoc
   }
 
-  // The held doc's content: null before the first snapshot and while removed.
-  const liveContent = (): DocumentContainers | null => (doc === null ? null : contentOf(doc))
-  function readContent<T>(read: (content: DocumentContainers) => T, empty: T): T {
+  // The held doc: null before the first snapshot and while removed.
+  const liveContent = (): SessionDocument | null => (doc === null ? null : contentOf(doc))
+  function readContent<T>(read: (content: SessionDocument) => T, empty: T): T {
     const content = liveContent()
     return content === null ? empty : read(content)
   }
@@ -555,14 +464,14 @@ export function createDocumentSyncSession(
   }
 
   function exportSnapshot(): Uint8Array | null {
-    return doc === null ? null : doc.export({ mode: 'snapshot' })
+    return doc === null ? null : doc.exportSnapshot()
   }
 
   function getContentState(): string | null {
     if (doc === null) return null
     // A document a peer deleted has no tree node to name it by; the record's own
     // digest still answers a string so the contract stays total.
-    return listedContentState(doc, deps.contentDocumentId) ?? contentStateOf(doc)
+    return doc.listedContentState() ?? doc.recordContentState()
   }
 
   function getAnnotations(): readonly CommentThread[] {
@@ -602,7 +511,7 @@ export function createDocumentSyncSession(
    * before publishing, rather than a capture-then-recheck pair spanning an
    * await.
    */
-  function publishCanvasFromDoc(targetDoc: LoroDoc): void {
+  function publishCanvasFromDoc(targetDoc: SessionDocument): void {
     deps.generations.nextApplyGeneration()
     const content = isStale() ? null : contentOf(targetDoc)
     if (content === null) return
@@ -616,14 +525,14 @@ export function createDocumentSyncSession(
       deps.onStatusChange('error')
       return
     }
-    const canvas = readSpatialCanvas(content)
+    const canvas = content.canvas()
     currentCanvas = canvas
     // Read from the same doc read that produced the canvas, so the two
     // published values are always a pair taken at one instant rather than
     // two reads a remote update could land between.
-    currentAnnotations = readAnnotations(content)
-    currentThreadMarks = refreshThreadMarks(targetDoc, content, currentAnnotations)
-    currentProposals = readProposals(content)
+    currentAnnotations = content.annotations()
+    currentThreadMarks = refreshThreadMarks(targetDoc, currentAnnotations)
+    currentProposals = content.proposals()
     notify(canvas, 'external')
     notifyAnnotations(currentAnnotations)
     notifyProposals(currentProposals)
@@ -644,12 +553,13 @@ export function createDocumentSyncSession(
    * comment-shaped command nobody added to the list, writing a conversation
    * the panel never hears about. Equality here cannot go stale that way.
    */
-  function republishAnnotationsIfChanged(targetDoc: LoroDoc): void {
-    const content = isStale() ? null : contentOf(targetDoc)
+  function republishAnnotationsIfChanged(targetDoc: SessionDocument): void {
+    // A snapshot replaced it and closed it: what it holds is not the session's.
+    const content = isStale() || targetDoc !== doc ? null : contentOf(targetDoc)
     if (content === null) return
     let next: readonly CommentThread[]
     try {
-      next = readAnnotations(content)
+      next = content.annotations()
     } catch (err) {
       // Same contract as guardedCommit: the chain must never reject, or every
       // later firing's commit is skipped for the rest of the session.
@@ -660,14 +570,14 @@ export function createDocumentSyncSession(
     // passage merely MOVED leaves the thread list byte-for-byte identical,
     // so gating on the threads alone would keep drawing the highlight where
     // the text used to be. Both are compared, and neither alone decides.
-    const marks = refreshThreadMarks(targetDoc, content, next)
+    const marks = refreshThreadMarks(targetDoc, next)
     const movedMarks = !sameThreadMarks(currentThreadMarks, marks)
     currentThreadMarks = marks
     // The proposal layer changes on the same signal and is compared the
     // same cheap way: adopting one rewrites its status, and a person's edit
     // can turn a change into a conflict without touching the proposal at
     // all — which the canvas publish beside this already reports.
-    const nextProposals = readProposals(content)
+    const nextProposals = content.proposals()
     if (JSON.stringify(currentProposals) !== JSON.stringify(nextProposals)) {
       currentProposals = nextProposals
       notifyProposals(nextProposals)
@@ -695,7 +605,7 @@ export function createDocumentSyncSession(
   // this edit and be deleted by it.
   let windowStart: SpatialCanvas | null = null
   // Body text the editor binding wrote at its positions and has not
-  // committed: the ops are in the doc (a read sees them) and ride the same
+  // committed: the doc's body holds it (a read sees it) and it rides the same
   // debounce as a canvas edit, so a burst of keystrokes is one commit and
   // one push.
   let bodyOpsPending = false
@@ -716,7 +626,7 @@ export function createDocumentSyncSession(
     pendingTargets.clear()
     latestNext = null
 
-    // A commit that throws (unexpected shape, Loro internal error) must fail
+    // A commit that throws (unexpected shape, engine error) must fail
     // only its own target, not the whole firing or the commit chain — an
     // unguarded throw would reject the chain and silently skip every later
     // firing's commit for the rest of the session.
@@ -724,7 +634,7 @@ export function createDocumentSyncSession(
       // Judged again here: a live update can refuse the document between
       // the firing and its turn on the chain.
       if (unreadable) return
-      if (commitBody) targetDoc.commit()
+      if (commitBody) targetDoc.commitBody()
       if (next !== null) commitTargets(targetDoc, prev ?? next, next, commands)
     }
     // Chained with a resolved-only continuation (never `.catch`) because
@@ -743,7 +653,7 @@ export function createDocumentSyncSession(
 
   /** Each target on its own: guardedCommit's contract is that the chain never rejects. */
   function commitTargets(
-    targetDoc: LoroDoc,
+    targetDoc: SessionDocument,
     prev: SpatialCanvas,
     next: SpatialCanvas,
     commands: readonly EditorCommand[],
@@ -760,13 +670,12 @@ export function createDocumentSyncSession(
 
   // Nowhere to write once the document is removed; the page was told already.
   function commitTarget(
-    targetDoc: LoroDoc,
+    targetDoc: SessionDocument,
     prev: SpatialCanvas,
     next: SpatialCanvas,
     command: EditorCommand,
   ): void {
-    if (contentOf(targetDoc) === null) return
-    commitToDoc(directTarget(targetDoc, deps.contentDocumentId), prev, next, command)
+    contentOf(targetDoc)?.commitCommand(prev, next, command)
   }
 
   const debounce = createCommitDebounce(commitPendingTargets)
@@ -779,21 +688,24 @@ export function createDocumentSyncSession(
   }
 
   /**
-   * The binding wrote body ops into `bound`. A doc a snapshot has replaced is
+   * The binding wrote body text into `bound`. A doc a snapshot has replaced is
    * not ours to commit — the editor remounts on the new binding instead.
    */
-  function bodyEdited(bound: LoroDoc): void {
+  function bodyEdited(bound: SessionDocument): void {
     if (bound !== doc || removed || unreadable) return
     persistence.edited()
     bodyOpsPending = true
     debounce.arm()
   }
 
-  const bodyBindingOf = bodyBindingFor({
-    readText: (target: LoroDoc) => contentOf(target)?.getText(MARKDOWN_BODY_KEY) ?? null,
+  // The binding's doc is the held document's body, so a snapshot that replaces
+  // the document replaces the binding and the editor remounts exactly then.
+  const bodyBindingOf = bodyBindingFor<SessionDocument, SessionBodyText>({
+    readText: (target) => (removed || target !== doc ? null : target.body),
     onEdited: bodyEdited,
   })
-  const getBodyBinding = (): BodyBinding<LoroDoc, LoroText> | null => bodyBindingOf(doc)
+  const getBodyBinding = (): BodyBinding<SessionDocument, SessionBodyText> | null =>
+    bodyBindingOf(doc)
   onCanvasChange.flush = (): void => {
     debounce.cancel()
     commitPendingTargets()
@@ -847,6 +759,78 @@ export function createDocumentSyncSession(
     clearUndo()
   }
 
+  function resendEverything(held: SessionDocument): void {
+    let update: Uint8Array
+    try {
+      update = held.exportUpdate()
+    } catch (err) {
+      log.error('exporting the document to re-send failed', err)
+      deps.onStatusChange('error')
+      return
+    }
+    send(() => update)
+  }
+
+  /**
+   * Opens the engine document for a keeper's bytes. Persisted "snapshot" bytes
+   * are whatever the first local update's payload happened to be, so they may
+   * be update format as well as snapshot format; the engine opens either.
+   */
+  function openDocument(bytes: Uint8Array): SessionDocument {
+    const created: SessionDocument = new SessionDocument({
+      bytes,
+      contentDocumentId: deps.contentDocumentId,
+      onLocalUpdate: onLocalUpdate,
+      onChanged: (by) => onDocumentChanged(created, by),
+    })
+    return created
+  }
+
+  /**
+   * A local commit's update goes to the keeper.
+   *
+   * No isStale() guard: this is bound to this specific document and backend,
+   * fixed for the lifetime of the session, so it can never route bytes to a
+   * different backend. Gating on isStale() would drop a local commit made
+   * while dispose() flushes — which is exactly when `disposed` is already
+   * true. dispose()'s drain phase is what keeps backend.disconnect() from
+   * running before the push has been issued.
+   */
+  function onLocalUpdate(update: Uint8Array): void {
+    // "This document just changed locally" — the browser's analogue of
+    // the update the daemon's trigger rides. Before the push rather
+    // than after it: the scheduler only arms a timer here, and a
+    // checkpoint that waited for durability would miss the edits a
+    // failing store is exactly when you want bookmarked.
+    deps.checkpoints?.signal()
+    send(() => update)
+    // A step was pushed on the undo stack, or one was taken off it.
+    notifyHistoryChanged()
+  }
+
+  /**
+   * What the page is told of each change the document announces — a person's,
+   * a peer's, an undo — and, for a peer's, of the canvas and the locks.
+   */
+  function onDocumentChanged(changed: SessionDocument, by: ChangedBy): void {
+    announceOwnEdit(changed, by)
+    if (isStale() || (by === 'import' ? documentRemoved(changed) : removed)) return
+    // Fires for both a local commit and a remote import, matching MCP-app
+    // parity for what counts as "the doc changed" — but never for the initial
+    // snapshot, which is opened before anything listens.
+    deps.dispatchIdentityEvent(DOCUMENT_SYNC_CHANGED_EVENT, deps.getOptions().identity)
+    // Every change, not just an import: a local UNDO rewrites the body
+    // without one, and the editor holding stale text is the whole failure
+    // this notification exists to prevent. Re-notifying the editor that
+    // authored the keystroke is harmless — it already holds that value.
+    notifyBodyChanged()
+    if (by === 'import') {
+      publishCanvasFromDoc(changed)
+      // A remote peer may have locked or unlocked something.
+      notifyLocksChanged()
+    }
+  }
+
   function connect(): void {
     listenForPageLeaving()
     backend.connect({
@@ -858,7 +842,7 @@ export function createDocumentSyncSession(
         // Re-send everything this document holds. A backend whose transport
         // was down dropped the deltas made meanwhile — each push carries only
         // one commit's ops, so no later push replays them — and the server
-        // would never learn about those edits. Loro's import is idempotent,
+        // would never learn about those edits. A CRDT import is idempotent,
         // so a server that already has them merges a no-op.
         //
         // Full state rather than a delta since the last acknowledged version:
@@ -866,8 +850,8 @@ export function createDocumentSyncSession(
         // send from, and inventing one that is wrong would lose edits
         // silently again. Counted like any push: its landing is when the
         // writes lost during the outage land, so it settles their failure.
-        const connectedDoc = doc
-        if (connectedDoc !== null) send(() => connectedDoc.export({ mode: 'update' }))
+        // Taken now: a snapshot may replace this document before the push runs.
+        if (doc !== null) resendEverything(doc)
       },
 
       onWritesLanded() {
@@ -889,81 +873,24 @@ export function createDocumentSyncSession(
 
       onSnapshot(bytes) {
         if (isStale()) return
-        // Persisted "snapshot" bytes are whatever pushLocalUpdate's first
-        // subscribeLocalUpdates payload happened to be — which is Loro
-        // update-format, not doc.export({ mode: 'snapshot' }) format.
-        // LoroDoc.fromSnapshot() only accepts true snapshot bytes and throws
-        // on update bytes; doc.import() accepts either format, so a fresh
-        // doc + import() is the only reconstruction that works for both.
-        const newDoc = new LoroDoc()
-        newDoc.import(bytes)
-        if (doc !== null && documentRemoved(newDoc)) return
-        const refusal = unreadableSnapshot(newDoc, deps.contentDocumentId, contentOf)
+        const arriving = openDocument(bytes)
+        if (doc !== null && documentRemoved(arriving)) {
+          arriving.close()
+          return
+        }
+        const refusal = unreadableSnapshot(arriving)
         if (refusal !== null) {
+          arriving.close()
           unreadable = true
           deps.onBackendError(refusal)
           deps.onStatusChange('error')
           return
         }
         unreadable = false
-        doc = newDoc
-        undoManager = new UndoManager(newDoc, {
-          mergeInterval: 500,
-          onPush: () => {
-            notifyHistoryChanged()
-            return { value: null, cursors: [] }
-          },
-          onPop: () => {
-            notifyHistoryChanged()
-          },
-        })
+        doc?.close()
+        doc = arriving
 
-        newDoc.subscribeLocalUpdates((update) => {
-          // No isStale() guard here: this callback is bound to this specific
-          // `newDoc` and `backend`, both fixed for the lifetime of this
-          // session, so it can never route bytes to a different backend.
-          // Gating on isStale() would drop a local commit that lands on a
-          // microtask AFTER teardown flips `disposed` — which is exactly
-          // what happens when onCanvasChange.flush() runs during dispose()
-          // (doc.commit() fires synchronously, but this subscriber fires on
-          // a later microtask, by which point `disposed` is already true).
-          // dispose()'s drain phase is what keeps backend.disconnect() from
-          // running before this callback has had a chance to fire — without
-          // it, the transport could already be closed by the time this push
-          // happens, silently losing the last edit before a canvas switch or
-          // unmount.
-          // "This document just changed locally" — the browser's analogue of
-          // the update the daemon's trigger rides. Before the push rather
-          // than after it: the scheduler only arms a timer here, and a
-          // checkpoint that waited for durability would miss the edits a
-          // failing store is exactly when you want bookmarked.
-          deps.checkpoints?.signal()
-          send(() => update)
-        })
-
-        newDoc.subscribe((e) => {
-          announceOwnEdit(newDoc, e.by)
-          if (isStale() || (e.by === 'import' ? documentRemoved(newDoc) : removed)) return
-          // Fires for both a local commit (onChange -> doc.commit()) and a
-          // remote import (onRemoteUpdate), matching MCP-app parity for
-          // what counts as "the doc changed" — but never for the initial
-          // snapshot import above, since that happens before this listener
-          // is registered.
-          deps.dispatchIdentityEvent(DOCUMENT_SYNC_CHANGED_EVENT, deps.getOptions().identity)
-          // Every change, not just an import: a local UNDO rewrites the body
-          // container without one, and the editor holding stale text is the
-          // whole failure this notification exists to prevent. Re-notifying
-          // the editor that authored the keystroke is harmless — it already
-          // holds that value.
-          notifyBodyChanged()
-          if (e.by === 'import') {
-            publishCanvasFromDoc(newDoc)
-            // A remote peer may have locked or unlocked something.
-            notifyLocksChanged()
-          }
-        })
-
-        publishCanvasFromDoc(newDoc)
+        publishCanvasFromDoc(arriving)
         // Hydration decides the lock set for this session — without this,
         // a persisted lock reads as absent until the next toggle.
         notifyLocksChanged()
@@ -975,7 +902,7 @@ export function createDocumentSyncSession(
 
       onRemoteUpdate(bytes) {
         if (isStale()) return
-        doc?.import(bytes)
+        doc?.importBytes(bytes)
       },
 
       onVersionCreated(payload) {
@@ -1095,9 +1022,13 @@ export function createDocumentSyncSession(
     // there is nothing to drain, so disconnect happens immediately —
     // matching every caller that assumes a synchronous teardown.
     if (pendingCommitCount > 0) {
-      void drainBeforePushHasFired().then(() => backend.disconnect())
+      void drainBeforePushHasFired().then(() => {
+        backend.disconnect()
+        doc?.close()
+      })
     } else {
       backend.disconnect()
+      doc?.close()
     }
   }
 
@@ -1128,9 +1059,9 @@ export function createDocumentSyncSession(
   }
 
   function clearUndo(): void {
-    if (!undoManager) return
-    undoManager.clear()
-    // clear() empties the stack without an onPop, so notify explicitly —
+    if (!doc) return
+    doc.clearUndo()
+    // Clearing empties the stack without a step popped, so notify explicitly —
     // otherwise a consumer keeps rendering an enabled Undo button over an
     // empty stack after a version restore.
     notifyHistoryChanged()
@@ -1178,9 +1109,8 @@ export function createDocumentSyncSession(
    * subscriber alone wakes no listener on it, so the page keeps the view it
    * had under the removal notice rather than reading empty values into it.
    */
-  function documentRemoved(targetDoc: LoroDoc): boolean {
-    const id = deps.contentDocumentId
-    const gone = id !== undefined && resolveWorkspaceDocumentById(targetDoc, id) === null
+  function documentRemoved(targetDoc: SessionDocument): boolean {
+    const gone = !targetDoc.hasEntry()
     if (gone === removed) return gone
     removed = gone
     if (gone) {
@@ -1201,29 +1131,29 @@ export function createDocumentSyncSession(
       publishCanvasFromDoc(doc)
       return true
     }
-    if (!undoManager?.canUndo()) return false
-    undoManager.undo()
+    if (!doc.canUndo()) return false
+    doc.undo()
     publishCanvasFromDoc(doc)
     return true
   }
 
   function redo(): boolean {
-    if (!undoManager || !doc || removed || unreadable) return false
-    if (!undoManager.canRedo()) return false
+    if (!doc || removed || unreadable) return false
+    if (!doc.canRedo()) return false
     // Same staleness, for the same reason: the queued write was computed
     // against the document as it stood before this redo.
     dropQueuedWrite()
-    undoManager.redo()
+    doc.redo()
     publishCanvasFromDoc(doc)
     return true
   }
 
   function canUndo(): boolean {
-    return (undoManager !== null && doc !== null && undoManager.canUndo()) === true
+    return doc?.canUndo() === true
   }
 
   function canRedo(): boolean {
-    return (undoManager !== null && doc !== null && undoManager.canRedo()) === true
+    return doc?.canRedo() === true
   }
 
   function subscribeHistory(listener: () => void): () => void {
@@ -1238,7 +1168,7 @@ export function createDocumentSyncSession(
   // subscribeLocalUpdates push, like every other local change. The canvas
   // VALUE is unchanged, so subscribers get a lock notification rather than a
   // canvas publish.
-  function writeLocks(write: (content: DocumentContainers) => void): void {
+  function writeLocks(write: (content: SessionDocument) => void): void {
     const content = unreadable ? null : liveContent()
     if (content === null) return
     write(content)
@@ -1246,8 +1176,7 @@ export function createDocumentSyncSession(
   }
 
   function getDocumentName(): string | null | undefined {
-    const id = deps.contentDocumentId
-    return doc === null || id === undefined ? undefined : readWorkspaceDocumentName(doc, id)
+    return doc?.name()
   }
 
   function notifyBodyChanged(): void {
@@ -1282,16 +1211,16 @@ export function createDocumentSyncSession(
     subscribeProposals,
     subscribe,
     subscribeHistory,
-    getNodeLocks: () => readContent(readNodeLocks, EMPTY_LOCKS),
-    setNodeLock: (nodeId, locked) => writeLocks((on) => workspaceSetNodeLock(on, nodeId, locked)),
-    getEdgeLocks: () => readContent(readEdgeLocks, EMPTY_LOCKS),
-    setEdgeLock: (edgeId, locked) => writeLocks((on) => workspaceSetEdgeLock(on, edgeId, locked)),
+    getNodeLocks: () => readContent((on) => on.nodeLocks(), EMPTY_LOCKS),
+    setNodeLock: (nodeId, locked) => writeLocks((on) => on.setNodeLock(nodeId, locked)),
+    getEdgeLocks: () => readContent((on) => on.edgeLocks(), EMPTY_LOCKS),
+    setEdgeLock: (edgeId, locked) => writeLocks((on) => on.setEdgeLock(edgeId, locked)),
     subscribeLocks,
-    getMarkdownBody: () => readContent(readMarkdownBody, ''),
+    getMarkdownBody: () => readContent((on) => on.markdownBody(), ''),
     subscribeMarkdownBody,
     getBodyBinding,
-    getCoreFacets: () => readContent(readCoreFacets, undefined),
-    getFacets: () => readContent(readFacets, EMPTY_FACETS),
+    getCoreFacets: () => readContent((on) => on.coreFacets(), undefined),
+    getFacets: () => readContent((on) => on.facets(), EMPTY_FACETS),
     getDocumentName,
   }
 }
