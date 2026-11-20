@@ -1,0 +1,84 @@
+{
+  "error": {
+    "name": "DocumentContentLossError",
+    "message": "Document 01H8XJZ9K5N4M3P2Q1R0S9T8V7 records no kind and is not empty. It holds 3 node(s) and 1 edge(s), which this write would replace with a markdown body. Edit it through wb_canvas_edit, which records it as spatial and keeps them."
+  },
+  "content": {
+    "doc1": {
+      "kind": null,
+      "canvas": {
+        "nodes": [
+          {
+            "id": "a",
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 60,
+            "tags": [
+              "x",
+              "old"
+            ],
+            "resource": {
+              "mimeType": "text/markdown",
+              "content": "Alpha"
+            }
+          },
+          {
+            "id": "b",
+            "x": 300,
+            "y": 0,
+            "width": 200,
+            "height": 60,
+            "resource": {
+              "mimeType": "text/markdown",
+              "content": "Beta"
+            }
+          },
+          {
+            "id": "c",
+            "x": 600,
+            "y": 0,
+            "width": 200,
+            "height": 60,
+            "tags": [
+              "old"
+            ],
+            "resource": {
+              "mimeType": "text/markdown",
+              "content": "Gamma"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "from": {
+              "node": "a"
+            },
+            "to": {
+              "node": "b"
+            },
+            "tags": [
+              "old"
+            ]
+          }
+        ],
+        "tags": [
+          "kept",
+          "old"
+        ]
+      },
+      "skipped": 0,
+      "body": "",
+      "threads": [],
+      "proposals": [],
+      "nodeLocks": [],
+      "edgeLocks": [],
+      "facets": {},
+      "coreFacets": null,
+      "trustFacets": null
+    }
+  },
+  "saves": [],
+  "events": []
+}

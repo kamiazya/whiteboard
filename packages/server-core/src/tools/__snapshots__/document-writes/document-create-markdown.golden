@@ -1,0 +1,77 @@
+{
+  "path": "note",
+  "content": {
+    "doc1": {
+      "kind": "markdown",
+      "canvas": {
+        "nodes": [],
+        "edges": []
+      },
+      "skipped": 0,
+      "body": "Body at birth.",
+      "threads": [],
+      "proposals": [],
+      "nodeLocks": [],
+      "edgeLocks": [],
+      "facets": {},
+      "coreFacets": {
+        "type": "note",
+        "tags": [
+          "alpha"
+        ]
+      },
+      "trustFacets": {
+        "generated": {
+          "by": "process:whiteboard-server",
+          "at": "2026-01-02T03:04:05.000Z"
+        }
+      }
+    }
+  },
+  "saves": [
+    {
+      "documentId": "doc1",
+      "chunks": 1,
+      "frontierIsTheOplogVersion": true,
+      "docRef": {
+        "kind": "document",
+        "workspaceId": "01RAZ9RNDPVKYWSQEWJ2PKYRZJ",
+        "documentId": "doc1"
+      }
+    },
+    {
+      "documentId": "doc1",
+      "chunks": 1,
+      "frontierIsTheOplogVersion": true,
+      "docRef": {
+        "kind": "document",
+        "workspaceId": "01RAZ9RNDPVKYWSQEWJ2PKYRZJ",
+        "documentId": "doc1"
+      }
+    }
+  ],
+  "events": [
+    {
+      "workspaceId": "01RAZ9RNDPVKYWSQEWJ2PKYRZJ",
+      "documentId": "doc1",
+      "path": "note",
+      "keys": [
+        "doc",
+        "documentId",
+        "path",
+        "workspaceId"
+      ]
+    },
+    {
+      "workspaceId": "01RAZ9RNDPVKYWSQEWJ2PKYRZJ",
+      "documentId": "doc1",
+      "path": "note",
+      "keys": [
+        "doc",
+        "documentId",
+        "path",
+        "workspaceId"
+      ]
+    }
+  ]
+}

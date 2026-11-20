@@ -1,0 +1,132 @@
+{
+  "answer": {
+    "updated": [
+      {
+        "documentId": "01H8XJZ9K5N4M3P2Q1R0S9T8V7",
+        "facets": {
+          "visual.edges/v0": {
+            "routing": "curved"
+          }
+        },
+        "tags": [
+          "kept",
+          "new",
+          "board"
+        ]
+      }
+    ]
+  },
+  "content": {
+    "doc1": {
+      "kind": "spatial",
+      "canvas": {
+        "nodes": [
+          {
+            "id": "a",
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 60,
+            "tags": [
+              "x",
+              "new"
+            ],
+            "resource": {
+              "mimeType": "text/markdown",
+              "content": "Alpha"
+            }
+          },
+          {
+            "id": "b",
+            "x": 300,
+            "y": 0,
+            "width": 200,
+            "height": 60,
+            "resource": {
+              "mimeType": "text/markdown",
+              "content": "Beta"
+            }
+          },
+          {
+            "id": "c",
+            "x": 600,
+            "y": 0,
+            "width": 200,
+            "height": 60,
+            "tags": [
+              "new"
+            ],
+            "resource": {
+              "mimeType": "text/markdown",
+              "content": "Gamma"
+            }
+          }
+        ],
+        "edges": [
+          {
+            "id": "e1",
+            "from": {
+              "node": "a"
+            },
+            "to": {
+              "node": "b"
+            },
+            "tags": [
+              "new"
+            ]
+          }
+        ],
+        "facets": {
+          "visual.edges/v0": {
+            "routing": "curved"
+          }
+        },
+        "tags": [
+          "kept",
+          "new",
+          "board"
+        ]
+      },
+      "skipped": 0,
+      "body": "",
+      "threads": [],
+      "proposals": [],
+      "nodeLocks": [
+        "b"
+      ],
+      "edgeLocks": [],
+      "facets": {
+        "example.sample/v1": {
+          "status": "open"
+        }
+      },
+      "coreFacets": null,
+      "trustFacets": null
+    }
+  },
+  "saves": [
+    {
+      "documentId": "doc1",
+      "chunks": 1,
+      "frontierIsTheOplogVersion": true,
+      "docRef": {
+        "kind": "document",
+        "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+        "documentId": "doc1"
+      }
+    }
+  ],
+  "events": [
+    {
+      "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+      "documentId": "doc1",
+      "path": "doc",
+      "keys": [
+        "doc",
+        "documentId",
+        "path",
+        "workspaceId"
+      ]
+    }
+  ]
+}

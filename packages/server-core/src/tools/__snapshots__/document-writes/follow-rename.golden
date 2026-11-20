@@ -1,0 +1,123 @@
+{
+  "result": {
+    "updated": [
+      "board",
+      "note"
+    ],
+    "failed": []
+  },
+  "content": {
+    "doc1": {
+      "kind": "markdown",
+      "canvas": {
+        "nodes": [],
+        "edges": []
+      },
+      "skipped": 0,
+      "body": "see [[archive/login]] and [[Login flow]] and [[unrelated]]",
+      "threads": [],
+      "proposals": [],
+      "nodeLocks": [],
+      "edgeLocks": [],
+      "facets": {},
+      "coreFacets": null,
+      "trustFacets": null
+    },
+    "doc2": {
+      "kind": "spatial",
+      "canvas": {
+        "nodes": [
+          {
+            "id": "f1",
+            "x": 0,
+            "y": 100,
+            "width": 100,
+            "height": 40,
+            "resource": {
+              "mimeType": "application/octet-stream",
+              "location": "archive/login"
+            }
+          },
+          {
+            "id": "t1",
+            "x": 0,
+            "y": 0,
+            "width": 200,
+            "height": 60,
+            "resource": {
+              "mimeType": "text/markdown",
+              "content": "see [[archive/login]]"
+            }
+          },
+          {
+            "id": "t2",
+            "x": 0,
+            "y": 200,
+            "width": 200,
+            "height": 60,
+            "resource": {
+              "mimeType": "text/markdown",
+              "content": "unrelated"
+            }
+          }
+        ],
+        "edges": []
+      },
+      "skipped": 0,
+      "body": "",
+      "threads": [],
+      "proposals": [],
+      "nodeLocks": [],
+      "edgeLocks": [],
+      "facets": {},
+      "coreFacets": null,
+      "trustFacets": null
+    }
+  },
+  "saves": [
+    {
+      "documentId": "doc2",
+      "chunks": 1,
+      "frontierIsTheOplogVersion": true,
+      "docRef": {
+        "kind": "document",
+        "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+        "documentId": "doc2"
+      }
+    },
+    {
+      "documentId": "doc1",
+      "chunks": 1,
+      "frontierIsTheOplogVersion": true,
+      "docRef": {
+        "kind": "document",
+        "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+        "documentId": "doc1"
+      }
+    }
+  ],
+  "events": [
+    {
+      "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+      "documentId": "doc2",
+      "path": "board",
+      "keys": [
+        "doc",
+        "documentId",
+        "path",
+        "workspaceId"
+      ]
+    },
+    {
+      "workspaceId": "01ZVM89A4A1V9FS03Z9J64KEK1",
+      "documentId": "doc1",
+      "path": "doc",
+      "keys": [
+        "doc",
+        "documentId",
+        "path",
+        "workspaceId"
+      ]
+    }
+  ]
+}

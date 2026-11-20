@@ -1,0 +1,26 @@
+{
+  "error": {
+    "name": "DocumentHasNoFrontmatterError",
+    "message": "Document 01H8XJZ9K5N4M3P2Q1R0S9T8V7 has no OKF frontmatter to tag. Write its content first with wb_workspace_edit's document.set op (a markdown body starting with a --- frontmatter block), then tag it."
+  },
+  "content": {
+    "doc1": {
+      "kind": "markdown",
+      "canvas": {
+        "nodes": [],
+        "edges": []
+      },
+      "skipped": 0,
+      "body": "bare",
+      "threads": [],
+      "proposals": [],
+      "nodeLocks": [],
+      "edgeLocks": [],
+      "facets": {},
+      "coreFacets": null,
+      "trustFacets": null
+    }
+  },
+  "saves": [],
+  "events": []
+}
