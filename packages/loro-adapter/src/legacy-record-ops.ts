@@ -1,5 +1,5 @@
 import { bytesToBase64, type documentEngine as wire } from '@kamiazya/whiteboard-model'
-import { decodeFrontiers, encodeFrontiers } from 'loro-crdt'
+import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { versionOfPairs, versionPairs } from './engine/answers.js'
 import { breachOf, touchedSince } from './engine/engine.js'
 import { unwrapAnswer } from './engine/read-value.js'
@@ -80,4 +80,17 @@ export const legacyRecordOps: RecordOps<LegacyRecord> = {
       projected.free()
     }
   },
+}
+
+/**
+ * A document of its own from the bytes a projection export answers, for the
+ * consumers that still read a past document through a `LoroDoc`.
+ *
+ * ponytail: the one place a past state becomes a `LoroDoc`; it goes when
+ * restore and the history reads take a document's content through the engine.
+ */
+export function documentFromSnapshot(bytes: Uint8Array): LoroDoc {
+  const doc = new LoroDoc()
+  doc.import(bytes)
+  return doc
 }

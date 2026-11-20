@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { documentFromSnapshot } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
@@ -10,6 +11,16 @@ import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
 // What a version lookup may answer for a DIFFERENT workspace, and which end of
 // a document's history each judgement reads. Two workspaces hold a document at
 // the same path, so every id and every row has a plausible wrong owner.
+
+/** A version's past document as a LoroDoc, rebuilt from the bytes the store answers. */
+async function loadPast(
+  versions: { load(workspaceId: string, id: string): Promise<Uint8Array | null> },
+  workspaceId: string,
+  id: string,
+) {
+  const bytes = await versions.load(workspaceId, id)
+  return bytes === null ? null : documentFromSnapshot(bytes)
+}
 
 let tempDir: string
 
@@ -422,7 +433,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
         store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', { auto: false }),
       )
       await edit('01PAW75F73PVC402Y3V151KT6R', 'after')
-      const asSaved = (await store.load('01PAW75F73PVC402Y3V151KT6R', first.id))?.toJSON()
+      const asSaved = (await loadPast(store, '01PAW75F73PVC402Y3V151KT6R', first.id))?.toJSON()
       const { documentId } = await handle.db
         .selectFrom('versions')
         .select('documentId')
@@ -439,7 +450,9 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       expect((await compactWorkspace('01PAW75F73PVC402Y3V151KT6R', store)).compacted).toBe(true)
       _clearWorkspaceDocCacheForTests()
       expect(asSaved).toBeDefined()
-      expect((await store.load('01PAW75F73PVC402Y3V151KT6R', first.id))?.toJSON()).toEqual(asSaved)
+      expect((await loadPast(store, '01PAW75F73PVC402Y3V151KT6R', first.id))?.toJSON()).toEqual(
+        asSaved,
+      )
     })
 
     it('is empty for a workspace with no versions', async () => {

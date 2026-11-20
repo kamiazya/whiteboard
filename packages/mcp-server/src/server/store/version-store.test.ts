@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { MAX_MANUAL_PER_DOCUMENT, restorePointOptions } from '@kamiazya/whiteboard-history'
+import { documentFromSnapshot } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { TooManyVersionsError } from '@kamiazya/whiteboard-server-core'
@@ -15,6 +16,16 @@ const SESS_1 = '01WWQTBYFRHW3XPWFX2J1XKH6P'
 // Tests for the native Loro version store backed by the sqlite metadata DB.
 // Frontiers and metadata live in the versions table; nothing this store owns
 // touches the filesystem any more (the version thumbnails did, and are gone).
+
+/** A version's past document as a LoroDoc, rebuilt from the bytes the store answers. */
+async function loadPast(
+  versions: { load(workspaceId: string, id: string): Promise<Uint8Array | null> },
+  workspaceId: string,
+  id: string,
+) {
+  const bytes = await versions.load(workspaceId, id)
+  return bytes === null ? null : documentFromSnapshot(bytes)
+}
 
 let tempDir: string
 
@@ -288,7 +299,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     await saveDocument(SESS_1, 'canvas-a', live, { kind: 'spatial', overwrite: true })
     expect(countElements(live)).toBe(3)
 
-    const past = await store.load(SESS_1, entry.id)
+    const past = await loadPast(store, SESS_1, entry.id)
     expect(past).not.toBeNull()
     expect(countElements(past!)).toBe(1)
     const pastIds = (past!.getMovableList('elements').toJSON() as Array<{ id: string }>).map(
@@ -305,7 +316,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     appendElement(live, 'x2')
     const liveCountBefore = countElements(live)
 
-    await store.load(SESS_1, entry.id)
+    await loadPast(store, SESS_1, entry.id)
 
     expect(countElements(live)).toBe(liveCountBefore)
     appendElement(live, 'x3')
@@ -327,13 +338,13 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     // A restart: only what the store holds is left to check the version out on.
     _clearWorkspaceDocCacheForTests()
     clearDocCacheForTests()
-    const past = await store.load(SESS_1, entry.id)
+    const past = await loadPast(store, SESS_1, entry.id)
     expect(past).not.toBeNull()
     expect(countElements(past as LoroDoc)).toBe(1)
   })
 
   it('returns null for an unknown version id', async () => {
-    const past = await store.load(SESS_1, 'nope')
+    const past = await loadPast(store, SESS_1, 'nope')
     expect(past).toBeNull()
   })
 

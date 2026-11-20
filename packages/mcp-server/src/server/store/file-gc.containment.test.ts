@@ -177,6 +177,7 @@ describe('file-GC containment gate: a files dir re-pointed during the reference 
           return []
         },
         openCheckouts: async () => ({
+          release: () => {},
           load: async () => {
             throw new Error('no versions were listed')
           },

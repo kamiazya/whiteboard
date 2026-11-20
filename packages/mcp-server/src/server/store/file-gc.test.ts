@@ -307,6 +307,7 @@ describe('purgeDanglingFiles', () => {
     const fakeStore = {
       listIdsByDocument: async () => ['v-broken'],
       openCheckouts: async () => ({
+        release: () => {},
         load: async () => {
           throw new Error('frontier rows missing')
         },
@@ -486,7 +487,7 @@ describe('purgeDanglingFiles', () => {
 
     const fakeStore = {
       listIdsByDocument: async () => ['v-missing'],
-      openCheckouts: async () => ({ load: async () => null }),
+      openCheckouts: async () => ({ load: async () => null, release: () => {} }),
     }
 
     await expect(
@@ -740,7 +741,7 @@ it('stands down when another instance writes while the pass is deciding', async 
       }
       return []
     },
-    openCheckouts: async () => ({ load: async () => null }),
+    openCheckouts: async () => ({ load: async () => null, release: () => {} }),
   }
 
   const result = await purgeDanglingFiles(workspaceId, {

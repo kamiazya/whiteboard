@@ -1,4 +1,8 @@
-import { countSpatialNodes, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  countSpatialNodes,
+  documentFromSnapshot,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import type { Attestation } from '../versions/version-entry.js'
@@ -66,7 +70,7 @@ describe('FakeVersionHistory', () => {
 
     expect(history.saves).toEqual([{ path: 'a', options: { auto: true, label: 'first' } }])
     const loaded = await history.load(WORKSPACE_ID, entry.id)
-    expect(loaded && countSpatialNodes(loaded)).toBe(1)
+    expect(loaded && countSpatialNodes(documentFromSnapshot(loaded))).toBe(1)
   })
 
   test('with no store, every document is empty', async () => {

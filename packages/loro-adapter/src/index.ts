@@ -63,7 +63,7 @@ export {
 } from './file-references.js'
 export { collectImageRefIds } from './image-refs.js'
 export { type LegacyRecord, loroDocKind } from './legacy-record-kind.js'
-export { legacyRecordOps } from './legacy-record-ops.js'
+export { documentFromSnapshot, legacyRecordOps } from './legacy-record-ops.js'
 export {
   CONTENT_CONTAINER_KEYS,
   deleteSpatialEdge,

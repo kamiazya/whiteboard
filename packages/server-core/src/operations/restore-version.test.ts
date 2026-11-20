@@ -136,8 +136,13 @@ describe('restoreVersion in-place mode', () => {
   it('evicts the live doc when reconcile itself fails', async () => {
     const live = new FakeLive()
     live.seed('canvas-a', spatialDoc(['n1']))
-    // Not a LoroDoc at all: reconcileDocContent throws before any save runs.
-    const poisoned = versionsWith({ v1: { doc: {} as LoroDoc } })
+    // A past state holding a node in the retired shape (a kind and its own
+    // field), which the restore cannot write back: it fails inside the
+    // reconcile step, before any save runs.
+    const mismatched = new LoroDoc()
+    mismatched.getMap('nodes').set('n1', { id: 'n1', type: 'text', text: 'old shape' })
+    mismatched.commit()
+    const poisoned = versionsWith({ v1: { doc: mismatched } })
     await expect(run(live, poisoned)).rejects.toThrow()
     expect(live.evicted).toEqual(['canvas-a'])
     expect(live.calls.map((c) => c.method)).not.toContain('save')

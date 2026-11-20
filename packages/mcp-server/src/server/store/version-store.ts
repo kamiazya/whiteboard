@@ -1,11 +1,16 @@
 import {
   autoVersionsOverCap,
   carriedAutoVersionsOverCap,
+  frontiersFromBase64,
   frontiersToBase64,
   MAX_AUTO_PER_DOCUMENT,
   sandwichedAutoVersionIds,
 } from '@kamiazya/whiteboard-history'
-import { type RecordSession, sharedCrdtEngine } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  type RecordSession,
+  type RecordView,
+  sharedCrdtEngine,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { DocumentNotFoundError } from '@kamiazya/whiteboard-ports'
 import type { Insertable } from 'kysely'
 import { sql } from 'kysely'
@@ -17,12 +22,7 @@ import type { DatabaseSchema } from './db/schema.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { insertAdoptedRows } from './version-adopt-rows.js'
 import { refusePastManualCeiling, refusePastRestorePointCeiling } from './version-ceilings.js'
-import {
-  frontiersToText,
-  loadWorkspaceVersionAt,
-  openVersionCheckouts,
-  type VersionCheckouts,
-} from './version-store-legacy.js'
+import { frontiersToText } from './version-store-legacy.js'
 import { withPersistedWorkspaceRecord, withStoredWorkspaceRecord } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -123,7 +123,13 @@ export interface VersionStore extends VersionHistory {
   ): Promise<{ deletedCount: number; deletedIds: string[] }>
 }
 
-export type { VersionCheckouts }
+/** See `VersionStore.openCheckouts`. */
+export interface VersionCheckouts {
+  /** What `VersionStore.load` answers, read off the shared copy. */
+  load(versionId: string): Promise<Uint8Array | null>
+  /** Gives the shared copy back; call it once the walk is done. */
+  release(): void
+}
 
 /** The same points loro-crdt's `Frontiers` names, spelled without importing it. */
 export type StoredFrontiers = Array<{ peer: `${number}`; counter: number }>
@@ -428,31 +434,64 @@ export class FileVersionStore implements VersionStore {
     })
   }
 
-  async load(workspaceId: string, id: string) {
+  async load(workspaceId: string, id: string): Promise<Uint8Array | null> {
     validateWorkspaceId(workspaceId)
     validateVersionId(id)
-    return (await this.openCheckouts(workspaceId)).load(id)
+    const checkouts = await this.openCheckouts(workspaceId)
+    try {
+      return await checkouts.load(id)
+    } finally {
+      checkouts.release()
+    }
   }
 
   async openCheckouts(workspaceId: string): Promise<VersionCheckouts> {
     validateWorkspaceId(workspaceId)
     const db = await this.scope.db()
-    return openVersionCheckouts(
-      workspaceId,
-      {
-        version: (id) =>
-          db
-            .selectFrom('versions')
-            .select(['frontiers', 'documentId'])
-            .where('workspaceId', '=', workspaceId)
-            .where('id', '=', id)
-            .executeTakeFirst(),
+    // Opened on the first version that needs it, so a walk over a document
+    // with no versions copies nothing; one copy of the record then stands for
+    // the whole walk and is moved from version to version.
+    let view: RecordView | null = null
+    let standsAt: string | null = null
+    return {
+      load: async (id) => {
+        validateVersionId(id)
+        const row = await db
+          .selectFrom('versions')
+          .select(['frontiers', 'documentId'])
+          .where('workspaceId', '=', workspaceId)
+          .where('id', '=', id)
+          .executeTakeFirst()
+        if (!row) return null
+        // Checked out against the WORKSPACE record, whose oplog the frontiers
+        // were recorded in — never against a live per-document projection,
+        // whose fresh lineage does not contain them. The past state is then
+        // projected back out as a standalone document, which is the shape every
+        // caller expects; the projection copies, so the next move of the
+        // shared copy cannot reach it.
+        if (view === null) {
+          view = await this.viewAtVersion(workspaceId, id, row.frontiers, () => {
+            throw corruptStoredData(
+              `versions/${id}`,
+              'workspace-scoped version has no stored workspace document to check out against',
+            )
+          })
+          standsAt = row.frontiers
+        } else if (standsAt !== row.frontiers) {
+          const open = view
+          checkedOut(id, () => open.moveTo(frontiersFromBase64(row.frontiers)))
+          standsAt = row.frontiers
+        }
+        return view.exportProjection(row.documentId)
       },
-      this.scope,
-    )
+      release() {
+        view?.release()
+        view = null
+      },
+    }
   }
 
-  async loadWorkspaceAt(workspaceId: string, id: string) {
+  async loadWorkspaceAt(workspaceId: string, id: string): Promise<RecordView | null> {
     validateWorkspaceId(workspaceId)
     validateVersionId(id)
     const db = await this.scope.db()
@@ -463,7 +502,21 @@ export class FileVersionStore implements VersionStore {
       .where('id', '=', id)
       .executeTakeFirst()
     if (!row) return null
-    return loadWorkspaceVersionAt(workspaceId, id, row.frontiers, this.scope)
+    return this.viewAtVersion(workspaceId, id, row.frontiers, () => null)
+  }
+
+  /** A view of the stored record at a version's point; frontiers it cannot reach are corruption. */
+  private viewAtVersion<T extends null | never>(
+    workspaceId: string,
+    versionId: string,
+    frontiers: string,
+    noRecord: () => T,
+  ): Promise<RecordView | T> {
+    return withStoredWorkspaceRecord(workspaceId, this.scope, async (record) =>
+      record === null
+        ? noRecord()
+        : checkedOut(versionId, () => record.view(frontiersFromBase64(frontiers))),
+    )
   }
 
   async list(workspaceId: string, path: string): Promise<VersionEntry[]> {
@@ -718,6 +771,18 @@ export class FileVersionStore implements VersionStore {
       .where('documentId', '=', documentId)
       .where('id', 'in', toRemove)
       .execute()
+  }
+}
+
+/** Runs a move of a view to a saved point; one the record cannot reach is corruption. */
+function checkedOut<T>(versionId: string, move: () => T): T {
+  try {
+    return move()
+  } catch (error) {
+    throw corruptStoredData(
+      `versions/${versionId}`,
+      `frontiers could not be checked out against the workspace document (${messageOf(error)})`,
+    )
   }
 }
 

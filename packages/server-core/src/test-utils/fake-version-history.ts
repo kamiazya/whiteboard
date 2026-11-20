@@ -1,3 +1,4 @@
+import type { RecordView } from '@kamiazya/whiteboard-loro-adapter'
 import { countSpatialNodes } from '@kamiazya/whiteboard-loro-adapter'
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
@@ -66,14 +67,10 @@ export class FakeVersionHistory implements VersionHistory {
     this.rows.set(entry.id, { entry, snapshot: doc.export({ mode: 'snapshot' }) })
     return entry
   }
-  async load(_workspaceId: string, id: string): Promise<LoroDoc | null> {
-    const row = this.rows.get(id)
-    if (row === undefined) return null
-    const doc = new LoroDoc()
-    doc.import(row.snapshot)
-    return doc
+  async load(_workspaceId: string, id: string): Promise<Uint8Array | null> {
+    return this.rows.get(id)?.snapshot ?? null
   }
-  async loadWorkspaceAt(): Promise<LoroDoc | null> {
+  async loadWorkspaceAt(): Promise<RecordView | null> {
     return null
   }
   async adopt(_workspaceId: string, rows: readonly AdoptedVersion[]): Promise<readonly string[]> {

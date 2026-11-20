@@ -1,10 +1,11 @@
 import {
   countSpatialNodes,
+  documentFromSnapshot,
   judgeStateWithinTextLimits,
-  projectWorkspaceDocument,
-  readWorkspaceNodes,
+  type RecordView,
   reconcileDocContent,
   statedKindSplit,
+  type WorkspaceNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { documentPathSchema, isSelfOrDescendant } from '@kamiazya/whiteboard-model'
@@ -122,8 +123,9 @@ export async function restoreVersion(
   const { workspaceId, path, versionId } = input
   return live.withWriteLock(workspaceId, async () => {
     const doc = await live.get(workspaceId, path)
-    const past = await versions.load(workspaceId, versionId)
-    if (past === null) return { kind: 'not-found' }
+    const pastBytes = await versions.load(workspaceId, versionId)
+    if (pastBytes === null) return { kind: 'not-found' }
+    const past = documentFromSnapshot(pastBytes)
     // A version id is unique per WORKSPACE, so `load` alone would answer
     // another document's past state — and the reconcile below would then
     // overwrite this document with unrelated content. The history named by
@@ -297,13 +299,17 @@ async function documentIdAt(
  * it can project — every one judged before the rollback's first deletion, so
  * a refusal leaves the subtree as it was rather than half rolled back.
  */
-function judgedPastSubtree(pastWorkspace: LoroDoc, inSubtree: (path: string) => boolean) {
-  const pastDocs = readWorkspaceNodes(pastWorkspace).flatMap((node) =>
+async function judgedPastSubtree(pastWorkspace: RecordView, inSubtree: (path: string) => boolean) {
+  const nodes = await pastWorkspace.read(
+    { query: 'nodes' },
+    { parse: (value) => value as WorkspaceNode[] },
+  )
+  const pastDocs = nodes.flatMap((node) =>
     node.type === 'document' && inSubtree(node.path) ? [node] : [],
   )
   const restoring = pastDocs.flatMap((node) => {
-    const pastDoc = projectWorkspaceDocument(pastWorkspace, node.meta.documentId)
-    return pastDoc === null ? [] : [{ node, pastDoc }]
+    const bytes = pastWorkspace.exportProjection(node.meta.documentId)
+    return bytes === null ? [] : [{ node, pastDoc: documentFromSnapshot(bytes) }]
   })
   for (const { node, pastDoc } of restoring) withinSyncLimits(pastDoc, node.path, node.meta.kind)
   return { pastDocs, restoring }
@@ -320,7 +326,13 @@ async function restoreSubtree(
   const pastWorkspace = await versions.loadWorkspaceAt(workspaceId, versionId)
   if (pastWorkspace === null) return { kind: 'subtree-needs-workspace-version' }
   const inSubtree = (p: string) => isSelfOrDescendant(p, path)
-  const { pastDocs, restoring } = judgedPastSubtree(pastWorkspace, inSubtree)
+  let judged: Awaited<ReturnType<typeof judgedPastSubtree>>
+  try {
+    judged = await judgedPastSubtree(pastWorkspace, inSubtree)
+  } finally {
+    pastWorkspace.release()
+  }
+  const { pastDocs, restoring } = judged
   const pastIds = new Set(pastDocs.map((node) => node.meta.documentId))
   // A row without an id cannot be correlated to the version and is left
   // alone.

@@ -3,7 +3,13 @@
  * that split them: a live store that records the write-lock depth of every
  * call, and a version history keyed by id.
  */
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  bindRecordOps,
+  legacyRecordOps,
+  type RecordView,
+  readSpatialCanvas,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -175,11 +181,14 @@ export class FakeVersions implements VersionHistory {
       ...(options.restoredFrom === undefined ? {} : { restoredFrom: options.restoredFrom }),
     }
   }
-  async load(_workspaceId: string, id: string): Promise<LoroDoc | null> {
-    return this.byId.get(id)?.doc ?? null
+  async load(_workspaceId: string, id: string): Promise<Uint8Array | null> {
+    return this.byId.get(id)?.doc?.export({ mode: 'snapshot' }) ?? null
   }
-  async loadWorkspaceAt(_workspaceId: string, id: string): Promise<LoroDoc | null> {
-    return this.byId.get(id)?.workspace ?? null
+  async loadWorkspaceAt(_workspaceId: string, id: string): Promise<RecordView | null> {
+    const workspace = this.byId.get(id)?.workspace
+    if (workspace === undefined || workspace === null) return null
+    const session = bindRecordOps(legacyRecordOps, workspace, async () => {})
+    return session.view(session.version().encodedFrontiers)
   }
   async list(_workspaceId: string, path: string): Promise<readonly VersionEntry[]> {
     return [...this.byId.entries()]
