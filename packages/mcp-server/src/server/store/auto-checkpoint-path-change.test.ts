@@ -20,7 +20,7 @@ const { prepareDataDir } = await import('./db/prepare.js')
 const { documentFrontier, installAutoCheckpoint, uninstallAutoCheckpointForTests } = await import(
   './auto-checkpoint.js'
 )
-type CheckpointSubject = import('./auto-checkpoint.js').CheckpointSubject
+type CheckpointSubject = Parameters<import('./auto-checkpoint.js').DocumentCheckpointScheduler>[2]
 type DocumentCheckpointScheduler = import('./auto-checkpoint.js').DocumentCheckpointScheduler
 const { disposeAutoCompact } = await import('./auto-compact.js')
 const { createContainer, resolveServerDeps } = await import('../../di/container.js')

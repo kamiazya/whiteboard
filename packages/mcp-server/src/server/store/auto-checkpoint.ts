@@ -8,7 +8,7 @@ import { encodeFrontiers, type LoroDoc } from 'loro-crdt'
  * frontier. Either is asked when the checkpoint is about to be taken, never
  * when the signal arrives.
  */
-export type CheckpointSubject = LoroDoc | (() => Uint8Array | Promise<Uint8Array>)
+type CheckpointSubject = LoroDoc | (() => Uint8Array | Promise<Uint8Array>)
 
 /** The scheduler over the daemon's documents. */
 export type DocumentCheckpointScheduler = CheckpointScheduler<CheckpointSubject>

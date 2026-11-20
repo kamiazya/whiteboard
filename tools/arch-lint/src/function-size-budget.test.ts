@@ -579,7 +579,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/server-core/src/tools/document-crud.ts#wbDocumentCreate': 130,
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool': 147,
   'packages/server-core/src/tools/document-search.ts#createDocumentSearchTool.execute': 135,
-  'packages/server-core/src/tools/document-set.ts#createDocumentSetOperation': 70,
   'packages/server-core/src/tools/facet-list.ts#createFacetListTool': 87,
   // The one exported chunk-size constant is 18 characters longer than the local
   // `MAX_CHUNK_BYTES` it replaced, so the call sites that used to fit on one line

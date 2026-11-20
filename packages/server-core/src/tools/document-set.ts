@@ -332,6 +332,77 @@ async function applyOkfTitle(
   })
 }
 
+type ParsedOkf = ReturnType<typeof parseWritableOkf>
+
+/**
+ * The writes that replace a document's whole content with `parsed`: the kind
+ * claim, the core facets, the extension facets when the frontmatter names a
+ * bucket, the trust facets and the body.
+ */
+function contentWrites(
+  input: DocumentSetInput,
+  { frontmatter, body }: ParsedOkf,
+  checkedFacets: ExtensionFacets | undefined,
+  claim: readonly wire.Write[],
+  keepsGenerated: boolean,
+): wire.Write[] {
+  const { facets: _sent, title: _title, generated, verified, ...coreFacets } = frontmatter
+  return [
+    ...claim,
+    { op: 'writeCoreFacets', args: { core: coreFacets } },
+    ...(frontmatter.facets === undefined
+      ? []
+      : [{ op: 'writeFacets' as const, args: { facets: checkedFacets ?? {} } }]),
+    {
+      op: 'writeTrustFacets',
+      args: {
+        trust: {
+          generated: keepsGenerated
+            ? (generated as NonNullable<typeof generated>)
+            : { by: input.actor ?? UNATTRIBUTED_ACTOR, at: new Date().toISOString() },
+          ...(verified === undefined ? {} : { verified }),
+        },
+      },
+    },
+    // The body goes in the CRDT text container (see writeMarkdownBody).
+    { op: 'writeMarkdownBody', args: { body } },
+  ]
+}
+
+async function replaceContent(
+  deps: ServerDeps,
+  input: DocumentSetInput,
+  session: DocumentSession,
+  parsed: ParsedOkf,
+  checkedFacets: ExtensionFacets | undefined,
+): Promise<void> {
+  // Captured before anything below writes, because both are what the document
+  // said a moment ago rather than what it is about to say.
+  const storedTrust = await trustFacetsOf(session)
+  const storedBody = await markdownBodyOf(session)
+
+  const claim = await claimMarkdownDocument(session, input.documentId)
+
+  // OKF is an export format, not the storage model: the Loro side keeps its
+  // own OKF-compatible document, and the workspace owns the name. So parsing an
+  // OKF projects it INTO that model exactly as serialising projects back out,
+  // and `title` lands on the workspace rather than becoming a second stored
+  // copy (ADR-0009 decision 2).
+  //
+  // Absent is not cleared: an OKF with no `title` says nothing about the name,
+  // so omitting it must not erase one.
+  await applyOkfTitle(deps, input, parsed.frontmatter.title)
+
+  // A `generated` the document already declares is the truth about how that
+  // content was produced (§5.2) — importing it did not author it — so it is
+  // honoured rather than restamped. Only content this write is the origin of
+  // gets the server's clock (ADR-0016 decision 2).
+  const { generated } = parsed.frontmatter
+  const keeps = keepsDeclaredGenerated(generated, storedTrust?.generated, storedBody, parsed.body)
+  session.write(contentWrites(input, parsed, checkedFacets, claim, keeps))
+  await session.save()
+}
+
 /**
  * Replaces the whole content of an existing document from an OKF Markdown
  * string: core facets, extension facets and the body are overwritten, not
@@ -346,71 +417,23 @@ export function createDocumentSetOperation(deps: ServerDeps) {
     execute: async (input: DocumentSetInput): Promise<DocumentSetOutput> => {
       await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
 
-      const { frontmatter, body } = parseWritableOkf(input.markdown)
+      const parsed = parseWritableOkf(input.markdown)
 
       // What the workspace DECLARES about its tags reaches this writer too
       // (ADR-0040 decision 5) — taken before the document is opened, so a
       // refusal leaves the stored body as it stands.
-      await refuseFrontmatterTags(deps, input.workspaceId, frontmatter.tags)
+      await refuseFrontmatterTags(deps, input.workspaceId, parsed.frontmatter.tags)
       const checkedFacets = await checkFrontmatterFacets(
         deps,
         input.workspaceId,
-        frontmatter.facets,
+        parsed.frontmatter.facets,
       )
 
       await withDocument(
         deps,
         input.workspaceId,
         input.documentId,
-        async (session) => {
-          // Captured before anything below writes, because both are what the
-          // document said a moment ago rather than what it is about to say.
-          const storedTrust = await trustFacetsOf(session)
-          const storedBody = await markdownBodyOf(session)
-
-          const claim = await claimMarkdownDocument(session, input.documentId)
-
-          // OKF is an export format, not the storage model: the Loro side keeps
-          // its own OKF-compatible document, and the workspace owns the name. So
-          // parsing an OKF projects it INTO that model exactly as serialising
-          // projects back out, and `title` lands on the workspace rather than
-          // becoming a second stored copy (ADR-0009 decision 2).
-          //
-          // Absent is not cleared: an OKF with no `title` says nothing about the
-          // name, so omitting it must not erase one.
-          const { facets: _sent, title, generated, verified, ...coreFacets } = frontmatter
-          await applyOkfTitle(deps, input, title)
-
-          // A `generated` the document already declares is the truth about how
-          // that content was produced (§5.2) — importing it did not author it —
-          // so it is honoured rather than restamped. Only content this write is
-          // the origin of gets the server's clock (ADR-0016 decision 2).
-          const keeps = keepsDeclaredGenerated(generated, storedTrust?.generated, storedBody, body)
-          session.write([
-            ...claim,
-            { op: 'writeCoreFacets', args: { core: coreFacets } },
-            ...(frontmatter.facets === undefined
-              ? []
-              : [{ op: 'writeFacets' as const, args: { facets: checkedFacets ?? {} } }]),
-            {
-              op: 'writeTrustFacets',
-              args: {
-                trust: {
-                  generated: keeps
-                    ? (generated as NonNullable<typeof generated>)
-                    : {
-                        by: input.actor ?? UNATTRIBUTED_ACTOR,
-                        at: new Date().toISOString(),
-                      },
-                  ...(verified === undefined ? {} : { verified }),
-                },
-              },
-            },
-            // The body goes in the CRDT text container (see writeMarkdownBody).
-            { op: 'writeMarkdownBody', args: { body } },
-          ])
-          await session.save()
-        },
+        (session) => replaceContent(deps, input, session, parsed, checkedFacets),
         { create: true },
       )
 
