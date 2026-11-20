@@ -9,6 +9,7 @@ import {
   CANVAS_MAX_NODES,
   COMMENT_MESSAGE_MAX_CHARS,
   CONTAINER_NAME_MAX_CHARS,
+  type CommentThread,
   DOCUMENT_MAX_OPEN_CHANGES,
   DOCUMENT_MAX_OPEN_THREADS,
   DOCUMENT_NAME_MAX_LENGTH,
@@ -16,14 +17,13 @@ import {
   MARKDOWN_MAX_CHARS,
   NODE_LOCATION_MAX_CHARS,
   NODE_TEXT_MAX_CHARS,
+  type ProposedChange,
   TAGS_PER_ELEMENT_MAX,
   TEXT_ANCHOR_QUOTE_MAX_CHARS,
   THREAD_MAX_MESSAGES,
   WORKSPACE_MAX_DOCUMENTS,
   WORKSPACE_MAX_FOLDERS,
-  type CommentThread,
   documentEngine as wire,
-  type ProposedChange,
 } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { type JsonChange, LoroDoc } from 'loro-crdt'
@@ -255,7 +255,9 @@ const CASES = {
     (c) => writeProposal(c, { id: 'p2', changes: [change(-1)] }),
   ),
   'thread-messages': text(
-    manyOf(1, (doc) => writeCommentThread(doc, thread('long', THREAD_MAX_MESSAGES, DOCUMENT_ANCHOR))),
+    manyOf(1, (doc) =>
+      writeCommentThread(doc, thread('long', THREAD_MAX_MESSAGES, DOCUMENT_ANCHOR)),
+    ),
     (c) => writeThreadMessage(c, 'long', { id: 'extra', body: 'one more' }),
   ),
   'content-root': text(seedRecord, (c) => documentNode(c, NOTE).data.set('nodes', 1)),
@@ -306,7 +308,7 @@ export function describeBreachDetail(makeEngine: () => CrdtEngine) {
     })
 
     it.each(Object.entries(CASES) as Array<[wire.BreachShape, Case]>)(
-      'carries the judge\'s own object for %s',
+      "carries the judge's own object for %s",
       (shape, held) => {
         const base = held.base()
         const { bytes, breach: direct } = judgedDirectly(held, base)
