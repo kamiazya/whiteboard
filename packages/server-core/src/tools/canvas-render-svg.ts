@@ -10,17 +10,12 @@ import {
   selectCanvasFragment,
   spatialRenderStyleSchema,
 } from '@kamiazya/whiteboard-canvas-render'
-import {
-  readAnnotations,
-  readDocumentKind,
-  readMarkdownBody,
-} from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { documentIdSchema, LABEL_MAX_CHARS, utf16Max } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
-import { loadDocument } from '../document-io.js'
+import { type DocumentSession, withDocument } from '../document-session.js'
+import { annotationsOf, canvasOf, kindOf, markdownBodyOf } from '../document-session-reads.js'
 import { composeCanvasPicture, sceneEnvelope } from '../render/compose-canvas-scene.js'
 import { composeMarkdownPicture } from '../render/compose-markdown-scene.js'
 import { loadReferenceGraph } from '../render/reference-graph.js'
@@ -117,12 +112,12 @@ const SCENE_RENDER_SVG: CorePictureAsk = { viewBox: 'document' }
 async function markdownPicture(
   deps: ServerDeps,
   input: CanvasRenderSvgInput,
-  doc: LoroDoc,
+  session: DocumentSession,
   measure: MeasureText,
   fontAvailable: ReturnType<typeof fontAvailableOf>,
   onRefused: (refusal: LayoutRefusal) => void,
 ): Promise<PicturedScene> {
-  const body = readMarkdownBody(doc)
+  const body = await markdownBodyOf(session)
   const loaded = input.embedReferences
     ? await loadReferenceGraph(deps, input.workspaceId, { bodies: [body] })
     : undefined
@@ -150,7 +145,7 @@ async function markdownPicture(
 async function canvasPicture(
   deps: ServerDeps,
   input: CanvasRenderSvgInput,
-  doc: LoroDoc,
+  session: DocumentSession,
   canvas: SpatialCanvas,
   measure: MeasureText,
   fontAvailable: ReturnType<typeof fontAvailableOf>,
@@ -174,7 +169,9 @@ async function canvasPicture(
     // With comments asked for, the export draws what the editor draws: a
     // thread about a passage of a node's text is a highlight behind those
     // words, a node set an outline around them.
-    ...(input.comments ? { threads: readAnnotations(doc) } : { commentLayer: false as const }),
+    ...(input.comments
+      ? { threads: await annotationsOf(session) }
+      : { commentLayer: false as const }),
   }
   return composeCanvasPicture(part, measure, options, SCENE_RENDER_SVG)
 }
@@ -193,7 +190,17 @@ async function renderDocument(
   const refusal = unknownStyleRefusal(input.style)
   if (refusal !== undefined) throw new UnknownRenderStyleError(refusal)
   await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-  const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
+  return withDocument(deps, input.workspaceId, input.documentId, (session) =>
+    renderSession(deps, input, session),
+  )
+}
+
+async function renderSession(
+  deps: ServerDeps,
+  input: CanvasRenderSvgInput,
+  session: DocumentSession,
+): Promise<CanvasRenderSvgAnswer> {
+  const canvas = await canvasOf(session)
   const measurer = await resolveTextMeasurer(deps)
   const { measure } = measurer
   const fontAvailable = fontAvailableOf(measurer)
@@ -201,7 +208,7 @@ async function renderDocument(
   // a document that predates kinds (wb_document_get's read path). Neither
   // known reads as spatial, the kind every pre-kind document was.
   const kind =
-    readDocumentKind(doc) ??
+    (await kindOf(session)) ??
     (
       await deps.documentIndex.resolveDocumentById({
         workspaceId: input.workspaceId,
@@ -215,8 +222,8 @@ async function renderDocument(
   }
   const { scene, svg } =
     kind === 'markdown'
-      ? await markdownPicture(deps, input, doc, measure, fontAvailable, onRefused)
-      : await canvasPicture(deps, input, doc, canvas, measure, fontAvailable, onRefused)
+      ? await markdownPicture(deps, input, session, measure, fontAvailable, onRefused)
+      : await canvasPicture(deps, input, session, canvas, measure, fontAvailable, onRefused)
 
   const envelope = sceneEnvelope(scene)
   const output = { svg, width: envelope.w, height: envelope.h }

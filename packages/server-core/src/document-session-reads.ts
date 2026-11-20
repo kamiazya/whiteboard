@@ -9,8 +9,8 @@ import type {
   TrustFacets,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import { getLogger } from './log.js'
 import type { DocumentSession } from './document-session.js'
+import { getLogger } from './log.js'
 
 const log = getLogger('document-session')
 
@@ -21,8 +21,8 @@ const log = getLogger('document-session')
 const asserted = <T>() => z.custom<T>()
 const canvasShape = asserted<{ readonly canvas: SpatialCanvas; readonly skipped: number }>()
 const kindShape = asserted<DocumentKind | undefined>()
-const threadsShape = asserted<readonly CommentThread[]>()
-const proposalsShape = asserted<readonly Proposal[]>()
+const threadsShape = asserted<CommentThread[]>()
+const proposalsShape = asserted<Proposal[]>()
 const facetsShape = asserted<ExtensionFacets>()
 const coreShape = asserted<StoredCoreFacets | undefined>()
 const trustShape = asserted<TrustFacets | undefined>()
@@ -36,8 +36,7 @@ export const annotationsOf = (session: DocumentSession) =>
   session.read({ query: 'annotations' }, threadsShape)
 export const proposalsOf = (session: DocumentSession) =>
   session.read({ query: 'proposals' }, proposalsShape)
-export const facetsOf = (session: DocumentSession) =>
-  session.read({ query: 'facets' }, facetsShape)
+export const facetsOf = (session: DocumentSession) => session.read({ query: 'facets' }, facetsShape)
 export const coreFacetsOf = (session: DocumentSession) =>
   session.read({ query: 'coreFacets' }, coreShape)
 export const trustFacetsOf = (session: DocumentSession) =>
@@ -67,4 +66,16 @@ export async function canvasOf(session: DocumentSession): Promise<SpatialCanvas>
     })
   }
   return canvas
+}
+
+const idsShape = z.array(z.string())
+
+/** The ids of the nodes the document locks. */
+export async function nodeLocksOf(session: DocumentSession): Promise<ReadonlySet<string>> {
+  return new Set(await session.read({ query: 'nodeLocks' }, idsShape))
+}
+
+/** The ids of the edges the document locks. */
+export async function edgeLocksOf(session: DocumentSession): Promise<ReadonlySet<string>> {
+  return new Set(await session.read({ query: 'edgeLocks' }, idsShape))
 }

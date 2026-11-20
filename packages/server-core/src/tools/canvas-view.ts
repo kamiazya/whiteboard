@@ -12,7 +12,6 @@ import {
   writtenTargets,
 } from '@kamiazya/whiteboard-canvas-render'
 import { jsonCanvasDocumentSchema, toJsonCanvas } from '@kamiazya/whiteboard-codec'
-import { readAnnotations } from '@kamiazya/whiteboard-loro-adapter'
 import {
   commentThreadSchema,
   documentIdSchema,
@@ -20,7 +19,8 @@ import {
   workspaceCanonicalIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import { loadDocument } from '../document-io.js'
+import { withDocument } from '../document-session.js'
+import { annotationsOf, canvasOf } from '../document-session-reads.js'
 import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { loadReferenceGraph } from '../render/reference-graph.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -181,8 +181,15 @@ export function createCanvasViewTool(deps: ServerDeps) {
     outputSchema: canvasViewOutputSchema,
     async execute(input: CanvasViewInput): Promise<CanvasViewOutput> {
       await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-      const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
-      await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'canvas_view')
+      const { canvas, threads } = await withDocument(
+        deps,
+        input.workspaceId,
+        input.documentId,
+        async (session) => {
+          await assertSpatialDocument(deps, session, 'canvas_view')
+          return { canvas: await canvasOf(session), threads: await annotationsOf(session) }
+        },
+      )
       const drawn = await colouredDrawing(deps, input.workspaceId, canvas)
       // Resolved from the style the CALLER asked for, not from the document's
       // facet alone: a canvas naming a theme drawn under the bundled look
@@ -199,7 +206,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
         // `facets` and `embed` as its own fields and the format carries them
         // under its extension key.
         scene: toJsonCanvas(drawn.canvas),
-        threads: readAnnotations(doc),
+        threads,
         ...(input.style === undefined ? {} : { style: input.style }),
         ...(themeFont === undefined ? {} : { themeFont }),
         // Everything THIS canvas writes, through the one definition of a

@@ -1,7 +1,8 @@
 import {
+  RetiredStoredShapeError,
   readAnnotations,
-  readCoreFacets,
   readContentWithTags,
+  readCoreFacets,
   readDocumentKind,
   readFacets,
   readMarkdownBody,
@@ -21,7 +22,7 @@ import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentEngineTrapError, SnapshotNotFoundError } from './document-io.js'
-import { openDocument, openOrCreateDocument, withDocument } from './document-session.js'
+import { openDocument, withDocument } from './document-session.js'
 import {
   annotationsOf,
   canvasOf,
@@ -72,7 +73,7 @@ const spatial = (doc: LoroDoc) => {
 const markdown = (doc: LoroDoc) => {
   writeDocumentKind(doc, 'markdown')
   writeMarkdownBody(doc, '# Title\n\nbody text')
-  writeCoreFacets(doc, { description: 'about it', tags: ['a', 'b'] })
+  writeCoreFacets(doc, { type: 'note', description: 'about it', tags: ['a', 'b'] })
 }
 
 afterEach(() => {
@@ -171,13 +172,14 @@ describe('opening a document that was never saved', () => {
   it('refuses with SnapshotNotFoundError when it must exist', async () => {
     const handles = watchEngineHandles()
 
-    await expect(openDocument(deps(new FakeDocumentStore()), WORKSPACE_ID, DOCUMENT_ID)).rejects.toThrow(
-      SnapshotNotFoundError,
-    )
+    await expect(
+      openDocument(deps(new FakeDocumentStore()), WORKSPACE_ID, DOCUMENT_ID),
+    ).rejects.toThrow(SnapshotNotFoundError)
     expect(handles.minted()).toEqual([])
   })
 
-  it('answers an empty document when it may be created', async () => {
+  it('answers an empty document when it may be created, and releases it', async () => {
+    const handles = watchEngineHandles()
     await withDocument(
       deps(new FakeDocumentStore()),
       WORKSPACE_ID,
@@ -188,17 +190,6 @@ describe('opening a document that was never saved', () => {
       },
       { create: true },
     )
-  })
-
-  it('opens an empty document through openOrCreateDocument and releases it', async () => {
-    const handles = watchEngineHandles()
-    const session = await openOrCreateDocument(
-      deps(new FakeDocumentStore()),
-      WORKSPACE_ID,
-      DOCUMENT_ID,
-    )
-    expect(await facetsOf(session)).toEqual({})
-    session.release()
 
     expect(handles.minted()).toHaveLength(1)
     expect(handles.unaccounted()).toEqual([])
@@ -215,16 +206,18 @@ describe('an engine abort while a document is opened', () => {
   }
 
   it.each([
-    ['openDocument', openDocument],
-    ['openOrCreateDocument', openOrCreateDocument],
-  ])('%s answers a typed error and logs the document at error', async (_name, open) => {
+    ['openDocument', {}],
+    ['a document that may be created', { create: true }],
+  ])('%s answers a typed error and logs the document at error', async (_name, options) => {
     const records: { level: string; data?: Record<string, unknown> }[] = []
     setLogSink((record) => records.push(record))
 
-    const failure = await open(
+    const failure = await withDocument(
       makeTestDeps({ documentStore: new TrappingStore() }),
       WORKSPACE_ID,
       DOCUMENT_ID,
+      async () => {},
+      options,
     ).catch((err: unknown) => err)
 
     expect(failure).toBeInstanceOf(DocumentEngineTrapError)
@@ -254,7 +247,7 @@ describe('the engine handles a session opens', () => {
     expect(handles.unaccounted()).toEqual([])
   })
 
-  it('are closed once when the work throws, and the failure is the work\'s own', async () => {
+  it("are closed once when the work throws, and the failure is the work's own", async () => {
     const handles = watchEngineHandles()
 
     await expect(
@@ -272,7 +265,14 @@ describe('the engine handles a session opens', () => {
     const session = await openDocument(await seeded(), WORKSPACE_ID, DOCUMENT_ID)
 
     await expect(
-      session.read({ query: 'documents' }, { parse: () => { throw new Error('bad shape') } }),
+      session.read(
+        { query: 'documents' },
+        {
+          parse: () => {
+            throw new Error('bad shape')
+          },
+        },
+      ),
     ).rejects.toThrow('bad shape')
     session.release()
     session.release()
@@ -301,3 +301,24 @@ async function seededDoc(store: FakeDocumentStore): Promise<LoroDoc> {
   doc.import(reassembleSnapshot(stored.manifest, stored.chunks))
   return doc
 }
+
+describe('a document that holds a retired stored shape', () => {
+  it("refuses a read with the adapter's typed error naming the shape", async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      doc.getMap('nodes').set('old', { type: 'text', id: 'old' })
+      doc.commit()
+    })
+    const stored = await seededDoc(store)
+    const expected = await Promise.resolve()
+      .then(() => readSpatialCanvasWithSkipped(stored))
+      .catch((err: unknown) => err)
+
+    const failure = await withDocument(deps(store), WORKSPACE_ID, DOCUMENT_ID, canvasOf).catch(
+      (err: unknown) => err,
+    )
+
+    expect(failure).toBeInstanceOf(RetiredStoredShapeError)
+    expect((failure as Error).message).toBe((expected as Error).message)
+  })
+})

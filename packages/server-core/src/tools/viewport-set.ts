@@ -1,6 +1,7 @@
 import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import { loadDocument } from '../document-io.js'
+import { withDocument } from '../document-session.js'
+import { canvasOf } from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
 import { viewportRequestParamsSchema } from '../viewport-request.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
@@ -103,7 +104,7 @@ export function createViewportSetTool(deps: ServerDeps) {
       // would otherwise read exactly like a correct one, and with one open it
       // would frame nothing and still be reported delivered.
       if (input.elementIds !== undefined && input.elementIds.length > 0) {
-        const { canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
+        const canvas = await withDocument(deps, input.workspaceId, input.documentId, canvasOf)
         const present = new Set(canvas.nodes.map((node) => node.id))
         const missing = input.elementIds.find((id) => !present.has(id))
         if (missing !== undefined) throw new NodeNotFoundError(input.documentId, missing)

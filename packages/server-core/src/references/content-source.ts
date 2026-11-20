@@ -1,6 +1,7 @@
-import { readContentWithTags } from '@kamiazya/whiteboard-loro-adapter'
 import { ContentFactsCache, type DocumentContentSource } from '@kamiazya/whiteboard-reference-graph'
-import { loadDocument, SnapshotNotFoundError } from '../document-io.js'
+import { SnapshotNotFoundError } from '../document-io.js'
+import { withDocument } from '../document-session.js'
+import { contentOf } from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
 
 /** The daemon's side of `reference-graph`'s port: its document store. */
@@ -21,8 +22,9 @@ function contentSourceFromDeps(deps: ServerDeps): DocumentContentSource {
     },
     async loadContent(workspaceId, entry) {
       try {
-        const { doc } = await loadDocument(deps, workspaceId, entry.documentId)
-        return readContentWithTags(doc, entry.kind)
+        return await withDocument(deps, workspaceId, entry.documentId, (session) =>
+          contentOf(session, entry.kind),
+        )
       } catch (err) {
         if (err instanceof SnapshotNotFoundError) return null
         throw err

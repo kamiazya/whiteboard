@@ -1,12 +1,18 @@
 import {
-  type CrdtEngine,
   lease,
-  randomPeerId,
   type RecordLease,
+  RetiredStoredShapeError,
+  randomPeerId,
   sharedCrdtEngine,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { bytesToBase64, type documentEngine as wire, type DocumentId } from '@kamiazya/whiteboard-model'
+import {
+  bytesToBase64,
+  type DocumentId,
+  type WorkspaceId,
+  type documentEngine as wire,
+} from '@kamiazya/whiteboard-model'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
+import { z } from 'zod'
 import { SnapshotNotFoundError, withEngineTrapReported } from './document-io.js'
 import type { ServerDeps } from './server-deps.js'
 
@@ -19,8 +25,8 @@ type Shape<T> = { parse(value: unknown): T }
  * about the document outlives the call.
  */
 export interface DocumentSession {
-  readonly workspaceId: string
-  readonly documentId: string
+  readonly workspaceId: WorkspaceId
+  readonly documentId: DocumentId
   /** One named read, answered as the value the reader produced. */
   read<T>(query: wire.Query, shape: Shape<T>): Promise<T>
   /** Gives the engine's copy back. Releasing twice is one release. */
@@ -28,22 +34,48 @@ export interface DocumentSession {
 }
 
 function sessionOver(
-  engine: CrdtEngine,
   held: RecordLease,
-  workspaceId: string,
-  documentId: string,
+  workspaceId: WorkspaceId,
+  documentId: DocumentId,
 ): DocumentSession {
   return {
     workspaceId,
     documentId,
-    read: (query, shape) => lease.read(held, query, shape),
+    read: (query, shape) => readRestoringRefusal(held, query, shape),
     release: () => held.release(),
   }
 }
 
+/**
+ * The engine answers a reader's refusal as its class NAME, so the class a
+ * caller maps to a status is gone by the time it reaches the tool. A retired
+ * stored shape is the refusal every content read can raise, and the engine can
+ * name the shape it found, so the typed error is rebuilt from that answer.
+ */
+async function readRestoringRefusal<T>(
+  held: RecordLease,
+  query: wire.Query,
+  shape: Shape<T>,
+): Promise<T> {
+  try {
+    return await lease.read(held, query, shape)
+  } catch (err) {
+    if (!(err instanceof Error) || err.name !== 'RetiredStoredShapeError') throw err
+    const found = await lease.read(held, { query: 'retiredStoredShape' }, foundShape)
+    throw new RetiredStoredShapeError(found ?? UNNAMED_RETIRED_SHAPE)
+  }
+}
+
+// A refusal only the index row's kind can raise (a markdown body held as a
+// canvas text node, on a document that records no kind) is one the question
+// above, which has no kind to ask with, cannot name.
+const UNNAMED_RETIRED_SHAPE = 'a markdown body stored as a canvas text node'
+
+const foundShape = z.string().nullable()
+
 async function storedBytes(
   deps: ServerDeps,
-  workspaceId: string,
+  workspaceId: WorkspaceId,
   documentId: DocumentId,
 ): Promise<Uint8Array | null> {
   const docRef = { kind: 'document' as const, workspaceId, documentId }
@@ -54,7 +86,7 @@ async function storedBytes(
 }
 
 function openOver(
-  workspaceId: string,
+  workspaceId: WorkspaceId,
   documentId: DocumentId,
   bytes: Uint8Array | null,
 ): Promise<DocumentSession> {
@@ -64,7 +96,7 @@ function openOver(
       peer: randomPeerId(),
       ...(bytes === null ? {} : { bytes: bytesToBase64(bytes) }),
     })
-    return sessionOver(engine, lease.ownedLease(engine, handle), workspaceId, documentId)
+    return sessionOver(lease.ownedLease(engine, handle), workspaceId, documentId)
   })
 }
 
@@ -75,7 +107,7 @@ function openOver(
  */
 export async function openDocument(
   deps: ServerDeps,
-  workspaceId: string,
+  workspaceId: WorkspaceId,
   documentId: DocumentId,
 ): Promise<DocumentSession> {
   const bytes = await storedBytes(deps, workspaceId, documentId)
@@ -84,9 +116,9 @@ export async function openDocument(
 }
 
 /** Opens a saved document, or an empty one when none was saved yet. */
-export async function openOrCreateDocument(
+async function openOrCreateDocument(
   deps: ServerDeps,
-  workspaceId: string,
+  workspaceId: WorkspaceId,
   documentId: DocumentId,
 ): Promise<DocumentSession> {
   return openOver(workspaceId, documentId, await storedBytes(deps, workspaceId, documentId))
@@ -98,7 +130,7 @@ export async function openOrCreateDocument(
  */
 export async function withDocument<T>(
   deps: ServerDeps,
-  workspaceId: string,
+  workspaceId: WorkspaceId,
   documentId: DocumentId,
   work: (session: DocumentSession) => Promise<T> | T,
   options?: { readonly create?: boolean },

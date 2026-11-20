@@ -1,12 +1,12 @@
 import { type OkfMarkdownFrontmatter, serializeOkf } from '@kamiazya/whiteboard-codec'
+import { withDocument } from '../document-session.js'
 import {
-  readCoreFacets,
-  readDocumentContent,
-  readDocumentKind,
-  readFacets,
-  readTrustFacets,
-} from '@kamiazya/whiteboard-loro-adapter'
-import { loadDocument } from '../document-io.js'
+  contentOf,
+  coreFacetsOf,
+  facetsOf,
+  kindOf,
+  trustFacetsOf,
+} from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { BARE_BODY_TYPE } from './document-crud.js'
@@ -47,27 +47,35 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
     input.workspaceId,
     input.documentId,
   )
-  const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
-  const coreFacets = readCoreFacets(doc)
-  // A document that predates kinds carries none on its own doc; its index row
-  // may. One with neither is read as the markdown it has always been taken for.
-  const kind = readDocumentKind(doc) ?? entry.kind
-  if (kind !== undefined && kind !== 'markdown') {
-    throw new DocumentKindMismatchError(
-      input.documentId,
-      kind,
-      'It has no body to export as OKF Markdown. Read it with wb_document_get, which answers JSON Canvas for a spatial document.',
-    )
-  }
-  const facets = readFacets(doc)
-  // Through the one by-kind reader, so a note whose body an older writer left
-  // in a canvas text node is refused rather than exported empty.
-  const content = readDocumentContent(doc, 'markdown')
-  const body = content.kind === 'markdown' ? content.body : ''
-  // The trust family lives in its own bucket (ADR-0016 decision 4) and is
-  // projected back to the frontmatter ROOT, where OKF puts it — the same
-  // projection `title` gets from the workspace name.
-  const trust = readTrustFacets(doc)
+  const { coreFacets, facets, body, trust } = await withDocument(
+    deps,
+    input.workspaceId,
+    input.documentId,
+    async (session) => {
+      // A document that predates kinds carries none on its own doc; its index row
+      // may. One with neither is read as the markdown it has always been taken for.
+      const kind = (await kindOf(session)) ?? entry.kind
+      if (kind !== undefined && kind !== 'markdown') {
+        throw new DocumentKindMismatchError(
+          input.documentId,
+          kind,
+          'It has no body to export as OKF Markdown. Read it with wb_document_get, which answers JSON Canvas for a spatial document.',
+        )
+      }
+      // Through the one by-kind reader, so a note whose body an older writer left
+      // in a canvas text node is refused rather than exported empty.
+      const { content } = await contentOf(session, 'markdown')
+      return {
+        coreFacets: await coreFacetsOf(session),
+        facets: await facetsOf(session),
+        body: content.kind === 'markdown' ? content.body : '',
+        // The trust family lives in its own bucket (ADR-0016 decision 4) and is
+        // projected back to the frontmatter ROOT, where OKF puts it — the same
+        // projection `title` gets from the workspace name.
+        trust: await trustFacetsOf(session),
+      }
+    },
+  )
   const frontmatter: OkfMarkdownFrontmatter = {
     // `coreFacetsSchema.type` is required. Every markdown document is born
     // with one, so this only answers for a row that predates that, and says
