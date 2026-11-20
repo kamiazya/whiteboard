@@ -1,9 +1,13 @@
-import { newImageRef } from '@kamiazya/whiteboard-model'
+import { bytesToBase64, newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { DocumentContainers } from './containers.js'
+import { createCrdtEngine } from './engine/engine.js'
+import { ownedLease, withLease } from './engine/lease.js'
+import { scanFileReferencesOfLease } from './engine/lease-file-references.js'
 import { type FileReferenceReads, scanFileReferences } from './file-references.js'
+import { collectImageRefIds } from './image-refs.js'
 import { writeSpatialCanvas } from './loro-bridge.js'
 import { writeProposal } from './proposals.js'
 import { recordTrashEntry, type TrashEntry } from './workspace-trash.js'
@@ -53,12 +57,49 @@ function trash(record: LoroDoc, path: string, documentId: string): Uint8Array {
 
 const noTrash: FileReferenceReads['trashBytes'] = async () => null
 
-describe('scanFileReferences', () => {
+/**
+ * The scan as an engine lease reads it: the record opens as a handle, and a
+ * version's state is named by the images it holds rather than as containers.
+ */
+async function scanThroughLease(record: LoroDoc, reads: FileReferenceReads) {
+  const engine = createCrdtEngine()
+  const handle = engine.open({
+    peer: '1',
+    bytes: bytesToBase64(record.export({ mode: 'snapshot' })),
+  }).handle
+  const { versions } = reads
+  return withLease(ownedLease(engine, handle), (leased) =>
+    scanFileReferencesOfLease(leased, {
+      trashBytes: (entry) => reads.trashBytes(entry),
+      ...(versions === undefined
+        ? {}
+        : {
+            versions: {
+              list: (holder) => versions.list(holder),
+              imageRefIds: async (holder, versionId) => {
+                const past = await versions.load(holder, versionId)
+                return past === null ? null : [...collectImageRefIds(past)]
+              },
+            },
+          }),
+      ...(reads.between === undefined
+        ? {}
+        : { between: () => reads.between?.() ?? Promise.resolve() }),
+    }),
+  )
+}
+
+const SCANS = [
+  ['a LoroDoc', scanFileReferences],
+  ['an engine lease', scanThroughLease],
+] as const
+
+describe.each(SCANS)('scanFileReferences over %s', (_name, scanOf) => {
   it('collects what a live document draws', async () => {
     const record = new LoroDoc()
     place(record, 'live', LIVE, 'img-live')
 
-    const scan = await scanFileReferences(record, { trashBytes: noTrash })
+    const scan = await scanOf(record, { trashBytes: noTrash })
 
     expect(scan.referenced).toEqual(new Set(['img-live']))
     expect(scan.unjudged).toEqual([])
@@ -80,7 +121,7 @@ describe('scanFileReferences', () => {
       changes: [{ id: 'c1', status: 'open', op: 'node.add', node }],
     })
 
-    const scan = await scanFileReferences(record, { trashBytes: noTrash })
+    const scan = await scanOf(record, { trashBytes: noTrash })
 
     expect(scan.referenced).toEqual(new Set(['img-live', 'img-proposed']))
     expect(scan.unjudged).toEqual([])
@@ -94,7 +135,7 @@ describe('scanFileReferences', () => {
     place(peer, 'same', TRASHED, 'img-second')
     record.import(peer.export({ mode: 'snapshot' }))
 
-    const scan = await scanFileReferences(record, { trashBytes: noTrash })
+    const scan = await scanOf(record, { trashBytes: noTrash })
 
     expect(scan.referenced).toEqual(new Set(['img-first', 'img-second']))
   })
@@ -104,7 +145,7 @@ describe('scanFileReferences', () => {
     place(record, 'gone', TRASHED, 'img-trash')
     const bytes = trash(record, 'gone', TRASHED)
 
-    const scan = await scanFileReferences(record, { trashBytes: async () => bytes })
+    const scan = await scanOf(record, { trashBytes: async () => bytes })
 
     expect(scan.referenced).toEqual(new Set(['img-trash']))
   })
@@ -114,7 +155,7 @@ describe('scanFileReferences', () => {
     place(record, 'gone', TRASHED, 'img-trash')
     trash(record, 'gone', TRASHED)
 
-    const scan = await scanFileReferences(record, { trashBytes: noTrash })
+    const scan = await scanOf(record, { trashBytes: noTrash })
 
     expect(scan.referenced).toEqual(new Set())
     expect(scan.unjudged).toEqual([])
@@ -125,11 +166,34 @@ describe('scanFileReferences', () => {
     place(record, 'gone', TRASHED, 'img-trash')
     trash(record, 'gone', TRASHED)
 
-    const scan = await scanFileReferences(record, {
+    const scan = await scanOf(record, {
       trashBytes: async () => new LoroDoc().export({ mode: 'snapshot' }),
     })
 
-    expect(scan.unjudged).toMatchObject([{ kind: 'trash', documentId: TRASHED }])
+    expect(scan.unjudged).toMatchObject([
+      { kind: 'trash', documentId: TRASHED, cause: { message: 'trash bytes hold no document' } },
+    ])
+  })
+
+  it('reports a trash entry whose bytes hold another document as unjudged', async () => {
+    const record = new LoroDoc()
+    place(record, 'gone', TRASHED, 'img-trash')
+    place(record, 'other', LIVE, 'img-other')
+    const other = trash(record, 'other', LIVE)
+    trash(record, 'gone', TRASHED)
+
+    const scan = await scanOf(record, {
+      trashBytes: async (entry) => (entry.documentId === TRASHED ? other : null),
+    })
+
+    expect(scan.unjudged).toMatchObject([
+      {
+        kind: 'trash',
+        documentId: TRASHED,
+        cause: { message: 'trash bytes hold a different document' },
+      },
+    ])
+    expect(scan.referenced).toEqual(new Set())
   })
 
   it('keeps what only a saved version of a live document draws', async () => {
@@ -146,7 +210,7 @@ describe('scanFileReferences', () => {
       },
     }
 
-    const scan = await scanFileReferences(record, { trashBytes: noTrash, versions })
+    const scan = await scanOf(record, { trashBytes: noTrash, versions })
 
     expect(scan.referenced).toEqual(new Set(['img-then', 'img-now']))
   })
@@ -157,7 +221,7 @@ describe('scanFileReferences', () => {
     const bytes = trash(record, 'gone', TRASHED)
     const asked: { documentId: string; trashed: boolean }[] = []
 
-    await scanFileReferences(record, {
+    await scanOf(record, {
       trashBytes: async () => bytes,
       versions: {
         list: async (holder) => {
@@ -175,7 +239,7 @@ describe('scanFileReferences', () => {
     const record = new LoroDoc()
     place(record, 'live', LIVE, 'img-live')
 
-    const scan = await scanFileReferences(record, {
+    const scan = await scanOf(record, {
       trashBytes: noTrash,
       versions: {
         list: async () => ['v-broken', 'v-null'],
@@ -188,7 +252,13 @@ describe('scanFileReferences', () => {
 
     expect(scan.unjudged).toMatchObject([
       { kind: 'version', documentId: LIVE, path: 'live', versionId: 'v-broken' },
-      { kind: 'version', documentId: LIVE, path: 'live', versionId: 'v-null' },
+      {
+        kind: 'version',
+        documentId: LIVE,
+        path: 'live',
+        versionId: 'v-null',
+        cause: { message: 'a listed version could not be loaded' },
+      },
     ])
   })
 
@@ -199,7 +269,7 @@ describe('scanFileReferences', () => {
     for (const node of record.getTree('tree').getNodes()) node.data.set('kind', 'future-kind')
     record.commit()
 
-    const scan = await scanFileReferences(record, { trashBytes: noTrash })
+    const scan = await scanOf(record, { trashBytes: noTrash })
 
     expect(scan.unjudged).toMatchObject([{ kind: 'unreadable-node' }])
   })
@@ -211,7 +281,7 @@ describe('scanFileReferences', () => {
     const bytes = trash(record, 'gone', TRASHED)
     let yields = 0
 
-    await scanFileReferences(record, {
+    await scanOf(record, {
       trashBytes: async () => bytes,
       versions: { list: async () => ['v1'], load: async () => null },
       between: async () => {

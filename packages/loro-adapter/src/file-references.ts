@@ -74,13 +74,107 @@ export interface FileReferenceScan {
   readonly unjudged: readonly UnjudgedFileHolder[]
 }
 
-/** What a trash entry's evacuated bytes hold, or null when the bytes are gone. */
-async function trashedContent(
-  entry: TrashEntry,
-  reads: FileReferenceReads,
-): Promise<DocumentContainers | null> {
-  const bytes = await reads.trashBytes(entry)
-  if (bytes === null) return null
+/**
+ * How a record answers what the walk asks of it. A `LoroDoc` answers directly
+ * and a lease through engine reads; the judgement over the answers is one walk
+ * either way, so a place an image can sit is learned once.
+ */
+export interface FileReferenceSource {
+  /** Nodes this build cannot read: absent from the listing, and so are their documents' images. */
+  unreadableNodes(): Promise<readonly string[]>
+  trashEntries(): Promise<readonly TrashEntry[]>
+  /** Every document by id, the shadowed ones included. */
+  liveDocuments(): Promise<ReadonlyArray<{ readonly documentId: string; readonly path: string }>>
+  liveImageRefIds(documentId: string): Promise<Iterable<string>>
+  /** The evacuated bytes a trash entry names, or null when they are gone. */
+  trashBytes(entry: TrashEntry): Promise<Uint8Array | null>
+  /** What the bytes hold of the entry's document; throws when they hold none, or another. */
+  trashedImageRefIds(entry: TrashEntry, bytes: Uint8Array): Promise<Iterable<string>>
+  readonly versions?: {
+    list(holder: FileReferenceHolder): Promise<readonly string[]>
+    /** The images one version's state of the holder names; throws when it cannot be read. */
+    imageRefIds(holder: FileReferenceHolder, versionId: string): Promise<Iterable<string>>
+  }
+  between?(): Promise<void>
+}
+
+/** What one pass accumulates; each arm below adds to it. */
+interface ScanState {
+  readonly referenced: Set<string>
+  readonly unjudged: UnjudgedFileHolder[]
+  /** The documents whose versions are asked for once the documents are read. */
+  readonly holders: FileReferenceHolder[]
+  readonly between: () => Promise<void>
+}
+
+function collect(state: ScanState, ids: Iterable<string>): void {
+  for (const id of ids) state.referenced.add(id)
+}
+
+async function scanTrash(source: FileReferenceSource, state: ScanState) {
+  for (const entry of await source.trashEntries()) {
+    await state.between()
+    try {
+      // Bytes that are gone leave nothing a restore could bring back, so
+      // there is nothing for the entry's images to be kept for.
+      const bytes = await source.trashBytes(entry)
+      if (bytes === null) continue
+      collect(state, await source.trashedImageRefIds(entry, bytes))
+      state.holders.push({ documentId: entry.documentId, path: entry.path, trashed: true })
+    } catch (cause) {
+      state.unjudged.push({ kind: 'trash', documentId: entry.documentId, cause })
+    }
+  }
+}
+
+/**
+ * Every document by id, the shadowed ones included: a path names only the
+ * first document carrying it, and the second one's images are as live.
+ */
+async function scanLive(source: FileReferenceSource, state: ScanState) {
+  for (const entry of await source.liveDocuments()) {
+    await state.between()
+    collect(state, await source.liveImageRefIds(entry.documentId))
+    state.holders.push({ documentId: entry.documentId, path: entry.path, trashed: false })
+  }
+}
+
+async function scanVersions(
+  versions: NonNullable<FileReferenceSource['versions']>,
+  state: ScanState,
+) {
+  for (const holder of state.holders) {
+    for (const versionId of await versions.list(holder)) {
+      await state.between()
+      try {
+        collect(state, await versions.imageRefIds(holder, versionId))
+      } catch (cause) {
+        const { documentId, path } = holder
+        state.unjudged.push({ kind: 'version', documentId, path, versionId, cause })
+      }
+    }
+  }
+}
+
+/** The one walk: what a source names, and what it could not read. */
+export async function walkFileReferences(source: FileReferenceSource): Promise<FileReferenceScan> {
+  const state: ScanState = {
+    referenced: new Set(),
+    unjudged: (await source.unreadableNodes()).map((treeId) => ({
+      kind: 'unreadable-node',
+      treeId,
+    })),
+    holders: [],
+    between: source.between ?? (async () => {}),
+  }
+  await scanTrash(source, state)
+  await scanLive(source, state)
+  if (source.versions !== undefined) await scanVersions(source.versions, state)
+  return { referenced: state.referenced, unjudged: state.unjudged }
+}
+
+/** What a trash entry's evacuated bytes hold of its document. */
+function trashedContent(entry: TrashEntry, bytes: Uint8Array): DocumentContainers {
   const scratch = new LoroDoc()
   if (importWorkspaceSubtree(scratch, bytes) === null) {
     throw new Error('trash bytes hold no document')
@@ -100,81 +194,28 @@ async function versionContent(
   return past
 }
 
-/** What one pass accumulates; each arm below adds to it. */
-interface ScanState {
-  readonly referenced: Set<string>
-  readonly unjudged: UnjudgedFileHolder[]
-  /** The documents whose versions are asked for once the documents are read. */
-  readonly holders: FileReferenceHolder[]
-  readonly between: () => Promise<void>
-}
-
-function collect(state: ScanState, doc: DocumentContainers): void {
-  for (const id of collectImageRefIds(doc)) state.referenced.add(id)
-}
-
-async function scanTrash(record: LoroDoc, reads: FileReferenceReads, state: ScanState) {
-  for (const entry of readTrashEntries(record)) {
-    await state.between()
-    try {
-      // Bytes that are gone leave nothing a restore could bring back, so
-      // there is nothing for the entry's images to be kept for.
-      const content = await trashedContent(entry, reads)
-      if (content === null) continue
-      collect(state, content)
-      state.holders.push({ documentId: entry.documentId, path: entry.path, trashed: true })
-    } catch (cause) {
-      state.unjudged.push({ kind: 'trash', documentId: entry.documentId, cause })
-    }
-  }
-}
-
-/**
- * Every document by id, the shadowed ones included: a path names only the
- * first document carrying it, and the second one's images are as live.
- */
-async function scanLive(record: LoroDoc, state: ScanState) {
-  for (const entry of readWorkspaceDocuments(record)) {
-    await state.between()
-    collect(state, documentContainers(record, entry.documentId))
-    state.holders.push({ documentId: entry.documentId, path: entry.path, trashed: false })
-  }
-}
-
-async function scanVersions(
-  versions: NonNullable<FileReferenceReads['versions']>,
-  state: ScanState,
-) {
-  for (const holder of state.holders) {
-    for (const versionId of await versions.list(holder)) {
-      await state.between()
-      try {
-        collect(state, await versionContent(versions, holder, versionId))
-      } catch (cause) {
-        const { documentId, path } = holder
-        state.unjudged.push({ kind: 'version', documentId, path, versionId, cause })
-      }
-    }
-  }
-}
-
-export async function scanFileReferences(
+export function scanFileReferences(
   record: LoroDoc,
   reads: FileReferenceReads,
 ): Promise<FileReferenceScan> {
-  const state: ScanState = {
-    referenced: new Set(),
-    // A node this build cannot read is absent from the document listing, and
-    // so are its documents' images.
-    unjudged: unreadableWorkspaceNodes(record).map((treeId) => ({
-      kind: 'unreadable-node',
-      treeId,
-    })),
-    holders: [],
-    between: reads.between ?? (async () => {}),
-  }
-  await scanTrash(record, reads, state)
-  await scanLive(record, state)
-  if (reads.versions !== undefined) await scanVersions(reads.versions, state)
-  return { referenced: state.referenced, unjudged: state.unjudged }
+  const { versions } = reads
+  return walkFileReferences({
+    unreadableNodes: async () => unreadableWorkspaceNodes(record),
+    trashEntries: async () => readTrashEntries(record),
+    liveDocuments: async () => readWorkspaceDocuments(record),
+    liveImageRefIds: async (documentId) =>
+      collectImageRefIds(documentContainers(record, documentId)),
+    trashBytes: (entry) => reads.trashBytes(entry),
+    trashedImageRefIds: async (entry, bytes) => collectImageRefIds(trashedContent(entry, bytes)),
+    ...(versions === undefined
+      ? {}
+      : {
+          versions: {
+            list: (holder) => versions.list(holder),
+            imageRefIds: async (holder, versionId) =>
+              collectImageRefIds(await versionContent(versions, holder, versionId)),
+          },
+        }),
+    between: () => reads.between?.() ?? Promise.resolve(),
+  })
 }
