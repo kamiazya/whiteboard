@@ -38,6 +38,7 @@ import {
   describeVersionDecoding,
   describeViewMove,
 } from './crdt-engine-conformance-calls.js'
+import { describeContainerPlace } from './crdt-engine-conformance-container-place.js'
 import { describeDocumentReaders } from './crdt-engine-conformance-document-readers.js'
 import {
   applied,
@@ -768,6 +769,7 @@ export function describeCrdtEngineConformance(makeEngine: () => CrdtEngine) {
     describeThreadMessageCounts(makeEngine)
     describeBreachDetail(makeEngine)
     describeDocumentReaders(makeEngine)
+    describeContainerPlace(makeEngine)
     describeSubtreeImport(makeEngine)
     describeSubtreeRoot(makeEngine)
     describeReadNow(makeEngine)

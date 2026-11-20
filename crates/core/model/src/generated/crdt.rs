@@ -287,6 +287,8 @@ pub enum QueryName {
     WorkspaceDocumentEntry,
     /// Written `workspaceDocumentProjection`.
     WorkspaceDocumentProjection,
+    /// Written `containerPlace`.
+    ContainerPlace,
 }
 
 impl QueryName {
@@ -329,6 +331,7 @@ impl QueryName {
             Self::FileReferences => "fileReferences",
             Self::WorkspaceDocumentEntry => "workspaceDocumentEntry",
             Self::WorkspaceDocumentProjection => "workspaceDocumentProjection",
+            Self::ContainerPlace => "containerPlace",
         }
     }
 
@@ -371,6 +374,7 @@ impl QueryName {
             "fileReferences" => Some(Self::FileReferences),
             "workspaceDocumentEntry" => Some(Self::WorkspaceDocumentEntry),
             "workspaceDocumentProjection" => Some(Self::WorkspaceDocumentProjection),
+            "containerPlace" => Some(Self::ContainerPlace),
             _ => None,
         }
     }

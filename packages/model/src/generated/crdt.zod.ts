@@ -97,6 +97,7 @@ export const queryNameSchema = z.enum([
   'fileReferences',
   'workspaceDocumentEntry',
   'workspaceDocumentProjection',
+  'containerPlace',
 ])
 export type QueryName = z.infer<typeof queryNameSchema>
 

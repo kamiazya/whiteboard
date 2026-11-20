@@ -121,7 +121,8 @@
         "organisationChangedSince",
         "fileReferences",
         "workspaceDocumentEntry",
-        "workspaceDocumentProjection"
+        "workspaceDocumentProjection",
+        "containerPlace"
       ]
     },
     "BreachShape": {
