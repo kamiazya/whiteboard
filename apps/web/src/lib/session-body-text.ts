@@ -52,6 +52,11 @@ export class SessionBodyText implements BodyTextPort, BodyDocPort {
     return this.runs.length > 0
   }
 
+  /** The queue as it stands, left in place. */
+  peekRuns(): documentEngine.TextRun[] {
+    return [...this.runs]
+  }
+
   private takeRuns(): documentEngine.TextRun[] {
     const taken = this.runs
     this.runs = []

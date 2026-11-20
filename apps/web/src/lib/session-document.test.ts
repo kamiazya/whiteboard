@@ -377,6 +377,15 @@ describe('the handle a session document opens', () => {
     expect(handles.unaccounted()).toEqual([])
   })
 
+  it('answers a body never read as empty once closed, and takes typing without throwing', () => {
+    const seam = opened(standalone('x'), undefined)
+    seam.close()
+
+    expect(() => seam.body.insert(0, 'y')).not.toThrow()
+    expect(seam.body.toString()).toBe('y')
+    expect(seam.markdownBody()).toBe('')
+  })
+
   it('takes no write and announces nothing once closed', async () => {
     const updates: Uint8Array[] = []
     const changes: ChangedBy[] = []

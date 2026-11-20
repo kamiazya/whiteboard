@@ -77,6 +77,33 @@ const nullableShape = z.unknown()
 
 type Entry = z.infer<typeof entryShape>
 
+/** Stable empty answers, so a read of a document that is not held is referentially stable. */
+export const NO_LOCKS: ReadonlySet<string> = new Set()
+export const NO_FACETS: ExtensionFacets = {}
+
+/**
+ * What a document answered the moment its session was disposed, which is all a
+ * late reader (a render in flight, an effect cleanup) gets from then on.
+ */
+interface Kept {
+  readonly body: string
+  readonly facets: ExtensionFacets
+  readonly coreFacets: StoredCoreFacets | undefined
+  readonly nodeLocks: ReadonlySet<string>
+  readonly edgeLocks: ReadonlySet<string>
+  readonly name: string | null | undefined
+  readonly listedState: string | null
+  readonly snapshot: Uint8Array | null
+}
+
+function attempt<T>(read: () => T, fallback: T): T {
+  try {
+    return read()
+  } catch {
+    return fallback
+  }
+}
+
 /** One node of the workspace record, as the adapter's own reader lists it. */
 export type WorkspaceNodeRow = ReturnType<typeof readWorkspaceNodes>[number]
 
@@ -98,6 +125,7 @@ export class SessionDocument implements BodyDocPort {
   private announced: ChangedBy[] = []
   private readonly imported = createSubscribers()
   private closed = false
+  private kept: Kept | null = null
   /** Moves on every change, so a read of the whole record is kept until the record changes. */
   private generation = 0
   private entryAt: { readonly generation: number; readonly entry: Entry } | null = null
@@ -112,7 +140,7 @@ export class SessionDocument implements BodyDocPort {
     this.contentDocumentId = options.contentDocumentId
     this.options = options
     this.body = new SessionBodyText(
-      () => this.query('markdownBody', stringShape),
+      () => (this.closed ? '' : this.query('markdownBody', stringShape)),
       (runs) => this.spliceBody(runs),
     )
   }
@@ -120,18 +148,58 @@ export class SessionDocument implements BodyDocPort {
   // ---- reads ----
 
   private query<T>(query: documentEngine.QueryName, shape: z.ZodType<T>): T {
+    if (this.closed) throw new RangeError('this document is closed')
     const args = this.contentDocumentId === undefined ? {} : { documentId: this.contentDocumentId }
     return lease.readNow(this.record, { query, args }, shape)
+  }
+
+  /**
+   * What a closed document answers: what it held when it was kept at disposal,
+   * and the answer of a document that is not held for one that never was
+   * (replaced by a snapshot, or refused unread).
+   */
+  private answer<T>(live: () => T, kept: (held: Kept) => T, none: T): T {
+    if (!this.closed) return live()
+    return this.kept === null ? none : kept(this.kept)
+  }
+
+  /**
+   * `read` over the document as it stands including keystrokes the window has
+   * not committed. Those are in the mirror and not in the engine, and a state
+   * or an export that left them out would describe a body the editor no longer
+   * shows. Committing them here would be a second commit inside the window, so
+   * they are applied to a throwaway copy instead.
+   */
+  private readIncludingTyped<T>(read: (from: RecordLease) => T): T {
+    if (!this.body.pending) return read(this.record)
+    const { handle } = this.engine.fork({ handle: this.record.handle, peer: randomPeerId() })
+    const copy = lease.ownedLease(this.engine, handle)
+    try {
+      this.engine.textSplice({
+        handle,
+        ...this.hostArgs(),
+        text: 'body',
+        runs: this.body.peekRuns(),
+        judge: 'none',
+      })
+      return read(copy)
+    } finally {
+      copy.release()
+    }
+  }
+
+  private entryOf(from: RecordLease): Entry {
+    return lease.readNow(
+      from,
+      { query: 'workspaceDocumentEntry', args: { documentId: this.contentDocumentId } },
+      entryShape,
+    )
   }
 
   /** The record's own entry for the served document; null when a peer removed it. */
   private entry(): Entry {
     if (this.entryAt?.generation === this.generation) return this.entryAt.entry
-    const entry = lease.readNow(
-      this.record,
-      { query: 'workspaceDocumentEntry', args: { documentId: this.contentDocumentId } },
-      entryShape,
-    )
+    const entry = this.entryOf(this.record)
     this.entryAt = { generation: this.generation, entry }
     return entry
   }
@@ -143,9 +211,15 @@ export class SessionDocument implements BodyDocPort {
 
   /** `undefined` with no record entry to read, `null` for an entry with no name. */
   name(): string | null | undefined {
-    if (this.contentDocumentId === undefined) return undefined
-    const entry = this.entry()
-    return entry === null ? undefined : (entry.name ?? null)
+    return this.answer(
+      () => {
+        if (this.contentDocumentId === undefined) return undefined
+        const entry = this.entry()
+        return entry === null ? undefined : (entry.name ?? null)
+      },
+      (held) => held.name,
+      undefined,
+    )
   }
 
   /**
@@ -154,13 +228,27 @@ export class SessionDocument implements BodyDocPort {
    * digest the index compares; null when the node is gone.
    */
   listedContentState(): string | null {
-    if (this.contentDocumentId === undefined) return this.recordContentState()
-    return this.entry()?.contentDigest ?? null
+    return this.answer(
+      () => {
+        if (this.contentDocumentId === undefined) return this.recordContentState()
+        if (!this.body.pending) return this.entry()?.contentDigest ?? null
+        return this.readIncludingTyped((from) => this.entryOf(from)?.contentDigest ?? null)
+      },
+      (held) => held.listedState,
+      null,
+    )
   }
 
-  /** The digest of the whole record, the answer when no node names the document. */
-  recordContentState(): string {
-    return lease.readNow(this.record, { query: 'contentDigest' }, stringShape)
+  /** The digest of the whole record, the answer when no node names the document; null once closed. */
+  recordContentState(): string | null {
+    return this.answer(
+      () =>
+        this.readIncludingTyped((from) =>
+          lease.readNow(from, { query: 'contentDigest' }, stringShape),
+        ),
+      (held) => held.listedState,
+      null,
+    )
   }
 
   canvas(): SpatialCanvas {
@@ -181,23 +269,43 @@ export class SessionDocument implements BodyDocPort {
 
   /** The body including keystrokes the window has not committed. */
   markdownBody(): string {
-    return this.body.toString()
+    return this.answer(
+      () => this.body.toString(),
+      (held) => held.body,
+      '',
+    )
   }
 
   facets(): ExtensionFacets {
-    return this.query('facets', facetsShape)
+    return this.answer(
+      () => this.query('facets', facetsShape),
+      (held) => held.facets,
+      NO_FACETS,
+    )
   }
 
   coreFacets(): StoredCoreFacets | undefined {
-    return this.query('coreFacets', coreShape)
+    return this.answer(
+      () => this.query('coreFacets', coreShape),
+      (held) => held.coreFacets,
+      undefined,
+    )
   }
 
   nodeLocks(): ReadonlySet<string> {
-    return new Set(this.query('nodeLocks', idsShape))
+    return this.answer(
+      () => new Set(this.query('nodeLocks', idsShape)),
+      (held) => held.nodeLocks,
+      NO_LOCKS,
+    )
   }
 
   edgeLocks(): ReadonlySet<string> {
-    return new Set(this.query('edgeLocks', idsShape))
+    return this.answer(
+      () => new Set(this.query('edgeLocks', idsShape)),
+      (held) => held.edgeLocks,
+      NO_LOCKS,
+    )
   }
 
   /** Whether the record still holds the plane comments lived in before threads. */
@@ -230,9 +338,13 @@ export class SessionDocument implements BodyDocPort {
     this.commitBody()
   }
 
-  /** The committed document as snapshot bytes. */
-  exportSnapshot(): Uint8Array {
-    return lease.exportSnapshot(this.record)
+  /** The document as snapshot bytes, typed text included; null once closed unkept. */
+  exportSnapshot(): Uint8Array | null {
+    return this.answer(
+      () => this.readIncludingTyped((from) => lease.exportSnapshot(from)),
+      (held) => held.snapshot,
+      null,
+    )
   }
 
   /** Everything the document holds as an update, which a keeper that missed pushes merges as a no-op. */
@@ -362,11 +474,30 @@ export class SessionDocument implements BodyDocPort {
 
   // ---- lifetime ----
 
-  /** Gives the document back; the session never calls this document again. */
-  close(): void {
+  /**
+   * Gives the document back; the session never calls this document again.
+   * `keepAnswers` is for a disposed session, which a late reader may still ask:
+   * it answers what the document held now, and every other closed document
+   * answers as one that was never held.
+   */
+  close({ keepAnswers = false } = {}): void {
     if (this.closed) return
+    if (keepAnswers) this.kept = this.keep()
     this.closed = true
     this.record.release()
+  }
+
+  private keep(): Kept {
+    return {
+      body: attempt(() => this.markdownBody(), ''),
+      facets: attempt(() => this.facets(), NO_FACETS),
+      coreFacets: attempt(() => this.coreFacets(), undefined),
+      nodeLocks: attempt(() => this.nodeLocks(), NO_LOCKS),
+      edgeLocks: attempt(() => this.edgeLocks(), NO_LOCKS),
+      name: attempt(() => this.name(), undefined),
+      listedState: attempt(() => this.listedContentState() ?? this.recordContentState(), null),
+      snapshot: attempt(() => this.exportSnapshot(), null),
+    }
   }
 
   /**

@@ -39,7 +39,7 @@ import {
 import { PersistenceLedger } from './persistence-ledger.js'
 import { type BodyBinding, bodyBindingFor } from './session-body-binding.js'
 import type { SessionBodyText } from './session-body-text.js'
-import { type ChangedBy, SessionDocument } from './session-document.js'
+import { type ChangedBy, NO_FACETS, NO_LOCKS, SessionDocument } from './session-document.js'
 import type { EditorCommand } from './spatial/commands.js'
 import { threadsAfterCommand } from './spatial/thread-commands.js'
 import { createSubscribers } from './subscribers.js'
@@ -54,12 +54,6 @@ const log = getAppLogger('document-sync')
 const DISPOSE_DRAIN_TIMEOUT_MS = 2_000
 
 export { COMMIT_DEBOUNCE_MS } from './commit-debounce.js'
-
-/** Stable empty set so a lock read before the first snapshot is referentially stable. */
-const EMPTY_LOCKS: ReadonlySet<string> = new Set()
-
-/** Stable empty bucket, for the same reason `EMPTY_LOCKS` is stable. */
-const EMPTY_FACETS: ExtensionFacets = {}
 
 /**
  * Generation counters shared across every session a single `useDocumentSync`
@@ -692,7 +686,7 @@ export function createDocumentSyncSession(
    * not ours to commit — the editor remounts on the new binding instead.
    */
   function bodyEdited(bound: SessionDocument): void {
-    if (bound !== doc || removed || unreadable) return
+    if (bound !== doc || disposed || removed || unreadable) return
     persistence.edited()
     bodyOpsPending = true
     debounce.arm()
@@ -1024,18 +1018,18 @@ export function createDocumentSyncSession(
     if (pendingCommitCount > 0) {
       void drainBeforePushHasFired().then(() => {
         backend.disconnect()
-        doc?.close()
+        doc?.close({ keepAnswers: true })
       })
     } else {
       backend.disconnect()
-      doc?.close()
+      doc?.close({ keepAnswers: true })
     }
   }
 
   function onChange(next: SpatialCanvas, command: EditorCommand): void {
     // No document, or one this build cannot read whole: nowhere to write,
     // and shown ink would read as kept work.
-    if (removed || !doc || unreadable) return
+    if (disposed || removed || !doc || unreadable) return
     // Published immediately (not debounced) so a controlled SpatialEditor's
     // own re-render reflects the edit right away; only the Loro write is
     // debounced in the background.
@@ -1123,7 +1117,7 @@ export function createDocumentSyncSession(
   }
 
   function undo(): boolean {
-    if (!doc || removed || unreadable) return false
+    if (!doc || disposed || removed || unreadable) return false
     // An edit still inside its debounce window is the most recent thing the
     // person did and is not in the document yet, so taking it back IS the
     // undo — the committed stack is left alone.
@@ -1138,7 +1132,7 @@ export function createDocumentSyncSession(
   }
 
   function redo(): boolean {
-    if (!doc || removed || unreadable) return false
+    if (!doc || disposed || removed || unreadable) return false
     if (!doc.canRedo()) return false
     // Same staleness, for the same reason: the queued write was computed
     // against the document as it stood before this redo.
@@ -1211,16 +1205,16 @@ export function createDocumentSyncSession(
     subscribeProposals,
     subscribe,
     subscribeHistory,
-    getNodeLocks: () => readContent((on) => on.nodeLocks(), EMPTY_LOCKS),
+    getNodeLocks: () => readContent((on) => on.nodeLocks(), NO_LOCKS),
     setNodeLock: (nodeId, locked) => writeLocks((on) => on.setNodeLock(nodeId, locked)),
-    getEdgeLocks: () => readContent((on) => on.edgeLocks(), EMPTY_LOCKS),
+    getEdgeLocks: () => readContent((on) => on.edgeLocks(), NO_LOCKS),
     setEdgeLock: (edgeId, locked) => writeLocks((on) => on.setEdgeLock(edgeId, locked)),
     subscribeLocks,
     getMarkdownBody: () => readContent((on) => on.markdownBody(), ''),
     subscribeMarkdownBody,
     getBodyBinding,
     getCoreFacets: () => readContent((on) => on.coreFacets(), undefined),
-    getFacets: () => readContent((on) => on.facets(), EMPTY_FACETS),
+    getFacets: () => readContent((on) => on.facets(), NO_FACETS),
     getDocumentName,
   }
 }
