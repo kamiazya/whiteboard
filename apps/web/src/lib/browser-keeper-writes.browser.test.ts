@@ -35,13 +35,9 @@ import { BrowserBackend } from './browser-backend.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { createDocumentSyncSession, createGenerationCounters } from './document-sync-session.js'
-import {
-  DOCUMENT_SYNC_CHANGED_EVENT,
-  type DirtyEventDetail,
-  dispatchIdentityEvent,
-} from './document-sync-types.js'
+import { DOCUMENT_SYNC_CHANGED_EVENT, dispatchIdentityEvent } from './document-sync-types.js'
 import { loroTextSync } from './loro-codemirror-sync.js'
-import type { EditorCommand } from './spatial/commands.js'
+import type { EditorCommand, EditorLeafCommand } from './spatial/commands.js'
 import { applyCommand } from './spatial/commands.js'
 import { listenToWorkspace, type WorkspaceBroadcast } from './workspace-broadcast.js'
 
@@ -60,9 +56,9 @@ class CountingDocs extends BrowserWorkspaceDocs {
 }
 
 /** The window events a tab's session raised, by the identity each tab was given. */
-const windowEvents: DirtyEventDetail[] = []
+const windowEvents: Array<{ workspaceId: string; path: string }> = []
 const onWindowEvent = (event: Event) => {
-  windowEvents.push((event as CustomEvent<DirtyEventDetail>).detail)
+  windowEvents.push((event as CustomEvent<{ workspaceId: string; path: string }>).detail)
 }
 
 const cleanups: Array<() => void> = []
@@ -80,7 +76,12 @@ afterEach(async () => {
 })
 
 /** What one tab's listeners were told, from the moment its page was open. */
-async function openTab(documentId: string, path: string, kind: 'markdown' | 'spatial', label: string) {
+async function openTab(
+  documentId: string,
+  path: string,
+  kind: 'markdown' | 'spatial',
+  label: string,
+) {
   const docs = new CountingDocs()
   const backend = new BrowserBackend({ documentId, path, kind }, docs)
   const persistence: string[] = []
@@ -171,8 +172,7 @@ function listenForAnnouncements() {
       end.post({ type: 'document-created', path: `sentinel-${sentinels}` })
       end.close()
       await vi.waitFor(
-        () =>
-          expect(heard.filter((m) => m.type === 'document-created')).toHaveLength(sentinels),
+        () => expect(heard.filter((m) => m.type === 'document-created')).toHaveLength(sentinels),
         WAIT,
       )
       return heard.filter((message) => message.type === 'update').length
@@ -353,7 +353,10 @@ describe('typing into a browser-kept markdown body', () => {
     expect(merged).toContain('mine')
     // The editor on the first tab shows the merge, not only the session.
     await vi.waitFor(() => expect(viewA.state.doc.toString()).toBe(merged), WAIT)
-    await vi.waitFor(async () => expect(await persistedMarkdownBody(doc.documentId)).toBe(merged), WAIT)
+    await vi.waitFor(
+      async () => expect(await persistedMarkdownBody(doc.documentId)).toBe(merged),
+      WAIT,
+    )
     // One save of its own on each side, and both reached the channel.
     expect(a.docs.saves).toBe(1)
     expect(b.docs.saves).toBe(1)
@@ -366,13 +369,16 @@ describe('typing into a browser-kept markdown body', () => {
     expect(a.session.getMarkdownBody()).toBe(' theirs')
     expect(viewA.state.doc.toString()).toBe(' theirs')
     expect(a.session.canUndo()).toBe(false)
-    await vi.waitFor(async () => expect(await persistedMarkdownBody(doc.documentId)).toBe(' theirs'), WAIT)
+    await vi.waitFor(
+      async () => expect(await persistedMarkdownBody(doc.documentId)).toBe(' theirs'),
+      WAIT,
+    )
   })
 })
 
 describe('commanding a browser-kept canvas', () => {
-  const create = createNodeCommand('n1', 0, 0)
-  const move: EditorCommand = { kind: 'move-node', id: 'n1', x: 50, y: 60 }
+  const create = createNodeCommand('n1', 0, 0) as EditorLeafCommand
+  const move: EditorLeafCommand = { kind: 'move-node', id: 'n1', x: 50, y: 60 }
   const created = applyCommand(EMPTY, create)
   const moved = applyCommand(created, move)
 
@@ -458,7 +464,10 @@ describe('commanding a browser-kept canvas', () => {
 
     expect(a.session.getCanvas()).toEqual(moved)
     expect([a.session.canUndo(), a.session.canRedo()]).toEqual([true, false])
-    await vi.waitFor(async () => expect(await persistedNodeIds(doc.documentId)).toEqual(['n1']), WAIT)
+    await vi.waitFor(
+      async () => expect(await persistedNodeIds(doc.documentId)).toEqual(['n1']),
+      WAIT,
+    )
     await vi.waitFor(() => expect(b.session.getCanvas()).toEqual(moved), WAIT)
     expect(a.docs.saves).toBe(3)
     expect(await channel.updates()).toBe(3)
