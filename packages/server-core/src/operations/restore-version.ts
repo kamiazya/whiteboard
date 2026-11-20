@@ -179,12 +179,16 @@ async function restoreInPlace(
   ctx: RestoreContext,
 ): Promise<RestoreVersionResult> {
   const { workspaceId, path, label, versionId } = ctx
-  const { changed } = await writePast(ctx, path, {
+  const written = await writePast(ctx, path, {
     label,
     kind: null,
     recorded: await live.kind(workspaceId, path),
   })
-  if (changed) await recordMerge(versions, workspaceId, path, versionId)
+  // A document gone from the record between the history lookup and the write
+  // (another process over the same data directory holds no lock of ours) is
+  // one that does not exist, as the lookup would have answered a moment later.
+  if (written === null) return { kind: 'not-found' }
+  if (written.changed) await recordMerge(versions, workspaceId, path, versionId)
   return { kind: 'restored-in-place' }
 }
 
@@ -208,11 +212,13 @@ async function restoreOntoExisting(
   // A target that records no kind is declared by the first write that
   // reaches it, so it takes the source's — the shape the merged content
   // has — and a kind-aware consumer (editor routing) opens it correctly.
-  const { changed, documentId, elementCount } = await writePast(ctx, targetPath, {
+  const written = await writePast(ctx, targetPath, {
     label,
     kind: targetKind === null ? sourceKind : null,
     recorded: targetKind ?? sourceKind,
   })
+  if (written === null) return { kind: 'not-found' }
+  const { changed, documentId, elementCount } = written
   if (changed) await recordMerge(versions, workspaceId, targetPath, versionId)
   return { kind: 'restored-to-target', targetPath, documentId, elementCount }
 }
@@ -384,14 +390,15 @@ async function restoreOneDocument(
 ): Promise<boolean> {
   const { deps, workspaceId } = ctx
   const live = deps.liveDocuments
-  if (liveRow === undefined) {
-    // Deleted since the version: recreated under the SAME documentId's row
-    // lineage as far as the tree is concerned (the write-through places it
-    // by path + kind).
+  // Deleted since the version: recreated under the SAME documentId's row
+  // lineage as far as the tree is concerned (the write-through places it
+  // by path + kind).
+  const recreate = async () => {
     await live.save(workspaceId, node.path, past.pastDoc, { kind: node.meta.kind })
     live.evict(workspaceId, node.path)
     return true
   }
+  if (liveRow === undefined) return recreate()
   const moved = liveRow.path !== node.path
   if (moved) {
     await live.rename(workspaceId, liveRow.path, node.path)
@@ -403,7 +410,8 @@ async function restoreOneDocument(
     past.bytes,
     node.meta.kind ?? null,
   )
-  return moved || written.changed
+  // A row the record no longer holds is a document to recreate, not one to write into.
+  return written === null ? recreate() : moved || written.changed
 }
 
 /**
@@ -484,7 +492,7 @@ async function writePastAtNode(
   path: string,
   pastBytes: Uint8Array,
   requestedKind: DocumentKind | null,
-): Promise<Written> {
+): Promise<Written | null> {
   const { workspaceDocuments } = deps
   const record = await workspaceDocuments.open(workspaceId)
   let documentId: string
@@ -494,7 +502,8 @@ async function writePastAtNode(
       { query: 'workspaceDocumentEntry', args: { path } },
       assertedAs<NodeEntry | null>(),
     )
-    if (entry === null) throw new RestoredDocumentIdMissingError(path)
+    // Nothing to write into: nothing was changed, and the record is as it was.
+    if (entry === null) return null
     documentId = entry.documentId
     // An EXPLICIT kind is an intentional sync request (a different-kind source's
     // content onto a target that records none); a plain restore leaves it.
@@ -565,7 +574,7 @@ async function writePast(
     /** The kind the target will record once saved, which the past envelope is held to. */
     recorded: DocumentKind | null
   },
-): Promise<Written> {
+): Promise<Written | null> {
   const { deps, workspaceId, past, pastBytes, progress } = ctx
   const { label, kind, recorded } = options
   await progress({

@@ -123,6 +123,17 @@ describe('restoreVersion in-place mode', () => {
     expectAllCallsLocked(live)
   })
 
+  it('answers not-found, writing nothing, for a document the record no longer holds when the write is reached', async () => {
+    // The history still names the version, but another process over the same
+    // data directory removed the document between the lookup and the write.
+    const live = new FakeLive()
+    const result = await run(live, versionsWith({ v1: { doc: spatialDoc(['n1']) } }))
+    expect(result).toEqual({ kind: 'not-found' })
+    expect(live.calls.map((c) => c.method)).not.toContain('save')
+    expect(live.recordsDropped).toEqual([])
+    expectAllCallsLocked(live)
+  })
+
   it('evicts the live doc when save fails, and the failure propagates', async () => {
     const live = new FakeLive()
     live.seed('canvas-a', spatialDoc(['n1']))
