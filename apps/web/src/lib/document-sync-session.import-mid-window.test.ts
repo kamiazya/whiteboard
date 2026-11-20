@@ -119,15 +119,16 @@ describe('a remote update arriving while typed body text is inside its window', 
     s.session.dispose()
   })
 
-  it('answers an undo pressed before the window closes with true and changes nothing, the step still on the stack', () => {
+  it('undoes the typed text when pressed before the window closes, keeping the remote text', () => {
     const s = openedSession()
     typeIntoBody(s.session, 0, '>')
     s.handlers().onRemoteUpdate(remoteInsert(5, ' there'))
 
     expect(s.session.undo()).toBe(true)
 
-    expect(s.session.getMarkdownBody()).toBe('>hello there')
-    expect(s.session.canUndo()).toBe(true)
+    expect(s.session.getMarkdownBody()).toBe('hello there')
+    expect(s.session.canUndo()).toBe(false)
+    expect(s.session.canRedo()).toBe(true)
     s.session.dispose()
   })
 

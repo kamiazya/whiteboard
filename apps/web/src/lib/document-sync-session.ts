@@ -363,7 +363,9 @@ export function createDocumentSyncSession(
   let unreadable = false
   let commitChain: Promise<void> = Promise.resolve()
   // Counts onChange firings that have been chained onto commitChain but have
-  // not yet settled. Lets dispose() tell "nothing was pending, safe to
+  // not yet settled, and pushes `send` has queued whose call to the keeper has
+  // not happened yet (an undo, a redo or a body commit makes one outside the
+  // chain). Lets dispose() tell "nothing was pending, safe to
   // disconnect immediately" apart from "a flush-triggered (or still-running)
   // firing exists" without needing to inspect a Promise's settled state
   // synchronously (not otherwise observable in plain JS).
@@ -400,8 +402,12 @@ export function createDocumentSyncSession(
    */
   function send(bytes: () => Uint8Array): void {
     const push = persistence.pushStarted()
+    pendingCommitCount++
     void Promise.resolve()
-      .then(() => backend.pushLocalUpdate(bytes()))
+      .then(() => {
+        pendingCommitCount--
+        return backend.pushLocalUpdate(bytes())
+      })
       .then(push.resolved, () => {
         if (isStale()) return push.dropped()
         deps.onStatusChange('error')
@@ -1118,10 +1124,19 @@ export function createDocumentSyncSession(
 
   function undo(): boolean {
     if (!doc || disposed || removed || unreadable) return false
-    // An edit still inside its debounce window is the most recent thing the
-    // person did and is not in the document yet, so taking it back IS the
+    // Typed body text is already in the document, so dropping its timer would
+    // leave it shown but never written: it commits as its own step, which the
+    // engine undo below then takes back.
+    const bodyPending = bodyOpsPending
+    if (bodyPending) {
+      debounce.cancel()
+      bodyOpsPending = false
+      doc.commitBody()
+    }
+    // A canvas edit still inside its debounce window is the most recent thing
+    // the person did and is not in the document yet, so taking it back IS the
     // undo — the committed stack is left alone.
-    if (dropQueuedWrite()) {
+    if (dropQueuedWrite() && !bodyPending) {
       publishCanvasFromDoc(doc)
       return true
     }
@@ -1135,7 +1150,8 @@ export function createDocumentSyncSession(
     if (!doc || disposed || removed || unreadable) return false
     if (!doc.canRedo()) return false
     // Same staleness, for the same reason: the queued write was computed
-    // against the document as it stood before this redo.
+    // against the document as it stood before this redo. Typed body text is
+    // not dropped with it: `doc.redo()` commits it first, as its own step.
     dropQueuedWrite()
     doc.redo()
     publishCanvasFromDoc(doc)

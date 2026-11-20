@@ -71,6 +71,8 @@ export function heldHandlers() {
 interface TestSessionOptions {
   /** The keeper's push; resolves at once unless given. */
   readonly push?: DocumentBackend['pushLocalUpdate']
+  /** Called when the session lets the keeper go. */
+  readonly disconnect?: () => void
   /** Whether connecting reports the stream open at once. Defaults to true. */
   readonly connected?: boolean
   /** Delivered as the first snapshot after connecting; without one the session holds no document. */
@@ -86,7 +88,7 @@ export function openTestSession(options: TestSessionOptions = {}) {
       hold(h)
       if (options.connected !== false) h.onConnected()
     },
-    disconnect() {},
+    disconnect: options.disconnect ?? (() => {}),
     pushLocalUpdate: options.push ?? (() => Promise.resolve()),
     sendClientReady() {},
   } satisfies DocumentBackend

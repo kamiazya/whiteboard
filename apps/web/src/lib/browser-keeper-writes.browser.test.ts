@@ -535,10 +535,8 @@ describe('two tabs editing one markdown body in any interleaving', () => {
           } else if (op.kind === 'pause') {
             await windowsClosed(tabs)
           } else {
-            // Taken once the tab's own window has closed. Inside it, undo
-            // cancels the write of a body whose keystrokes are already in the
-            // document, so the text stays on screen unsaved — a case this
-            // model leaves out rather than states.
+            // Taken once the tab's own window has closed: the in-window case
+            // is pinned by example in document-sync-session.body-undo-in-window.test.ts.
             await windowsClosed([tabs[op.tab]])
             if (op.kind === 'undo') undone = tabs[op.tab].session.undo() || undone
             else tabs[op.tab].session.redo()
