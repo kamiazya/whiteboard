@@ -20,8 +20,8 @@ export async function editWorkspaceRecord<T>(
   edit: (record: RecordLease) => Promise<{ value: T; writes: wire.Write[] }>,
 ): Promise<T> {
   const records = new BrowserWorkspaceRecords(dbName)
-  // The id read sits inside the isolation, as `openWorkspaceOrNull`'s does:
-  // a throwing accessor is an unopened record, not an escape past this check.
+  // The id read sits inside the isolation: a throwing accessor is an unopened
+  // record, not an escape past this check.
   const held = await (async () => {
     try {
       const workspaceId = getBrowserWorkspaceId()

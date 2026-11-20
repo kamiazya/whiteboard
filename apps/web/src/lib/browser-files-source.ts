@@ -7,17 +7,18 @@ import {
   trashPurgeRefusal,
   trashRestoreRefusal,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import {
-  applyDocumentEdit,
-  type ContentWithTags,
-  documentContainers,
-  readContentWithTags,
-  readDocumentContent,
-  readFacets,
-  readMarkdownBody,
-  resolveWorkspaceDocumentById,
+import type {
+  ContentWithTags,
+  DocumentContent,
+  RecordLease,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { type DocumentKind, type ExtensionFacets, tagsInUse } from '@kamiazya/whiteboard-model'
+import { lease } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  type DocumentKind,
+  type ExtensionFacets,
+  tagsInUse,
+  type documentEngine as wire,
+} from '@kamiazya/whiteboard-model'
 import {
   readStencilLibrary,
   readTagLibrary,
@@ -43,20 +44,17 @@ import {
   type SearchHit,
   searchableTexts,
 } from '@kamiazya/whiteboard-search'
-import type { LoroDoc } from 'loro-crdt'
+import { z } from 'zod'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { type ContentClock, idbContentClock } from './browser-document-summary.js'
 import { createTagBearersCache, type ReadDocument } from './browser-files-source-tags.js'
 import { writeImportedContent } from './browser-import-content.js'
+import { editWorkspaceRecord } from './browser-record-edit.js'
 import { writeTagLibraryDocument } from './browser-tag-library-write.js'
-import {
-  BrowserWorkspaceDocs,
-  openWorkspaceOrNull,
-  saveAndAnnounce,
-} from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { touchContentTimestamp } from './content-timestamp.js'
 import { createSeededDocumentAt } from './create-seeded-document.js'
+import { documentEditWrites } from './document-edit-writes.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import { DocumentFileStore } from './document-file-store.js'
 import type { ImportedDocument } from './document-import.js'
@@ -68,28 +66,31 @@ import {
 import { searchReady } from './search-core.js'
 import { isCoreTrap } from './spatial/core-trap.js'
 import {
-  type ContentRecord,
+  type HeldDocument,
+  type LazyContentRecord,
   lazyContentRecord,
-  loadDocumentContent,
-  projectDocumentContent,
+  loadDocument,
+  withHeldDocument,
 } from './workspace-content.js'
 
 type ReadableEntry = { documentId: string; path: string; kind?: DocumentKind }
 
 /**
- * One document's current content. A walk passes the workspace record it
- * opened once, so N documents cost one open; a lone read opens its own.
+ * What `read` makes of one document's current content. A walk passes the
+ * workspace record it opened once, so N documents cost one open; a lone read
+ * opens its own.
  */
-async function loadCurrentDocFrom(
+async function readCurrent<T extends object>(
   entry: WorkspaceDocumentEntry,
-  record?: () => Promise<ContentRecord>,
-): Promise<LoroDoc> {
-  const doc =
+  read: (held: HeldDocument) => Promise<T>,
+  record?: LazyContentRecord,
+): Promise<T> {
+  const answer =
     record === undefined
-      ? await loadDocumentContent(entry.documentId)
-      : await projectDocumentContent(await record(), entry.documentId)
-  if (doc === null) throw new Error(`document ${entry.documentId} holds no readable content`)
-  return doc
+      ? await loadDocument(entry.documentId, read)
+      : await withHeldDocument(await record.open(), entry.documentId, read)
+  if (answer === null) throw new Error(`document ${entry.documentId} holds no readable content`)
+  return answer
 }
 
 /**
@@ -108,52 +109,78 @@ async function loadCurrentDocFrom(
  */
 async function* readDocumentsFrom(entries: readonly ReadableEntry[]): AsyncGenerator<ReadDocument> {
   const record = lazyContentRecord()
-  for (const entry of entries) {
-    let doc: LoroDoc
-    try {
-      doc = await loadCurrentDocFrom({ documentId: entry.documentId, path: entry.path }, record)
-    } catch {
-      continue
+  try {
+    for (const entry of entries) {
+      let read: ContentWithTags
+      try {
+        read = await readCurrent(
+          { documentId: entry.documentId, path: entry.path },
+          (held) => held.contentWithTags(entry.kind),
+          record,
+        )
+      } catch {
+        // A document that cannot be read, or a canvas this build cannot parse,
+        // carries nothing anyone here can read.
+        continue
+      }
+      yield { documentId: entry.documentId, ...read }
     }
-    let read: ContentWithTags
-    try {
-      read = readContentWithTags(doc, entry.kind)
-    } catch {
-      // A canvas this build cannot parse is the same miss as an unreadable
-      // document: it carries nothing anyone here can read.
-      continue
-    }
-    yield { documentId: entry.documentId, ...read }
+  } finally {
+    await record.release()
   }
 }
 
 /**
- * Repoints one listed document's references inside the workspace record,
- * answering whether anything changed. A document the record does not hold (a
- * per-document record nothing has folded yet) or cannot read is left as
- * written: the rename already stands, and the rest still get repaired.
+ * The writes that repoint one listed document's references, none when nothing
+ * changes. A document the record does not hold (a per-document record nothing
+ * has folded yet) or cannot read is left as written: the rename already
+ * stands, and the rest still get repaired.
  */
-function rewriteInRecord(
-  workspace: LoroDoc,
+async function referenceRewriteWrites(
+  record: RecordLease,
   entry: { readonly documentId: string; readonly kind?: DocumentKind },
   plan: ReadonlyMap<string, string>,
-): boolean {
-  if (resolveWorkspaceDocumentById(workspace, entry.documentId) === null) return false
+): Promise<wire.Write[]> {
   try {
-    const doc = documentContainers(workspace, entry.documentId)
-    const edit = planDocumentReferenceRewrite(readDocumentContent(doc, entry.kind), plan)
-    if (edit === null) return false
-    applyDocumentEdit(doc, edit)
-    return true
+    const content = await lease.read(
+      record,
+      {
+        query: 'documentContent',
+        args:
+          entry.kind === undefined
+            ? { documentId: entry.documentId }
+            : { documentId: entry.documentId, kind: entry.kind },
+      },
+      z.custom<DocumentContent>(),
+    )
+    const edit = planDocumentReferenceRewrite(content, plan)
+    return edit === null ? [] : documentEditWrites(entry.documentId, edit)
   } catch {
-    return false
+    return []
   }
+}
+
+/** Every listed document's reference-repointing writes, and the ids of those that change. */
+async function referenceRewrites(
+  record: RecordLease,
+  entries: readonly { readonly documentId: string; readonly kind?: DocumentKind }[],
+  plan: ReadonlyMap<string, string>,
+): Promise<{ value: string[]; writes: wire.Write[] }> {
+  const value: string[] = []
+  const writes: wire.Write[] = []
+  for (const entry of entries) {
+    const entryWrites = await referenceRewriteWrites(record, entry, plan)
+    if (entryWrites.length === 0) continue
+    value.push(entry.documentId)
+    writes.push(...entryWrites)
+  }
+  return { value, writes }
 }
 
 /** A library document's value, or what `read` answers for none: absent, unreadable or malformed. */
 async function readLibrary<T>(
   index: DocumentIndex,
-  load: (entry: WorkspaceDocumentEntry) => Promise<LoroDoc>,
+  load: (entry: WorkspaceDocumentEntry) => Promise<ExtensionFacets>,
   path: string,
   read: (facets: ExtensionFacets | undefined) => T,
 ): Promise<T> {
@@ -161,7 +188,7 @@ async function readLibrary<T>(
   const library = entries.find((entry) => entry.path === path)
   if (library === undefined) return read(undefined)
   try {
-    return read(readFacets(await load(library)))
+    return read(await load(library))
   } catch {
     return read(undefined)
   }
@@ -392,24 +419,18 @@ export function createBrowserFilesSource(
       moves,
     })
     if (plan.size === 0) return
-    const workspaceId = getBrowserWorkspaceId()
-    const entries = await index.listDocuments({ workspaceId })
-    const docs = new BrowserWorkspaceDocs()
-    const workspace = await openWorkspaceOrNull(docs)
-    if (workspace === null) return
-    const rewritten: string[] = []
-    for (const entry of entries) {
-      if (rewriteInRecord(workspace, entry, plan)) rewritten.push(entry.documentId)
-    }
-    if (rewritten.length === 0) return
-    await saveAndAnnounce(docs, workspaceId, workspace)
+    const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
+    const rewritten = await editWorkspaceRecord(
+      'The workspace could not be opened to repoint the references.',
+      undefined,
+      (record) => referenceRewrites(record, entries, plan),
+    )
     await Promise.all(rewritten.map((documentId) => touchContentTimestamp(documentId)))
     // The content moved, so the search corpus entries for it are stale.
     for (const documentId of rewritten) corpus.delete(documentId)
   }
 
-  const loadCurrentDoc = (entry: WorkspaceDocumentEntry, record?: () => Promise<ContentRecord>) =>
-    loadCurrentDocFrom(entry, record)
+  const loadFacets = (entry: WorkspaceDocumentEntry) => readCurrent(entry, (held) => held.facets())
   const readableDocuments = (entries: readonly ReadableEntry[]) => readDocumentsFrom(entries)
 
   const bearersByDocument = createTagBearersCache(readableDocuments)
@@ -429,14 +450,14 @@ export function createBrowserFilesSource(
    */
   async function searchableTextsFor(
     entry: WorkspaceDocumentEntry,
-    record: () => Promise<ContentRecord>,
+    record: LazyContentRecord,
   ): Promise<string[]> {
     const stamp = entry.updatedAt ?? ''
     const cached = corpus.get(entry.documentId)
     if (cached !== undefined && cached.stamp === stamp) return cached.texts
     try {
-      const doc = await loadCurrentDoc(entry, record)
-      const texts = searchableTexts(readDocumentContent(doc, entry.kind))
+      const content = await readCurrent(entry, (held) => held.content(entry.kind), record)
+      const texts = searchableTexts(content)
       corpus.set(entry.documentId, { stamp, texts })
       return texts
     } catch {
@@ -448,10 +469,10 @@ export function createBrowserFilesSource(
     // One well-known path per library, the same constants the daemon reads:
     // nothing here can ask the index which document carries a facet either,
     // and the two keepers must agree on where a library lives.
-    readTagLibrary: () => readLibrary(index, loadCurrentDoc, TAG_LIBRARY_PATH, readTagLibrary),
+    readTagLibrary: () => readLibrary(index, loadFacets, TAG_LIBRARY_PATH, readTagLibrary),
     writeTagLibrary: (library) => writeTagLibraryDocument(index, library),
     readStencilLibrary: () =>
-      readLibrary(index, loadCurrentDoc, STENCIL_LIBRARY_PATH, readStencilLibrary),
+      readLibrary(index, loadFacets, STENCIL_LIBRARY_PATH, readStencilLibrary),
     async listTagsInUse() {
       const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
       const stamps = await clock(entries.map((entry) => entry.documentId))
@@ -544,9 +565,14 @@ export function createBrowserFilesSource(
       await searchReady()
       const entries = await this.listDocuments()
       const record = lazyContentRecord()
-      const searchable = await searchableOf(entries, await folderNamesIn(index), (entry) =>
-        searchableTextsFor(entry, record),
-      )
+      let searchable: SearchableDocument[]
+      try {
+        searchable = await searchableOf(entries, await folderNamesIn(index), (entry) =>
+          searchableTextsFor(entry, record),
+        )
+      } finally {
+        await record.release()
+      }
       const byId = new Map(entries.map((entry) => [entry.documentId, entry]))
       // Every hit here is a keyword hit — there is no embedder in the
       // browser — so each carries its rank, and the panel highlights.
@@ -588,12 +614,14 @@ export function createBrowserFilesSource(
       //
       // The facets come off the SAME decoded document. Reading them from a
       // second load would be a second decode per visible row.
-      const doc = await loadCurrentDoc(entry)
-      return { body: readMarkdownBody(doc), facets: readFacets(doc) }
+      return readCurrent(entry, async (held) => ({
+        body: await held.body(),
+        facets: await held.facets(),
+      }))
     },
 
     async loadSpatialSnapshot(entry: WorkspaceDocumentEntry): Promise<Uint8Array> {
-      return (await loadCurrentDoc(entry)).export({ mode: 'snapshot' })
+      return readCurrent(entry, (held) => held.projection())
     },
 
     // One file store per origin, so the row says nothing about where to look.

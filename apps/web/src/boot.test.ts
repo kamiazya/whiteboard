@@ -9,7 +9,7 @@ import type { RuntimeConfig } from '@kamiazya/whiteboard-daemon-client/api-clien
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { SERVER_KEEPER, startBootSequence } from './boot.js'
 import { DB_VERSION, setWhiteboardDbNameForTests } from './lib/browser-idb.js'
-import { BrowserWorkspaceDocs, openWorkspaceOrNull } from './lib/browser-workspace-docs.js'
+import { BrowserWorkspaceDocs } from './lib/browser-workspace-docs.js'
 import {
   getBrowserWorkspaceId,
   resetBrowserWorkspaceIdForTests,
@@ -20,6 +20,7 @@ import { scheduleFileSweep } from './lib/file-sweep-schedule.js'
 import { IdbDocumentIndex } from './lib/idb-document-index.js'
 import { clearNamedDb } from './test-utils/browser-document.js'
 import { expectLoggedFailure } from './test-utils/logged-failures.js'
+import { openWorkspaceOrNull } from './test-utils/open-workspace-or-null.js'
 
 // A spy, so no boot in this file arms the real page-load sweep's timer.
 vi.mock('./lib/file-sweep-schedule.js', () => ({ scheduleFileSweep: vi.fn() }))

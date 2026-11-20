@@ -3,9 +3,10 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
-import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
+import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { touchContentTimestamp } from '../lib/content-timestamp.js'
+import { openWorkspaceOrNull } from './open-workspace-or-null.js'
 
 /**
  * Writes standalone-document bytes INTO an existing tree node and stamps its

@@ -312,6 +312,105 @@ export function describeDocumentKindFallback(makeEngine: () => CrdtEngine) {
   })
 }
 
+type Okay = { ok: Record<string, unknown> | undefined }
+
+/** What the two separate reads answer, in the shape the combined read owes. */
+async function separateReads(
+  engine: CrdtEngine,
+  handle: number,
+  args: Record<string, unknown> | undefined,
+) {
+  const content = ((await ask(engine, handle, 'documentContent', args)) as Okay).ok as {
+    kind: string
+  }
+  const core = ((await ask(engine, handle, 'coreFacets', args)) as Okay).ok as
+    | { tags?: string[] }
+    | undefined
+  const tags = content.kind === 'markdown' ? core?.tags : undefined
+  return { ok: tags === undefined ? { content } : { content, tags } }
+}
+
+const TAGGED_READ_CASES: Array<[string, (engine: CrdtEngine, handle: number) => void]> = [
+  [
+    'a markdown document with tags',
+    (engine, handle) => {
+      write(engine, handle, 'writeDocumentKind', { kind: 'markdown' })
+      write(engine, handle, 'writeMarkdownBody', { body: 'tagged' })
+      write(engine, handle, 'writeCoreFacets', {
+        core: { type: 'note', description: 'about', tags: ['a', 'team:b'] },
+      })
+    },
+  ],
+  [
+    'a markdown document without tags',
+    (engine, handle) => {
+      write(engine, handle, 'writeDocumentKind', { kind: 'markdown' })
+      write(engine, handle, 'writeMarkdownBody', { body: 'plain' })
+      write(engine, handle, 'writeCoreFacets', { core: { type: 'note' } })
+    },
+  ],
+  [
+    'a markdown document that records no core facets',
+    (engine, handle) => {
+      write(engine, handle, 'writeDocumentKind', { kind: 'markdown' })
+      write(engine, handle, 'writeMarkdownBody', { body: 'bare' })
+    },
+  ],
+  [
+    'a spatial document with tags on its canvas',
+    (engine, handle) => {
+      write(engine, handle, 'writeDocumentKind', { kind: 'spatial' })
+      write(engine, handle, 'writeSpatialCanvas', {
+        canvas: { nodes: [], edges: [], tags: ['board'] },
+      })
+    },
+  ],
+  ['a spatial document without tags', () => {}],
+]
+
+export function describeDocumentContentWithTags(makeEngine: () => CrdtEngine) {
+  describe('a document content read that carries the tags', () => {
+    it.each(TAGGED_READ_CASES)('answers what the two reads answer for %s', async (_name, seed) => {
+      const engine = makeEngine()
+      const { handle } = engine.open({ peer: '1' })
+      seed(engine, handle)
+      expect(await ask(engine, handle, 'documentContentWithTags')).toEqual(
+        await separateReads(engine, handle, undefined),
+      )
+    })
+
+    it('answers the same for a document a workspace record hosts, and with the row kind', async () => {
+      const engine = makeEngine()
+      const { handle } = engine.open({ peer: '1' })
+      write(engine, handle, 'createWorkspaceDocumentAtPath', {
+        path: 'note',
+        documentId: FIRST,
+        kind: 'markdown',
+      })
+      write(engine, handle, 'writeCoreFacets', {
+        documentId: FIRST,
+        core: { type: 'note', tags: ['hosted'] },
+      })
+      for (const args of [{ documentId: FIRST }, { documentId: FIRST, kind: 'markdown' }]) {
+        const combined = (await ask(engine, handle, 'documentContentWithTags', args)) as Okay
+        expect(combined).toEqual(await separateReads(engine, handle, args))
+        // The node's own kind is not consulted: only the row's, when asked with it.
+        if ('kind' in args) expect(combined.ok).toMatchObject({ tags: ['hosted'] })
+      }
+    })
+
+    it('refuses what the content read refuses', async () => {
+      const engine = makeEngine()
+      const { handle } = engine.open({ peer: '1' })
+      const combined = await ask(engine, handle, 'documentContentWithTags', {
+        documentId: FIRST,
+      })
+      expect(combined).toEqual(await ask(engine, handle, 'documentContent', { documentId: FIRST }))
+      expect(combined).toHaveProperty('err')
+    })
+  })
+}
+
 /** Exported subtree bytes of a markdown document with a body, as base64. */
 function subtreeSource(engine: CrdtEngine): string {
   const { handle } = engine.open({ peer: '3' })

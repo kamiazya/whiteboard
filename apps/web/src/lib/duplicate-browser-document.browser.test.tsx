@@ -14,12 +14,12 @@ import {
 import { beforeEach, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { loadDocumentContent } from '../test-utils/load-document-content.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { idbContentClock } from './browser-document-summary.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { duplicateBrowserDocument } from './duplicate-browser-document.js'
-import { loadDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('duplicate-browser-document')
 

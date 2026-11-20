@@ -25,7 +25,7 @@ import { BrowserDocumentIndex } from '../../lib/browser-document-index.js'
 import { ensureBrowserWorkspace } from '../../lib/browser-document-summary.js'
 import { createBrowserFilesSource } from '../../lib/browser-files-source.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
-import { projectDocumentContent } from '../../lib/workspace-content.js'
+import { withHeldDocument } from '../../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
 import { seedWorkspaceDocumentContent } from '../../test-utils/seed-workspace-content.js'
@@ -74,7 +74,7 @@ it('prints what listDocuments costs as the workspace grows', { timeout: 600_000 
   await ensureBrowserWorkspace(index)
   const workspaceId = getBrowserWorkspaceId()
   const readings: Record<number, { coldMs: number; repeatMs: number }> = {}
-  const opened = vi.mocked(projectDocumentContent)
+  const opened = vi.mocked(withHeldDocument)
   let seeded = 0
 
   for (const size of SIZES) {

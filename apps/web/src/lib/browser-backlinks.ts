@@ -1,4 +1,3 @@
-import { readContentWithTags } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import {
   type BacklinkEntry,
@@ -7,7 +6,7 @@ import {
 } from '@kamiazya/whiteboard-reference-graph'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { searchReady } from './search-core.js'
-import { lazyContentRecord, projectDocumentContent } from './workspace-content.js'
+import { lazyContentRecord, withHeldDocument } from './workspace-content.js'
 
 /**
  * The browser keeper's answer to "what links here": the reference graph the
@@ -34,17 +33,22 @@ export function browserBacklinksReader(index: DocumentIndex): (documentId: strin
   const cache = new ContentFactsCache({
     // The workspace is the browser's active one — the only one this keeper
     // holds open — so the port's workspace argument has nothing to select.
-    loadContent: async (_workspaceId, entry) => {
-      const doc = await projectDocumentContent(await record(), entry.documentId)
-      return doc === null ? null : readContentWithTags(doc, entry.kind)
-    },
+    loadContent: async (_workspaceId, entry) =>
+      withHeldDocument(await record.open(), entry.documentId, (held) =>
+        held.contentWithTags(entry.kind),
+      ),
   })
   return async (documentId) => {
     // Extraction and the excerpts are the search core's.
     await searchReady()
-    record = lazyContentRecord()
-    const workspaceId = getBrowserWorkspaceId()
-    const entries = await index.listDocuments({ workspaceId })
-    return backlinksIn(entries, await cache.factsFor(workspaceId, entries), documentId)
+    const asked = lazyContentRecord()
+    record = asked
+    try {
+      const workspaceId = getBrowserWorkspaceId()
+      const entries = await index.listDocuments({ workspaceId })
+      return backlinksIn(entries, await cache.factsFor(workspaceId, entries), documentId)
+    } finally {
+      await asked.release()
+    }
   }
 }

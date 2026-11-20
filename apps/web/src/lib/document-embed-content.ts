@@ -11,12 +11,6 @@
  */
 
 import type { LoadedReference } from '@kamiazya/whiteboard-canvas-render'
-import {
-  readCoreFacets,
-  readDocumentContent,
-  readMarkdownBody,
-  readSpatialCanvas,
-} from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
@@ -31,7 +25,7 @@ import {
 import { DocumentFileStore } from './document-file-store.js'
 import { imageRefusal } from './image-upload-policy.js'
 import { loadedFileDocument } from './read-loaded-file-document.js'
-import { loadDocumentContent } from './workspace-content.js'
+import { loadDocument } from './workspace-content.js'
 
 const log = getAppLogger('document-embed-content')
 
@@ -90,12 +84,13 @@ async function loadDocumentName(documentId: string): Promise<string | undefined>
  */
 async function loadEmbeddedDocument(documentId: string): Promise<LoadedFileDocument | undefined> {
   try {
-    const doc = await loadDocumentContent(documentId)
-    if (doc === null) return undefined
-    return loadedFileDocument(
-      { canvas: readSpatialCanvas(doc), facets: readCoreFacets(doc), body: readMarkdownBody(doc) },
-      await loadDocumentName(documentId),
-    )
+    const halves = await loadDocument(documentId, async (held) => ({
+      canvas: await held.canvas(),
+      facets: await held.coreFacets(),
+      body: await held.body(),
+    }))
+    if (halves === null) return undefined
+    return loadedFileDocument(halves, await loadDocumentName(documentId))
   } catch (err) {
     log.warn('embedded document load failed', { documentId, err })
     throw err
@@ -116,11 +111,15 @@ export async function loadBrowserReference(
   documentId: string,
 ): Promise<LoadedReference | undefined> {
   try {
-    const doc = await loadDocumentContent(documentId)
-    if (doc === null) return undefined
-    const entry = await loadDocumentEntry(documentId)
+    // The entry is asked for inside the read: a record that could not be
+    // opened fails before anyone asks the index about a document it never saw.
+    const loaded = await loadDocument(documentId, async (held) => {
+      const entry = await loadDocumentEntry(documentId)
+      return { entry, content: await held.content(entry?.kind) }
+    })
+    if (loaded === null) return undefined
+    const { entry, content } = loaded
     const name = entry?.name !== undefined ? { name: entry.name } : {}
-    const content = readDocumentContent(doc, entry?.kind)
     return {
       documentId,
       ...name,

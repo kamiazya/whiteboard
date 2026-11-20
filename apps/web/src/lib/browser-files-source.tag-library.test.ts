@@ -9,8 +9,8 @@ import { TAG_LIBRARY_PATH } from '@kamiazya/whiteboard-plugin-visual'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { loadDocumentContent } from '../test-utils/load-document-content.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
-import { loadDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('browser-files-source-tag-library')
 

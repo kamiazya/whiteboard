@@ -69,7 +69,17 @@ macro_rules! wire_enum_covered {
 }
 
 wire_enum_covered!(every_breach_shape_round_trips, BreachShape, 28);
-wire_enum_covered!(every_query_name_round_trips, QueryName, 33);
+wire_enum_covered!(every_query_name_round_trips, QueryName, 34);
+
+#[test]
+fn the_combined_content_read_is_its_own_query_beside_the_content_read() {
+    assert_eq!(
+        QueryName::from_wire("documentContentWithTags"),
+        Some(QueryName::DocumentContentWithTags)
+    );
+    assert_ne!(QueryName::DocumentContentWithTags, QueryName::DocumentContent);
+    assert_eq!(QueryName::DocumentContentWithTags.as_str(), "documentContentWithTags");
+}
 wire_enum_covered!(every_writer_name_round_trips, WriterName, 50);
 wire_enum_covered!(every_import_judge_round_trips, ImportJudge, 3);
 wire_enum_covered!(every_write_judge_round_trips, WriteJudge, 2);

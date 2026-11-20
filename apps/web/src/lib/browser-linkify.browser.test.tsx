@@ -7,6 +7,7 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { loadDocumentContent } from '../test-utils/load-document-content.js'
 import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 import { browserBacklinksReader } from './browser-backlinks.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
@@ -14,7 +15,6 @@ import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { linkifyBrowserMentions } from './browser-linkify.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { loadDocumentContent } from './workspace-content.js'
 
 // The browser keeper's **Link**, over real IndexedDB and the production index:
 // the source is a node of this browser's workspace record, edited in place.
