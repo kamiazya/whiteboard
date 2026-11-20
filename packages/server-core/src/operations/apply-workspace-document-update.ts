@@ -1,13 +1,4 @@
-import {
-  documentsRemovedSince,
-  documentsTouchedSince,
-  organisationChangedSince,
-  recordTrashEntry,
-  seedNamesFromTitles,
-  stampEditedDocuments,
-  type TouchedDocument,
-} from '@kamiazya/whiteboard-loro-adapter'
-import type { LoroDoc, VersionVector } from 'loro-crdt'
+import type { RecordSession, TouchedDocument } from '@kamiazya/whiteboard-loro-adapter'
 import { runEvictingOnEngineTrap } from '../document-io.js'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -40,6 +31,13 @@ export interface ApplyWorkspaceDocumentUpdateInput {
   readonly mayPlaceDocuments?: boolean
 }
 
+/** What a since-read names: the version the record stood at, as the engine asks it. */
+type Since = Array<[string, number]>
+
+// The engine answers in the shapes the loro-adapter readers return; this
+// package asserts the type and holds no schema of its own for it.
+const assertedAs = <T>() => ({ parse: (value: unknown) => value as T })
+
 /** A document whose content an applied update wrote. */
 type EditedDocument = Pick<TouchedDocument, 'documentId' | 'path'>
 
@@ -55,12 +53,12 @@ type ApplyWorkspaceDocumentUpdateResult =
  * nothing of the refused update.
  */
 function refusePlacement(
-  doc: LoroDoc,
-  since: VersionVector,
+  record: RecordSession,
+  since: Since,
   target: Parameters<typeof runEvictingOnEngineTrap>[0],
 ): boolean {
   const placed = runEvictingOnEngineTrap(target, 'importing an update into', () =>
-    organisationChangedSince(doc, since),
+    record.readNow({ query: 'organisationChangedSince', args: { since } }, assertedAs<boolean>()),
   )
   if (placed) target.evict()
   return placed
@@ -108,11 +106,11 @@ export async function applyWorkspaceDocumentUpdate(
 ): Promise<ApplyWorkspaceDocumentUpdateResult> {
   const { workspaceId, update } = input
   return deps.liveDocuments.withWriteLock(workspaceId, async () => {
-    const doc = await deps.workspaceDocuments.get(workspaceId)
+    const record = await deps.workspaceDocuments.open(workspaceId)
     const target = droppableRecord(deps, workspaceId)
-    const since = doc.oplogVersion()
+    const since: Since = record.version().entries.map(({ peer, counter }) => [peer, counter])
     try {
-      importWithinSyncLimits(doc, update, target)
+      importWithinSyncLimits(record, update, target)
     } catch (err: unknown) {
       if (isSyncWriteRefusal(err)) {
         throw err
@@ -128,7 +126,7 @@ export async function applyWorkspaceDocumentUpdate(
     // before the save completes drops it unsaved: kept, it would ride the
     // next ordinary save by anyone, unrefused.
     try {
-      return await keepImported(deps, input, doc, since, target)
+      return await keepImported(deps, input, record, since, target)
     } catch (err) {
       target.evict()
       throw err
@@ -168,12 +166,12 @@ function droppableRecord(
  */
 async function evacuateRemoved(
   blobStore: ServerDeps['blobStore'],
-  doc: LoroDoc,
-  since: VersionVector,
+  record: RecordSession,
+  since: Since,
   target: Parameters<typeof runEvictingOnEngineTrap>[0],
 ): Promise<void> {
   const removed = runEvictingOnEngineTrap(target, 'importing an update into', () =>
-    documentsRemovedSince(doc, since),
+    record.removedSince(since.map(([peer, counter]) => ({ peer, counter }))),
   )
   const deletedAt = Date.now()
   for (const { documentId, path, name, folderNames, bytes } of removed) {
@@ -182,14 +180,21 @@ async function evacuateRemoved(
       bytes: new Uint8Array(bytes),
       contentType: 'application/octet-stream',
     })
-    recordTrashEntry(doc, {
-      documentId,
-      path,
-      ...(name === undefined ? {} : { name }),
-      ...(folderNames === undefined ? {} : { folderNames }),
-      deletedAt,
-      blob: ref,
-    })
+    record.write([
+      {
+        op: 'recordTrashEntry',
+        args: {
+          entry: {
+            documentId,
+            path,
+            ...(name === undefined ? {} : { name }),
+            ...(folderNames === undefined ? {} : { folderNames }),
+            deletedAt,
+            blob: ref,
+          },
+        },
+      },
+    ])
   }
 }
 
@@ -197,24 +202,33 @@ async function evacuateRemoved(
 async function keepImported(
   deps: Pick<ServerDeps, 'workspaceDocuments' | 'blobStore'>,
   input: ApplyWorkspaceDocumentUpdateInput,
-  doc: LoroDoc,
-  since: VersionVector,
+  record: RecordSession,
+  since: Since,
   target: Parameters<typeof runEvictingOnEngineTrap>[0],
 ): Promise<ApplyWorkspaceDocumentUpdateResult> {
-  if (input.mayPlaceDocuments === false && refusePlacement(doc, since, target)) {
+  if (input.mayPlaceDocuments === false && refusePlacement(record, since, target)) {
     return { kind: 'placement-refused' }
   }
-  await evacuateRemoved(deps.blobStore, doc, since, target)
+  await evacuateRemoved(deps.blobStore, record, since, target)
   // Before the save, so the name and the stamp ride the same write and its
   // fan-out hands them back to the replica that made the edit.
   const touched = runEvictingOnEngineTrap(target, 'importing an update into', () => {
-    const found = documentsTouchedSince(doc, since)
-    seedNamesFromTitles(doc, found)
-    if (input.origin !== 'transfer') stampEditedDocuments(doc, found)
+    const found = record.readNow(
+      { query: 'touchedSince', args: { since } },
+      assertedAs<TouchedDocument[]>(),
+    )
+    // Both writers read what was touched since `since` themselves; the names
+    // and the stamp land as one change.
+    record.write([
+      { op: 'seedNamesFromTitles', args: { since } },
+      ...(input.origin === 'transfer'
+        ? []
+        : [{ op: 'stampEditedDocuments' as const, args: { since, at: Date.now() } }]),
+    ])
     return found
   })
   // Fan-out to subscribers happens inside save.
-  await deps.workspaceDocuments.save(input.workspaceId, doc)
+  await record.save()
   deps.workspaceDocuments.evictProjections(input.workspaceId)
   const edited = touched
     .filter((each) => each.contentWritten)
