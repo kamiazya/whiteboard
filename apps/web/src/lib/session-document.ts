@@ -343,13 +343,17 @@ export class SessionDocument implements BodyDocPort {
   undo(): void {
     if (this.closed) return
     this.body.commit()
-    this.landed(this.engine.undo({ handle: this.record.handle, judge: 'none' }))
+    this.landed(this.engine.undo({ handle: this.record.handle, judge: 'none' }), {
+      immediate: true,
+    })
   }
 
   redo(): void {
     if (this.closed) return
     this.body.commit()
-    this.landed(this.engine.redo({ handle: this.record.handle, judge: 'none' }))
+    this.landed(this.engine.redo({ handle: this.record.handle, judge: 'none' }), {
+      immediate: true,
+    })
   }
 
   clearUndo(): void {
@@ -369,31 +373,32 @@ export class SessionDocument implements BodyDocPort {
    * A mutation of the engine's document landed: `result` is the engine's
    * answer for a local commit, and absent for an import (judged by version).
    * `bodyMirrorHolds` is for the commit of the body's own queue, which leaves
-   * the editor's mirror exactly the committed text.
+   * the editor's mirror exactly the committed text. `immediate` delivers the
+   * announcement before the call returns.
    */
   private landed(
     result: documentEngine.MutationResult | undefined,
-    { bodyMirrorHolds = false } = {},
+    { bodyMirrorHolds = false, immediate = false } = {},
   ): void {
     const update = result === undefined ? undefined : localUpdateOf(result)
     if (result !== undefined && update === undefined) return
     this.generation += 1
     if (!bodyMirrorHolds) this.body.invalidate()
     if (update !== undefined) this.options.onLocalUpdate(update)
-    this.announce(result === undefined ? 'import' : 'local')
+    this.announce(result === undefined ? 'import' : 'local', result === undefined || immediate)
   }
 
   /**
    * Queues the announcement of a change. A local commit's is delivered on the
    * next microtask, so the calls that made a burst of commits are all done
-   * when the page is told; an import's is delivered at once and carries every
-   * announcement still queued with it, in order, since a reader woken by the
-   * import sees the document after both.
+   * when the page is told. An import's, an undo's and a redo's are delivered
+   * at once and carry every announcement still queued with them, in order,
+   * since the editor must show the result by the time those calls return.
    */
-  private announce(by: ChangedBy): void {
+  private announce(by: ChangedBy, immediate: boolean): void {
     const first = this.announced.length === 0
     this.announced.push(by)
-    if (by === 'import') this.deliverAnnounced()
+    if (immediate) this.deliverAnnounced()
     else if (first) queueMicrotask(() => this.deliverAnnounced())
   }
 

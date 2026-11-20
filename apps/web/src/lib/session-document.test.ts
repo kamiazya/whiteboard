@@ -332,6 +332,21 @@ describe('writes and history of a session document', () => {
     seam.close()
   })
 
+  it('tells the body’s subscribers of an undo and a redo before the call returns', () => {
+    const seam = opened(standalone('hello'), undefined)
+    seam.body.insert(5, '!')
+    seam.commitBody()
+    const listener = vi.fn()
+    seam.body.subscribe(listener)
+
+    seam.undo()
+    expect(listener).toHaveBeenCalled()
+    const afterUndo = listener.mock.calls.length
+    seam.redo()
+    expect(listener).toHaveBeenCalledTimes(afterUndo + 1)
+    seam.close()
+  })
+
   it('commits queued keystrokes as their own step before an undo takes that step back', () => {
     const updates: Uint8Array[] = []
     const seam = opened(standalone('hello'), undefined, { updates })
