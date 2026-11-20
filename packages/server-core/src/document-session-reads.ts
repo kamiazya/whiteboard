@@ -1,4 +1,4 @@
-import type { ContentWithTags } from '@kamiazya/whiteboard-loro-adapter'
+import type { ContentWithTags, DocumentContent } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   CommentThread,
   DocumentKind,
@@ -27,6 +27,7 @@ const facetsShape = asserted<ExtensionFacets>()
 const coreShape = asserted<StoredCoreFacets | undefined>()
 const trustShape = asserted<TrustFacets | undefined>()
 const contentShape = asserted<ContentWithTags>()
+const documentContentShape = asserted<DocumentContent>()
 
 export const kindOf = (session: DocumentSession) =>
   session.read({ query: 'documentKind' }, kindShape)
@@ -79,3 +80,16 @@ export async function nodeLocksOf(session: DocumentSession): Promise<ReadonlySet
 export async function edgeLocksOf(session: DocumentSession): Promise<ReadonlySet<string>> {
   return new Set(await session.read({ query: 'edgeLocks' }, idsShape))
 }
+
+/** The document's content as a markdown body or a canvas; `kind` is the index row's, for a document that recorded none. */
+export const documentContentOf = (session: DocumentSession, kind: DocumentKind | undefined) =>
+  session.read(
+    { query: 'documentContent', args: kind === undefined ? {} : { kind } },
+    documentContentShape,
+  )
+
+const countsShape = z.record(z.string(), z.number())
+
+/** What each thread stores, readable or not, by thread id. */
+export const threadMessageCountsOf = (session: DocumentSession) =>
+  session.read({ query: 'threadMessageCounts' }, countsShape)

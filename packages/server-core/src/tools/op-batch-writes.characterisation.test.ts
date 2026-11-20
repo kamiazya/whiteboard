@@ -144,7 +144,7 @@ async function record(rigged: Rig) {
 
 async function golden(name: string, value: unknown) {
   await expect(`${JSON.stringify(value, null, 2)}\n`).toMatchFileSnapshot(
-    `./__snapshots__/op-batch-writes/${name}.json`,
+    `./__snapshots__/op-batch-writes/${name}.golden`,
   )
 }
 
