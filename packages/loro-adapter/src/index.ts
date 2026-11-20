@@ -51,6 +51,7 @@ export { leaseOps } from './engine/lease-ops.js'
 export { loadCrdtEngine, sharedCrdtEngine } from './engine/load.js'
 export { randomPeerId } from './engine/peer.js'
 export { readValue } from './engine/read-value.js'
+export { openStandalone, type StandaloneRecord } from './engine/standalone.js'
 export type { CrdtEngine } from './engine/types.js'
 export { isEngineTrap } from './engine-trap.js'
 export { type EnvelopeKindBreach, envelopeKindBreach, statedKindSplit } from './envelope-kind.js'
@@ -93,7 +94,7 @@ export {
   setProposedChangeStatus,
   writeProposal,
 } from './proposals.js'
-export { RecordBytesRejectedError, type RecordKind } from './record-kind.js'
+export { RecordBytesRejectedError, type RecordKind, type VersionOrder } from './record-kind.js'
 export {
   bindRecordOps,
   type RecordOps,

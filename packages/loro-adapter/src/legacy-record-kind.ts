@@ -1,11 +1,17 @@
 import { LoroDoc, VersionVector } from 'loro-crdt'
-import { RecordBytesRejectedError, type RecordKind } from './record-kind.js'
+import { RecordBytesRejectedError, type RecordKind, type VersionOrder } from './record-kind.js'
 
 /** The record a keeper holds while it holds a `LoroDoc`. */
 export type LegacyRecord = LoroDoc
 
 function sameVersion(doc: LoroDoc, stored: Uint8Array): boolean {
   return doc.oplogVersion().compare(VersionVector.decode(stored)) === 0
+}
+
+function orderOf(doc: LoroDoc, stored: Uint8Array): VersionOrder {
+  const order = doc.oplogVersion().compare(VersionVector.decode(stored))
+  if (order === undefined) return 'concurrent'
+  return order === 0 ? 'equal' : order < 0 ? 'behind' : 'ahead'
 }
 
 /**
@@ -29,6 +35,7 @@ export const loroDocKind: RecordKind<LegacyRecord> = {
   },
   encodedVersion: (doc) => new Uint8Array(doc.oplogVersion().encode()),
   atVersion: sameVersion,
+  compareVersion: orderOf,
   exportUpdateSince: (doc, stored) =>
     new Uint8Array(
       stored === null

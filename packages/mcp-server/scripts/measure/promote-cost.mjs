@@ -62,5 +62,6 @@ try {
   console.log(`documents ${COUNT}: median ${times[Math.floor(times.length / 2)].toFixed(1)} ms`)
 } finally {
   resetDataDirForTests()
-  process.exit(0)
 }
+// The store's handles keep the process alive; only a run that got here succeeded.
+process.exit(0)

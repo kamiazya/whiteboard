@@ -49,6 +49,21 @@ export interface RecordOps<R> {
   moveView(view: R, frontiers: Uint8Array): void
   /** One document as a document of its own, or `null` when the record holds none. */
   exportProjection(record: R, documentId: string): Uint8Array | null
+  /** The whole record, as a snapshot another replica opens. */
+  exportSnapshot(record: R): Uint8Array
+  /**
+   * The operations after a stored version vector (`RecordVersion.encoded`), or
+   * the whole history for `null`. Importing them into a record that stood at
+   * that version brings it to this one.
+   */
+  exportUpdateSince(record: R, since: Uint8Array | null): Uint8Array
+  /**
+   * The record as a shallow snapshot cut at `version`, a version vector as
+   * `versionAt` answers one. The history before the cut is dropped.
+   */
+  exportShallowSnapshotAt(record: R, version: readonly wire.VersionEntry[]): Uint8Array
+  /** The operations the record's history starts from, as a version vector; empty unless it was cut. */
+  shallowRootVersion(record: R): wire.VersionEntry[]
   /** Gives back a record a view made; a `LoroDoc` needs nothing and a lease frees its handle. */
   release(record: R): void
 }
@@ -82,6 +97,16 @@ export interface RecordSession {
   removedSince(since: readonly wire.VersionEntry[]): RemovedDocument[]
   /** The record as it stood at `frontiers` (bytes `version().encodedFrontiers` answered). */
   view(frontiers: Uint8Array): RecordView
+  /** The whole record as a snapshot another replica opens. */
+  exportSnapshot(): Uint8Array
+  /** The operations after a version vector `version().encoded` answered; all of them for `null`. */
+  exportUpdateSince(since: Uint8Array | null): Uint8Array
+  /** One document as a document of its own, or `null` when the record holds none. */
+  exportProjection(documentId: string): Uint8Array | null
+  /** The record cut at a version vector, history before it dropped (compaction). */
+  exportShallowSnapshotAt(version: readonly wire.VersionEntry[]): Uint8Array
+  /** The operations the record's history starts from, as a version vector. */
+  shallowRootVersion(): wire.VersionEntry[]
   /** Persists what the session changed, announcing it as every save does. */
   save(): Promise<void>
 }
@@ -108,6 +133,11 @@ export function bindRecordOps<R>(
         release: () => ops.release(past),
       }
     },
+    exportSnapshot: () => ops.exportSnapshot(record),
+    exportUpdateSince: (since) => ops.exportUpdateSince(record, since),
+    exportProjection: (documentId) => ops.exportProjection(record, documentId),
+    exportShallowSnapshotAt: (version) => ops.exportShallowSnapshotAt(record, version),
+    shallowRootVersion: () => ops.shallowRootVersion(record),
     save: () => save(record),
   }
 }

@@ -18,13 +18,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { leasedSession } from '../test-utils/leased-session.js'
 import { judgeCarried } from './promote-carried.js'
 
-const tally = { judgements: 0, sizeCharged: 0, projectingReads: 0 }
+/** What judging cost one session, counted per session so no test reads another's. */
+interface Tally {
+  judgements: number
+  sizeCharged: number
+  projectingReads: number
+}
 
 /** The reads that project a document into one of its own: what a judgement costs, per read. */
 const PROJECTING = new Set(['documentJudgement'])
 
 /** `session` with each named read of a past view counted, and the size each judgement was charged. */
-function counted(session: RecordSession): RecordSession {
+function counted(session: RecordSession): { session: RecordSession; tally: Tally } {
+  const tally: Tally = { judgements: 0, sizeCharged: 0, projectingReads: 0 }
   const tallied = async <T>(
     query: Parameters<RecordSession['read']>[0],
     run: () => Promise<T>,
@@ -37,13 +43,18 @@ function counted(session: RecordSession): RecordSession {
     }
     return answer
   }
-  return {
+  const counting: RecordSession = {
     ...session,
     view(frontiers) {
       const view = session.view(frontiers)
       return { ...view, read: (query, shape) => tallied(query, () => view.read(query, shape)) }
     },
   }
+  return { session: counting, tally }
+}
+
+async function countedSession(snapshot: Uint8Array) {
+  return counted(await leasedSession(snapshot))
 }
 
 const DOCUMENT_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'
@@ -96,9 +107,6 @@ function opsUpTo(doc: LoroDoc, frontiers: Frontiers): number {
 }
 
 afterEach(() => {
-  tally.judgements = 0
-  tally.sizeCharged = 0
-  tally.projectingReads = 0
   vi.restoreAllMocks()
 })
 
@@ -124,10 +132,8 @@ describe('judgeCarried, rows at distinct points', () => {
     const { incoming, snapshot, points } = recordWithManyPoints()
     const rows = alternatingRows(points)
     const { crossed } = countCrossings(incoming)
-    const judged = await judgeCarried(counted(await leasedSession(snapshot)), {
-      trash: [],
-      versions: rows,
-    })
+    const { session, tally } = await countedSession(snapshot)
+    const judged = await judgeCarried(session, { trash: [], versions: rows })
     if (judged.kind !== 'admitted') throw new Error(`not admitted: ${judged.kind}`)
     expect(tally.judgements).toBe(POINTS)
     expect(tally.sizeCharged).toBeGreaterThan(POINTS * BODY_CHARS)
@@ -146,7 +152,7 @@ describe('judgeCarried, rows at distinct points', () => {
     const { incoming, snapshot, points } = recordWithManyPoints(1, 120)
     const rows = alternatingRows(points)
     const { crossed } = countCrossings(incoming)
-    const judged = await judgeCarried(counted(await leasedSession(snapshot)), {
+    const judged = await judgeCarried((await countedSession(snapshot)).session, {
       trash: [],
       versions: rows,
     })
@@ -158,11 +164,8 @@ describe('judgeCarried, rows at distinct points', () => {
     const { snapshot, points } = recordWithManyPoints()
     const rows = alternatingRows(points)
     const budget = 10 * BODY_CHARS
-    const judged = await judgeCarried(
-      counted(await leasedSession(snapshot)),
-      { trash: [], versions: rows },
-      budget,
-    )
+    const { session, tally } = await countedSession(snapshot)
+    const judged = await judgeCarried(session, { trash: [], versions: rows }, budget)
     expect(judged).toEqual({ kind: 'over-budget', limit: budget })
     // Refused at the first judgement past the budget, not after all of them.
     expect(tally.judgements).toBeLessThanOrEqual(11)
@@ -171,21 +174,18 @@ describe('judgeCarried, rows at distinct points', () => {
   it('admits rows whose judgements together project exactly the budget', async () => {
     const { snapshot, points } = recordWithManyPoints()
     const rows = alternatingRows(points).slice(0, 4)
-    const exact = await judgeCarried(counted(await leasedSession(snapshot)), {
-      trash: [],
-      versions: rows,
-    })
+    const first = await countedSession(snapshot)
+    const exact = await judgeCarried(first.session, { trash: [], versions: rows })
     if (exact.kind !== 'admitted') throw new Error(`not admitted: ${exact.kind}`)
-    const projected = tally.sizeCharged
-    tally.sizeCharged = 0
+    const projected = first.tally.sizeCharged
     const judged = await judgeCarried(
-      counted(await leasedSession(snapshot)),
+      (await countedSession(snapshot)).session,
       { trash: [], versions: rows },
       projected,
     )
     expect(judged.kind).toBe('admitted')
     const refused = await judgeCarried(
-      counted(await leasedSession(snapshot)),
+      (await countedSession(snapshot)).session,
       { trash: [], versions: rows },
       projected - 1,
     )

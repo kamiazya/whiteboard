@@ -1,6 +1,6 @@
 import { bytesToBase64 } from '@kamiazya/whiteboard-model'
 import { isEngineTrap } from '../engine-trap.js'
-import { RecordBytesRejectedError, type RecordKind } from '../record-kind.js'
+import { RecordBytesRejectedError, type RecordKind, type VersionOrder } from '../record-kind.js'
 import {
   exportSnapshot,
   exportUpdateSince,
@@ -20,6 +20,20 @@ export interface LeaseKindOptions {
 /** The same operations as the engine counts them, as peer to counter. */
 function counters(entries: readonly { peer: string; counter: number }[]): Map<string, number> {
   return new Map(entries.map(({ peer, counter }) => [peer, counter]))
+}
+
+/** How the operations `held` counts relate to the ones `named` counts: a missing peer counts zero. */
+function orderOfCounters(held: Map<string, number>, named: Map<string, number>): VersionOrder {
+  let ahead = false
+  let behind = false
+  for (const peer of new Set([...held.keys(), ...named.keys()])) {
+    const mine = held.get(peer) ?? 0
+    const theirs = named.get(peer) ?? 0
+    if (mine > theirs) ahead = true
+    if (mine < theirs) behind = true
+  }
+  if (ahead && behind) return 'concurrent'
+  return ahead ? 'ahead' : behind ? 'behind' : 'equal'
 }
 
 /**
@@ -61,6 +75,10 @@ export function leaseKind(
         record.engine.decode({ kind: 'version', bytes: bytesToBase64(stored) }).entries,
       )
       return held.size === named.size && [...named].every(([peer, at]) => held.get(peer) === at)
+    },
+    compareVersion(record, stored) {
+      const named = record.engine.decode({ kind: 'version', bytes: bytesToBase64(stored) }).entries
+      return orderOfCounters(counters(versionOf(record).entries), counters(named))
     },
     exportUpdateSince,
     exportSnapshot,

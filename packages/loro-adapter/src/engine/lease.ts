@@ -125,6 +125,36 @@ export function exportSnapshot(lease: RecordLease): Uint8Array {
 }
 
 /**
+ * The record as a shallow snapshot cut at `version` (a version vector, as
+ * `versionAt` answers one): the history before the cut is dropped.
+ */
+export function exportShallowSnapshotAt(
+  lease: RecordLease,
+  version: readonly wire.VersionEntry[],
+): Uint8Array {
+  return bytesOf(
+    exportedBytes(
+      lease.engine.export({
+        handle: lease.handle,
+        mode: 'shallow-snapshot-at-version',
+        version: [...version],
+      }),
+    ),
+  )
+}
+
+/**
+ * The operations the record's history starts from, as a version vector: empty
+ * for a record that was never shallow.
+ */
+export function shallowRootVersion(lease: RecordLease): wire.VersionEntry[] {
+  const { shallowRoot } = lease.engine.version({ handle: lease.handle })
+  return shallowRoot.length === 0
+    ? []
+    : lease.engine.version({ handle: lease.handle, at: shallowRoot }).version
+}
+
+/**
  * One document of a workspace record as a document of its own, content at the
  * root; `null` when the record holds no such document. The bytes open to the
  * same content each time, not to the same bytes.
