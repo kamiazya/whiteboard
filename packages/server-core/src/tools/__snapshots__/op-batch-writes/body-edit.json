@@ -1,0 +1,237 @@
+{
+  "content": {
+    "kind": "markdown",
+    "canvas": {
+      "nodes": [],
+      "edges": []
+    },
+    "skipped": 0,
+    "body": "ONE two three four FIVE six",
+    "threads": [],
+    "proposals": [
+      {
+        "id": "p1",
+        "author": "agent",
+        "createdAt": "2026-01-02T03:04:05.000Z",
+        "changes": [
+          {
+            "id": "c3",
+            "status": "open",
+            "op": "body.replace",
+            "anchor": {
+              "kind": "text",
+              "quote": {
+                "exact": "three"
+              },
+              "start": 8,
+              "end": 13
+            },
+            "text": "3",
+            "assumed": "three"
+          },
+          {
+            "id": "c4",
+            "status": "open",
+            "op": "body.replace",
+            "anchor": {
+              "kind": "text",
+              "quote": {
+                "exact": "six"
+              },
+              "start": 24,
+              "end": 27
+            },
+            "text": "6",
+            "assumed": "six"
+          }
+        ]
+      }
+    ],
+    "nodeLocks": [],
+    "edgeLocks": [],
+    "facets": {
+      "example.sample/v1": {
+        "status": "open"
+      }
+    }
+  },
+  "saves": [
+    {
+      "chunks": 1,
+      "frontierIsTheOplogVersion": true,
+      "docRef": {
+        "kind": "document",
+        "workspaceId": "ws-1",
+        "documentId": "01H8XJZ9K5N4M3P2Q1R0S9T8V7"
+      }
+    },
+    {
+      "chunks": 1,
+      "frontierIsTheOplogVersion": true,
+      "docRef": {
+        "kind": "document",
+        "workspaceId": "ws-1",
+        "documentId": "01H8XJZ9K5N4M3P2Q1R0S9T8V7"
+      }
+    },
+    {
+      "chunks": 1,
+      "frontierIsTheOplogVersion": true,
+      "docRef": {
+        "kind": "document",
+        "workspaceId": "ws-1",
+        "documentId": "01H8XJZ9K5N4M3P2Q1R0S9T8V7"
+      }
+    }
+  ],
+  "events": [
+    {
+      "workspaceId": "ws-1",
+      "documentId": "01H8XJZ9K5N4M3P2Q1R0S9T8V7",
+      "path": "doc",
+      "keys": [
+        "doc",
+        "documentId",
+        "path",
+        "workspaceId"
+      ],
+      "contentOfDoc": {
+        "kind": "markdown",
+        "canvas": {
+          "nodes": [],
+          "edges": []
+        },
+        "skipped": 0,
+        "body": "ONE two three four FIVE six",
+        "threads": [],
+        "proposals": [],
+        "nodeLocks": [],
+        "edgeLocks": [],
+        "facets": {
+          "example.sample/v1": {
+            "status": "open"
+          }
+        }
+      }
+    },
+    {
+      "workspaceId": "ws-1",
+      "documentId": "01H8XJZ9K5N4M3P2Q1R0S9T8V7",
+      "path": "doc",
+      "keys": [
+        "doc",
+        "documentId",
+        "path",
+        "workspaceId"
+      ],
+      "contentOfDoc": {
+        "kind": "markdown",
+        "canvas": {
+          "nodes": [],
+          "edges": []
+        },
+        "skipped": 0,
+        "body": "ONE two three four FIVE six",
+        "threads": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "author": "agent",
+            "createdAt": "2026-01-02T03:04:05.000Z",
+            "changes": [
+              {
+                "id": "c3",
+                "status": "open",
+                "op": "body.replace",
+                "anchor": {
+                  "kind": "text",
+                  "quote": {
+                    "exact": "three"
+                  },
+                  "start": 8,
+                  "end": 13
+                },
+                "text": "3",
+                "assumed": "three"
+              }
+            ]
+          }
+        ],
+        "nodeLocks": [],
+        "edgeLocks": [],
+        "facets": {
+          "example.sample/v1": {
+            "status": "open"
+          }
+        }
+      }
+    },
+    {
+      "workspaceId": "ws-1",
+      "documentId": "01H8XJZ9K5N4M3P2Q1R0S9T8V7",
+      "path": "doc",
+      "keys": [
+        "doc",
+        "documentId",
+        "path",
+        "workspaceId"
+      ],
+      "contentOfDoc": {
+        "kind": "markdown",
+        "canvas": {
+          "nodes": [],
+          "edges": []
+        },
+        "skipped": 0,
+        "body": "ONE two three four FIVE six",
+        "threads": [],
+        "proposals": [
+          {
+            "id": "p1",
+            "author": "agent",
+            "createdAt": "2026-01-02T03:04:05.000Z",
+            "changes": [
+              {
+                "id": "c3",
+                "status": "open",
+                "op": "body.replace",
+                "anchor": {
+                  "kind": "text",
+                  "quote": {
+                    "exact": "three"
+                  },
+                  "start": 8,
+                  "end": 13
+                },
+                "text": "3",
+                "assumed": "three"
+              },
+              {
+                "id": "c4",
+                "status": "open",
+                "op": "body.replace",
+                "anchor": {
+                  "kind": "text",
+                  "quote": {
+                    "exact": "six"
+                  },
+                  "start": 24,
+                  "end": 27
+                },
+                "text": "6",
+                "assumed": "six"
+              }
+            ]
+          }
+        ],
+        "nodeLocks": [],
+        "edgeLocks": [],
+        "facets": {
+          "example.sample/v1": {
+            "status": "open"
+          }
+        }
+      }
+    }
+  ]
+}
