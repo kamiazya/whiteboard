@@ -326,11 +326,12 @@ async function lendRecord(
   }
   const doc = await openFollowed(workspaceId, scope, open)
   if (doc === null) return null
-  // Kept a moment ago; a record already gone from the cache is the caller's alone.
+  // Kept a moment ago; a record already gone from the cache is the caller's
+  // alone, and a different one kept under the key since is a loan nobody wants.
   const lent = records.acquire(key)
-  return lent === undefined || lent.handle !== doc
-    ? { doc, give: () => {} }
-    : { doc, give: lent.give }
+  if (lent !== undefined && lent.handle === doc) return { doc, give: lent.give }
+  lent?.give()
+  return { doc, give: () => {} }
 }
 
 /**

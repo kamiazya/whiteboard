@@ -30,8 +30,11 @@ const {
   evictWorkspaceDocCache,
   _clearWorkspaceDocCacheForTests,
   _workspaceRecordReleasesForTests,
+  _workspaceRecordLoansForTests,
   WORKSPACE_DOC_CACHE_MAX_ENTRIES,
 } = await import('./workspace-doc-cache.js')
+const { RecordCache } = await import('./record-cache.js')
+const { LoroDoc } = await import('loro-crdt')
 const { globalStoreScope } = await import('./store-scope.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
@@ -114,5 +117,29 @@ describe('a bracket over the workspace record', () => {
     const releases = _workspaceRecordReleasesForTests()
     for (let i = 0; i <= WORKSPACE_DOC_CACHE_MAX_ENTRIES; i++) await getWorkspaceDoc(ws(i))
     expect(releases).toHaveLength(1)
+  })
+
+  it('gives back the loan it took of a record another cold open kept in its place', async () => {
+    await getWorkspaceDoc(ws(0))
+    _clearWorkspaceDocCacheForTests()
+    // A second cold open's keep lands between this one's keep and its acquire.
+    const keep = RecordCache.prototype.keep
+    let interleaved = false
+    vi.spyOn(RecordCache.prototype, 'keep').mockImplementation(function (
+      this: InstanceType<typeof RecordCache>,
+      key: string,
+      workspaceId: string,
+      held: object,
+    ) {
+      keep.call(this, key, workspaceId, held)
+      if (interleaved) return
+      interleaved = true
+      keep.call(this, key, workspaceId, new LoroDoc())
+    })
+
+    await withStoredWorkspaceRecord(ws(0), globalStoreScope, async () => {})
+
+    expect(interleaved).toBe(true)
+    expect(_workspaceRecordLoansForTests()).toBe(0)
   })
 })
