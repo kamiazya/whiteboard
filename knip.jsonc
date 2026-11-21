@@ -111,6 +111,9 @@
       "project": ["src/**/*.ts"]
     },
     "packages/reference-graph": {
+      // The oracle recorder is run by hand (its header says how) and shares
+      // its replay with the recorded-oracle test.
+      "entry": ["scripts/record-graph-oracle.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/scene": {
@@ -133,6 +136,9 @@
       "project": ["src/**/*.ts"]
     },
     "packages/workspace-index": {
+      // The oracle recorder is run by hand (its header says how) and shares
+      // its replay and pinned-clock helpers with the recorded-oracle test.
+      "entry": ["scripts/record-index-oracle.ts"],
       "project": ["src/**/*.ts"],
       "ignoreIssues": {
         // The record seam consumers move onto one at a time: the generic
