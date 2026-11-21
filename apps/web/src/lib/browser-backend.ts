@@ -15,7 +15,7 @@ import {
   type DocumentKind,
   type documentEngine as wire,
 } from '@kamiazya/whiteboard-model'
-import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
+import { type BlobStore, isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocCursor, WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { z } from 'zod'
 import { getAppLogger } from './app-logger.js'
@@ -23,6 +23,7 @@ import { saveAndAnnounce } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { touchContentTimestamp } from './content-timestamp.js'
+import { IdbBlobStore } from './idb-blob-store.js'
 import {
   listenToWorkspace,
   type WorkspaceBroadcast,
@@ -102,6 +103,42 @@ function writeUnjudged(record: RecordLease, batch: wire.Write[]): Uint8Array | n
 
 const entryShape = z.custom<unknown>()
 
+/**
+ * Puts every document an import removed in the trash, as the keeper's own
+ * delete does: its bytes as they stood before the import, stored first, then
+ * the row naming them, all before the save. Stored the other way round, or not
+ * at all, the removed node cannot be revived and a later compaction drops its
+ * content.
+ */
+async function evacuateRemoved(
+  blobs: BlobStore,
+  record: RecordLease,
+  since: readonly wire.VersionEntry[],
+): Promise<void> {
+  const deletedAt = Date.now()
+  for (const { documentId, path, name, folderNames, bytes } of lease.removedSince(record, since)) {
+    const { ref } = await blobs.put({
+      bytes: new Uint8Array(bytes),
+      contentType: 'application/octet-stream',
+    })
+    writeUnjudged(record, [
+      {
+        op: 'recordTrashEntry',
+        args: {
+          entry: {
+            documentId,
+            path,
+            ...(name === undefined ? {} : { name }),
+            ...(folderNames === undefined ? {} : { folderNames }),
+            deletedAt,
+            blob: ref,
+          },
+        },
+      },
+    ])
+  }
+}
+
 async function holdsDocument(record: RecordLease, documentId: string): Promise<boolean> {
   const entry = await lease.read(
     record,
@@ -150,6 +187,12 @@ export class BrowserBackend implements DocumentBackend {
   private workspaceId: string | null = null
   /** The workspace left this browser: nothing more is written, and the page has been told. */
   private removed = false
+  /**
+   * A record this backend dropped for another loaded from storage. Work already
+   * queued, or heard from another tab, holds the record it was made with; it
+   * lands on the one that replaced it.
+   */
+  private readonly replaced = new Map<RecordLease, RecordLease>()
   /** Serializes all write operations (pushLocalUpdate) to prevent TOCTOU races. */
   private _writeQueue: Promise<void> = Promise.resolve()
   /** This connection's end of the record's channel to the other tabs. */
@@ -157,7 +200,11 @@ export class BrowserBackend implements DocumentBackend {
   /** How far into the stored record a catch-up has read this copy; null before the first. */
   private cursor: WorkspaceDocCursor | null = null
 
-  constructor(target: BrowserBackendTarget, docs?: WorkspaceDocs<RecordLease>) {
+  constructor(
+    target: BrowserBackendTarget,
+    docs?: WorkspaceDocs<RecordLease>,
+    private readonly blobs: BlobStore = new IdbBlobStore(),
+  ) {
     this.target = target
     this.docs = docs ?? new BrowserWorkspaceRecords()
   }
@@ -241,10 +288,11 @@ export class BrowserBackend implements DocumentBackend {
    * over, not lost under, the restore.
    */
   applyRestore(past: Uint8Array, label?: string): Promise<void> {
-    const record = this.record
+    const captured = this.record
     const workspaceId = this.workspaceId
     const handlers = this.handlers
     const run = async (): Promise<void> => {
+      const record = captured === null ? null : this.live(captured)
       if (record === null || workspaceId === null || handlers === null) {
         throw new Error('restore before the document was delivered')
       }
@@ -292,12 +340,14 @@ export class BrowserBackend implements DocumentBackend {
     // A push before the snapshot was delivered has nothing to land on — the
     // session cannot produce one, since its doc exists only after onSnapshot.
     if (record === null || workspaceId === null || this.removed) return
+    record = this.live(record)
     try {
       // Refused before it lands: once imported, the bytes would ride the next
       // save whatever this one decided. Judged whatever the kind — a canvas's
       // node text, labels and comment messages are bounded as a note's body
       // is, and a record holding one past its bound is one the daemon refuses
       // to take on promotion.
+      const since = lease.versionOf(record).entries
       const imported = lease.importBytes(record, bytes, 'text')
       if (imported.outcome === 'refused') {
         getAppLogger('browser-backend').warn('refused an update past a text limit', {
@@ -307,6 +357,7 @@ export class BrowserBackend implements DocumentBackend {
         this.refuse(refusalOf(imported.breach), record, handlers)
         return
       }
+      if (!(await this.trashRemoved(record, since, workspaceId, handlers))) return
       // A note is named after its body's heading while nobody has named it —
       // before the save, so the name rides the same write. No kind check: a
       // canvas has an empty body container, so it announces no title and the
@@ -327,6 +378,30 @@ export class BrowserBackend implements DocumentBackend {
     } catch (err) {
       if (isWorkspaceRemovedError(err)) this.withdraw(record, handlers)
       else this.handlers?.onError?.('storage-failure')
+    }
+  }
+
+  /**
+   * What the update removed goes to the trash before it is saved, so the
+   * removal never reaches the store without a way back. When that fails the
+   * removal is already in this copy with no way back: not saved, and not
+   * kept — the stored record replaces it and the push is refused as a whole,
+   * so the session pushes what it holds again. Answers whether to go on.
+   */
+  private async trashRemoved(
+    record: RecordLease,
+    since: Parameters<typeof evacuateRemoved>[2],
+    workspaceId: string,
+    handlers: DocumentBackendHandlers | null,
+  ): Promise<boolean> {
+    try {
+      await evacuateRemoved(this.blobs, record, since)
+      return true
+    } catch (err) {
+      getAppLogger('browser-backend').warn('trashing what an update removed failed', err)
+      await this.reloadFromStorage(workspaceId, record, handlers)
+      this.handlers?.onError?.('storage-failure')
+      return false
     }
   }
 
@@ -374,6 +449,44 @@ export class BrowserBackend implements DocumentBackend {
     return this.disconnected || this.handlers !== handlers
   }
 
+  /** The record `held` stands for now: itself, or what replaced it. */
+  private live(held: RecordLease): RecordLease {
+    let record = held
+    for (
+      let next = this.replaced.get(record);
+      next !== undefined;
+      next = this.replaced.get(record)
+    ) {
+      record = next
+    }
+    return record
+  }
+
+  /**
+   * Drops a record that holds ops which were never saved and may not be, for the
+   * stored one, and hands the session that. The daemon does the same when a
+   * write fails after its import: kept, the record would carry those ops into
+   * the next save, which would persist them as though they had been accepted.
+   */
+  private async reloadFromStorage(
+    workspaceId: string,
+    stale: RecordLease,
+    handlers: DocumentBackendHandlers | null,
+  ): Promise<void> {
+    const fresh = await this.docs.create(workspaceId)
+    this.replaced.set(stale, fresh)
+    if (this.record === stale) this.record = fresh
+    stale.release()
+    if (this.record !== fresh) {
+      // The backend let go of the record meanwhile: the reload is nobody's.
+      fresh.release()
+      return
+    }
+    if (handlers !== null && !this.isStale(handlers)) {
+      handlers.onSnapshot(lease.exportSnapshot(fresh))
+    }
+  }
+
   /** Persists the record and hands what it wrote to the other tabs holding it. */
   private async saveAndTellOtherTabs(workspaceId: string, record: RecordLease): Promise<void> {
     await saveAndAnnounce(this.docs, workspaceId, record, this.broadcast)
@@ -419,7 +532,7 @@ export class BrowserBackend implements DocumentBackend {
   ): void {
     if (this.isStale(handlers)) return
     if (message.type === 'workspace-removed') {
-      this._writeQueue = this._writeQueue.then(() => this.withdraw(record, handlers))
+      this._writeQueue = this._writeQueue.then(() => this.withdraw(this.live(record), handlers))
       return
     }
     if (message.type === 'version-created') {
@@ -436,7 +549,7 @@ export class BrowserBackend implements DocumentBackend {
       (message.type === 'document-renamed' && message.documentId === this.target.documentId)
     if (catchUp) {
       this._writeQueue = this._writeQueue.then(() =>
-        this.catchUpWithStore(workspaceId, record, handlers),
+        this.catchUpWithStore(workspaceId, this.live(record), handlers),
       )
       return
     }
@@ -444,13 +557,15 @@ export class BrowserBackend implements DocumentBackend {
     if (message.type !== 'update') return
     this._writeQueue = this._writeQueue.then(async () => {
       if (this.isStale(handlers)) return
-      const merged = importFromAnotherTab(record, message.bytes)
+      const merged = importFromAnotherTab(this.live(record), message.bytes)
       if (merged === 'skipped') return
       handlers.onRemoteUpdate(message.bytes)
       // Bytes that build on record writes this copy never received — the
       // index's create, move or pin, whose saves announce no bytes — stay
       // pending until it has them, and the record does.
-      if (merged === 'pending') await this.catchUpWithStore(workspaceId, record, handlers)
+      if (merged === 'pending') {
+        await this.catchUpWithStore(workspaceId, this.live(record), handlers)
+      }
     })
   }
 
