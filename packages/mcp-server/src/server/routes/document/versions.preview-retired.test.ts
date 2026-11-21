@@ -1,9 +1,7 @@
 /**
  * Previewing a saved version whose state holds a shape no reader serves any
- * more is refused rather than shown as an empty document. Nothing on this route
- * maps the refusal, so it answers as an unhandled error does (500); the restore
- * of the same version answers 400. Pinned as it is so a move of the read keeps
- * the answer it has.
+ * more is refused rather than shown as an empty document, with the 400 and code
+ * the restore of the same version answers.
  */
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -48,7 +46,7 @@ function updateOf(edit: (doc: LoroDoc) => void): Uint8Array<ArrayBuffer> {
 }
 
 describe('GET /versions/:id/document over a version holding a retired shape', () => {
-  it('is refused, as an unhandled error, and a plain version still previews', async () => {
+  it('is refused as a retired stored shape, and a plain version still previews', async () => {
     const app = createDocumentRouter(
       testDocumentRouterOptions({ serverDeps, autoVersionQuietMs: 60_000 }),
     )
@@ -86,6 +84,7 @@ describe('GET /versions/:id/document over a version holding a retired shape', ()
     const ok = await preview(plain.id)
     expect(ok.status).toBe(200)
     const refused = await preview(old.id)
-    expect(refused.status).toBe(500)
+    expect(refused.status).toBe(400)
+    expect(((await refused.json()) as { error: string }).error).toBe('retired_stored_shape')
   })
 })

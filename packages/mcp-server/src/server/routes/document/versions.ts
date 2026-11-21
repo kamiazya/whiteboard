@@ -6,7 +6,7 @@ import {
   saveVersionRequestSchema,
   type VersionDocumentResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { openStandalone } from '@kamiazya/whiteboard-loro-adapter'
+import { openStandalone, RetiredStoredShapeError } from '@kamiazya/whiteboard-loro-adapter'
 import {
   errorBody,
   invalidRequestBody,
@@ -69,6 +69,16 @@ const pastVersionCeiling: ErrorAnswer = (err) => {
   const body: SaveVersionRefusal = { error: err.code, message: err.message }
   return { status: err.status, body }
 }
+
+/**
+ * A past state stored in a shape this version no longer reads: refused as a
+ * restore of the same version is, since both open that past state and neither
+ * can do anything with it.
+ */
+const retiredPastShape: ErrorAnswer = (err) =>
+  err instanceof RetiredStoredShapeError
+    ? { status: 400, body: errorBody(err.code, err.message) }
+    : null
 
 const SAVE_VERSION_ANSWERS: readonly ErrorAnswer[] = [
   pastVersionCeiling,
@@ -179,7 +189,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
       const response = await pastContent(past, workspaceId, path, scope)
       return c.json(response)
     } catch (err) {
-      const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)
+      const owned = firstOwned(err, [retiredPastShape, ...STORED_DOCUMENT_ANSWERS])
       if (owned) return c.json(owned.body, owned.status)
       throw err
     }
