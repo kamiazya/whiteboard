@@ -7,6 +7,7 @@
  * tell apart, and what an eviction that loses state would change.
  */
 
+import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -38,7 +39,7 @@ const {
   saveWorkspaceDoc,
   _clearWorkspaceDocCacheForTests,
   evictWorkspaceDocCache,
-  WORKSPACE_DOC_CACHE_MAX_ENTRIES,
+  workspaceDocCacheMaxEntries,
 } = await import('./workspace-doc-cache.js')
 const { loadDocument, saveDocument, onWorkspaceDocUpdated } = await import('./document-store.js')
 const { getDb } = await import('./db/index.js')
@@ -72,7 +73,7 @@ async function openRange(from: number, to: number): Promise<LoroDoc[]> {
 
 describe('the workspace-record cache bound', () => {
   it('keeps at most the bound resident, dropping the least recently used', async () => {
-    const N = WORKSPACE_DOC_CACHE_MAX_ENTRIES
+    const N = workspaceDocCacheMaxEntries()
     expect(N).toBeGreaterThan(1)
     const opened = await openRange(0, N + 1)
 
@@ -85,7 +86,7 @@ describe('the workspace-record cache bound', () => {
   })
 
   it('counts a hit as a use, so a touched record outlives an untouched one', async () => {
-    const N = WORKSPACE_DOC_CACHE_MAX_ENTRIES
+    const N = workspaceDocCacheMaxEntries()
     const opened = await openRange(0, N)
     expect(await getWorkspaceDoc(ws(0))).toBe(opened[0])
 
@@ -96,7 +97,7 @@ describe('the workspace-record cache bound', () => {
   })
 
   it('reopens an evicted record with the same content and frontier', async () => {
-    const N = WORKSPACE_DOC_CACHE_MAX_ENTRIES
+    const N = workspaceDocCacheMaxEntries()
     const first = await getWorkspaceDoc(ws(0))
     first.getMap('probe').set('k', 'v')
     first.commit()
@@ -113,7 +114,7 @@ describe('the workspace-record cache bound', () => {
   })
 
   it('never evicts a record whose write lock is held', async () => {
-    const N = WORKSPACE_DOC_CACHE_MAX_ENTRIES
+    const N = workspaceDocCacheMaxEntries()
     let release!: () => void
     const released = new Promise<void>((resolve) => {
       release = resolve
@@ -144,7 +145,7 @@ describe('the workspace-record cache bound', () => {
   })
 
   it('drops a record once its lock is released and it is least recently used', async () => {
-    const N = WORKSPACE_DOC_CACHE_MAX_ENTRIES
+    const N = workspaceDocCacheMaxEntries()
     let held!: LoroDoc
     await withWorkspaceWriteLock(ws(0), async () => {
       held = await getWorkspaceDoc(ws(0))
@@ -200,7 +201,7 @@ describe('a dropped workspace record and what was derived from it', () => {
     await saveDocument(ws(0), 'd', canvasDoc('before'), { kind: 'spatial' })
     expect(textOf(await loadDocument(ws(0), 'd'))).toBe('before')
 
-    await openRange(1, WORKSPACE_DOC_CACHE_MAX_ENTRIES + 1)
+    await openRange(1, workspaceDocCacheMaxEntries() + 1)
     await foreignEdit(ws(0), 'd', 'after')
 
     const served = await loadDocument(ws(0), 'd')
@@ -217,7 +218,7 @@ describe('a dropped workspace record and what was derived from it', () => {
       if (workspaceId === ws(0)) replica.import(update)
     })
     try {
-      await openRange(1, WORKSPACE_DOC_CACHE_MAX_ENTRIES + 1)
+      await openRange(1, workspaceDocCacheMaxEntries() + 1)
       await foreignEdit(ws(0), 'd', 'after')
 
       const reopened = await getWorkspaceDoc(ws(0))
@@ -232,7 +233,7 @@ describe('a dropped workspace record and what was derived from it', () => {
   // remembered from an earlier drop must not be announced from either.
   it('announces nothing on reopen once an explicit eviction followed the drop', async () => {
     await saveDocument(ws(0), 'd', canvasDoc('before'), { kind: 'spatial' })
-    await openRange(1, WORKSPACE_DOC_CACHE_MAX_ENTRIES + 1)
+    await openRange(1, workspaceDocCacheMaxEntries() + 1)
     evictWorkspaceDocCache(ws(0))
     const announced: string[] = []
     const off = onWorkspaceDocUpdated((workspaceId) => {
@@ -251,7 +252,7 @@ describe('a dropped workspace record and what was derived from it', () => {
 
 describe('the bound after a write lock releases', () => {
   it('trims back to the bound on the next access once locks release', async () => {
-    const N = WORKSPACE_DOC_CACHE_MAX_ENTRIES
+    const N = workspaceDocCacheMaxEntries()
     let release!: () => void
     const released = new Promise<void>((resolve) => {
       release = resolve

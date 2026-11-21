@@ -36,8 +36,11 @@ export interface RecordCacheOptions<H> {
    * sets an idle time owns the worker that arms it, and declares it as one.
    */
   readonly schedule?: (run: () => void, ms: number) => { cancel(): void }
-  /** The entry the bound dropped, as it leaves; not called for an eviction by name. */
-  readonly onBoundDrop?: (key: string, handle: H) => void
+  /**
+   * The entry the bound or the idle time dropped, as it leaves: a reopen has
+   * nothing that followed it meanwhile. Not called for an eviction by name.
+   */
+  readonly onLapse?: (key: string, handle: H) => void
   readonly now?: () => number
   /** A handle taken on loan (+1) or given back (-1), for a caller that accounts for loans by handle. */
   readonly onLoan?: (handle: H, change: 1 | -1) => void
@@ -153,7 +156,7 @@ export class RecordCache<H> {
       if (excess <= 0) break
       if (candidate === keep || this.options.pinned(entry.workspaceId)) continue
       this.entries.delete(candidate)
-      this.options.onBoundDrop?.(candidate, entry.handle)
+      this.options.onLapse?.(candidate, entry.handle)
       this.drop(entry)
       excess -= 1
     }
@@ -169,6 +172,7 @@ export class RecordCache<H> {
       if (entry.refs > 0 || this.options.pinned(entry.workspaceId)) continue
       if (now - entry.lastUsed < idleMs) continue
       this.entries.delete(key)
+      this.options.onLapse?.(key, entry.handle)
       this.drop(entry)
     }
     this.arm()

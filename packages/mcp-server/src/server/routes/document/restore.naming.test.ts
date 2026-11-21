@@ -1,3 +1,4 @@
+import '../../store/_test-loro-records.js'
 import {
   readWorkspaceNodes,
   setWorkspaceDocumentName,

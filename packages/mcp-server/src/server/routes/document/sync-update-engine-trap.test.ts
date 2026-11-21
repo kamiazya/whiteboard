@@ -9,6 +9,7 @@
  * that trapped answers `document_engine_trap`, and the next request is served
  * by a fresh instance.
  */
+import '../../store/_test-loro-records.js'
 import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'

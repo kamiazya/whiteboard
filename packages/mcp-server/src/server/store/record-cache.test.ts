@@ -18,8 +18,11 @@ let released: string[]
 let locked: Set<string>
 let now: number
 
+let lapsed: string[]
+
 function cache(options: { maxEntries?: number; idleMs?: number } = {}) {
   return new RecordCache<Handle>({
+    onLapse: (key) => lapsed.push(key),
     maxEntries: options.maxEntries ?? 3,
     idleMs: options.idleMs,
     schedule: (run, ms) => {
@@ -34,6 +37,7 @@ function cache(options: { maxEntries?: number; idleMs?: number } = {}) {
 
 beforeEach(() => {
   released = []
+  lapsed = []
   locked = new Set()
   now = 0
   vi.useFakeTimers()
@@ -127,6 +131,23 @@ describe('a handle replaced or evicted by name', () => {
     expect(released).toEqual(['a'])
     lent?.give()
     expect(released).toEqual(['a', 'b'])
+  })
+})
+
+describe('an entry that lapses', () => {
+  it('is reported when the bound or the idle time drops it, and not when it is evicted by name', () => {
+    const records = cache({ maxEntries: 1, idleMs: 1000 })
+    records.keep('a', 'wa', handle('a'))
+    records.keep('b', 'wb', handle('b'))
+    expect(lapsed).toEqual(['a'])
+
+    now = 1000
+    vi.advanceTimersByTime(1000)
+    expect(lapsed).toEqual(['a', 'b'])
+
+    records.keep('c', 'wc', handle('c'))
+    records.evict('c')
+    expect(lapsed).toEqual(['a', 'b'])
   })
 })
 

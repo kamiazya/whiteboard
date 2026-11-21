@@ -6,6 +6,7 @@
  * shadowed; one at its manual ceiling is left out of `recorded` without failing
  * the rest.
  */
+import '../../store/_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

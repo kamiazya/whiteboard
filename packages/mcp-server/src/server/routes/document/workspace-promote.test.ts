@@ -4,6 +4,7 @@
  * pin (ADR-0050 decision 3), so an attestation sent beside the bytes names a
  * credential nothing here can check, and is refused before anything lands.
  */
+import '../../store/_test-loro-records.js'
 import { createHash } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'

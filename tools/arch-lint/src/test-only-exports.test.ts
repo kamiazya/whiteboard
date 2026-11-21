@@ -209,8 +209,14 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "the stored-or-nothing record as a document, which the cache's own tests and the store tests inspect the cached instance through; shipped reads take it through `withStoredWorkspaceRecord`, which lends it, and the cache's `WorkspaceDocs.open` is its one shipped caller",
   'packages/mcp-server/src/server/store/document-store.ts#saveDocument':
     'a document handed to the store as a LoroDoc, which the store and route tests build their fixtures with; its shipped caller is `saveDocumentBytes` beside it, which opens the bytes it is given as a document first',
-  'packages/workspace-index/src/index-record-kind.ts#leaseIndexKind':
-    'the index over engine leases, which only its tests build until the consumers move from the LoroDoc default onto leases and pass it as the index kind',
+  'packages/loro-adapter/src/workspace-tree.ts#resolveWorkspaceDocument':
+    "the document a path names, read from a LoroDoc workspace record, which the store tests inspect the cached instance through; shipped reads resolve a path through a record session's `workspaceDocumentEntry` query, which both record kinds answer",
+  'packages/mcp-server/src/server/store/workspace-doc-cache.ts#workspaceDocCacheMaxEntries':
+    "how many records the active kind keeps resident, which the cache's tests fill past to watch the bound drop one; nothing shipped asks, since the cache applies it itself",
+  'packages/mcp-server/src/server/store/workspace-doc-cache.ts#releaseWorkspaceDocLoan':
+    'gives back the loan a cache-backed `WorkspaceDocs` made of a record, which the store tests do for a record they opened through it; shipped holders release it through the index kind `cacheBackedRecordKind` builds',
+  'packages/mcp-server/src/server/store/workspace-record-kind.ts#LEASE_IDLE_MS':
+    "how long an unused lease is kept, which the idle-release test advances time past; the lease kind's own `idleMs` is the one shipped reader",
   'packages/canvas-render/src/edge-arrows.ts#edgeArrowEnds':
     "which ends of an edge carry an arrowhead, the TypeScript statement of the rule the core's routing is checked against: its shipped consumers left with the TypeScript SVG backend (ADR-0054 A3.6), and edge-touching-boxes.rust.test.ts asks it, independently of the core, whether the router's touching-box path ends in a head",
   'packages/scene/src/scene-graph.ts#ShapeSceneNode':

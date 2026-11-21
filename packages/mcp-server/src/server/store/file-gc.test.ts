@@ -1,3 +1,4 @@
+import './_test-loro-records.js'
 import { mkdir, mkdtemp, readdir, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -36,7 +37,6 @@ const WS_UNREADABLE = '01MVE8AT3F5JXZ49DZMVQ0W37V'
 const WS_V = '011NS8H5QYXT03TKXY3CSNQBWB'
 
 let tempDir: string
-
 vi.mock('../config.js', () => ({
   get DATA_DIR() {
     return tempDir

@@ -9,6 +9,7 @@
  * workspace holding versions under the SAME documentId, and a sweep keyed
  * on documentId alone would take them.
  */
+import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

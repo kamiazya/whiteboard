@@ -11,6 +11,7 @@ import { type AutoVersionTrigger, createAutoVersionTrigger } from './store/auto-
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { emitWorkspaceDocUpdated, followWorkspaceRecord } from './store/document-store.js'
 import { createFileGcSweeper } from './store/file-gc-sweeper.js'
+import { recordIdleReleaseWorker } from './store/record-idle-release.js'
 import {
   DEFAULT_BACKUP_CRON,
   parseBackupDir,
@@ -331,6 +332,26 @@ function autoCompactWork(scope: StoreScope): BackgroundWork {
   }
 }
 
+function recordIdleReleaseWork(): BackgroundWork {
+  return {
+    name: 'record-idle-release',
+    trigger:
+      'a workspace record nobody has used for five minutes, when records are held as engine ' +
+      'leases (WHITEBOARD_RECORD_KIND, `lease` by default); a LoroDoc is freed by collecting it',
+    instances: {
+      runs: 'every-instance',
+      because:
+        'each process holds its OWN records in its own engine and gives back what it is not ' +
+        'using; a leader could not release another process memory',
+    },
+    loop: LOOP_COSTS['record-idle-release'],
+    // `start` arms the wait the cache schedules its idle sweep with; `stop`
+    // cancels it. The stdio entry does not arm it: that process lives as long as
+    // one client session, so the bound alone holds what it keeps.
+    worker: recordIdleReleaseWorker,
+  }
+}
+
 /** The declarations both roots run, each answering the registry's three questions once. */
 export function sharedBackgroundWork(
   workers: SharedWorkers,
@@ -342,6 +363,7 @@ export function sharedBackgroundWork(
   return [
     autoCheckpointWork(arming.checkpointScheduler),
     autoCompactWork(workers.scope),
+    recordIdleReleaseWork(),
     {
       name: 'file-gc-sweeper',
       trigger: 'every WHITEBOARD_FILE_GC_INTERVAL_MS (24h by default); the sweeper resolves it',

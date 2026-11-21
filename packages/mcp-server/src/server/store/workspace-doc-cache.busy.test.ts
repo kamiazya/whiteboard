@@ -7,10 +7,11 @@
  * where "corrupt" sends an operator looking for damage that is not there.
  */
 
+import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import { RecordStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
@@ -49,8 +50,8 @@ describe('opening the workspace record while the database is busy', () => {
     ['an extended busy code', { code: 'SQLITE_ERROR', extendedCode: 'SQLITE_BUSY_SNAPSHOT' }],
   ])('rethrows %s as itself, not as corrupt stored data', async (_name, codes) => {
     const err = Object.assign(new Error('database is locked'), codes)
-    vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open').mockRejectedValue(err)
-    vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'create').mockRejectedValue(err)
+    vi.spyOn(RecordStoreWorkspaceDocs.prototype, 'open').mockRejectedValue(err)
+    vi.spyOn(RecordStoreWorkspaceDocs.prototype, 'create').mockRejectedValue(err)
 
     const read = await openWorkspaceDocIfStored(WS).catch((e: unknown) => e)
     const write = await getWorkspaceDoc(WS).catch((e: unknown) => e)
@@ -62,7 +63,7 @@ describe('opening the workspace record while the database is busy', () => {
   })
 
   it('still reports a record that will not decode as corrupt stored data', async () => {
-    vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open').mockRejectedValue(
+    vi.spyOn(RecordStoreWorkspaceDocs.prototype, 'open').mockRejectedValue(
       new Error('wasm decode failed'),
     )
 

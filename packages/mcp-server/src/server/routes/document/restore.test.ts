@@ -1,3 +1,4 @@
+import '../../store/_test-loro-records.js'
 import {
   writeMarkdownBody,
   writeSpatialCanvas,
@@ -298,9 +299,9 @@ describe('POST /api/workspaces/:workspaceId/documents/:documentId/versions/:id/r
     // Fail the workspace-record save itself — the persistence step at the
     // end of the restore — after reconcile+commit have already mutated the
     // live workspace doc.
-    const { DocumentStoreWorkspaceDocs } = await import('@kamiazya/whiteboard-workspace-index')
+    const { RecordStoreWorkspaceDocs } = await import('@kamiazya/whiteboard-workspace-index')
     const saveSpy = vi
-      .spyOn(DocumentStoreWorkspaceDocs.prototype, 'save')
+      .spyOn(RecordStoreWorkspaceDocs.prototype, 'save')
       .mockRejectedValueOnce(new Error('simulated snapshot failure'))
 
     const restoreRes = await app.request(

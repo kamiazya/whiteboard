@@ -17,6 +17,7 @@
  * Deterministic rather than racy: the writer holds the lock across the
  * whole window, so the interleaving is imposed instead of hoped for.
  */
+import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

@@ -10,7 +10,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { describeUnderBothRecordKinds } from './_test-record-kinds.js'
 
 let tempDir: string
 vi.mock('../config.js', () => ({
@@ -23,23 +24,26 @@ vi.mock('../config.js', () => ({
 }))
 
 const {
-  getWorkspaceDoc,
   withWorkspaceRecord,
   withStoredWorkspaceRecord,
   withPersistedWorkspaceRecord,
   evictWorkspaceDocCache,
   _clearWorkspaceDocCacheForTests,
   _workspaceRecordReleasesForTests,
+  workspaceDocCacheMaxEntries,
   _workspaceRecordLoansForTests,
-  WORKSPACE_DOC_CACHE_MAX_ENTRIES,
 } = await import('./workspace-doc-cache.js')
 const { RecordCache } = await import('./record-cache.js')
-const { LoroDoc } = await import('loro-crdt')
+const { workspaceRecordKindNamed } = await import('./workspace-record-kind.js')
 const { globalStoreScope } = await import('./store-scope.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 const ws = (i: number) => workspaceIdFor(`ws-lend-${i}`)
+
+/** Opens the record into the cache and gives the loan back. */
+const warm = (workspaceId: string) =>
+  withWorkspaceRecord(workspaceId, globalStoreScope, async () => {})
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'ws-doc-lend-'))
@@ -52,10 +56,10 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true })
 })
 
-describe('a bracket over the workspace record', () => {
+describeUnderBothRecordKinds('a bracket over the workspace record', (kind) => {
   it('holds the record past the entry it was lent from, and gives it back when it ends', async () => {
     const releases = _workspaceRecordReleasesForTests()
-    await getWorkspaceDoc(ws(0))
+    await warm(ws(0))
     releases.length = 0
 
     await withWorkspaceRecord(ws(0), globalStoreScope, async () => {
@@ -68,7 +72,7 @@ describe('a bracket over the workspace record', () => {
 
   it('does the same for a bracket that reads only a stored record', async () => {
     const releases = _workspaceRecordReleasesForTests()
-    await getWorkspaceDoc(ws(0))
+    await warm(ws(0))
     releases.length = 0
 
     await withStoredWorkspaceRecord(ws(0), globalStoreScope, async () => {
@@ -81,7 +85,7 @@ describe('a bracket over the workspace record', () => {
 
   it('does the same for a bracket over the persisted record', async () => {
     const releases = _workspaceRecordReleasesForTests()
-    await getWorkspaceDoc(ws(0))
+    await warm(ws(0))
     releases.length = 0
 
     await withPersistedWorkspaceRecord(ws(0), globalStoreScope, async () => {
@@ -94,7 +98,7 @@ describe('a bracket over the workspace record', () => {
 
   it('gives the record back when the bracket throws', async () => {
     const releases = _workspaceRecordReleasesForTests()
-    await getWorkspaceDoc(ws(0))
+    await warm(ws(0))
     releases.length = 0
 
     await expect(
@@ -115,14 +119,15 @@ describe('a bracket over the workspace record', () => {
 
   it('releases a record the bound drops, once no bracket reads it', async () => {
     const releases = _workspaceRecordReleasesForTests()
-    for (let i = 0; i <= WORKSPACE_DOC_CACHE_MAX_ENTRIES; i++) await getWorkspaceDoc(ws(i))
+    for (let i = 0; i <= workspaceDocCacheMaxEntries(); i++) await warm(ws(i))
     expect(releases).toHaveLength(1)
   })
 
   it('gives back the loan it took of a record another cold open kept in its place', async () => {
-    await getWorkspaceDoc(ws(0))
+    await warm(ws(0))
     _clearWorkspaceDocCacheForTests()
     // A second cold open's keep lands between this one's keep and its acquire.
+    const other = await workspaceRecordKindNamed(kind).index.empty()
     const keep = RecordCache.prototype.keep
     let interleaved = false
     const spy = vi.spyOn(RecordCache.prototype, 'keep').mockImplementation(function (
@@ -134,7 +139,7 @@ describe('a bracket over the workspace record', () => {
       keep.call(this, key, workspaceId, held)
       if (interleaved) return
       interleaved = true
-      keep.call(this, key, workspaceId, new LoroDoc())
+      keep.call(this, key, workspaceId, other)
     })
 
     try {

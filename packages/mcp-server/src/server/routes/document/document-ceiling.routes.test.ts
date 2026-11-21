@@ -4,6 +4,7 @@
  * sync update answers: a duplicate, a restore from the trash, and a version
  * restored to a new path.
  */
+import '../../store/_test-loro-records.js'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { documentDuplicateByIdApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'

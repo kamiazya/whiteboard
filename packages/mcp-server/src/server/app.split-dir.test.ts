@@ -13,6 +13,7 @@
  * puts the evidence only in `served`, so a route that follows the global
  * answers with the ambient dir's emptiness rather than refusing the address.
  */
+import './store/_test-loro-records.js'
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
