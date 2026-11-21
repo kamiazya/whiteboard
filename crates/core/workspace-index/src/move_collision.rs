@@ -124,6 +124,13 @@ mod tests {
     }
 
     #[test]
+    fn an_empty_folder_at_the_destination_is_still_occupied() {
+        let nodes = [folder("dest"), document("a")];
+        let moving = [document("a")];
+        assert_eq!(move_collision(&nodes, &moving, "a", "dest").as_deref(), Some("dest"));
+    }
+
+    #[test]
     fn a_document_collision_is_named_over_a_folder_one() {
         let nodes = [folder("c"), document("c/d"), folder("a"), document("a/d")];
         let moving = [folder("a"), document("a/d")];

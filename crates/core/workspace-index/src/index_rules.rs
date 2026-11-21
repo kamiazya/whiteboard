@@ -149,6 +149,34 @@ mod tests {
         assert!(!same_display_name(None, "plan"));
     }
 
+    fn named_folder(path: &str, name: &str) -> Node {
+        Node {
+            kind: NodeKind::Folder,
+            path: path.to_owned(),
+            name: Some(name.to_owned()),
+            document_id: None,
+        }
+    }
+
+    #[test]
+    fn an_empty_folder_the_move_does_not_leave_still_shows_its_name() {
+        let document = Node {
+            kind: NodeKind::Document,
+            path: "x/b/d".to_owned(),
+            name: None,
+            document_id: Some("d".to_owned()),
+        };
+        let nodes = [
+            named_folder("a", "Notes"),
+            named_folder("x", "X"),
+            named_folder("x/b", "Notes"),
+            document.clone(),
+        ];
+        let moving = [named_folder("x/b", "Notes"), document];
+        let refused = refuse_moved_name(&nodes, &moving, "x/b", "c");
+        assert_eq!(refused.map_err(|taken| taken.path), Err("c".to_owned()));
+    }
+
     #[test]
     fn a_blob_is_named_by_another_row_only_across_documents() {
         let blob = BlobRef { algorithm: "sha-256".to_owned(), digest_hex: "00".to_owned() };
