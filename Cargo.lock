@@ -628,6 +628,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "whiteboard-history"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "wasm-bindgen-test",
+ "whiteboard-model",
+]
+
+[[package]]
 name = "whiteboard-log"
 version = "0.0.0"
 dependencies = [

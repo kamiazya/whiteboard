@@ -17,6 +17,7 @@ members = [
   "crates/core/search",
   "crates/core/workspace-index",
   "crates/core/reference-graph",
+  "crates/core/history",
   "crates/bindings/wasm",
   "crates/bindings/native-fixture",
   "crates/xtask",
