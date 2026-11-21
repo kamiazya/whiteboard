@@ -109,7 +109,7 @@ describe('a writer of the workspace record', () => {
 
   it('holds a loan while the index duplicates a document, and none after', async () => {
     await saveDocument(WS, 'a', new LoroDoc(), { kind: 'markdown' })
-    const index = await workspaceTreeIndex(globalStoreScope)
+    const index = workspaceTreeIndex(globalStoreScope)
 
     const { seen, left, taken } = await loansDuring(() =>
       index.duplicateDocument({ workspaceId: WS, path: 'a' }),

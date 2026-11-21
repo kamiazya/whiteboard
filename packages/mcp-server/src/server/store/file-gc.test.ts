@@ -596,7 +596,7 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
     await deleteDocument(WS_PURGED, 'page')
     expect((await purgeDanglingFiles(WS_PURGED, withVersions())).purgedCount).toBe(0)
 
-    const index = await workspaceTreeIndex(globalStoreScope)
+    const index = workspaceTreeIndex(globalStoreScope)
     expect(
       await index.purgeTrashEntry({ workspaceId: WS_PURGED, documentId: documentId ?? '' }),
     ).toBe(true)

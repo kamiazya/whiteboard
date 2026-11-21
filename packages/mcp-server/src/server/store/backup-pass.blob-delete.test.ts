@@ -40,7 +40,7 @@ const INDEX_SOURCES: Record<string, () => Promise<LoroWorkspaceDocumentIndex<obj
     if (!(index instanceof LoroWorkspaceDocumentIndex)) throw new Error('not the tree index')
     return index
   },
-  workspaceTreeIndex: () => workspaceTreeIndex(storeScope(dataDir, SELF_HOST_TENANT_ID)),
+  workspaceTreeIndex: async () => workspaceTreeIndex(storeScope(dataDir, SELF_HOST_TENANT_ID)),
 }
 
 async function trashedDocument(index: LoroWorkspaceDocumentIndex<object>): Promise<string> {

@@ -118,7 +118,7 @@ it('reaches the verdict every keeper reaches on the shared scenario', async () =
         expect(await deleteDocument(WORKSPACE, step.path)).toBe(true)
         break
       case 'purge': {
-        const index = await workspaceTreeIndex(globalStoreScope)
+        const index = workspaceTreeIndex(globalStoreScope)
         const documentId = trashedIds.get(step.path) ?? ''
         expect(await index.purgeTrashEntry({ workspaceId: WORKSPACE, documentId })).toBe(true)
         break
