@@ -106,7 +106,7 @@ function describeEquality(makeEngine: () => CrdtEngine) {
 }
 
 function describeRefusal(makeEngine: () => CrdtEngine) {
-  it('refuses a document the record does not host, and a question that names none', async () => {
+  it('refuses a document the record does not host', async () => {
     const engine = makeEngine()
     const handle = record(engine)
     expect(
@@ -114,7 +114,49 @@ function describeRefusal(makeEngine: () => CrdtEngine) {
         documentId: '01J0000000000000000000000Z',
       }),
     ).toHaveProperty('err')
-    expect(await ask(engine, handle, 'documentJudgement')).toHaveProperty('err')
+  })
+}
+
+function describeStandalone(makeEngine: () => CrdtEngine) {
+  it('judges the document a handle itself holds when no document is named, as the separate reads do', async () => {
+    const engine = makeEngine()
+    const record_ = record(engine)
+    const { bytes } = engine.export({ handle: record_, mode: 'projection', documentId: SECOND })
+    const alone = engine.open({ peer: '9', bytes: bytes as string }).handle
+    const combined = (
+      (await ask(engine, alone, 'documentJudgement')) as { ok: Record<string, unknown> }
+    ).ok
+    const separate: Record<string, unknown> = {}
+    for (const query of SEPARATE) {
+      separate[query] = ((await ask(engine, alone, query)) as { ok: unknown }).ok
+    }
+    const stated = (await ask(engine, alone, 'documentKind')) as { ok: unknown }
+    separate.statedKind = typeof stated.ok === 'string' ? stated.ok : null
+    expect(combined).toEqual(separate)
+    // The same document asked for by id on the record that hosts it.
+    const hosted = (
+      (await ask(engine, record_, 'documentJudgement', { documentId: SECOND })) as {
+        ok: Record<string, unknown>
+      }
+    ).ok
+    expect(combined).toEqual(hosted)
+  })
+
+  it('judges a standalone document that breaks a text limit', async () => {
+    const engine = makeEngine()
+    const record_ = record(engine)
+    write(
+      engine,
+      record_,
+      'writeMarkdownBody',
+      { documentId: SECOND, body: 'x'.repeat(MARKDOWN_MAX_CHARS + 1) },
+      'none',
+    )
+    const { bytes } = engine.export({ handle: record_, mode: 'projection', documentId: SECOND })
+    const alone = engine.open({ peer: '9', bytes: bytes as string }).handle
+    expect(await ask(engine, alone, 'documentJudgement')).toMatchObject({
+      ok: { textLimitBreach: { shape: 'body' } },
+    })
   })
 }
 
@@ -122,5 +164,6 @@ export function describeDocumentJudgement(makeEngine: () => CrdtEngine) {
   describe('documentJudgement', () => {
     describeEquality(makeEngine)
     describeRefusal(makeEngine)
+    describeStandalone(makeEngine)
   })
 }

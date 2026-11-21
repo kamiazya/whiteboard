@@ -1,10 +1,8 @@
 import {
-  countSpatialNodes,
-  documentFromSnapshot,
-  judgeStateWithinTextLimits,
+  openStandalone,
   type RecordSession,
   type RecordView,
-  statedKindSplit,
+  type SyncTextBreach,
   type WorkspaceNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
@@ -15,7 +13,6 @@ import {
   messageOf,
 } from '@kamiazya/whiteboard-model'
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
-import type { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../log.js'
 import type { LiveDocuments, RestoreProgressEvent, ServerDeps } from '../server-deps.js'
 import { DocumentKindChangedError, textBreachRefusal } from './sync-write-refusals.js'
@@ -78,8 +75,8 @@ interface RestoreContext {
   /** The SOURCE document, whose history holds the version. */
   readonly path: string
   readonly versionId: string
-  /** The past document, for what is judged of it and for a document it creates. */
-  readonly past: LoroDoc
+  /** The past document, opened as a record of its own, for what is judged of it. */
+  readonly past: RecordSession
   /** The same past document as the bytes a write at the record's node takes. */
   readonly pastBytes: Uint8Array
   readonly label: string | undefined
@@ -138,38 +135,42 @@ export async function restoreVersion(
   return live.withWriteLock(workspaceId, async () => {
     const pastBytes = await versions.load(workspaceId, versionId)
     if (pastBytes === null) return { kind: 'not-found' }
-    const past = documentFromSnapshot(pastBytes)
-    // A version id is unique per WORKSPACE, so `load` alone would answer
-    // another document's past state — and the reconcile below would then
-    // overwrite this document with unrelated content. The history named by
-    // `path` has to hold the id; one that does not is, to this caller, a
-    // version that does not exist. The same row carries the label the
-    // progress events show.
-    const owned = (await versions.list(workspaceId, path)).find((v) => v.id === versionId)
-    if (owned === undefined) return { kind: 'not-found' }
+    const standalone = await openStandalone(pastBytes)
+    try {
+      // A version id is unique per WORKSPACE, so `load` alone would answer
+      // another document's past state — and the reconcile below would then
+      // overwrite this document with unrelated content. The history named by
+      // `path` has to hold the id; one that does not is, to this caller, a
+      // version that does not exist. The same row carries the label the
+      // progress events show.
+      const owned = (await versions.list(workspaceId, path)).find((v) => v.id === versionId)
+      if (owned === undefined) return { kind: 'not-found' }
 
-    const ctx: RestoreContext = {
-      deps,
-      workspaceId,
-      path,
-      versionId,
-      past,
-      pastBytes,
-      label: owned.label,
-      progress,
-    }
+      const ctx: RestoreContext = {
+        deps,
+        workspaceId,
+        path,
+        versionId,
+        past: standalone.session,
+        pastBytes,
+        label: owned.label,
+        progress,
+      }
 
-    // The three modes the header describes, in the order they take
-    // precedence. A `targetPath` equal to `path` collapses into in-place,
-    // which is why it is compared rather than merely present.
-    const { targetPath } = input
-    if (targetPath !== undefined && targetPath !== path) {
-      return await restoreToTarget(live, versions, ctx, targetPath, input)
+      // The three modes the header describes, in the order they take
+      // precedence. A `targetPath` equal to `path` collapses into in-place,
+      // which is why it is compared rather than merely present.
+      const { targetPath } = input
+      if (targetPath !== undefined && targetPath !== path) {
+        return await restoreToTarget(live, versions, ctx, targetPath, input)
+      }
+      if (input.subtree === true) {
+        return await restoreSubtree(live, versions, ctx)
+      }
+      return await restoreInPlace(live, versions, ctx)
+    } finally {
+      standalone.release()
     }
-    if (input.subtree === true) {
-      return await restoreSubtree(live, versions, ctx)
-    }
-    return await restoreInPlace(live, versions, ctx)
   })
 }
 
@@ -233,7 +234,7 @@ async function restoreToTarget(
   targetPath: string,
   input: RestoreVersionInput,
 ): Promise<RestoreVersionResult> {
-  const { workspaceId, path, past, versionId } = ctx
+  const { workspaceId } = ctx
 
   if (!documentPathSchema.safeParse(targetPath).success) {
     return { kind: 'invalid-target-path' }
@@ -247,14 +248,26 @@ async function restoreToTarget(
 
   if (targetAlreadyExists) return await restoreOntoExisting(live, versions, ctx, targetPath)
 
-  // Genuinely new document: no live doc and no connected clients, so
-  // there is nothing to reconcile against. The restored content is
-  // whatever the source stores, so the new row carries the source's own
-  // kind rather than the store default.
+  return createTarget(live, versions, ctx, targetPath)
+}
+
+/**
+ * Genuinely new document: no live doc and no connected clients, so there is
+ * nothing to reconcile against. The restored content is whatever the source
+ * stores, so the new row carries the source's own kind rather than the store
+ * default.
+ */
+async function createTarget(
+  live: LiveDocuments,
+  versions: Pick<ServerDeps, 'versions'>['versions'],
+  ctx: RestoreContext,
+  targetPath: string,
+): Promise<RestoreVersionResult> {
+  const { workspaceId, path, past, pastBytes, versionId } = ctx
   const sourceKind = await live.kind(workspaceId, path)
-  withinSyncLimits(past, targetPath, sourceKind)
+  await withinSyncLimits(past, targetPath, sourceKind)
   try {
-    await live.save(workspaceId, targetPath, past, {
+    await live.create(workspaceId, targetPath, pastBytes, {
       overwrite: false,
       ...(sourceKind !== null ? { kind: sourceKind } : {}),
     })
@@ -268,11 +281,15 @@ async function restoreToTarget(
   // this path being served instead of the just-written snapshot.
   live.evict(workspaceId, targetPath)
   await recordMerge(versions, workspaceId, targetPath, versionId)
+  const documentId = await documentIdAt(live, workspaceId, targetPath)
+  // A document a restore creates is written like any other: its checkpoint and
+  // compaction are scheduled by the same observer.
+  await announceWritten(ctx.deps, workspaceId, documentId, targetPath)
   return {
     kind: 'restored-to-target',
     targetPath,
-    documentId: await documentIdAt(live, workspaceId, targetPath),
-    elementCount: countSpatialNodes(past),
+    documentId,
+    elementCount: await past.read({ query: 'spatialNodeCount' }, assertedAs<number>()),
   }
 }
 
@@ -322,9 +339,17 @@ async function judgedPastSubtree(pastWorkspace: RecordView, inSubtree: (path: st
   )
   const restoring = pastDocs.flatMap((node) => {
     const bytes = pastWorkspace.exportProjection(node.meta.documentId)
-    return bytes === null ? [] : [{ node, bytes, pastDoc: documentFromSnapshot(bytes) }]
+    return bytes === null ? [] : [{ node, bytes }]
   })
-  for (const { node, pastDoc } of restoring) withinSyncLimits(pastDoc, node.path, node.meta.kind)
+  // One past document open at a time: each is judged and given back.
+  for (const { node, bytes } of restoring) {
+    const { session, release } = await openStandalone(bytes)
+    try {
+      await withinSyncLimits(session, node.path, node.meta.kind)
+    } finally {
+      release()
+    }
+  }
   return { pastDocs, restoring }
 }
 
@@ -364,9 +389,9 @@ async function restoreSubtree(
         await live.delete(workspaceId, row.path)
       }
     }
-    for (const { node, bytes, pastDoc } of restoring) {
+    for (const { node, bytes } of restoring) {
       const row = rowsById.get(node.meta.documentId)
-      const changed = await restoreOneDocument(ctx, node, { bytes, pastDoc }, row)
+      const changed = await restoreOneDocument(ctx, node, bytes, row)
       // Every document the rollback moved gains the point, not just the
       // one that was addressed: leaving the rest unrecorded would make
       // this the one mode whose history reads as a straight line through
@@ -387,7 +412,7 @@ async function restoreSubtree(
 async function restoreOneDocument(
   ctx: RestoreContext,
   node: { readonly path: string; readonly meta: { readonly kind?: DocumentKind } },
-  past: { readonly bytes: Uint8Array; readonly pastDoc: LoroDoc },
+  pastBytes: Uint8Array,
   liveRow: { readonly path: string } | undefined,
 ): Promise<boolean> {
   const { deps, workspaceId } = ctx
@@ -396,8 +421,14 @@ async function restoreOneDocument(
   // lineage as far as the tree is concerned (the write-through places it
   // by path + kind).
   const recreate = async () => {
-    await live.save(workspaceId, node.path, past.pastDoc, { kind: node.meta.kind })
+    await live.create(workspaceId, node.path, pastBytes, { kind: node.meta.kind })
     live.evict(workspaceId, node.path)
+    await announceWritten(
+      deps,
+      workspaceId,
+      await documentIdAt(live, workspaceId, node.path),
+      node.path,
+    )
     return true
   }
   if (liveRow === undefined) return recreate()
@@ -409,7 +440,7 @@ async function restoreOneDocument(
     deps,
     workspaceId,
     node.path,
-    past.bytes,
+    pastBytes,
     node.meta.kind ?? null,
   )
   // A row the record no longer holds is a document to recreate, not one to write into.
@@ -425,15 +456,24 @@ async function restoreOneDocument(
  * Refused rather than restored without it, since a version that says it is
  * another kind is not the version the caller chose with one field changed.
  */
-function withinSyncLimits(
-  past: LoroDoc,
+async function withinSyncLimits(
+  past: RecordSession,
   path: string,
   recorded: DocumentKind | null | undefined,
-): void {
-  const breach = judgeStateWithinTextLimits(past)
-  if (breach !== null) throw textBreachRefusal(breach, { path })
-  const split = statedKindSplit(past, recorded)
-  if (split !== null) throw new DocumentKindChangedError(split.recorded, split.kind)
+): Promise<void> {
+  const judged = await past.read({ query: 'documentJudgement' }, assertedAs<PastJudgement>())
+  if (judged.textLimitBreach !== null) throw textBreachRefusal(judged.textLimitBreach, { path })
+  // An envelope stating nothing defers to the record; one stating the kind it
+  // records is no split.
+  if (recorded != null && judged.statedKind !== null && judged.statedKind !== recorded) {
+    throw new DocumentKindChangedError(recorded, judged.statedKind)
+  }
+}
+
+/** What judging the past document answers: its breach of a sync limit and the kind its envelope states. */
+interface PastJudgement {
+  readonly textLimitBreach: SyncTextBreach | null
+  readonly statedKind: DocumentKind | null
 }
 
 /**
@@ -513,7 +553,7 @@ async function writePastAtNode(
   // Nothing to write into: nothing was changed, and the record is as it was.
   if (written === null) return null
   workspaceDocuments.evictProjections(workspaceId)
-  await announceWritten(deps, workspaceId, written.documentId, path)
+  if (written.changed) await announceWritten(deps, workspaceId, written.documentId, path)
   return written
 }
 
@@ -601,7 +641,7 @@ async function writePast(
   })
   try {
     try {
-      withinSyncLimits(past, targetPath, recorded)
+      await withinSyncLimits(past, targetPath, recorded)
     } catch (err) {
       deps.workspaceDocuments.evict(workspaceId)
       deps.workspaceDocuments.evictProjections(workspaceId)

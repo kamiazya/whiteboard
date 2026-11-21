@@ -353,6 +353,18 @@ export interface LiveDocuments {
     doc: LoroDoc,
     options?: { overwrite?: boolean; kind?: DocumentKind },
   ): Promise<void>
+  /**
+   * `save` for a document given as the snapshot bytes of one: stores them as
+   * the content at `path`, under the same rules (`overwrite`, `kind`, the
+   * path already held). What an operation uses for a document it holds only
+   * as bytes, so it never opens one.
+   */
+  create(
+    workspaceId: string,
+    path: string,
+    snapshot: Uint8Array,
+    options?: { overwrite?: boolean; kind?: DocumentKind },
+  ): Promise<void>
   exists(workspaceId: string, path: string): Promise<boolean>
   /** The document's recorded kind, or null when the path holds none. */
   kind(workspaceId: string, path: string): Promise<DocumentKind | null>

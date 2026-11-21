@@ -18,6 +18,7 @@ export function unusedLiveDocuments(): LiveDocuments {
   }
   return {
     save: refuse('save'),
+    create: refuse('create'),
     exists: refuse('exists'),
     kind: refuse('kind'),
     list: refuse('list'),

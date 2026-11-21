@@ -110,25 +110,32 @@ const wholeDocument =
   }
 
 /**
- * What judging one document asks of its state, from ONE projection: the
+ * What judging one document asks of its state, from ONE projection (or, with no
+ * `documentId`, of the document the handle itself holds, as the sibling reads
+ * answer for it): the
  * size, digest and text-limit breach are each a read of the whole document,
  * so asking for them one by one projects it three times. The answer equals
  * the separate reads; `statedKind` is what its envelope says (`null` for
  * none), for a caller that compares it with the kind the record has.
  */
-function documentJudgement(doc: LoroDoc, documentId: string) {
+function documentJudgement(doc: LoroDoc, documentId: string | undefined) {
+  if (documentId === undefined) return judgementOf(doc)
   const projected = projectWorkspaceDocument(doc, documentId)
   if (projected === null) throw new RangeError(`No document "${documentId}" in this workspace`)
   try {
-    return {
-      stateSize: stateSize(projected),
-      contentDigest: contentDigestOfDocument(projected),
-      textLimitBreach: judgeStateWithinTextLimits(projected),
-      spatialNodeCount: countSpatialNodes(projected),
-      statedKind: readDocumentKind(projected) ?? null,
-    }
+    return judgementOf(projected)
   } finally {
     projected.free()
+  }
+}
+
+function judgementOf(content: LoroDoc) {
+  return {
+    stateSize: stateSize(content),
+    contentDigest: contentDigestOfDocument(content),
+    textLimitBreach: judgeStateWithinTextLimits(content),
+    spatialNodeCount: countSpatialNodes(content),
+    statedKind: readDocumentKind(content) ?? null,
   }
 }
 
@@ -176,7 +183,7 @@ export const READERS: Record<documentEngine.QueryName, Reader> = {
     return { referenced: [...scan.referenced].sort(), unjudged: scan.unjudged }
   },
   containerPlace: (doc, args) => containerPlace(doc, requiredContainer(args)),
-  documentJudgement: (doc, args) => documentJudgement(doc, requiredId(args)),
+  documentJudgement: (doc, args) => documentJudgement(doc, args.documentId),
   workspaceDocumentEntry: (doc, args) => {
     if ((args.documentId === undefined) === (args.path === undefined)) {
       throw new TypeError('this read names a document by its id or by its path, one of them')

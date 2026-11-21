@@ -1,6 +1,7 @@
 import {
   bindRecordOps,
   createWorkspaceDocumentAtPath,
+  documentFromSnapshot,
   legacyRecordOps,
   projectWorkspaceDocument,
   type RecordSession,
@@ -28,6 +29,9 @@ export class FakeLiveDocuments implements LiveDocuments {
   }
   async save(_workspaceId: string, path: string, doc: LoroDoc): Promise<void> {
     this.docs.set(path, doc)
+  }
+  async create(_workspaceId: string, path: string, snapshot: Uint8Array): Promise<void> {
+    this.docs.set(path, documentFromSnapshot(snapshot))
   }
   async exists(_workspaceId: string, path: string): Promise<boolean> {
     return this.docs.has(path)
