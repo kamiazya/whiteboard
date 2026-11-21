@@ -288,7 +288,7 @@ describe('an adapter or a root passes the scope it serves to a store that defaul
     for (const name of [
       'FileVersionStore',
       'workspaceRegistry',
-      'getDoc',
+      'loadDocument',
       'listDocuments',
       'loadWorkspaceNames',
       'purgeDanglingFiles',
@@ -297,7 +297,7 @@ describe('an adapter or a root passes the scope it serves to a store that defaul
     ]) {
       expect(exports.has(name), name).toBe(true)
     }
-    expect(exports.get('getDoc')).toEqual({ kind: 'parameter', index: 2 })
+    expect(exports.get('loadDocument')).toEqual({ kind: 'parameter', index: 2 })
     expect(exports.get('purgeDanglingFiles')).toEqual({ kind: 'options', index: 1 })
   })
 

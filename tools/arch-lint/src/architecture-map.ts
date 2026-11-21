@@ -90,7 +90,6 @@ export const KNOWN_PACKAGE_CYCLES: readonly {
  * comment said it could only shrink.
  */
 export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
-  'routes/debug.ts -> doc-cache',
   'routes/debug.ts -> document-store',
   'routes/document.ts -> version-store',
   'routes/document.ts -> auto-version',
@@ -225,8 +224,11 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  *
  * Then 26 -> 25, when the files router took the purge's own version-reader
  * type from `file-gc` instead of naming the whole version store.
+ *
+ * Then 25 -> 24, when the projection cache that `routes/debug.ts` listed was
+ * deleted along with the dump's view of it.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 25
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 24
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

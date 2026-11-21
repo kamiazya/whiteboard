@@ -93,7 +93,6 @@ vi.mock('./config.js', () => ({
 
 const { createApp } = await import('./app.js')
 const { createContainer, resolveServerDeps } = await import('../di/container.js')
-const { clearDocCacheForTests } = await import('./store/doc-cache.js')
 const { _clearWorkspaceDocCacheForTests } = await import('./store/document-store.js')
 const { resetSyncStreamsForTests } = await import('./sync-streams.js')
 
@@ -310,7 +309,6 @@ async function seededCallbacks(app: ReturnType<typeof createApp>, idp: Idp) {
 async function seededApp(idp: Idp): Promise<Seed> {
   const dir = await mkdtemp(join(tempDir, 'server-mode-'))
   dataDir = dir
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   const handle = await createIsolatedDb({ dataDir: dir })
   const stores = serverModePeople(handle.db, dir)

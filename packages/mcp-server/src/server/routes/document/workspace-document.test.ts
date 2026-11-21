@@ -49,14 +49,12 @@ vi.mock('../../config.js', () => ({
 const { createDocumentRouter } = await import('../document.js')
 const { listDocuments, loadDocument, onWorkspaceDocUpdated, _clearWorkspaceDocCacheForTests } =
   await import('../../store/document-store.js')
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createIsolatedDb } = await import('../../store/db/test-helpers.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'ws-doc-route-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   // The workspace exists because this fixture says so, not because the first
   // POST created it: that route passes `createWorkspace: true`, which is
@@ -136,8 +134,8 @@ it('POST workspace-document/update lands on the tree and refreshes per-document 
   )
   await createDoc('c')
   await pushDoc(app, new LoroDoc(), ['n-a'])
-  // Warm the per-document projection cache so the test proves invalidation,
-  // not just a cold read.
+  // Read it once before the sync update, so the test proves the update is
+  // seen, not just a cold read.
   expect(
     readSpatialCanvas(await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'c')).nodes.map((n) => n.id),
   ).toEqual(['n-a'])
@@ -200,9 +198,14 @@ it('a PER-DOCUMENT update reaches a workspace-document subscriber', async () => 
       writeSpatialNode(client, textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 }))
     }
     client.commit()
-    await serverDeps.liveDocuments.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'c', client, {
-      overwrite: true,
-    })
+    await serverDeps.liveDocuments.create(
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
+      'c',
+      client.export({ mode: 'snapshot' }),
+      {
+        overwrite: true,
+      },
+    )
   } finally {
     unsubscribe()
   }

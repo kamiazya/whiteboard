@@ -1,5 +1,5 @@
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   resolveTestServerDeps,
   testDocumentRouterOptions,
@@ -21,11 +21,7 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
-
-beforeEach(() => clearDocCacheForTests())
-afterEach(() => clearDocCacheForTests())
 
 type Listed = { workspaces: { workspaceId: string; tier?: string }[] }
 

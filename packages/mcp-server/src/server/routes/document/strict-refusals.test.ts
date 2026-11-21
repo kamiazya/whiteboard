@@ -26,7 +26,6 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
   '../../store/document-store.js'
 )
@@ -34,13 +33,10 @@ const { createDocumentRouter } = await import('../document.js')
 
 beforeEach(async () => {
   await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
 })
-afterEach(() => {
-  clearDocCacheForTests()
-})
+afterEach(() => {})
 
 // Request bodies are strict so that a caller learns a field it sent did not
 // take effect. The refusal is only worth that if it names the field: a newer

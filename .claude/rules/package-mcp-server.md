@@ -132,9 +132,8 @@ carrying a declared value and no colour of its own in that colour, the
 legend naming the key. Two guards, each held by an example and
 mutation-checked: it asks only for a board that CARRIES a tag
 (`carriesATag`, server-core's), so the common untagged board costs no
-read; and it probes `documentExists` before `getDoc`, because the headless
-read path answers a missing path with an EMPTY document (uncached:
-`getOrLoad` never keeps one for a path the tree does not place), which
+read; and it probes `documentExists` before reading, because the headless
+read path answers a missing path with an EMPTY document, which
 would read as a library declaring nothing rather than as no library. `headless-renderer.tag-library.test.ts` holds the threading
 through the real renderer, since the export test mocks it.
 
@@ -295,8 +294,7 @@ workspace record. `workspace-doc-cache.ts` therefore asks the store, on every
 access, whether the record's persisted frontier holds ops the cached document
 lacks (`recordIsAhead`: one `readFrontier` plus a version-vector compare,
 0.074ms against 1.04ms for `readCursor`). If it does, the document catches up
-from `followedTo`, every projection of that workspace in `doc-cache.ts` is
-evicted, and the gain is announced through `emitWorkspaceDocUpdated`.
+from `followedTo`, and the gain is announced through `emitWorkspaceDocUpdated`.
 Anything that imports into the cached document announces it or returns the
 updates for its caller to (`catchUpWorkspaceDoc` announces); a silent import
 is a subscriber that never hears. The daemon's tail is only the push for pages

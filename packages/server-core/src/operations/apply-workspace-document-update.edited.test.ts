@@ -14,10 +14,13 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
+import type { LiveDocuments } from '../server-deps.js'
 import { unusedBlobStore } from '../test-utils/unused-blob-store.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
-import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
+import {
+  unusedWorkspaceDocuments,
+  type WorkspaceDocumentsOverDoc,
+} from '../test-utils/unused-workspace-documents.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 
 const WS = 'ws-edited'
@@ -42,11 +45,10 @@ function keeper() {
   client.commit()
   const record = new LoroDoc()
   record.import(client.export({ mode: 'snapshot' }))
-  const workspaceDocuments: WorkspaceDocuments = {
+  const workspaceDocuments: WorkspaceDocumentsOverDoc = {
     ...unusedWorkspaceDocuments(),
     get: async () => record,
     async save() {},
-    evictProjections() {},
   }
   const live: LiveDocuments = {
     ...unusedLiveDocuments(),

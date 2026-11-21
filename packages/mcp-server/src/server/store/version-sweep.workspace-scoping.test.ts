@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { deleteWorkspaceNodeAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import { hasDocumentTrash } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { getWorkspaceDoc, saveWorkspaceDoc } from './document-store.js'
 
 let tempDir: string
 
@@ -101,9 +102,9 @@ describe('sweeping a deleted document’s versions', () => {
     await deps.documentTeardown.around(
       { workspaceId: '01PAW75F73PVC402Y3V151KT6R', documentId, path: 'doomed' },
       async () => {
-        const record = await deps.workspaceDocuments.get('01PAW75F73PVC402Y3V151KT6R')
+        const record = await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')
         expect(deleteWorkspaceNodeAtPath(record, 'doomed')).toBe(true)
-        await deps.workspaceDocuments.save('01PAW75F73PVC402Y3V151KT6R', record)
+        await saveWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R', record)
       },
     )
     expect(await rowsOf('01PAW75F73PVC402Y3V151KT6R')).toEqual([])

@@ -10,11 +10,14 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
+import type { LiveDocuments } from '../server-deps.js'
 import { StoredDoc } from '../test-utils/stored-doc.js'
 import { unusedBlobStore } from '../test-utils/unused-blob-store.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
-import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
+import {
+  unusedWorkspaceDocuments,
+  type WorkspaceDocumentsOverDoc,
+} from '../test-utils/unused-workspace-documents.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 import { SyncWriteRefusalError } from './sync-write-refusals.js'
 
@@ -35,12 +38,11 @@ describe('a sync update writing a `__proto__` key', () => {
     createWorkspaceDocumentAtPath(doc, { path: 'board', documentId: BOARD, kind: 'spatial' })
     doc.commit()
     const store = new StoredDoc(doc)
-    const workspaceDocuments: WorkspaceDocuments = {
+    const workspaceDocuments: WorkspaceDocumentsOverDoc = {
       ...unusedWorkspaceDocuments(),
       get: async () => store.get(),
       save: async (_workspaceId, saved) => store.save(saved),
       evict: () => store.evict(),
-      evictProjections: () => {},
     }
     const liveDocuments: LiveDocuments = {
       ...unusedLiveDocuments(),

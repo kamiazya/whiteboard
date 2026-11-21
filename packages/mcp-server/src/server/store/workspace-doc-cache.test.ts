@@ -40,8 +40,7 @@ const {
   evictWorkspaceDocCache,
   WORKSPACE_DOC_CACHE_MAX_ENTRIES,
 } = await import('./workspace-doc-cache.js')
-const { clearDocCacheForTests } = await import('./doc-cache.js')
-const { getDoc, saveDocument, onWorkspaceDocUpdated } = await import('./document-store.js')
+const { loadDocument, saveDocument, onWorkspaceDocUpdated } = await import('./document-store.js')
 const { getDb } = await import('./db/index.js')
 const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
@@ -55,7 +54,6 @@ const ws = (i: number) => workspaceIdFor(`ws-lru-${i}`)
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'ws-doc-lru-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   _resetWorkspaceLocksForTests()
 })
@@ -194,19 +192,18 @@ async function foreignEdit(workspaceId: string, path: string, text: string): Pro
 
 async function storedText(workspaceId: string, path: string): Promise<string | null> {
   _clearWorkspaceDocCacheForTests()
-  clearDocCacheForTests()
-  return textOf(await getDoc(workspaceId, path))
+  return textOf(await loadDocument(workspaceId, path))
 }
 
 describe('a dropped workspace record and what was derived from it', () => {
   it('serves a foreign edit made while the record was out of the cache', async () => {
     await saveDocument(ws(0), 'd', canvasDoc('before'), { kind: 'spatial' })
-    expect(textOf(await getDoc(ws(0), 'd'))).toBe('before')
+    expect(textOf(await loadDocument(ws(0), 'd'))).toBe('before')
 
     await openRange(1, WORKSPACE_DOC_CACHE_MAX_ENTRIES + 1)
     await foreignEdit(ws(0), 'd', 'after')
 
-    const served = await getDoc(ws(0), 'd')
+    const served = await loadDocument(ws(0), 'd')
     expect(textOf(served)).toBe('after')
     await saveDocument(ws(0), 'd', served, { overwrite: true })
     expect(await storedText(ws(0), 'd')).toBe('after')

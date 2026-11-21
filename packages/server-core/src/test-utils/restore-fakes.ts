@@ -70,10 +70,8 @@ interface StoredDoc {
  */
 export class FakeLive implements LiveDocuments {
   readonly docs = new Map<string, StoredDoc>()
-  readonly evicted: string[] = []
-  /** The workspaces whose record was dropped unsaved, and whose per-document projections were. */
+  /** The workspaces whose record was dropped unsaved. */
   readonly recordsDropped: string[] = []
-  readonly projectionsDropped: string[] = []
   /** The documents the write observer was told of. */
   readonly written: string[] = []
   readonly calls: { method: string; lockDepth: number }[] = []
@@ -111,10 +109,6 @@ export class FakeLive implements LiveDocuments {
         this.record('evictRecord')
         this.recordsDropped.push(workspaceId)
         this.keptRecord = null
-      },
-      evictProjections: (workspaceId) => {
-        this.record('evictProjections')
-        this.projectionsDropped.push(workspaceId)
       },
     }
   }
@@ -279,10 +273,6 @@ export class FakeLive implements LiveDocuments {
     this.record('delete')
     this.keptRecord = null
     this.docs.delete(this.key(workspaceId, path))
-  }
-  evict(_workspaceId: string, path: string): void {
-    this.record('evict')
-    this.evicted.push(path)
   }
   async withWriteLock<T>(_workspaceId: string, fn: () => Promise<T>): Promise<T> {
     this.lockDepth += 1

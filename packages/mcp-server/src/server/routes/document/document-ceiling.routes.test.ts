@@ -39,18 +39,14 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { saveDocument } = await import('../../store/document-store.js')
 const { getWorkspaceDoc, saveWorkspaceDoc } = await import('../../store/workspace-doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 
 beforeEach(async () => {
   await mkdir(join(tmp.dir, WS), { recursive: true })
-  clearDocCacheForTests()
 })
-afterEach(() => {
-  clearDocCacheForTests()
-})
+afterEach(() => {})
 
 /** `n` in the ULID alphabet, so a seeded id is canonical. */
 function crockford(n: number): string {

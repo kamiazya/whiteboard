@@ -54,7 +54,6 @@ import { LoroDoc } from 'loro-crdt'
 import { bootSelfHostDeps } from '../../src/di/boot-self-host-deps.ts'
 import { disposeAutoCompact, uninstallAutoCompact } from '../../src/server/store/auto-compact.ts'
 import { clearDbCacheForTests, closeDb } from '../../src/server/store/db/index.ts'
-import { clearDocCacheForTests } from '../../src/server/store/doc-cache.ts'
 import { _clearWorkspaceDocCacheForTests } from '../../src/server/store/workspace-doc-cache.ts'
 import { resetDataDirForTests, setDataDirForTests } from '../../src/shared/data-dir-secure.ts'
 
@@ -95,7 +94,6 @@ async function withStore(work) {
   } finally {
     uninstallAutoCompact()
     await disposeAutoCompact()
-    clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
     await closeDb(served)
     clearDbCacheForTests()

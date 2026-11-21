@@ -22,7 +22,6 @@ vi.mock('../config.js', () => ({
 }))
 const tmp = withTempDataDir('whiteboard-version-tools-')
 const { resolveTestServerDeps } = await import('../routes/_test-helpers.js')
-const { clearDocCacheForTests } = await import('../store/doc-cache.js')
 const { _clearWorkspaceDocCacheForTests } = await import('../store/document-store.js')
 const { FileVersionStore } = await import('../store/version-store.js')
 
@@ -100,7 +99,6 @@ describe('wb_version_* tools over the daemon history', () => {
     expect(await textOf(deps, documentId)).toBe('modified')
 
     // Simulate the daemon restarting between the checkpoint and the rollback.
-    clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
     const reborn = await resolveTestServerDeps(tmp.dir)
     const restored = await createVersionRestoreTool(reborn).execute({

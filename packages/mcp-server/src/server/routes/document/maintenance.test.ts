@@ -26,18 +26,13 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { getDb } = await import('../../store/db/index.js')
 const { saveDocument } = await import('../../store/document-store.js')
 const { createMaintenanceRouter } = await import('./maintenance.js')
 const { createDocumentRouter } = await import('../document.js')
 
-beforeEach(() => {
-  clearDocCacheForTests()
-})
-afterEach(() => {
-  clearDocCacheForTests()
-})
+beforeEach(() => {})
+afterEach(() => {})
 
 describe('maintenance router', () => {
   it('returns a Hono instance', () => {

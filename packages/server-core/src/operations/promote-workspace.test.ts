@@ -32,11 +32,14 @@ import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap, LoroText, type LoroTreeNode } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
-import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
+import type { LiveDocuments } from '../server-deps.js'
 import { FakeBlobStore } from '../test-utils/fake-blob-store.js'
 import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
-import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
+import {
+  unusedWorkspaceDocuments,
+  type WorkspaceDocumentsOverDoc,
+} from '../test-utils/unused-workspace-documents.js'
 import { TooManyVersionsError } from '../versions/version-refusal.js'
 import { promoteWorkspace } from './promote-workspace.js'
 import { OffGrammarPathError, syncWriteAnswer } from './sync-write-refusals.js'
@@ -124,7 +127,7 @@ function fakes(peer = 1n) {
   const blobs = new FakeBlobStore()
   let saves = 0
   let evictions = 0
-  const workspaceDocuments: WorkspaceDocuments = {
+  const workspaceDocuments: WorkspaceDocumentsOverDoc = {
     ...unusedWorkspaceDocuments(),
     async exists() {
       return true
@@ -138,7 +141,6 @@ function fakes(peer = 1n) {
     evict() {
       evictions += 1
     },
-    evictProjections() {},
   }
   return {
     live: live as LiveDocuments,
@@ -263,7 +265,6 @@ describe('promoteWorkspace', () => {
         workspaceDocuments: {
           ...fake.workspaceDocuments,
           evict: () => dropped.push('record'),
-          evictProjections: () => dropped.push('projections'),
         },
         versions: fake.versions,
         blobStore: fake.blobs,
@@ -271,7 +272,7 @@ describe('promoteWorkspace', () => {
       { workspaceId: WS, snapshot: browserRecord(), operator },
     ).catch((err: unknown) => err)
     expect(failure).toBeInstanceOf(DocumentEngineTrapError)
-    expect(dropped).toEqual(['record', 'projections'])
+    expect(dropped).toEqual(['record'])
     expect(fake.saves()).toBe(0)
     expect(fake.versions.saves).toEqual([])
   })

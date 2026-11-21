@@ -39,17 +39,15 @@ vi.mock('../../config.js', () => ({
 }))
 
 const documentStore = await import('../../store/document-store.js')
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 
 // The deps a router is handed by its root; here, the test wiring over the
 // temp data dir.
 let serverDeps: ServerDeps
 beforeEach(async () => {
-  clearDocCacheForTests()
   serverDeps = await resolveTestServerDeps(tmp.dir)
 })
-const { getDoc } = documentStore
+const { loadDocument } = documentStore
 
 async function seedMarkdown(workspaceId: string, path: string, body: string) {
   const doc = new LoroDoc()
@@ -59,7 +57,7 @@ async function seedMarkdown(workspaceId: string, path: string, body: string) {
 }
 
 async function bodyAt(workspaceId: string, path: string): Promise<string> {
-  const doc = await getDoc(workspaceId, path)
+  const doc = await loadDocument(workspaceId, path)
   return readMarkdownBody(doc)
 }
 

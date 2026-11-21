@@ -9,9 +9,10 @@ import {
   _autoCompactTimerCountForTests,
   uninstallAutoCompact,
 } from '../server/store/auto-compact.js'
-import { peekDoc } from '../server/store/doc-cache.js'
-import { getDoc, saveDocument } from '../server/store/document-store.js'
+import { resolveDocumentIdAtPath, saveDocument } from '../server/store/document-store.js'
 import { InMemoryBlobStore } from '../server/store/inmemory/in-memory-blob-store.js'
+import { globalStoreScope } from '../server/store/store-scope.js'
+import { FileVersionStore } from '../server/store/version-store.js'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import { createContainer, resolveServerDeps } from './container.js'
 
@@ -120,24 +121,22 @@ describe('resolveServerDeps document teardown', () => {
 
   it("supplies the composition root's own teardown, not an inert stub", async () => {
     const deps = resolveServerDeps(createContainer(storeMemoryModule))
-    // A cached projection the teardown has to drop: an inert stub would run
-    // the delete and leave it behind for the next create to inherit. Only a
-    // placed document is cached, so it is saved at its path first.
-    await saveDocument('01AD0EBCZCCZMY8F94QTKHK2WV', 'torn-down', new LoroDoc(), {
-      overwrite: true,
-    })
-    await getDoc('01AD0EBCZCCZMY8F94QTKHK2WV', 'torn-down')
-    expect(peekDoc('01AD0EBCZCCZMY8F94QTKHK2WV', 'torn-down')).toBeDefined()
+    const workspaceId = '01AD0EBCZCCZMY8F94QTKHK2WV'
+    // A document with a saved version the teardown has to sweep: an inert stub
+    // would run the delete and leave the version row behind.
+    await saveDocument(workspaceId, 'torn-down', new LoroDoc(), { overwrite: true })
+    const documentId = await resolveDocumentIdAtPath(workspaceId, 'torn-down')
+    if (documentId === null) throw new Error('the document was not placed')
+    const version = await new FileVersionStore().save(workspaceId, 'torn-down', { auto: true })
+    const db = await globalStoreScope.db()
+    const rows = () => db.selectFrom('versions').select('id').where('id', '=', version.id).execute()
+    expect(await rows()).toHaveLength(1)
 
     await deps.documentTeardown.around(
-      {
-        workspaceId: '01AD0EBCZCCZMY8F94QTKHK2WV',
-        documentId: '01HZZZZZZZZZZZZZZZZZZZZZZZ',
-        path: 'torn-down',
-      },
+      { workspaceId, documentId, path: 'torn-down' },
       async () => true,
     )
 
-    expect(peekDoc('01AD0EBCZCCZMY8F94QTKHK2WV', 'torn-down')).toBeUndefined()
+    expect(await rows()).toEqual([])
   })
 })

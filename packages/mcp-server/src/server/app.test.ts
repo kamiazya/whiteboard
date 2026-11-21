@@ -26,7 +26,6 @@ vi.mock('./config.js', () => ({
 
 const { createApp } = await import('./app.js')
 const { createContainer, resolveServerDeps } = await import('../di/container.js')
-const { clearDocCacheForTests } = await import('./store/doc-cache.js')
 const { clearWorkspaceIdCacheForTests } = await import('./current-workspace.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
 
@@ -63,7 +62,6 @@ describe('createApp daemon mutation auth', () => {
     await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
     await mkdir(join(tmp.dir, 'data'), { recursive: true })
     process.env.WHITEBOARD_DEBUG = '1'
-    clearDocCacheForTests()
     clearWorkspaceIdCacheForTests()
     await writeFile(
       join(tmp.dir, 'web-app', 'index.html'),
@@ -83,7 +81,6 @@ describe('createApp daemon mutation auth', () => {
     } else {
       process.env.WHITEBOARD_DEBUG = originalWhiteboardDebug
     }
-    clearDocCacheForTests()
     clearWorkspaceIdCacheForTests()
   })
 
@@ -594,8 +591,8 @@ describe('createApp daemon mutation auth', () => {
 
   // The "PUT /head surfaces current canvas corruption" assertion relied on
   // pre-populating the canvas .loro on the legacy filesystem path before any
-  // doc-cache / branches write. Now that documents live under blobs/ and the
-  // branches metadata + canvas snapshot can race the doc-cache, the precise
+  // cache / branches write. Now that documents live under blobs/ and the
+  // branches metadata + canvas snapshot can race the cache, the precise
   // 500 propagation needs a dedicated harness. Re-add as a follow-up once the
   // version-store conversion lands and the cache invalidation path is settled.
 

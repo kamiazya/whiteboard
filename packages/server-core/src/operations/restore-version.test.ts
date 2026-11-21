@@ -141,9 +141,8 @@ describe('restoreVersion in-place mode', () => {
     await expect(run(live, versionsWith({ v1: { doc: spatialDoc(['n2']) } }))).rejects.toThrow(
       'disk full',
     )
-    // The record the write landed in is dropped unsaved, and the projections cut from it.
+    // The record the write landed in is dropped unsaved.
     expect(live.recordsDropped).toEqual([WS])
-    expect(live.projectionsDropped).toEqual([WS])
     expect(nodeIdsAt(live, 'canvas-a')).toEqual(['n1'])
     // And the next open does not meet the unsaved write: nothing of it was kept.
     expect(await live.nodeIdsInRecord('canvas-a')).toEqual(['n1'])
@@ -163,7 +162,6 @@ describe('restoreVersion in-place mode', () => {
     const poisoned = versionsWith({ v1: { doc: mismatched } })
     await expect(run(live, poisoned)).rejects.toThrow()
     expect(live.recordsDropped).toEqual([WS])
-    expect(live.projectionsDropped).toEqual([WS])
     expect(live.calls.map((c) => c.method)).not.toContain('save')
   })
 
@@ -203,7 +201,6 @@ describe('restoreVersion restore-to-target mode', () => {
     })
     expect(live.stored('canvas-new')?.id).not.toBe(live.stored('canvas-a')?.id)
     expect(live.stored('canvas-new')?.kind).toBe('markdown')
-    expect(live.evicted).toEqual(['canvas-new'])
     expectAllCallsLocked(live)
   })
 
@@ -326,8 +323,6 @@ describe('restoreVersion subtree mode', () => {
     expect(result).toEqual({ kind: 'restored-subtree', restoredCount: 3 })
     expect(live.paths()).toEqual(['canvas-a', 'canvas-a/child', 'canvas-a/deleted', 'elsewhere'])
     expect(live.stored('canvas-a/deleted')?.kind).toBe('markdown')
-    // The recreated document (no live row) is evicted; reconciled ones are not.
-    expect(live.evicted).toEqual(['canvas-a/deleted'])
     // And the recreated document is announced, as every document a restore writes is.
     expect(live.written).toContain('canvas-a/deleted')
     expect(events).toEqual([

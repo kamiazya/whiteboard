@@ -1,16 +1,9 @@
-// The export path reads documents through a `(workspaceId, path)`-keyed LRU
-// of live LoroDoc instances. The MCP tool surface writes them by documentId,
-// with a fresh LoroDoc per call, and nothing on that path touches the cache —
-// so an export can serve bytes from before an agent's edit.
-//
-// It fails in the worst available shape: both loaders answer "nothing found"
-// with an EMPTY document rather than an error, so a stale or missed read is
-// indistinguishable from a canvas that really is empty. The route returns 200
-// and a file path for a picture of nothing.
-//
-// Deliberately not mocking the store. The existing `headless-export.test.ts`
-// calls `clearDocCacheForTests()` in beforeEach AND afterEach, which designs this defect
-// out of every case in the file; this one exists to keep the cache in play.
+// The MCP tool surface writes documents by documentId with a fresh LoroDoc per
+// call, and the export reads them by path from the workspace record. Both
+// loaders answer "nothing found" with an EMPTY document rather than an error,
+// so a missed read is indistinguishable from a canvas that really is empty: the
+// route returns 200 and a file path for a picture of nothing. The store is not
+// mocked, so the export meets the record exactly as a tool's save leaves it.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -34,8 +27,7 @@ vi.mock('../config.js', () => ({
 }))
 
 const { exportCanvasHeadlessSvg } = await import('./headless-export.js')
-const { saveDocument, getDoc } = await import('../store/document-store.js')
-const { clearDocCacheForTests } = await import('../store/doc-cache.js')
+const { saveDocument, loadDocument } = await import('../store/document-store.js')
 const { getDb } = await import('../store/db/index.js')
 const { LibsqlDocumentStore } = await import('../store/libsql/libsql-document-store.js')
 const { resolveDocumentIdAtPath } = await import('../store/document-store.js')
@@ -45,11 +37,9 @@ const PATH = 'design'
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-export-cache-test-'))
-  clearDocCacheForTests()
 })
 
 afterEach(async () => {
-  clearDocCacheForTests()
   await rm(tempDir, { recursive: true, force: true })
 })
 
@@ -102,13 +92,8 @@ async function stampOfStored(): Promise<Uint8Array<ArrayBuffer>> {
 }
 
 describe('an export after an agent edit', () => {
-  it('renders what the tool wrote, not what was cached before it', async () => {
+  it('renders what the tool wrote, not what the document held before it', async () => {
     await saveDocument(WORKSPACE, PATH, new LoroDoc())
-
-    // Stands in for anything that opens the document BY PATH between the
-    // create and the edit — a browser tab's WS connect, a snapshot GET, a
-    // version read. Each populates this cache; none is unusual.
-    await getDoc(WORKSPACE, PATH)
 
     await writeThroughToolPath('日本語のテキスト')
 
@@ -130,7 +115,7 @@ describe('an export after an agent edit', () => {
   it('merges a diverged history instead of preferring the copy it holds', async () => {
     await saveDocument(WORKSPACE, PATH, new LoroDoc())
     const loadedAt = await stampOfStored()
-    const cached = await getDoc(WORKSPACE, PATH)
+    const cached = await loadDocument(WORKSPACE, PATH)
     cached
       .getMap('nodes')
       .set(
@@ -155,7 +140,6 @@ describe('an export after an agent edit', () => {
 
   it('is not merely a smaller picture — the empty case is a valid-looking export', async () => {
     await saveDocument(WORKSPACE, PATH, new LoroDoc())
-    await getDoc(WORKSPACE, PATH)
     await writeThroughToolPath('hello')
 
     const { svg } = await exportCanvasHeadlessSvg({

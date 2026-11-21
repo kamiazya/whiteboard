@@ -9,7 +9,7 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { Hono } from 'hono'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createTestDocument, resolveTestServerDeps, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-folder-names-test-')
@@ -28,11 +28,7 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createWorkspacesRouter } = await import('./workspaces.js')
-
-beforeEach(() => clearDocCacheForTests())
-afterEach(() => clearDocCacheForTests())
 
 const WS = 'ws1'
 

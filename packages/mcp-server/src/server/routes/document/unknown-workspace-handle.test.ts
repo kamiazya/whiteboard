@@ -66,7 +66,9 @@ async function daemon() {
     createContainer(createSelfHostStoreLocalModule(handle.db, dataDir)),
   )
   await serverDeps.documentIndex.createWorkspace({ workspaceId: KNOWN, segment: KNOWN_SEGMENT })
-  await serverDeps.liveDocuments.save(KNOWN, 'doc', new LoroDoc(), { kind: 'spatial' })
+  await serverDeps.liveDocuments.create(KNOWN, 'doc', new LoroDoc().export({ mode: 'snapshot' }), {
+    kind: 'spatial',
+  })
   const documentId = await documentIdAt(serverDeps, KNOWN, 'doc')
   const app = createApp({
     authMode: 'local-daemon',
@@ -252,7 +254,12 @@ describe('a document in the trash, on the document routes', () => {
   it('keeps refusing the trashed id once another document is created at its old path', async () => {
     const d = await daemon()
     await trashed(d)
-    await d.serverDeps.liveDocuments.save(KNOWN, 'doc', new LoroDoc(), { kind: 'spatial' })
+    await d.serverDeps.liveDocuments.create(
+      KNOWN,
+      'doc',
+      new LoroDoc().export({ mode: 'snapshot' }),
+      { kind: 'spatial' },
+    )
 
     const res = await send(d, probeFor('PUT', 'files/:fileId', d.documentId), KNOWN)
 

@@ -19,7 +19,6 @@ import { getLogger } from '../log.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { corruptStoredData, isCorruptStoredDataError } from './corrupt-stored-data.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
-import { evictWorkspaceDocs, getOrLoad } from './doc-cache.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
@@ -74,15 +73,10 @@ const workspaceDocCache = new Map<string, { workspaceId: string; doc: LoroDoc }>
  *
  * Dropping a record also drops what it was following: no `followRecord` runs
  * for it until it is reopened, so a write another process makes meanwhile is
- * seen by nobody here. Two things derived from the record would then be
- * wrong, and `openFollowed` settles both when it reopens one. The per-document
- * projections in `doc-cache.ts` were cut from the OLD record, so a hit would
- * serve the content from before that write and the next save of it would
- * write that content back over it — they are evicted on every open that
- * misses, which covers an explicit eviction as well as this bound. And the
- * subscribers were told only what the old instance held, while a reopened
- * instance already level with the record gives `followRecord` nothing to
- * announce — so the version a record was dropped at is kept
+ * seen by nobody here. The subscribers were told only what the old instance
+ * held, while a reopened instance already level with the record gives
+ * `followRecord` nothing to announce — so `openFollowed` keeps the version a
+ * record was dropped at
  * (`droppedVersions`) and its gain is announced on reopen.
  * `followedTo` is keyed by the instance and leaves with it.
  *
@@ -229,8 +223,8 @@ async function recordIsAhead(
 }
 
 /**
- * Read the record's new ops into `doc` and say what that did to everything
- * derived from it. Under the workspace write barrier by the caller: it
+ * Read the record's new ops into `doc`, and what the document was before them.
+ * Under the workspace write barrier by the caller: it
  * mutates the instance every in-process writer diffs against.
  */
 async function importRecord(
@@ -246,12 +240,6 @@ async function importRecord(
     cursor,
   )
   followedTo.set(doc, caught.cursor)
-  // Every per-document projection is a value cut from this record, so one
-  // taken before the ops arrived serves the old content for good — and a
-  // later save of it would diff the old content against the tree and revert
-  // what arrived. Only a real gain evicts: this process's own writes come back
-  // through here as ops the document already has.
-  if (doc.version().compare(before) !== 0) evictWorkspaceDocs(workspaceId, scope)
   return { caught, before }
 }
 
@@ -302,7 +290,6 @@ async function openFollowed(
   followedTo.set(doc, cursor)
   const key = workspaceDocCacheKey(scope, workspaceId)
   keepRecord(key, workspaceId, doc)
-  evictWorkspaceDocs(workspaceId, scope)
   const dropped = droppedVersions.get(key)
   if (dropped !== undefined) {
     droppedVersions.delete(key)
@@ -393,12 +380,10 @@ export async function saveWorkspaceDoc(
   try {
     update = await docs.save(workspaceId, doc)
   } catch (err) {
-    // The live workspace doc now carries ops durable storage refused, and
-    // every cached projection derives from it. Serving either as though
-    // persisted would resurrect exactly the unpersisted-state bug eviction
-    // exists to prevent — drop both so the next read reloads stored bytes.
+    // The live workspace doc now carries ops durable storage refused. Serving
+    // it as though persisted would resurrect exactly the unpersisted-state bug
+    // eviction exists to prevent — drop it so the next read reloads stored bytes.
     evictWorkspaceDocCache(workspaceId, scope)
-    evictWorkspaceDocs(workspaceId, scope)
     throw err
   }
   // Through the shared funnel rather than a second loop: a remote update
@@ -612,30 +597,4 @@ async function loadPlacedDocument(
   const entry = resolveWorkspaceDocument(workspaceDoc, path)
   if (entry === null) return null
   return projectWorkspaceDocument(workspaceDoc, entry.documentId) ?? new LoroDoc()
-}
-
-/**
- * `loadDocument` through the resident LRU (doc-cache.ts), which is what most
- * callers want: a sync update, an export, and a version read of the same
- * document within a session should share one LoroDoc rather than each
- * rebuilding several MiB of CRDT history. Reach for `loadDocument` directly
- * only when a *fresh* instance is the point.
- */
-export async function getDoc(
-  workspaceId: string,
-  path: string,
-  scope: StoreScope = globalStoreScope,
-): Promise<LoroDoc> {
-  // A cached projection is current while the workspace record it was cut
-  // from is: every write THIS process makes mutates it in place (saveDocument
-  // diffs against the live workspace doc), and what another process writes
-  // reaches it only through the record. So the record is asked first —
-  // reading it through is what evicts the projections a foreign write
-  // outdated — and the cache then serves what is left. No per-document
-  // delta replay runs here: the workspace record is the document's whole
-  // history, and a per-document oplog replayed over it would only lay older
-  // state over current content.
-  validateWorkspaceId(workspaceId)
-  await openWorkspaceDocIfStored(workspaceId, scope)
-  return getOrLoad(workspaceId, path, () => loadPlacedDocument(workspaceId, path, scope), scope)
 }

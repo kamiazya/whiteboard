@@ -45,8 +45,6 @@ import { daemonBlobStore } from './backup-guarded-blob-store.js'
 import { CacheCoherentDocumentIndex } from './cache-coherent-document-index.js'
 import { CorruptStoredDataError } from './corrupt-stored-data.js'
 import { renameWorkspaceRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
-import { evictDoc, settleSavedDoc } from './doc-cache.js'
-import { moveEvictingCache } from './moved-paths.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import type { VersionStore } from './version-store.js'
@@ -71,7 +69,6 @@ export {
   catchUpWorkspaceDoc,
   emitWorkspaceDocUpdated,
   evictWorkspaceDocCache,
-  getDoc,
   getWorkspaceDoc,
   loadDocument,
   onWorkspaceDocUpdated,
@@ -374,11 +371,6 @@ export async function saveDocument(
       scope,
     })
     await saveWorkspaceDoc(workspaceId, workspaceDoc, scope)
-    // A caller may hand this function a doc that is NOT the cached
-    // projection (a fresh import, a checkout clone), or the empty stand-in a
-    // read of an unplaced path was answered with. Self-heal at the funnel
-    // entry instead of trusting every such caller to remember to evict.
-    settleSavedDoc(workspaceId, path, doc, scope)
     notifyDocumentSaved(workspaceId, path)
   })
 }
@@ -469,7 +461,7 @@ export async function documentExists(
  */
 export function createDocumentTeardown(scope: StoreScope = globalStoreScope): DocumentTeardown {
   return {
-    around({ workspaceId, documentId, path }, deleteDocument) {
+    around({ workspaceId, documentId }, deleteDocument) {
       // The whole delete runs under this workspace's write barrier, so a
       // version saved mid-delete cannot land after the sweep below.
       return withWorkspaceWriteLock(workspaceId, async () => {
@@ -487,11 +479,6 @@ export function createDocumentTeardown(scope: StoreScope = globalStoreScope): Do
             .where('documentId', '=', documentId)
             .execute()
         }
-
-        // Force the next getDoc() to reload from disk (there is nothing left to
-        // reload from — a fresh create should not inherit a doc instance that
-        // still holds the deleted document's history).
-        evictDoc(workspaceId, path, scope)
 
         return result
       })
@@ -725,9 +712,7 @@ export async function renameDocumentPath(
     const documentId = entry.documentId
     if (oldPath === newPath) return { documentId }
 
-    await moveEvictingCache(workspaceId, oldPath, newPath, scope, workspaceDoc, () =>
-      moveThroughIndex(workspaceId, oldPath, newPath, scope),
-    )
+    await moveThroughIndex(workspaceId, oldPath, newPath, scope)
     return { documentId }
   })
 }

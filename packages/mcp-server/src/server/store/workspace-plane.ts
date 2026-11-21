@@ -33,7 +33,6 @@ import {
   DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
   reassembleSnapshot,
 } from '@kamiazya/whiteboard-ports'
-import { evictDoc } from './doc-cache.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { evictWorkspaceDocCache, withStoredWorkspaceRecord } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
@@ -219,8 +218,6 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
               },
             ])
             await record.save()
-            // A projection cut before this write no longer matches the record.
-            evictDoc(workspaceId, place.path, this.scope)
             return true
           }),
         ),

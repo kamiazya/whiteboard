@@ -44,7 +44,6 @@ const { saveDocument } = await import('./document-store.js')
 const { getWorkspaceDoc, _clearWorkspaceDocCacheForTests } = await import(
   './workspace-doc-cache.js'
 )
-const { clearDocCacheForTests } = await import('./doc-cache.js')
 
 // Version save refuses a path with no document, so tests seed each path they
 // checkpoint — the shape production always has (auto-version fires after
@@ -337,7 +336,6 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
 
     // A restart: only what the store holds is left to check the version out on.
     _clearWorkspaceDocCacheForTests()
-    clearDocCacheForTests()
     const past = await loadPast(store, SESS_1, entry.id)
     expect(past).not.toBeNull()
     expect(countElements(past as LoroDoc)).toBe(1)

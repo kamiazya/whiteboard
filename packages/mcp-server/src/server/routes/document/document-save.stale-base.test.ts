@@ -25,7 +25,7 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   documentIdAt,
   postDocumentEdit,
@@ -52,11 +52,8 @@ beforeEach(async () => {
   await serverDeps.documentIndex.createWorkspace({ workspaceId: WS })
 })
 
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 await import('../../sync-audience.js')
-beforeEach(clearDocCacheForTests)
-afterEach(clearDocCacheForTests)
 
 const box = (id: string) => textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 })
 

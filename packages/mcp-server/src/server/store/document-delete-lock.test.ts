@@ -23,6 +23,7 @@ import { join } from 'node:path'
 import { deleteWorkspaceNodeAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import { hasDocumentTrash } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { getWorkspaceDoc, saveWorkspaceDoc } from './document-store.js'
 
 let tempDir: string
 
@@ -132,9 +133,9 @@ describe('wbDocumentDelete', () => {
     await deps.documentTeardown.around(
       { workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1', documentId: created.documentId, path: 'gone' },
       async () => {
-        const record = await deps.workspaceDocuments.get('01ZVM89A4A1V9FS03Z9J64KEK1')
+        const record = await getWorkspaceDoc('01ZVM89A4A1V9FS03Z9J64KEK1')
         expect(deleteWorkspaceNodeAtPath(record, 'gone')).toBe(true)
-        await deps.workspaceDocuments.save('01ZVM89A4A1V9FS03Z9J64KEK1', record)
+        await saveWorkspaceDoc('01ZVM89A4A1V9FS03Z9J64KEK1', record)
       },
     )
 

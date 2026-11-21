@@ -8,7 +8,7 @@ import {
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   documentIdAt,
   documentOf,
@@ -35,16 +35,12 @@ beforeEach(async () => {
   await serverDeps.documentIndex.createWorkspace({ workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF' })
 })
 
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 // Pre-loaded for the same dynamic-import cycle restore.test.ts works around.
 await import('../../sync-audience.js')
 
 const createRouter = () =>
   createDocumentRouter(testDocumentRouterOptions({ serverDeps, autoVersionQuietMs: 60_000 }))
-
-beforeEach(clearDocCacheForTests)
-afterEach(clearDocCacheForTests)
 
 function nodesModelDocUpdate(nodeIds: string[]): Uint8Array<ArrayBuffer> {
   const doc = new LoroDoc()

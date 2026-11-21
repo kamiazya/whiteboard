@@ -26,9 +26,7 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearDocCacheForTests } = await import('../store/doc-cache.js')
-
-const { getDoc, saveDocument } = await import('../store/document-store.js')
+const { saveDocument } = await import('../store/document-store.js')
 const { createDebugRouter } = await import('./debug.js')
 
 function makeDocWithNodes(count: number): LoroDoc {
@@ -81,7 +79,6 @@ describe('GET /api/debug', () => {
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-debug-test-'))
-    clearDocCacheForTests()
     process.env.WHITEBOARD_DEBUG = '1'
   })
 
@@ -92,7 +89,6 @@ describe('GET /api/debug', () => {
       process.env.WHITEBOARD_DEBUG = originalDebugEnv
     }
     await rm(tempDir, { recursive: true, force: true })
-    clearDocCacheForTests()
   })
 
   it("reports each document's node count", async () => {
@@ -133,32 +129,6 @@ describe('GET /api/debug', () => {
     await saveDocument('01CQ0HQWW8AY123AC8V2WTRS85', 'canvas-1', makeDocWithRetiredElements(2))
 
     expect(await nodeCountsAt('01CQ0HQWW8AY123AC8V2WTRS85')).toEqual({ 'canvas-1': 0 })
-  })
-
-  it('marks only documents touched through getDoc as cached in the cache section', async () => {
-    await mkdir(join(tempDir, '01Y29BTH8EG1A0GW0MP9QF3ZFH'), { recursive: true })
-    await saveDocument('01Y29BTH8EG1A0GW0MP9QF3ZFH', 'touched', makeDocWithNodes(1))
-    await saveDocument('01Y29BTH8EG1A0GW0MP9QF3ZFH', 'untouched', makeDocWithNodes(1))
-
-    // Only touched documents should appear in cache.
-    await getDoc('01Y29BTH8EG1A0GW0MP9QF3ZFH', 'touched')
-
-    const app = createDebugRouter({ scope: testStoreScope() })
-    const res = await app.request('/api/debug')
-    const json = (await res.json()) as {
-      workspaces: Array<{
-        workspaceId: string
-        documents: Array<{ path: string; cached: boolean }>
-      }>
-      cache: { size: number; keys: string[] }
-    }
-
-    expect(json.cache.keys).toContain('01Y29BTH8EG1A0GW0MP9QF3ZFH/touched')
-    expect(json.cache.keys).not.toContain('01Y29BTH8EG1A0GW0MP9QF3ZFH/untouched')
-
-    const session = json.workspaces.find((s) => s.workspaceId === '01Y29BTH8EG1A0GW0MP9QF3ZFH')!
-    expect(session.documents.find((c) => c.path === 'touched')?.cached).toBe(true)
-    expect(session.documents.find((c) => c.path === 'untouched')?.cached).toBe(false)
   })
 
   it('returns workspaces: [] when no sessions exist', async () => {

@@ -159,11 +159,10 @@ describe('deleting a document', () => {
   // wbDocumentDelete once removed the index row and the Libsql bytes and
   // stopped there, leaving a cached doc instance behind that the HTTP route
   // evicted. Both paths now run the same teardown, and this asserts on what
-  // is LEFT — the version row kept for a restore, the cache entry gone — not
+  // is LEFT — the version row kept for a restore, the path vacated — not
   // on the tool answering { deleted: true }, which it did throughout.
   it('leaves the same state when the delete comes through wbDocumentDelete as through the HTTP path', async () => {
     const { getDb } = await import('./db/index.js')
-    const { peekDoc } = await import('./doc-cache.js')
     const { resolveDocumentIdAtPath } = await import('./document-store.js')
 
     const doc = new LoroDoc()
@@ -172,13 +171,6 @@ describe('deleting a document', () => {
     const version = await store.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted', {
       auto: true,
     })
-    // Populate the doc cache the way a read would, so eviction has something
-    // to evict — otherwise this half of the assertion passes vacuously.
-    // getDoc, not loadDocument: only the former goes through the LRU.
-    const { getDoc } = await import('./document-store.js')
-    await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted')
-    expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted')).toBeDefined()
-
     const db = await getDb(tempDir)
     const documentId = await resolveDocumentIdAtPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted')
     expect(documentId).not.toBeNull()
@@ -195,7 +187,6 @@ describe('deleting a document', () => {
       .where('id', '=', version.id)
       .execute()
     expect(survivors).toEqual([{ id: version.id }])
-    expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted')).toBeUndefined()
     expect(await resolveDocumentIdAtPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted')).toBeNull()
   })
 
@@ -392,43 +383,8 @@ describe('renameDocumentPath', () => {
     expect(paths).toEqual(['a', 'a/x', 'c/x'])
   })
 
-  it('evicts every moved path from the cache, not only the two named ones', async () => {
-    const { peekDoc, clearDocCacheForTests } = await import('./doc-cache.js')
-    const { getDoc } = await import('./document-store.js')
-    clearDocCacheForTests()
-    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', new LoroDoc())
-    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a/child', new LoroDoc())
-    await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'a/child')
-    expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'a/child')).not.toBeUndefined()
-
-    await renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', 'b')
-
-    // A stale instance cached under the old child path would be resurrected
-    // by the next read through it, shadowing the moved document.
-    expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'a/child')).toBeUndefined()
-  })
-
-  it('evicts the old cache key so a subsequent getDoc under the old path misses the cache', async () => {
-    const { peekDoc, clearDocCacheForTests } = await import('./doc-cache.js')
-    const { getDoc } = await import('./document-store.js')
-    clearDocCacheForTests()
-    try {
-      await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', new LoroDoc())
-      await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'a')
-      expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'a')).toBeDefined()
-
-      await renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', 'b')
-      expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'a')).toBeUndefined()
-    } finally {
-      clearDocCacheForTests()
-    }
-  })
-
   it('serves the renamed content at a destination path that was read while empty', async () => {
-    const { peekDoc, clearDocCacheForTests } = await import('./doc-cache.js')
-    const { getDoc } = await import('./document-store.js')
-    clearDocCacheForTests()
-    try {
+    {
       // Write real content under 'a'.
       const doc = new LoroDoc()
       doc.getText('content').insert(0, 'real content')
@@ -437,15 +393,12 @@ describe('renameDocumentPath', () => {
 
       // A read of the not-yet-placed path 'b' is answered empty, and must
       // leave nothing behind to shadow the document renamed onto it.
-      await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'b')
-      expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'b')).toBeUndefined()
+      await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'b')
 
       await renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', 'b')
 
-      const reloaded = await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'b')
+      const reloaded = await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'b')
       expect(reloaded.getText('content').toString()).toBe('real content')
-    } finally {
-      clearDocCacheForTests()
     }
   })
 })

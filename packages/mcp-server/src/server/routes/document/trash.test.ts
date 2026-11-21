@@ -33,6 +33,7 @@ import {
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { storeMemoryModule } from '../../../shared/test-utils/store-memory.module.js'
+import { getWorkspaceDoc, saveWorkspaceDoc } from '../../store/document-store.js'
 import { testDocumentRouterOptions, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-trash-test-')
@@ -48,7 +49,6 @@ vi.mock('../../config.js', () => ({
 
 const { saveDocument, resolveDocumentIdAtPath } = await import('../../store/document-store.js')
 const { setDocumentDisplayName } = await import('../../store/names-store.js')
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 const { createTrashRouter } = await import('./trash.js')
 const { createContainer, resolveServerDeps } = await import('../../../di/container.js')
@@ -56,9 +56,7 @@ const { createSelfHostStoreLocalModule } = await import('../../../di/store-local
 const { prepareDataDir } = await import('../../store/db/prepare.js')
 const { getDb } = await import('../../store/db/index.js')
 
-beforeEach(() => {
-  clearDocCacheForTests()
-})
+beforeEach(() => {})
 
 function canvasDoc(text: string): LoroDoc {
   const doc = new LoroDoc()
@@ -314,7 +312,6 @@ describe('trash routes', () => {
       ...chunkSnapshot(bytes, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES),
       frontier: new Uint8Array(agentDoc.oplogVersion().encode()),
     })
-    clearDocCacheForTests()
 
     expect(await servedTexts(app, WS, 'doomed')).toEqual(['precious', 'agent note'])
   })
@@ -363,15 +360,15 @@ describe('trash routes', () => {
     const deps = await realDeps()
     const app = await appWithRealDeps(deps)
     await deleteAt(app, WS, 'twice')
-    const record = await deps.workspaceDocuments.get(WS)
+    const record = await getWorkspaceDoc(WS)
     const [entry] = readTrashEntries(record)
     if (entry === undefined) throw new Error('the delete recorded no trash entry')
     await app.request(`/api/workspaces/${WS}/trash/${documentId}/restore`, { method: 'POST' })
     // The row a merge from another replica can leave beside the live
     // document: same documentId, still in the trash.
-    const placed = await deps.workspaceDocuments.get(WS)
+    const placed = await getWorkspaceDoc(WS)
     recordTrashEntry(placed, entry)
-    await deps.workspaceDocuments.save(WS, placed)
+    await saveWorkspaceDoc(WS, placed)
 
     const again = await app.request(`/api/workspaces/${WS}/trash/${documentId}/restore`, {
       method: 'POST',

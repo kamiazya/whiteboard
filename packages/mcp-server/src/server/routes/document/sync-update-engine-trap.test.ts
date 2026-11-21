@@ -13,6 +13,7 @@ import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { getWorkspaceDoc } from '../../store/document-store.js'
 import { testDocumentRouterOptions, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-sync-engine-trap-')
@@ -72,8 +73,8 @@ async function setup() {
 
 describe('a sync write the CRDT engine traps on', () => {
   it('workspace-document update answers document_engine_trap and the next request is served', async () => {
-    const { deps, app, post } = await setup()
-    poison(await deps.workspaceDocuments.get(WS))
+    const { app, post } = await setup()
+    poison(await getWorkspaceDoc(WS))
 
     const trapped = await post(
       `/api/w/${WS}/workspace-document/update`,
@@ -91,8 +92,8 @@ describe('a sync write the CRDT engine traps on', () => {
   })
 
   it('promote answers document_engine_trap and the next promote lands', async () => {
-    const { deps, post } = await setup()
-    poison(await deps.workspaceDocuments.get(WS))
+    const { post } = await setup()
+    poison(await getWorkspaceDoc(WS))
     const promote = (path: string) =>
       post(
         `/api/w/${WS}/workspace-document/promote`,

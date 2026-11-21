@@ -50,7 +50,6 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { createDocumentRouter } = await import('../document.js')
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { _clearWorkspaceDocCacheForTests, onWorkspaceDocUpdated } = await import(
   '../../store/document-store.js'
 )
@@ -60,7 +59,6 @@ let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'promote-ws-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   // The workspace exists because this fixture says so, not because the first
   // POST created it: that route passes `createWorkspace: true`, which is

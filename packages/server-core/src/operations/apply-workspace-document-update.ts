@@ -159,7 +159,6 @@ function droppableRecord(
       if (dropped) return
       dropped = true
       deps.workspaceDocuments.evict(workspaceId)
-      deps.workspaceDocuments.evictProjections(workspaceId)
     },
   }
 }
@@ -242,7 +241,6 @@ async function keepImported(
   )
   // Fan-out to subscribers happens inside save.
   await record.save()
-  deps.workspaceDocuments.evictProjections(input.workspaceId)
   const edited = touched
     .filter((each) => each.contentWritten)
     .map(({ documentId, path }) => ({ documentId, path }))

@@ -17,14 +17,12 @@ export function unusedLiveDocuments(): LiveDocuments {
     )
   }
   return {
-    save: refuse('save'),
     create: refuse('create'),
     exists: refuse('exists'),
     kind: refuse('kind'),
     list: refuse('list'),
     rename: refuse('rename'),
     delete: refuse('delete'),
-    evict: refuse('evict'),
     // The one method that is NOT refused: every mutating tool takes the
     // write lock around its load-modify-save, and taking a lock is not
     // reaching the live-document store — a test of what a tool writes is

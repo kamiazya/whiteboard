@@ -22,11 +22,8 @@ import {
   type TenantTransaction,
 } from './db/tenant-database.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
-import { evictDoc } from './doc-cache.js'
-import { moveEvictingCache } from './moved-paths.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { trashBlobNamedElsewhere } from './trash-blob-named-elsewhere.js'
-import { openWorkspaceDocIfStored } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 /** Creates in one namespace, one at a time per instance — see `createWorkspace`. */
@@ -52,22 +49,15 @@ async function refuseWorkspacePastCeiling(
 }
 
 /**
- * The tree index, with this composition root's doc-cache kept coherent
- * around the moves and deletes the port performs. The cache is keyed by
- * (workspaceId, path), so a path a document LEAVES keeps a doc filed under a
- * name that no longer means what it did, and is evicted here. A path a
- * document ARRIVES at needs nothing: the cache never holds an entry for a
- * path the tree places nothing at (`getOrLoad`), so there is no empty
- * stand-in for a restore, a duplicate or a create to displace. The shared
- * index cannot know this cache exists, so the composition root wraps it.
- *
- * The automatic-checkpoint scheduler's pending work is path-keyed state of the
- * same kind, so the same wrapper tells it.
+ * The tree index, with this composition root's path-keyed state kept coherent
+ * around the moves and deletes the port performs: the automatic-checkpoint
+ * scheduler's pending work is keyed by path, so a path a document leaves must
+ * be told to it. The shared index cannot know the scheduler exists, so the
+ * composition root wraps it.
  */
 export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
   /**
-   * `scope` is the data directory the registry row and the doc-cache entries
-   * belong to; `docs`, `blobs` and `registry` are expected to be over the same
+   * `scope` is the data directory the registry row belongs to; `docs`, `blobs` and `registry` are expected to be over the same
    * one, which is why a composition builds all four from one scope.
    */
   constructor(
@@ -217,15 +207,7 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
     // and its write — the update then lazily recreates the source path and a
     // phantom duplicate survives the rename.
     return withWorkspaceWriteLock(input.workspaceId, async () => {
-      const workspaceDoc = await openWorkspaceDocIfStored(input.workspaceId, this.scope)
-      await moveEvictingCache(
-        input.workspaceId,
-        input.from,
-        input.to,
-        this.scope,
-        workspaceDoc,
-        () => super.moveDocument(input),
-      )
+      await super.moveDocument(input)
       // A pending automatic checkpoint is keyed by path too, and the keeper
       // resolves that path when it saves: left under the old name it would
       // fail against a document that is no longer there.
@@ -236,7 +218,6 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
   override async deleteDocument(input: { workspaceId: string; path: string }): Promise<void> {
     return withWorkspaceWriteLock(input.workspaceId, async () => {
       await super.deleteDocument(input)
-      evictDoc(input.workspaceId, input.path, this.scope)
       checkpointAfterRemoval(input.workspaceId, input.path)
     })
   }

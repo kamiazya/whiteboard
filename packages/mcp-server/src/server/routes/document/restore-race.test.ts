@@ -34,20 +34,6 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-// Mock the store so `getDoc` can be gated to control interleaving against a
-// concurrent rename/delete. It must be THIS module: `getDoc` is the store's
-// cached read, and doc-cache.js (which holds the LRU it reads through) never
-// exports it. Mocking the wrong module is silent — a factory spreading
-// `...actual` just adds a property nobody imports, and the race never stages.
-vi.mock('../../store/document-store.js', async () => {
-  const actual = await vi.importActual<typeof import('../../store/document-store.js')>(
-    '../../store/document-store.js',
-  )
-  return { ...actual, getDoc: vi.fn(actual.getDoc) }
-})
-
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
-
 const { createDocumentRouter } = await import('../document.js')
 // Pre-load ws.js before the race below. document.ts pulls it in via a
 // fire-and-forget dynamic import (documented cycle workaround), and
@@ -58,13 +44,9 @@ const { createDocumentRouter } = await import('../document.js')
 await import('../../sync-audience.js')
 
 describe('restore targetPath-overwrite vs delete race', () => {
-  beforeEach(() => {
-    clearDocCacheForTests()
-  })
+  beforeEach(() => {})
 
-  afterEach(() => {
-    clearDocCacheForTests()
-  })
+  afterEach(() => {})
 
   it('does not resurrect deleted content when a DELETE of the overwrite target races the restore reading it', async () => {
     const app = createDocumentRouter(
@@ -165,13 +147,9 @@ describe('restore targetPath-overwrite vs delete race', () => {
 })
 
 describe('restore in-place vs delete race', () => {
-  beforeEach(() => {
-    clearDocCacheForTests()
-  })
+  beforeEach(() => {})
 
-  afterEach(() => {
-    clearDocCacheForTests()
-  })
+  afterEach(() => {})
 
   it('does not resurrect the canvas when a DELETE of the in-place restore target races the restore reading it', async () => {
     const app = createDocumentRouter(

@@ -57,7 +57,6 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { createDocumentRouter } = await import('../document.js')
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { _clearWorkspaceDocCacheForTests, onWorkspaceDocUpdated } = await import(
   '../../store/document-store.js'
 )
@@ -68,7 +67,6 @@ let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'promote-outcomes-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   await seedWorkspaceRow(tempDir, WS)
   serverDeps = await resolveTestServerDeps(tempDir)

@@ -47,8 +47,6 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearDocCacheForTests, peekDoc } = await import('../../store/doc-cache.js')
-
 const documentStore = await import('../../store/document-store.js')
 const { saveDocument } = documentStore
 const { corruptStoredData } = await import('../../store/corrupt-stored-data.js')
@@ -86,12 +84,8 @@ async function routerFailing(method: 'deleteDocument' | 'moveDocument', err: unk
   )
 }
 
-beforeEach(() => {
-  clearDocCacheForTests()
-})
-afterEach(() => {
-  clearDocCacheForTests()
-})
+beforeEach(() => {})
+afterEach(() => {})
 
 describe('workspaces router', () => {
   it('returns a Hono instance', () => {
@@ -346,7 +340,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:documentId', () => {
     expect(json2).not.toMatchObject({ error: 'corrupt_stored_data' })
   })
 
-  it('evicts the doc-cache on delete, so re-creating the same path after a warm cache read yields a fresh empty doc', async () => {
+  it('re-creating a deleted path after the document was written yields a fresh empty doc', async () => {
     // Registered up front so the POST below is not the thing that creates it:
     // that route passes `createWorkspace: true`, which is ADR-0019's mint
     // boundary, and a mint would key the workspace by a fresh ULID —
@@ -361,9 +355,8 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:documentId', () => {
     m.set('id', 'old-element')
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
-    // Warm the doc-cache via the update path, matching real client traffic.
+    // Write through the update path, matching real client traffic.
     await writeDocumentUpdate(serverDeps, SESSION1, 'cached', update)
-    expect(peekDoc(SESSION1, 'cached')).toBeDefined()
     const cachedId = await documentIdAt(serverDeps, SESSION1, 'cached')
 
     const delRes = await app.request(`/api/workspaces/${SESSION1}/documents/${cachedId}`, {
@@ -532,7 +525,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:documentId/path', () => {
     }
   })
 
-  it('evicts the doc-cache on rename: updating via the OLD path afterward lazily creates a FRESH canvas rather than resurrecting the warmed doc, while the new path keeps the real content', async () => {
+  it('updating via the OLD path after a rename lazily creates a FRESH canvas rather than resurrecting the moved doc, while the new path keeps the real content', async () => {
     // Registered up front so the POST below is not the thing that creates it:
     // that route passes `createWorkspace: true`, which is ADR-0019's mint
     // boundary, and a mint would key the workspace by a fresh ULID —
@@ -547,9 +540,8 @@ describe('PUT /api/workspaces/:workspaceId/documents/:documentId/path', () => {
     m.set('id', 'old-element')
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
-    // Warm the doc-cache via the update path, matching real client traffic.
+    // Write through the update path, matching real client traffic.
     await writeDocumentUpdate(serverDeps, SESSION1, 'a', update)
-    expect(peekDoc(SESSION1, 'a')).toBeDefined()
 
     const movedId = await documentIdAt(serverDeps, SESSION1, 'a')
     const renameRes = await app.request(`/api/workspaces/${SESSION1}/documents/${movedId}/path`, {

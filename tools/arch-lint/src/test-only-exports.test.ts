@@ -203,8 +203,8 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
-  'packages/mcp-server/src/server/store/workspace-doc-cache.ts#getDoc':
-    "the per-document projection reader, which the projection cache's own tests drive while the cache exists; no shipped path reads a projection any more, and it goes with the cache",
+  'packages/mcp-server/src/server/store/document-store.ts#saveDocument':
+    'a document handed to the store as a LoroDoc, which the store and route tests build their fixtures with; its shipped caller is `saveDocumentBytes` beside it, which opens the bytes it is given as a document first',
   'packages/workspace-index/src/index-record-kind.ts#leaseIndexKind':
     'the index over engine leases, which only its tests build until the consumers move from the LoroDoc default onto leases and pass it as the index kind',
   'packages/canvas-render/src/edge-arrows.ts#edgeArrowEnds':

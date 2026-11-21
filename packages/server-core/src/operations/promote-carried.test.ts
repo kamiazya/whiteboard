@@ -21,12 +21,14 @@ import { CANVAS_MAX_NODES, MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
-import type { WorkspaceDocuments } from '../server-deps.js'
 import { FakeBlobStore } from '../test-utils/fake-blob-store.js'
 import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { leasedSession } from '../test-utils/leased-session.js'
-import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
+import {
+  unusedWorkspaceDocuments,
+  type WorkspaceDocumentsOverDoc,
+} from '../test-utils/unused-workspace-documents.js'
 import { PROMOTE_MAX_TRASH, PROMOTE_MAX_VERSIONS } from '../versions/version-entry.js'
 import { judgeCarried } from './promote-carried.js'
 import { promoteWorkspace } from './promote-workspace.js'
@@ -98,7 +100,7 @@ function daemon() {
   writeMarkdownBody(documentContainers(workspaceDoc, DAEMON_OWN_ID), '# the daemon wrote this')
   workspaceDoc.commit()
   let saves = 0
-  const workspaceDocuments: WorkspaceDocuments = {
+  const workspaceDocuments: WorkspaceDocumentsOverDoc = {
     ...unusedWorkspaceDocuments(),
     exists: async () => true,
     get: async () => workspaceDoc,
@@ -106,7 +108,6 @@ function daemon() {
       saves += 1
     },
     evict() {},
-    evictProjections() {},
   }
   const deps = {
     liveDocuments: new FakeLiveDocuments(),

@@ -368,14 +368,13 @@ it('does not keep serving an agent write whose persistence failed', async () => 
   expect(readText(await loadDocument('01PAW75F73PVC402Y3V151KT6R', 'design'))).toBe('persisted')
 })
 
-it('a CRDT engine trap evicts the document projection, so the next write rebuilds it from storage', async () => {
+it('a CRDT engine trap evicts the workspace record, so the next write rebuilds it from storage', async () => {
   // After a WASM trap the LoroDoc that was inside the call keeps a lock it
   // never released, and every later call on THAT instance traps again while a
-  // fresh one works. The cached projection is that instance, so without
-  // evicting it one oversize write leaves the document unwritable until the
-  // daemon restarts. A poisoned instance is modelled by an `import` that
-  // always throws the trap; the rebuilt projection is a different instance
-  // and is not affected.
+  // fresh one works. The cached record is that instance, so without evicting
+  // it one oversize write leaves the workspace unwritable until the daemon
+  // restarts. A poisoned instance is modelled by a `commit` that always throws
+  // the trap; the rebuilt record is a different instance and is not affected.
   const { routed } = await stores()
   await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('persisted'), {
     kind: 'spatial',
@@ -426,9 +425,9 @@ it('a CRDT engine trap evicts the document projection, so the next write rebuild
   expect(await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')).not.toBe(poisoned)
 })
 
-it('an ordinary save failure keeps the cached projection', async () => {
+it('an ordinary save failure keeps the cached record', async () => {
   // Only a trap poisons an instance; evicting on every error would make each
-  // refused write cost a full re-projection of a document that is fine.
+  // refused write cost a full reload of a record that is fine.
   const { routed } = await stores()
   await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('persisted'), {
     kind: 'spatial',

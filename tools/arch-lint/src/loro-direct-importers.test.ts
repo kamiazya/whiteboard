@@ -47,12 +47,9 @@ function namesShapedSurface(source: ts.SourceFile): boolean {
  * contract). Shrink-only.
  */
 const LORO_DIRECT: Readonly<Record<string, string>> = {
-  'packages/mcp-server/src/server/store/doc-cache.ts': 'M8: daemon store',
   'packages/mcp-server/src/server/store/document-store.ts': 'M8: daemon store',
-  'packages/mcp-server/src/server/store/moved-paths.ts': 'M8: daemon store',
   'packages/mcp-server/src/server/store/workspace-doc-cache.ts': 'M8: daemon store',
   'packages/mcp-server/src/server/store/workspace-tail.ts': 'M8: daemon store',
-  'packages/server-core/src/server-deps.ts': 'M7: server-core',
 }
 
 /** Shipped files outside loro-adapter that hold a LoroDoc without importing `loro-crdt`. Shrink-only. */

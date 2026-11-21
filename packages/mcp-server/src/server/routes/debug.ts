@@ -1,12 +1,10 @@
 import { Hono } from 'hono'
-import { getCacheKeys, peekDoc } from '../store/doc-cache.js'
 import { countDocumentNodes, listDocuments, listWorkspaces } from '../store/document-store.js'
 import type { StoreScope } from '../store/store-scope.js'
 
 type DocumentInfo = {
   path: string
   nodeCount: number
-  cached: boolean
 }
 
 type WorkspaceInfo = {
@@ -19,16 +17,14 @@ async function summarizeDocument(
   path: string,
   scope: StoreScope,
 ): Promise<DocumentInfo> {
-  const cached = peekDoc(workspaceId, path, scope)
-  const nodeCount = await countDocumentNodes(workspaceId, path, scope)
-  return { path, nodeCount, cached: cached !== undefined }
+  return { path, nodeCount: await countDocumentNodes(workspaceId, path, scope) }
 }
 
 // Who may read the dump is the route-scope registry's `daemon-token-only`
 // decision, enforced by the /api/* middleware in front of this router — so
 // this file decides only whether the endpoint exists.
 export interface CreateDebugRouterOptions {
-  /** The directory whose workspaces, documents and cache the dump describes. */
+  /** The directory whose workspaces and documents the dump describes. */
   scope: StoreScope
   enabled?: boolean
 }
@@ -60,11 +56,7 @@ export function createDebugRouter(options: CreateDebugRouterOptions) {
       }),
     )
 
-    const keys = getCacheKeys(options.scope)
-    return c.json({
-      workspaces: workspaceInfos,
-      cache: { size: keys.length, keys },
-    })
+    return c.json({ workspaces: workspaceInfos })
   })
 
   return app

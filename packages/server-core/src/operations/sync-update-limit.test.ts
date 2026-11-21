@@ -28,13 +28,16 @@ import {
 import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
-import type { LiveDocuments, VersionHistory, WorkspaceDocuments } from '../server-deps.js'
+import type { LiveDocuments, VersionHistory } from '../server-deps.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { contentOf, recordHolding, sendRecordEdit } from '../test-utils/record-sync.js'
 import { StoredDoc } from '../test-utils/stored-doc.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { unusedVersionHistory } from '../test-utils/unused-version-history.js'
-import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
+import {
+  unusedWorkspaceDocuments,
+  type WorkspaceDocumentsOverDoc,
+} from '../test-utils/unused-workspace-documents.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 import { promoteWorkspace } from './promote-workspace.js'
 import { OffGrammarPathError, textBreachRefusal } from './sync-write-refusals.js'
@@ -57,13 +60,12 @@ const lock: Pick<LiveDocuments, 'withWriteLock'> = {
 }
 
 function workspaceDeps(store: StoredDoc) {
-  const workspaceDocuments: WorkspaceDocuments = {
+  const workspaceDocuments: WorkspaceDocumentsOverDoc = {
     ...unusedWorkspaceDocuments(),
     exists: async () => true,
     get: async () => store.get(),
     save: async (_workspaceId, doc) => store.save(doc),
     evict: () => store.evict(),
-    evictProjections: () => {},
   }
   const liveDocuments: LiveDocuments = { ...unusedLiveDocuments(), ...lock }
   const versions: VersionHistory = {
