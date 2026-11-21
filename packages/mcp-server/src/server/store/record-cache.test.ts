@@ -22,6 +22,10 @@ function cache(options: { maxEntries?: number; idleMs?: number } = {}) {
   return new RecordCache<Handle>({
     maxEntries: options.maxEntries ?? 3,
     idleMs: options.idleMs,
+    schedule: (run, ms) => {
+      const timer = setTimeout(run, ms)
+      return { cancel: () => clearTimeout(timer) }
+    },
     release: (held) => released.push(held.name),
     pinned: (workspaceId) => locked.has(workspaceId),
     now: () => now,
@@ -186,6 +190,20 @@ describe('a record nobody uses', () => {
     now = 10 ** 9
     expect(vi.getTimerCount()).toBe(0)
     expect(records.get('a')?.name).toBe('a')
+    expect(released).toEqual([])
+  })
+
+  it('arms nothing when it is given no way to wait', () => {
+    const records = new RecordCache<Handle>({
+      maxEntries: 3,
+      idleMs: 1000,
+      release: (held) => released.push(held.name),
+      pinned: () => false,
+      now: () => now,
+    })
+    records.keep('a', 'wa', handle('a'))
+    now = 10_000
+    vi.advanceTimersByTime(10_000)
     expect(released).toEqual([])
   })
 

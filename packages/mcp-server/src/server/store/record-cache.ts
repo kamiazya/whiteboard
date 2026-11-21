@@ -31,6 +31,11 @@ export interface RecordCacheOptions<H> {
   readonly pinned: (workspaceId: string) => boolean
   /** An entry nobody holds and nobody has used for this long is dropped and released. Absent: never. */
   readonly idleMs?: number
+  /**
+   * How a wait is armed, for the idle release. The cache owns no timer: whoever
+   * sets an idle time owns the worker that arms it, and declares it as one.
+   */
+  readonly schedule?: (run: () => void, ms: number) => { cancel(): void }
   /** The entry the bound dropped, as it leaves; not called for an eviction by name. */
   readonly onBoundDrop?: (key: string, handle: H) => void
   readonly now?: () => number
@@ -47,7 +52,7 @@ interface Entry<H> {
 
 export class RecordCache<H> {
   private readonly entries = new Map<string, Entry<H>>()
-  private timer: ReturnType<typeof setTimeout> | undefined
+  private timer: { cancel(): void } | undefined
 
   constructor(private readonly options: RecordCacheOptions<H>) {}
 
@@ -158,23 +163,23 @@ export class RecordCache<H> {
   }
 
   /**
-   * One timer, for the soonest an entry could go idle, armed only while there
-   * is such an entry. It never keeps the process alive, and a cache with no idle
-   * time set never arms it.
+   * One wait, for the soonest an entry could go idle, armed only while there is
+   * such an entry. A cache with no idle time (or no way to wait) never arms it.
    */
   private arm(): void {
     const idleMs = this.options.idleMs
-    if (idleMs === undefined || this.timer !== undefined) return
+    if (idleMs === undefined || this.options.schedule === undefined || this.timer !== undefined) {
+      return
+    }
     const waiting = [...this.entries.values()].filter((entry) => entry.refs === 0)
     if (waiting.length === 0) return
     const soonest = Math.min(...waiting.map((entry) => entry.lastUsed + idleMs))
     const wait = Math.max(0, soonest - this.now())
-    this.timer = setTimeout(() => this.sweep(), wait)
-    this.timer.unref?.()
+    this.timer = this.options.schedule(() => this.sweep(), wait)
   }
 
   private disarm(): void {
-    if (this.timer !== undefined) clearTimeout(this.timer)
+    this.timer?.cancel()
     this.timer = undefined
   }
 }
