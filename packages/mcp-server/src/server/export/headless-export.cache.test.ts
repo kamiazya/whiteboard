@@ -64,12 +64,15 @@ function textDoc(text: string): LoroDoc {
  * The MCP tool surface's write, reproduced exactly: resolve the documentId,
  * build a FRESH LoroDoc, and save it against `document:<id>` through the
  * store the composition root actually injects — WorkspaceRoutedDocumentStore,
- * which merges the write into the live cached projection and the workspace
- * record. That freshness is the whole point — a caller mutating the cached
- * instance in place leaves the cache correct by identity, and every tool
- * call does the opposite.
+ * which writes it into the workspace record. That freshness is the whole
+ * point — a caller mutating the cached instance in place leaves the cache
+ * correct by identity, and every tool call does the opposite. `basedOn` is
+ * the stamp the tool's load answered, when it loaded before another writer.
  */
-async function writeThroughToolPath(text: string): Promise<void> {
+async function writeThroughToolPath(
+  text: string,
+  basedOn?: Uint8Array<ArrayBuffer>,
+): Promise<void> {
   const db = await getDb(tempDir)
   const documentId = await resolveDocumentIdAtPath(WORKSPACE, PATH)
   if (documentId === undefined || documentId === null) throw new Error('no documentId for path')
@@ -83,7 +86,19 @@ async function writeThroughToolPath(text: string): Promise<void> {
     // The tools' own value (`document-io.ts`). It is what tells a reader the
     // stored bytes are ahead of anything it is holding.
     frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+    ...(basedOn === undefined ? {} : { basedOn }),
   })
+}
+
+async function stampOfStored(): Promise<Uint8Array<ArrayBuffer>> {
+  const documentId = await resolveDocumentIdAtPath(WORKSPACE, PATH)
+  if (documentId === undefined || documentId === null) throw new Error('no documentId for path')
+  const { WorkspaceRoutedDocumentStore } = await import('../store/workspace-plane.js')
+  const loaded = await new WorkspaceRoutedDocumentStore(
+    new LibsqlDocumentStore(await getDb(tempDir)),
+  ).loadSnapshot({ docRef: { kind: 'document', workspaceId: WORKSPACE, documentId } })
+  if (loaded === null) throw new Error('nothing stored')
+  return loaded.frontier
 }
 
 describe('an export after an agent edit', () => {
@@ -107,14 +122,14 @@ describe('an export after an agent edit', () => {
     expect(svg).toContain('日本語のテキスト')
   })
 
-  // Two writers, neither a prefix of the other: an open editor holding the
-  // cached document while an agent writes the same one. The frontier
-  // comparison answers `undefined` here rather than "behind", and treating
-  // that as up-to-date would drop the agent's node while looking correct —
-  // the editor's own edit is still there, so the export is not obviously
-  // wrong.
+  // Two writers, neither a prefix of the other: an editor saves through the
+  // route while an agent that loaded before it saves its own copy. Treating
+  // the agent's copy as the whole document would drop the editor's node while
+  // looking correct — the agent's own edit is still there, so the export is
+  // not obviously wrong.
   it('merges a diverged history instead of preferring the copy it holds', async () => {
     await saveDocument(WORKSPACE, PATH, new LoroDoc())
+    const loadedAt = await stampOfStored()
     const cached = await getDoc(WORKSPACE, PATH)
     cached
       .getMap('nodes')
@@ -123,8 +138,9 @@ describe('an export after an agent edit', () => {
         textNode({ id: 'editor', x: 0, y: 200, width: 300, height: 80, text: 'from the editor' }),
       )
     cached.commit()
+    await saveDocument(WORKSPACE, PATH, cached, { overwrite: true })
 
-    await writeThroughToolPath('from the agent')
+    await writeThroughToolPath('from the agent', loadedAt)
 
     const { svg } = await exportCanvasHeadlessSvg({
       layoutCore: async () => testLayoutCore(),
