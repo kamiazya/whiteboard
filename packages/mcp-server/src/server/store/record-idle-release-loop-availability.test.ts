@@ -56,6 +56,7 @@ describe('the idle release of workspace records', () => {
     snapshot ??= workspaceSnapshot(360)
     recordIdleReleaseWorker.start()
     let released = 0
+    let sweepMs = 0
     let done: () => void = () => {}
     const allReleased = new Promise<void>((resolve) => {
       done = resolve
@@ -63,7 +64,14 @@ describe('the idle release of workspace records', () => {
     const records = new RecordCache<RecordLease>({
       maxEntries: 4,
       idleMs: 250,
-      schedule: scheduleIdleRelease,
+      // The sweep runs synchronously inside the scheduled callback, so its
+      // own duration is exactly the stall it imposes on the loop.
+      schedule: (run, ms) =>
+        scheduleIdleRelease(() => {
+          const startedAt = performance.now()
+          run()
+          sweepMs = Math.max(sweepMs, performance.now() - startedAt)
+        }, ms),
       release: (record) => {
         kind.release(record)
         released += 1
@@ -77,13 +85,18 @@ describe('the idle release of workspace records', () => {
 
     expect(released).toBe(4)
     expect(records.size).toBe(0)
-    // The wait itself is idle time, so the turn share is high; what the
-    // ceiling below holds is the single longest stretch the sweep ran.
+    // The wait itself is idle time, so the loop kept getting turns.
     expect(loopTurnShare(availability)).toBeGreaterThan(0.05)
+    // The ceiling is held against the sweep's own duration, not the window's
+    // worst stall: the window also catches pauses that are not the sweep's —
+    // the stress job's repeats read 121.9ms there while the four releases took
+    // about 1ms — and charging those to this worker made the ceiling a
+    // statement about the machine. The window's worst stall stays in the
+    // message for whoever reads a failure.
     const floor = await measureSchedulingFloor(availability.elapsedMs, { intervalMs: 5 })
     expect(
-      availability.worstStallMs,
-      `worst ${availability.worstStallMs}ms, machine floor ${floor.worstStallMs}ms`,
+      sweepMs,
+      `sweep ${sweepMs.toFixed(1)}ms; window worst ${availability.worstStallMs}ms, machine floor ${floor.worstStallMs}ms`,
     ).toBeLessThanOrEqual(stallCeilingMs('record-idle-release') + floor.worstStallMs)
   }, 60_000)
 })
