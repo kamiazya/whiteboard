@@ -5,14 +5,38 @@
  * by its first sync) is laid out rather than left as an empty SVG.
  */
 
+import {
+  fontCatalogueEntryByFamily,
+  fontDownloadUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'
 
-afterEach(cleanup)
+/**
+ * The sketch theme asks the catalogue's source for its family, which is a
+ * request to the network: answered with a 503 there, it is a logged failure
+ * the test did not provoke. The face is held in flight instead, a font that
+ * has not arrived yet, which is the case a theme switch has to draw through.
+ */
+const sketchFace = fontCatalogueEntryByFamily('Yomogi')
+beforeEach(() => {
+  if (sketchFace === undefined) throw new Error('the catalogue no longer lists Yomogi')
+  const faceUrl = fontDownloadUrl(sketchFace)
+  const realFetch = globalThis.fetch
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) =>
+    String(input instanceof Request ? input.url : input) === faceUrl
+      ? new Promise<Response>(() => {})
+      : realFetch(input, init),
+  )
+})
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 const NODES = 13
 

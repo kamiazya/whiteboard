@@ -430,7 +430,8 @@ function isAnchors(v: unknown): v is [string, AnchorPair][] {
  * in `mode` and `style` with the families in `fontFamilies`, coloured by
  * `tagLibrary`; `fragments` answers its math blocks and diagram fences, and
  * `section` narrows it to a `#Heading`. A comment (`kind: 'comment'`) is
- * drawn at the theme its `density` names, with nothing resolved.
+ * drawn at the theme its `density` names, its `[[references]]` resolved
+ * through `references` as a note's are (none resolve without it).
  */
 export type MarkdownLayoutRequest = LayoutRequest &
   (
@@ -452,6 +453,7 @@ export type MarkdownLayoutRequest = LayoutRequest &
         readonly body: string
         readonly maxWidth: number
         readonly density: 'comfortable' | 'compact'
+        readonly references?: object
         readonly svg?: SvgAsk
       }
   )

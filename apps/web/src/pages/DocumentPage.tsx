@@ -51,6 +51,7 @@ import type {
 import type { ResolvedTheme } from '../lib/theme.js'
 import { createUserSettingsStore, type UserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
+import { CommentReferencesScope } from './comment-references-scope.js'
 import type { DocumentKeeper, DocumentKeeperEvents } from './document-keeper.js'
 import {
   type AnnounceNotice,
@@ -93,10 +94,9 @@ const log = getAppLogger('document-page')
  * comments, connections or history), which past state is being looked at, the
  * save-a-version flow, the seams the editor reads.
  *
- * Two components rather than one so the body's hooks run only while there is
- * a model to run them on — a keeper answering `terminal` renders its screen
- * and mounts nothing of the page, exactly as the keeper pages did before the
- * page was shared.
+ * Two components rather than one so the body's hooks run only while there is a model to
+ * run them on — a keeper answering `terminal` renders its screen and mounts nothing of the
+ * page, exactly as the keeper pages did before the page was shared.
  */
 export function DocumentPage<Props>({
   keeper,
@@ -118,7 +118,9 @@ export function DocumentPage<Props>({
   if (answer.kind === 'terminal') return answer.node
   const page: ReactNode = (
     <TagColouringProvider setTagColour={answer.model.tags?.setTagColour}>
-      <DocumentPageBody model={answer.model} versionRefreshSignal={versionRefreshSignal} />
+      <CommentReferencesScope model={answer.model}>
+        <DocumentPageBody model={answer.model} versionRefreshSignal={versionRefreshSignal} />
+      </CommentReferencesScope>
     </TagColouringProvider>
   )
   return answer.wrap === undefined ? page : answer.wrap(page)
