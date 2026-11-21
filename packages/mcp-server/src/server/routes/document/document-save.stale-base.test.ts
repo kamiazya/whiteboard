@@ -159,3 +159,49 @@ describe('a tool save over a record that moved since the tool loaded', () => {
     expect(body.split('theirs')).toHaveLength(2)
   })
 })
+
+describe('a tool save over a record that did not move since the tool loaded', () => {
+  it('ends a canvas with each node once', async () => {
+    const app = await seededApp()
+    const documentId = await documentIdAt(serverDeps, WS, 'board')
+    const toolsCopy = await loadFor(documentId)
+    writeSpatialNode(toolsCopy, box('tool'))
+    toolsCopy.commit()
+    await saveFrom(documentId, toolsCopy)
+    const record = await recordOf(app)
+    const entry = resolveWorkspaceDocument(record, 'board')
+    const ids = readSpatialCanvas(documentContainers(record, entry?.documentId ?? ''))
+      .nodes.map((node) => node.id)
+      .sort()
+    expect(ids).toEqual(['base', 'tool'])
+  })
+
+  it('ends a note with its text once, the tool’s insert in place', async () => {
+    const app = await seededApp()
+    const documentId = await documentIdAt(serverDeps, WS, 'note')
+    const toolsCopy = await loadFor(documentId)
+    toolsCopy.getText('body').insert(0, 'tool ')
+    toolsCopy.commit()
+    await saveFrom(documentId, toolsCopy)
+    const record = await recordOf(app)
+    const entry = resolveWorkspaceDocument(record, 'note')
+    expect(readMarkdownBody(documentContainers(record, entry?.documentId ?? ''))).toBe(
+      'tool middle',
+    )
+  })
+
+  it('does the same on a second save of the same copy, still once', async () => {
+    const app = await seededApp()
+    const documentId = await documentIdAt(serverDeps, WS, 'note')
+    const toolsCopy = await loadFor(documentId)
+    toolsCopy.getText('body').insert(0, 'a ')
+    toolsCopy.commit()
+    await saveFrom(documentId, toolsCopy)
+    toolsCopy.getText('body').insert(0, 'b ')
+    toolsCopy.commit()
+    await saveFrom(documentId, toolsCopy)
+    const record = await recordOf(app)
+    const entry = resolveWorkspaceDocument(record, 'note')
+    expect(readMarkdownBody(documentContainers(record, entry?.documentId ?? ''))).toBe('b a middle')
+  })
+})
