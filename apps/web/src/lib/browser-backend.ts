@@ -15,7 +15,7 @@ import {
   type DocumentKind,
   type documentEngine as wire,
 } from '@kamiazya/whiteboard-model'
-import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
+import { type BlobStore, isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocCursor, WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { z } from 'zod'
 import { getAppLogger } from './app-logger.js'
@@ -23,6 +23,7 @@ import { saveAndAnnounce } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
 import { touchContentTimestamp } from './content-timestamp.js'
+import { IdbBlobStore } from './idb-blob-store.js'
 import {
   listenToWorkspace,
   type WorkspaceBroadcast,
@@ -102,6 +103,42 @@ function writeUnjudged(record: RecordLease, batch: wire.Write[]): Uint8Array | n
 
 const entryShape = z.custom<unknown>()
 
+/**
+ * Puts every document an import removed in the trash, as the keeper's own
+ * delete does: its bytes as they stood before the import, stored first, then
+ * the row naming them, all before the save. Stored the other way round, or not
+ * at all, the removed node cannot be revived and a later compaction drops its
+ * content.
+ */
+async function evacuateRemoved(
+  blobs: BlobStore,
+  record: RecordLease,
+  since: readonly wire.VersionEntry[],
+): Promise<void> {
+  const deletedAt = Date.now()
+  for (const { documentId, path, name, folderNames, bytes } of lease.removedSince(record, since)) {
+    const { ref } = await blobs.put({
+      bytes: new Uint8Array(bytes),
+      contentType: 'application/octet-stream',
+    })
+    writeUnjudged(record, [
+      {
+        op: 'recordTrashEntry',
+        args: {
+          entry: {
+            documentId,
+            path,
+            ...(name === undefined ? {} : { name }),
+            ...(folderNames === undefined ? {} : { folderNames }),
+            deletedAt,
+            blob: ref,
+          },
+        },
+      },
+    ])
+  }
+}
+
 async function holdsDocument(record: RecordLease, documentId: string): Promise<boolean> {
   const entry = await lease.read(
     record,
@@ -157,7 +194,11 @@ export class BrowserBackend implements DocumentBackend {
   /** How far into the stored record a catch-up has read this copy; null before the first. */
   private cursor: WorkspaceDocCursor | null = null
 
-  constructor(target: BrowserBackendTarget, docs?: WorkspaceDocs<RecordLease>) {
+  constructor(
+    target: BrowserBackendTarget,
+    docs?: WorkspaceDocs<RecordLease>,
+    private readonly blobs: BlobStore = new IdbBlobStore(),
+  ) {
     this.target = target
     this.docs = docs ?? new BrowserWorkspaceRecords()
   }
@@ -298,6 +339,7 @@ export class BrowserBackend implements DocumentBackend {
       // node text, labels and comment messages are bounded as a note's body
       // is, and a record holding one past its bound is one the daemon refuses
       // to take on promotion.
+      const since = lease.versionOf(record).entries
       const imported = lease.importBytes(record, bytes, 'text')
       if (imported.outcome === 'refused') {
         getAppLogger('browser-backend').warn('refused an update past a text limit', {
@@ -307,6 +349,9 @@ export class BrowserBackend implements DocumentBackend {
         this.refuse(refusalOf(imported.breach), record, handlers)
         return
       }
+      // What the update removed is in the trash before it is saved, so the
+      // removal never reaches the store without a way back.
+      await evacuateRemoved(this.blobs, record, since)
       // A note is named after its body's heading while nobody has named it —
       // before the save, so the name rides the same write. No kind check: a
       // canvas has an empty body container, so it announces no title and the
