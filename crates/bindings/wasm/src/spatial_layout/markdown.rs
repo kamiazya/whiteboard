@@ -51,7 +51,7 @@ pub(super) fn layout_markdown(request: &MarkdownRequest, host: Option<&dyn Host>
     match &request.prose {
         Prose::Note(note) => layout_note(request, note, host),
         Prose::Comment(density, references, svg) => {
-            if let Some(what) = past_caps(request, references.as_ref(), 0) {
+            if let Some(what) = past_caps(request, references.as_deref(), 0) {
                 return refused("input-too-large", what);
             }
             let empty = ReferenceWire::default();
@@ -61,12 +61,12 @@ pub(super) fn layout_markdown(request: &MarkdownRequest, host: Option<&dyn Host>
                 // one nothing can resolve, and the plain parser keeps a
                 // `[[alias]]` as the brackets it was written in.
                 let seams =
-                    WireHost::new(references.as_ref().unwrap_or(&empty), Expansion::Every(false));
+                    WireHost::new(references.as_deref().unwrap_or(&empty), Expansion::Every(false));
                 let parsed = match references {
-                    Some(_) => seams.parse_body(&request.body).map_err(|_| ()),
-                    None => parse_markdown_body(&request.body).map_err(|_| ()),
+                    Some(_) => seams.parse_body(&request.body).ok(),
+                    None => parse_markdown_body(&request.body).ok(),
                 };
-                let root = parsed.unwrap_or_else(|()| literal_root(&request.body));
+                let root = parsed.unwrap_or_else(|| literal_root(&request.body));
                 let scene =
                     layout_comment_text(&root, request.max_width, *density, measure, &seams);
                 laid_out(&LaidOut { scene, anchors: Vec::new() }, None, &[], None, svg.as_ref())

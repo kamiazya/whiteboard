@@ -44,7 +44,7 @@ pub(crate) enum Prose {
     Note(Box<Note>),
     /// A comment's prose at its density, the documents its `[[references]]`
     /// resolve to (`None` resolves none) and the SVG its answer carries.
-    Comment(CommentDensity, Option<ReferenceWire>, Option<SvgAsk>),
+    Comment(CommentDensity, Option<Box<ReferenceWire>>, Option<SvgAsk>),
 }
 
 /// A markdown request.
@@ -91,7 +91,7 @@ pub(crate) fn markdown_request_of(value: &Value) -> Option<MarkdownRequest> {
         "markdown" => Prose::Note(Box::new(note_of(&mut f)?)),
         "comment" => Prose::Comment(
             f.field("density", density_of)??,
-            f.field("references", references_of)?,
+            f.field("references", references_of)?.map(Box::new),
             f.field("svg", svg_of)?,
         ),
         _ => return None,
