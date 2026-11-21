@@ -17,6 +17,7 @@ import {
   loadBrowserDocument,
 } from '../lib/browser-document-summary.js'
 import { createBrowserFilesSource } from '../lib/browser-files-source.js'
+import { forgetPendingUpdates } from '../lib/browser-pending-updates.js'
 import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import { refusalSentence } from '../lib/browser-storage-refusal.js'
 import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
@@ -585,6 +586,7 @@ export function useBrowserDocumentController(
           workspaceId: getBrowserWorkspaceId(),
           path: entry.path,
         })
+        await forgetPendingUpdates(getBrowserWorkspaceId(), id)
       }
     } catch {
       // Generic safe copy — do not expose raw IDB error
@@ -623,6 +625,7 @@ export function useBrowserDocumentController(
               workspaceId: getBrowserWorkspaceId(),
               path: stale.path,
             })
+            await forgetPendingUpdates(getBrowserWorkspaceId(), existingId)
           }
         } catch {
           // Dropping the old document is best-effort; failure must not abort recovery.

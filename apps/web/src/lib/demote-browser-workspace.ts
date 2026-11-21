@@ -50,6 +50,7 @@ import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { getAppLogger } from './app-logger.js'
 import { BROWSER_DEFAULT_SEGMENT, WORKSPACES_STORE } from './browser-idb.js'
+import { forgetPendingUpdates } from './browser-pending-updates.js'
 import { deleteVersionRowsOfWorkspace } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { switchBrowserWorkspace } from './browser-workspace-id.js'
@@ -95,6 +96,9 @@ export async function demoteBrowserWorkspace(
     openDocumentStore(dbName).deleteDoc({
       docRef: { kind: 'workspace-tree', workspaceId: sourceWorkspaceId },
     }),
+  )
+  await bestEffort(sourceWorkspaceId, 'pending updates', () =>
+    forgetPendingUpdates(sourceWorkspaceId, undefined, dbName),
   )
   // Keyed by the source id alone, so a record that will not open does not keep them.
   await bestEffort(sourceWorkspaceId, 'version rows', () =>

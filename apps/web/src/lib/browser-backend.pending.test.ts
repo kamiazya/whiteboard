@@ -14,10 +14,11 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { docOf, leaseOf } from '../test-utils/replica-lease.js'
 import { BrowserBackend } from './browser-backend.js'
-import { MAX_PENDING_BYTES, PendingUpdates } from './browser-pending-updates.js'
+import { forgetPendingUpdates, PendingUpdates } from './browser-pending-updates.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 
 vi.mock('./content-timestamp.js', () => ({ touchContentTimestamp: async () => {} }))
@@ -29,6 +30,8 @@ const TARGET = {
   kind: 'markdown' as const,
 }
 const WS = getBrowserWorkspaceId()
+/** The size past which an update is not logged: one mebibyte. */
+const CAP = 1024 * 1024
 
 function seed(): LoroDoc {
   const record = new LoroDoc()
@@ -86,20 +89,14 @@ async function entries() {
   return found
 }
 
-beforeEach(async () => {
-  await new Promise<void>((resolve) => {
-    const req = indexedDB.deleteDatabase(`${DB}-pending`)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
-})
+beforeEach(clearWhiteboardDb)
 
 describe('an update a Browser-kept document was handed before the tab went away', () => {
   it('is replayed into the next connection, whose snapshot carries it', async () => {
     const persisted = { bytes: seed().export({ mode: 'snapshot' }) }
     const first = await connect(storeOf(persisted, true))
     void first.backend.pushLocalUpdate(typed(first.session, 'lost? '))
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    await vi.waitFor(async () => expect((await entries()).length).toBe(1))
     first.backend.disconnect()
 
     const second = await connect(storeOf(persisted, false))
@@ -135,7 +132,7 @@ describe('an update a Browser-kept document was handed before the tab went away'
   it('is not logged past the size cap, which takes the ordinary path alone', () => {
     const log = new PendingUpdates(`${DB}-pending`)
     return log.open().then(() => {
-      expect(log.put(WS, TARGET.documentId, new Uint8Array(MAX_PENDING_BYTES + 1))).toBeNull()
+      expect(log.put(WS, TARGET.documentId, new Uint8Array(CAP + 1))).toBeNull()
       expect(log.put(WS, TARGET.documentId, new Uint8Array(8))).not.toBeNull()
       log.close()
     })
@@ -162,5 +159,33 @@ describe('an update a Browser-kept document was handed before the tab went away'
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('what a removed record would leave in the log', () => {
+  async function logged(workspaceId: string, documentId: string) {
+    const log = new PendingUpdates(`${DB}-pending`)
+    await log.open()
+    log.put(workspaceId, documentId, new Uint8Array(8))
+    await log.close()
+  }
+
+  it('is forgotten for one document, and for a whole workspace, and for nothing else', async () => {
+    await logged(WS, 'doc-a')
+    await logged(WS, 'doc-b')
+    await logged('other-workspace', 'doc-a')
+    const count = async (workspaceId: string, documentId: string) => {
+      const log = new PendingUpdates(`${DB}-pending`)
+      const found = await log.list(workspaceId, documentId)
+      log.close()
+      return found.length
+    }
+    await vi.waitFor(async () => expect(await count(WS, 'doc-b')).toBe(1))
+
+    await forgetPendingUpdates(WS, 'doc-a', DB)
+    expect([await count(WS, 'doc-a'), await count(WS, 'doc-b')]).toEqual([0, 1])
+
+    await forgetPendingUpdates(WS, undefined, DB)
+    expect([await count(WS, 'doc-b'), await count('other-workspace', 'doc-a')]).toEqual([0, 1])
   })
 })

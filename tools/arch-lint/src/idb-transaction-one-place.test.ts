@@ -33,6 +33,10 @@ const ALLOWLIST: Readonly<Record<string, { calls: number; why: string }>> = {
     calls: 1,
     why: 'the one transaction promise: settles on commit, rejects on error and abort',
   },
+  'apps/web/src/lib/browser-pending-updates.ts': {
+    calls: 1,
+    why: 'the put of a closing tab must be issued synchronously on a connection opened earlier; `inTransaction` awaits `openWhiteboardDb` before it opens a transaction, so its put would run after the page is gone (measured: a put awaited behind an open is lost at 0-300 ms, one issued in the call survives), and it opens the whiteboard schema where this is a database of its own',
+  },
   'apps/web/src/lib/workspace-tombstone.ts': {
     calls: 1,
     why: 'a read-only refusal whose two answers both arrive through `request`, so there is no commit for it to report early; convertible to `inTransaction` without a change in behaviour',
@@ -110,6 +114,6 @@ describe('apps/web opens an IndexedDB transaction in one place', () => {
   })
 
   it('holds the allowlist at its declared ceiling', () => {
-    expect(Object.keys(ALLOWLIST)).toHaveLength(2)
+    expect(Object.keys(ALLOWLIST)).toHaveLength(3)
   })
 })

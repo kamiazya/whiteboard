@@ -28,7 +28,7 @@ import { whiteboardDbName } from './browser-idb.js'
 const STORE = 'pending'
 
 /** Past this an update is not logged: a delta this large is a paste or an import, and the put is synchronous. */
-export const MAX_PENDING_BYTES = 1024 * 1024
+const MAX_PENDING_BYTES = 1024 * 1024
 
 /**
  * An entry's key: the workspace, the document, an order within this page, and
@@ -80,9 +80,7 @@ export class PendingUpdates {
     counter += 1
     const key: PendingKey = [workspaceId, documentId, Date.now(), counter, PAGE]
     try {
-      const tx = this.db.transaction(STORE, 'readwrite')
-      tx.objectStore(STORE).put(bytes, key as unknown as IDBValidKey)
-      tx.onerror = () => {}
+      this.store('readwrite')?.put(bytes, key as unknown as IDBValidKey)
       return key
     } catch {
       return null
@@ -91,12 +89,8 @@ export class PendingUpdates {
 
   /** Forgets one entry, once the save it was waiting on has landed. */
   remove(key: PendingKey): void {
-    if (this.db === null) return
     try {
-      this.db
-        .transaction(STORE, 'readwrite')
-        .objectStore(STORE)
-        .delete(key as unknown as IDBValidKey)
+      this.store('readwrite')?.delete(key as unknown as IDBValidKey)
     } catch {
       // A leftover entry is replayed, and replaying one that landed is a no-op.
     }
@@ -114,7 +108,11 @@ export class PendingUpdates {
     ] as unknown as IDBValidKey)
     return new Promise<PendingUpdate[]>((resolve) => {
       const found: PendingUpdate[] = []
-      const req = db.transaction(STORE).objectStore(STORE).openCursor(range)
+      const req = this.store('readonly')?.openCursor(range)
+      if (req === undefined) {
+        resolve(found)
+        return
+      }
       req.onsuccess = () => {
         const cursor = req.result
         if (cursor === null) {
@@ -130,9 +128,61 @@ export class PendingUpdates {
     })
   }
 
+  /**
+   * The one place a transaction is opened here, issued on the connection `open`
+   * left. Not `inTransaction` (`idb-tx.ts`): that opens its connection first and
+   * awaits it, and by then a closing tab is gone — measured as the reason a put
+   * must not wait — and it opens the whiteboard schema, which this database is not.
+   */
+  private store(mode: IDBTransactionMode): IDBObjectStore | undefined {
+    const tx = this.db?.transaction(STORE, mode)
+    if (tx !== undefined) tx.onerror = () => {}
+    return tx?.objectStore(STORE)
+  }
+
+  /** Drops what is logged for a workspace, or for one document of it. */
+  async forget(workspaceId: string, documentId?: string): Promise<void> {
+    await this.open()
+    const range =
+      documentId === undefined
+        ? IDBKeyRange.bound([workspaceId], [workspaceId, []] as unknown as IDBValidKey)
+        : IDBKeyRange.bound([workspaceId, documentId], [
+            workspaceId,
+            documentId,
+            [],
+          ] as unknown as IDBValidKey)
+    const store = this.store('readwrite')
+    if (store === undefined) return
+    await new Promise<void>((resolve) => {
+      const req = store.delete(range)
+      req.onsuccess = () => resolve()
+      req.onerror = () => resolve()
+    })
+  }
+
   close(): void {
     this.db?.close()
     this.db = null
     this.opening = null
+  }
+}
+
+/**
+ * Forgets what a record's removal would otherwise leave to be replayed into
+ * whatever is minted under the same ids. Best effort: nothing here can fail
+ * the removal that calls it.
+ */
+export async function forgetPendingUpdates(
+  workspaceId: string,
+  documentId?: string,
+  dbName?: string,
+): Promise<void> {
+  const log = new PendingUpdates(dbName === undefined ? undefined : `${dbName}-pending`)
+  try {
+    await log.forget(workspaceId, documentId)
+  } catch {
+    // A leftover entry is bounded by what was typed and never replayed past a tombstone.
+  } finally {
+    log.close()
   }
 }

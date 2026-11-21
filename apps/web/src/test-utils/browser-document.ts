@@ -74,6 +74,9 @@ export async function clearWhiteboardDb(): Promise<void> {
   // deleting the database under either makes that save warn in the NEXT test.
   await settleAutoCheckpoints()
   await indexWritesSettled()
+  // The pending log is its own database, and an entry outliving the reset would
+  // be replayed into the fresh record the next case builds.
+  await deleteAndKeepDeleted(`${whiteboardDbName()}-pending`)
   return deleteAndKeepDeleted(whiteboardDbName())
 }
 
