@@ -10,6 +10,9 @@
 //! scan runs over UTF-8 and only the ranges an icon answers are counted in
 //! UTF-16 code units, as the typesetter is handed them.
 
+use std::collections::BTreeSet;
+use std::sync::OnceLock;
+
 use whiteboard_model::Value;
 use whiteboard_model::json;
 
@@ -108,19 +111,25 @@ pub fn expand_emoji_shortcodes(text: &str) -> String {
 /// The names `table` (an icon asset file) holds, whatever each entry is: the
 /// nameable set is the vendored file's keys (`BUILT_IN_ICON_NAMES`), not every
 /// icon the plugin registers.
-fn icon_names(table: &str) -> Vec<String> {
+fn icon_names(table: &str) -> BTreeSet<String> {
     match json::parse(table) {
         Ok(Value::Map(entries)) => entries.into_iter().map(|(name, _)| name).collect(),
-        _ => Vec::new(),
+        _ => BTreeSet::new(),
     }
 }
 
-fn icon_ranges_with(table: &str, text: &str) -> Vec<IconShortcodeRange> {
+/// The vendored file's names, parsed once: the file is a constant, and parsing
+/// it is the whole of a call's cost.
+fn lucide_names() -> &'static BTreeSet<String> {
+    static NAMES: OnceLock<BTreeSet<String>> = OnceLock::new();
+    NAMES.get_or_init(|| icon_names(crate::render::LUCIDE))
+}
+
+fn icon_ranges_with(names: &BTreeSet<String>, text: &str) -> Vec<IconShortcodeRange> {
     let found = candidates(text, ":icon-", icon_byte);
     if found.is_empty() {
         return Vec::new();
     }
-    let names = icon_names(table);
     let mut ranges = Vec::new();
     // Byte offsets rise through the candidates, so one walk counts the units.
     let (mut byte, mut unit) = (0_usize, 0_usize);
@@ -133,7 +142,7 @@ fn icon_ranges_with(table: &str, text: &str) -> Vec<IconShortcodeRange> {
     for candidate in found {
         let from = units_to(candidate.from);
         let to = units_to(candidate.to);
-        if names.iter().any(|name| name == candidate.name) {
+        if names.contains(candidate.name) {
             ranges.push(IconShortcodeRange { from, to, name: candidate.name.to_owned() });
         }
     }
@@ -144,7 +153,7 @@ fn icon_ranges_with(table: &str, text: &str) -> Vec<IconShortcodeRange> {
 /// order, as UTF-16 ranges of the text.
 #[must_use]
 pub fn icon_shortcode_ranges(text: &str) -> Vec<IconShortcodeRange> {
-    icon_ranges_with(crate::render::LUCIDE, text)
+    icon_ranges_with(lucide_names(), text)
 }
 
 #[cfg(test)]
@@ -163,10 +172,14 @@ mod tests {
     #[test]
     fn an_icon_name_is_a_key_of_the_vendored_file_whatever_its_entry() {
         let table = r#"{"odd": 1, "star": {"geometry": []}}"#;
-        let names =
-            |text| icon_ranges_with(table, text).into_iter().map(|r| r.name).collect::<Vec<_>>();
+        let names = |text| {
+            icon_ranges_with(&icon_names(table), text)
+                .into_iter()
+                .map(|r| r.name)
+                .collect::<Vec<_>>()
+        };
         assert_eq!(names(":icon-odd: :icon-star: :icon-sun:"), ["odd", "star"]);
-        assert!(icon_ranges_with("[]", ":icon-star:").is_empty());
+        assert!(icon_ranges_with(&icon_names("[]"), ":icon-star:").is_empty());
     }
 
     #[test]
