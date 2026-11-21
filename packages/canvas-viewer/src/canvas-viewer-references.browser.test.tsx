@@ -74,7 +74,7 @@ describe('CanvasViewer comment bubbles resolve references as a node body does', 
     }),
   )
 
-  it('draws the resolved title for a [[reference]] in a bubble, not the written brackets', () => {
+  it('draws the resolved title for a [[reference]], not the brackets', () => {
     const { container } = render(
       <CanvasViewer
         core={CORE}
