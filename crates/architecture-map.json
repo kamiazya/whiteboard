@@ -214,8 +214,8 @@
     "whiteboard-reference-graph": {
       "path": "crates/core/reference-graph",
       "layer": "core",
-      "status": "planned",
-      "description": "per-document reference facts and the backlink aggregate",
+      "status": "present",
+      "description": "per-document reference facts and the backlink aggregate (the pure rules; the cache over a port waits for the ports layer)",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": [
         "whiteboard-det",

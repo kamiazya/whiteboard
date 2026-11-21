@@ -677,6 +677,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "whiteboard-reference-graph"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "wasm-bindgen-test",
+ "whiteboard-codec",
+ "whiteboard-det",
+ "whiteboard-model",
+ "whiteboard-search",
+]
+
+[[package]]
 name = "whiteboard-scene"
 version = "0.0.0"
 dependencies = [
