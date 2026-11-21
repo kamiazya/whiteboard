@@ -40,11 +40,10 @@ const {
   saveDocument,
   loadDocument,
   cacheBackedWorkspaceDocs,
-  getDoc,
+  getWorkspaceDoc,
   resolveDocumentIdAtPath,
   workspaceRegistry,
 } = await import('./document-store.js')
-const { peekDoc } = await import('./doc-cache.js')
 const { WorkspaceRoutedDocumentStore } = await import('./workspace-plane.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { getDb } = await import('./db/index.js')
@@ -141,33 +140,31 @@ it('a tool read (document ref) sees a daemon-route write, and a tool write lands
   ).toBeNull()
 })
 
-it('readFrontier answers for a tree-served document, and the stamp moves when its content does', async () => {
-  // ContentFactsCache (search / backlinks / tags) validates every cached
-  // fact by this frontier. The legacy per-document record it used to read
-  // is retired, so a null here silently blanks the whole search corpus —
-  // the exact shape `pnpm smoke:e2e`'s wb_document_search step caught.
+it('a load stamps a tree-served document with its content, and the stamp moves when the content does', async () => {
+  // ContentFactsCache validates cached facts on the listing's digest; the
+  // stamp a load answers is the same digest, which a save hands back as
+  // `basedOn` to say what it derived from.
   const { routed } = await stores()
   await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('v1'), { kind: 'spatial' })
   const rowId = await resolveDocumentIdAtPath('01PAW75F73PVC402Y3V151KT6R', 'design')
   if (rowId === null) throw new Error('document missing from the tree')
-  const row = { id: rowId }
+  const docRef = {
+    kind: 'document',
+    workspaceId: '01PAW75F73PVC402Y3V151KT6R',
+    documentId: rowId,
+  } as const
 
-  const before = await routed.readFrontier({
-    docRef: { kind: 'document', workspaceId: '01PAW75F73PVC402Y3V151KT6R', documentId: row.id },
-  })
-  expect(before).not.toBeNull()
-  if (before === null) return
+  const before = await routed.loadSnapshot({ docRef })
+  expect(before?.frontier.length).toBeGreaterThan(0)
+  const again = await routed.loadSnapshot({ docRef })
+  expect(Buffer.from(again?.frontier ?? []).equals(Buffer.from(before?.frontier ?? []))).toBe(true)
 
   await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('v2'), {
     kind: 'spatial',
     overwrite: true,
   })
-  const after = await routed.readFrontier({
-    docRef: { kind: 'document', workspaceId: '01PAW75F73PVC402Y3V151KT6R', documentId: row.id },
-  })
-  expect(after).not.toBeNull()
-  if (after === null) return
-  expect(Buffer.from(after.frontier).equals(Buffer.from(before.frontier))).toBe(false)
+  const after = await routed.loadSnapshot({ docRef })
+  expect(Buffer.from(after?.frontier ?? []).equals(Buffer.from(before?.frontier ?? []))).toBe(false)
 })
 
 it('readSnapshotManifest answers for a tree-served document with generation 0, matching loadSnapshot', async () => {
@@ -194,7 +191,10 @@ it('readSnapshotManifest answers for a tree-served document with generation 0, m
   const loaded = await routed.loadSnapshot({ docRef: ref })
   expect(loaded).not.toBeNull()
   if (loaded === null) return
-  expect(manifestResult.manifest).toEqual(loaded.manifest)
+  // Each cut is its own projection, so its byte count is its own; the layout
+  // of the chunks is what the two answers share.
+  expect(manifestResult.manifest.chunkCount).toBe(loaded.manifest.chunkCount)
+  expect(manifestResult.manifest.maxChunkBytes).toBe(loaded.manifest.maxChunkBytes)
 
   // Proves the tree-served branch was actually taken rather than a
   // fall-through: the legacy plane has no record for this ref at all.
@@ -224,7 +224,7 @@ it('routes a document ref by ITS OWN workspace, with no documents-table lookup (
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
   expect(readText(doc)).toBe('tree-truth')
-  expect(await routed.readFrontier({ docRef: ref })).not.toBeNull()
+  expect(loaded.frontier.length).toBeGreaterThan(0)
 })
 
 it('workspace-tree refs pass straight through to the inner store', async () => {
@@ -390,8 +390,8 @@ it('a CRDT engine trap evicts the document projection, so the next write rebuild
   const trap = Object.assign(new Error('unreachable'), { name: 'RuntimeError' })
   expect(isEngineTrap(trap)).toBe(true)
 
-  const poisoned = await getDoc('01PAW75F73PVC402Y3V151KT6R', 'design')
-  vi.spyOn(poisoned, 'import').mockImplementation(() => {
+  const poisoned = await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')
+  const commit = vi.spyOn(poisoned, 'commit').mockImplementation(() => {
     throw trap
   })
   // Built on the snapshot a tool would have loaded: an edit from an unrelated
@@ -419,11 +419,11 @@ it('a CRDT engine trap evicts the document projection, so the next write rebuild
   }
 
   await expect(save('trapped')).rejects.toBe(trap)
-  expect(peekDoc('01PAW75F73PVC402Y3V151KT6R', 'design')).toBeUndefined()
+  commit.mockRestore()
 
   await save('after-trap')
   expect(readText(await loadDocument('01PAW75F73PVC402Y3V151KT6R', 'design'))).toBe('after-trap')
-  expect(await getDoc('01PAW75F73PVC402Y3V151KT6R', 'design')).not.toBe(poisoned)
+  expect(await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')).not.toBe(poisoned)
 })
 
 it('an ordinary save failure keeps the cached projection', async () => {
@@ -436,8 +436,8 @@ it('an ordinary save failure keeps the cached projection', async () => {
   const rowId = await resolveDocumentIdAtPath('01PAW75F73PVC402Y3V151KT6R', 'design')
   if (rowId === null) throw new Error('document missing from the tree')
 
-  const live = await getDoc('01PAW75F73PVC402Y3V151KT6R', 'design')
-  vi.spyOn(live, 'import').mockImplementation(() => {
+  const live = await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')
+  vi.spyOn(live, 'commit').mockImplementation(() => {
     throw new Error('not a trap')
   })
   const edited = canvasDoc('refused')
@@ -453,7 +453,7 @@ it('an ordinary save failure keeps the cached projection', async () => {
       frontier: new Uint8Array(edited.oplogVersion().encode()),
     }),
   ).rejects.toThrow('not a trap')
-  expect(peekDoc('01PAW75F73PVC402Y3V151KT6R', 'design')).toBe(live)
+  expect(await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')).toBe(live)
 })
 
 describe('DocumentStore conformance (production wiring: routed over a tree-backed workspace)', () => {

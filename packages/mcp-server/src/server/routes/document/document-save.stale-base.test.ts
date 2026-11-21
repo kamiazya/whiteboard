@@ -91,12 +91,18 @@ async function seededApp() {
   return app
 }
 
+// Where each tool copy was loaded, as the tool's session keeps it: handed back
+// on the first save, and gone once the copy has been saved.
+const loadedAt = new WeakMap<LoroDoc, Uint8Array>()
+
 async function loadFor(documentId: string): Promise<LoroDoc> {
   const loaded = await serverDeps.documentStore.loadSnapshot({
     docRef: { kind: 'document', workspaceId: WS, documentId },
   })
   if (loaded === null) throw new Error('no stored document')
-  return LoroDoc.fromSnapshot(reassembleSnapshot(loaded.manifest, loaded.chunks))
+  const copy = LoroDoc.fromSnapshot(reassembleSnapshot(loaded.manifest, loaded.chunks))
+  loadedAt.set(copy, loaded.frontier)
+  return copy
 }
 
 async function saveFrom(documentId: string, doc: LoroDoc): Promise<void> {
@@ -109,7 +115,9 @@ async function saveFrom(documentId: string, doc: LoroDoc): Promise<void> {
     manifest,
     chunks,
     frontier: new Uint8Array(doc.oplogVersion().encode()),
+    ...(loadedAt.has(doc) ? { basedOn: loadedAt.get(doc) as Uint8Array<ArrayBuffer> } : {}),
   })
+  loadedAt.delete(doc)
 }
 
 async function recordOf(app: Awaited<ReturnType<typeof seededApp>>): Promise<LoroDoc> {
@@ -157,5 +165,51 @@ describe('a tool save over a record that moved since the tool loaded', () => {
     expect(body.split('middle')).toHaveLength(3)
     expect(body.split('tool')).toHaveLength(2)
     expect(body.split('theirs')).toHaveLength(2)
+  })
+})
+
+describe('a tool save over a record that did not move since the tool loaded', () => {
+  it('ends a canvas with each node once', async () => {
+    const app = await seededApp()
+    const documentId = await documentIdAt(serverDeps, WS, 'board')
+    const toolsCopy = await loadFor(documentId)
+    writeSpatialNode(toolsCopy, box('tool'))
+    toolsCopy.commit()
+    await saveFrom(documentId, toolsCopy)
+    const record = await recordOf(app)
+    const entry = resolveWorkspaceDocument(record, 'board')
+    const ids = readSpatialCanvas(documentContainers(record, entry?.documentId ?? ''))
+      .nodes.map((node) => node.id)
+      .sort()
+    expect(ids).toEqual(['base', 'tool'])
+  })
+
+  it('ends a note with its text once, the tool’s insert in place', async () => {
+    const app = await seededApp()
+    const documentId = await documentIdAt(serverDeps, WS, 'note')
+    const toolsCopy = await loadFor(documentId)
+    toolsCopy.getText('body').insert(0, 'tool ')
+    toolsCopy.commit()
+    await saveFrom(documentId, toolsCopy)
+    const record = await recordOf(app)
+    const entry = resolveWorkspaceDocument(record, 'note')
+    expect(readMarkdownBody(documentContainers(record, entry?.documentId ?? ''))).toBe(
+      'tool middle',
+    )
+  })
+
+  it('does the same on a second save of the same copy, still once', async () => {
+    const app = await seededApp()
+    const documentId = await documentIdAt(serverDeps, WS, 'note')
+    const toolsCopy = await loadFor(documentId)
+    toolsCopy.getText('body').insert(0, 'a ')
+    toolsCopy.commit()
+    await saveFrom(documentId, toolsCopy)
+    toolsCopy.getText('body').insert(0, 'b ')
+    toolsCopy.commit()
+    await saveFrom(documentId, toolsCopy)
+    const record = await recordOf(app)
+    const entry = resolveWorkspaceDocument(record, 'note')
+    expect(readMarkdownBody(documentContainers(record, entry?.documentId ?? ''))).toBe('b a middle')
   })
 })

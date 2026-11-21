@@ -2,6 +2,7 @@ import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/no
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import type { ServerDeps } from '../server-deps.js'
+import { withContentDigests } from './digested-index.js'
 import { ignoredDocumentWrites } from './ignored-document-writes.js'
 import { unusedDocumentTeardown } from './unused-document-teardown.js'
 import { unusedLiveDocuments } from './unused-live-documents.js'
@@ -41,10 +42,12 @@ import { unusedWorkspaceDocuments } from './unused-workspace-documents.js'
  * ```
  */
 export function makeTestDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
+  const documentStore = overrides.documentStore ?? new InMemoryDocumentStore()
   return {
-    documentStore: new InMemoryDocumentStore(),
+    documentStore,
     blobStore: {} as never,
-    documentIndex: new InMemoryDocumentIndex(),
+    // Listing entries carry a content digest, as the daemon's do.
+    documentIndex: withContentDigests(new InMemoryDocumentIndex(), documentStore),
     documentTeardown: unusedDocumentTeardown(),
     documentWritten: ignoredDocumentWrites(),
     versions: unusedVersionHistory(),
