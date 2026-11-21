@@ -8,6 +8,7 @@ import {
   type MarkdownRecord,
   NAMES_A_NAME_ONLY_EMBED,
   PAST_THE_PARSER,
+  renamedScene,
   sortedSceneDigest,
 } from '../test-utils/markdown-document-oracle/oracle.js'
 import { built, requireWasm, wasmBytes } from '../test-utils/wasm/glue.js'
@@ -73,12 +74,11 @@ const digests = new Map(
 /** How the core's answer to `record` differs from what it is held to, if it does. */
 function judged(core: Core, record: MarkdownRecord, meta: MarkdownMeta): string | undefined {
   const answer = core.layoutMarkdown(requestOf(record, meta), highlightCode)
-  const differs = difference(answer, record)
   if (NAMES_A_NAME_ONLY_EMBED.has(record.id)) {
-    return differs === undefined
-      ? 'draws as the TypeScript did; drop it from NAMES_A_NAME_ONLY_EMBED'
-      : undefined
+    if (!('scene' in record)) return 'listed without a recorded scene'
+    return difference(answer, { ...record, scene: renamedScene(record.scene, meta) })
   }
+  const differs = difference(answer, record)
   if (!PAST_THE_PARSER.has(bodyName(record.id))) return differs
   if (!('scene' in answer)) return `not drawn as its literal text: ${JSON.stringify(answer)}`
   return differs === undefined
