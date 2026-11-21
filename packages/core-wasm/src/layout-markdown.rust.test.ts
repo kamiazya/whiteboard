@@ -68,4 +68,18 @@ describe('a markdown body through the shim over the built artifact', () => {
     })
     expect('blockLines' in comment && comment.blockLines).toEqual([])
   })
+
+  it.each([
+    ['a note', { kind: 'markdown', mode: 'light' }],
+    ['a comment', { kind: 'comment', density: 'compact' }],
+  ] as const)('draws %s whose body holds a lone surrogate as it draws U+FFFD in its place', async (_name, shape) => {
+    const core = await loadCore(bytes())
+    const lay = (body: string) =>
+      core.layoutMarkdown({ ...shape, body, maxWidth: 400, measure } as never)
+
+    const drawn = lay('before \ud800 after')
+
+    expect('scene' in drawn, JSON.stringify(drawn)).toBe(true)
+    expect(drawn).toEqual(lay('before \ufffd after'))
+  })
 })

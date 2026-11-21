@@ -206,7 +206,7 @@ function encodeLayoutRequest(
 ): string | undefined {
   const measure = handle === undefined ? request.measure : { kind: 'fonts', handle }
   const cache = surface === undefined ? {} : { cache: surface }
-  const wire = wireOf({ ...request, measure, ...cache }, 0, true)
+  const wire = wireOf({ ...request, measure, ...cache }, 0, true, true)
   return wire === undefined ? undefined : JSON.stringify(wire)
 }
 
