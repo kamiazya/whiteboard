@@ -10,6 +10,8 @@
 //! scan runs over UTF-8 and only the ranges an icon answers are counted in
 //! UTF-16 code units, as the typesetter is handed them.
 
+use std::sync::OnceLock;
+
 use whiteboard_model::Value;
 use whiteboard_model::json;
 
@@ -115,12 +117,18 @@ fn icon_names(table: &str) -> Vec<String> {
     }
 }
 
-fn icon_ranges_with(table: &str, text: &str) -> Vec<IconShortcodeRange> {
+/// The vendored file's names, parsed once: the file is a constant, and parsing
+/// it is the whole of a call's cost.
+fn lucide_names() -> &'static [String] {
+    static NAMES: OnceLock<Vec<String>> = OnceLock::new();
+    NAMES.get_or_init(|| icon_names(crate::render::LUCIDE))
+}
+
+fn icon_ranges_with(names: &[String], text: &str) -> Vec<IconShortcodeRange> {
     let found = candidates(text, ":icon-", icon_byte);
     if found.is_empty() {
         return Vec::new();
     }
-    let names = icon_names(table);
     let mut ranges = Vec::new();
     // Byte offsets rise through the candidates, so one walk counts the units.
     let (mut byte, mut unit) = (0_usize, 0_usize);
@@ -144,7 +152,7 @@ fn icon_ranges_with(table: &str, text: &str) -> Vec<IconShortcodeRange> {
 /// order, as UTF-16 ranges of the text.
 #[must_use]
 pub fn icon_shortcode_ranges(text: &str) -> Vec<IconShortcodeRange> {
-    icon_ranges_with(crate::render::LUCIDE, text)
+    icon_ranges_with(lucide_names(), text)
 }
 
 #[cfg(test)]
@@ -163,10 +171,14 @@ mod tests {
     #[test]
     fn an_icon_name_is_a_key_of_the_vendored_file_whatever_its_entry() {
         let table = r#"{"odd": 1, "star": {"geometry": []}}"#;
-        let names =
-            |text| icon_ranges_with(table, text).into_iter().map(|r| r.name).collect::<Vec<_>>();
+        let names = |text| {
+            icon_ranges_with(&icon_names(table), text)
+                .into_iter()
+                .map(|r| r.name)
+                .collect::<Vec<_>>()
+        };
         assert_eq!(names(":icon-odd: :icon-star: :icon-sun:"), ["odd", "star"]);
-        assert!(icon_ranges_with("[]", ":icon-star:").is_empty());
+        assert!(icon_ranges_with(&icon_names("[]"), ":icon-star:").is_empty());
     }
 
     #[test]
