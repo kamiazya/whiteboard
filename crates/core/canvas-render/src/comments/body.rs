@@ -47,7 +47,9 @@ pub fn literal_root(text: &str) -> Root {
 }
 
 /// A comment's markdown laid out at the origin, `max_width` wide at `density`
-/// (`layoutCommentBody`). A body the host cannot parse is reported against the
+/// (`layoutCommentBody`). Its `[[alias]]` references resolve through the same
+/// host parse a node's body takes, so a bubble and a node never disagree about
+/// what a reference is. A body the host cannot parse is reported against the
 /// comment's id and drawn as its literal text, so the comment stays on screen.
 #[must_use]
 pub fn layout_comment_body(
@@ -58,7 +60,7 @@ pub fn layout_comment_body(
     options: &ComposeOptions<'_>,
 ) -> Vec<SceneNode> {
     let host = options.layout.host;
-    let root = host.parse_markdown(text).unwrap_or_else(|_| {
+    let root = host.parse_body(text).unwrap_or_else(|_| {
         host.degrade(Degradation::BodyParseFailed { node_id: id.to_owned() });
         literal_root(text)
     });

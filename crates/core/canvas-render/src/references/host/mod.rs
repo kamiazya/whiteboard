@@ -195,10 +195,6 @@ impl ComposeHost for WireHost<'_> {
         self.canvas_part(document_id, fragment)
     }
 
-    fn parse_markdown(&self, text: &str) -> Result<Root, ParseFailed> {
-        parse_markdown_body(text).map_err(|_| ParseFailed)
-    }
-
     fn degrade(&self, event: Degradation) {
         self.degradations.borrow_mut().push(event);
     }

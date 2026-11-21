@@ -9,7 +9,7 @@
 import { referenceSeamsFromWire, referenceWire } from '@kamiazya/whiteboard-canvas-render'
 import { browserLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/browser-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
@@ -54,5 +54,36 @@ describe('CanvasViewer file-reference seams', () => {
       />,
     )
     expect(svgText(container)).toContain('Weekly')
+  })
+})
+
+describe('CanvasViewer comment bubbles resolve references as a node body does', () => {
+  const board: SpatialCanvas = {
+    nodes: [textNode({ id: 'a', x: 0, y: 0, width: 200, height: 60, text: 'a' })],
+    edges: [],
+  }
+  const thread = (body: string) => ({
+    id: 't1',
+    anchor: { kind: 'spatial' as const, nodeIds: ['a'], x: 0, y: 0, width: 1, height: 1 },
+    status: 'open' as const,
+    messages: [{ id: 'm1', body }],
+  })
+  const references = referenceSeamsFromWire(
+    referenceWire(new Map([['notes', { documentId: 'D-NOTES', name: 'Weekly notes' }]]), {
+      resolveTitle: (id) => (id === 'D-NOTES' ? 'Weekly notes' : undefined),
+    }),
+  )
+
+  it('draws the resolved title for a [[reference]] in a bubble, not the written brackets', () => {
+    const { container } = render(
+      <CanvasViewer
+        core={CORE}
+        canvas={board}
+        references={references}
+        threads={[thread('see [[notes]] first')]}
+      />,
+    )
+    expect(svgText(container)).toContain('Weekly notes')
+    expect(svgText(container)).not.toContain('[[')
   })
 })

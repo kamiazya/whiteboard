@@ -92,10 +92,6 @@ impl ComposeHost for Naming {
     }
 
     fn degrade(&self, _: Degradation) {}
-
-    fn parse_markdown(&self, _: &str) -> Result<Root, ParseFailed> {
-        Err(ParseFailed)
-    }
 }
 
 /// Colours every fence the default highlighter's gate passes, as one keyword.

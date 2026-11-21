@@ -20,7 +20,7 @@
 use whiteboard_canvas_render::comments::CommentOptions;
 use whiteboard_canvas_render::comments::body::literal_root;
 use whiteboard_canvas_render::compose_canvas::{LaidOut, LayoutOptions};
-use whiteboard_canvas_render::compose_node::{BodySeams, ComposeHost, ContentCache};
+use whiteboard_canvas_render::compose_node::{BodySeams, ContentCache};
 use whiteboard_canvas_render::markdown_document::{layout_comment_text, layout_markdown_document};
 use whiteboard_canvas_render::measure::Measure;
 use whiteboard_canvas_render::references::{Expansion, ReferenceWire, WireHost};
@@ -29,6 +29,7 @@ use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::typeset::{
     DiagramRenderer, EmbedResolver, MathRenderer, select_markdown_section,
 };
+use whiteboard_codec::markdown::parse_markdown_body;
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::mdast::Root;
@@ -55,10 +56,10 @@ pub(super) fn layout_markdown(request: &MarkdownRequest, host: Option<&dyn Host>
             }
             let empty = ReferenceWire::default();
             measured(&request.measure, host, None, |measure, _| {
-                // The plain parser and no reference: a comment resolves no link.
+                // The request carries no reference wire, so the plain parser is
+                // what a body with nothing to resolve gets from the host too.
                 let seams = WireHost::new(&empty, Expansion::Every(false));
-                let root = seams
-                    .parse_markdown(&request.body)
+                let root = parse_markdown_body(&request.body)
                     .unwrap_or_else(|_| literal_root(&request.body));
                 let scene =
                     layout_comment_text(&root, request.max_width, *density, measure, &seams);

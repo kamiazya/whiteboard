@@ -62,8 +62,9 @@ pub struct ParseFailed;
 
 /// What the composer asks of the layer it runs in.
 pub trait ComposeHost {
-    /// A text node's markdown parsed (`parseBody`), its `[[alias]]` references
-    /// resolved to documents (`resolveReferences`).
+    /// A markdown body parsed (`parseBody`), its `[[alias]]` references
+    /// resolved to documents (`resolveReferences`): a text node's, and a
+    /// comment bubble's.
     fn parse_body(&self, text: &str) -> Result<Root, ParseFailed>;
 
     /// What a reference resolves to (`referenceFor`); a resolver that fails
@@ -78,11 +79,6 @@ pub trait ComposeHost {
     /// The canvas a body's `![[canvas]]` draws, narrowed to `fragment`: the
     /// typesetter's resolver keeps only its size.
     fn embedded_canvas(&self, document_id: &str, fragment: Option<&str>) -> Option<SpatialCanvas>;
-
-    /// A comment's markdown parsed alone (`parseBody`): a bubble's body takes
-    /// the parser without the reference resolution a node's body gets, as the
-    /// TypeScript's `layoutCommentBody` does.
-    fn parse_markdown(&self, text: &str) -> Result<Root, ParseFailed>;
 
     fn degrade(&self, event: Degradation);
 }

@@ -10,7 +10,8 @@
 //!
 //! A bubble's body is the opening message laid out at the origin ([`body`]), a
 //! settled one collapsed to its first line; only its parse is the host's
-//! ([`crate::compose_node::ComposeHost::parse_markdown`]).
+//! ([`crate::compose_node::ComposeHost::parse_body`], the parse a node's body
+//! takes).
 
 pub mod body;
 pub mod loose;
