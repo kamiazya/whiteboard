@@ -140,4 +140,27 @@ describe('an update a Browser-kept document was handed before the tab went away'
       log.close()
     })
   })
+
+  it('keeps two tabs that log in the same millisecond apart', async () => {
+    // Two page loads are two module instances, so each counts from one.
+    vi.useFakeTimers({ toFake: ['Date'], now: 1_700_000_000_000 })
+    try {
+      const logs = []
+      for (const _ of [0, 1]) {
+        vi.resetModules()
+        const { PendingUpdates: Fresh } = await import('./browser-pending-updates.js')
+        const log = new Fresh(`${DB}-pending`)
+        await log.open()
+        logs.push(log)
+      }
+      const a = logs[0]?.put(WS, TARGET.documentId, new Uint8Array([1]))
+      const b = logs[1]?.put(WS, TARGET.documentId, new Uint8Array([2]))
+      expect(a).not.toBeNull()
+      expect(b).not.toBeNull()
+      expect(await logs[0]?.list(WS, TARGET.documentId)).toHaveLength(2)
+      for (const log of logs) log?.close()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })

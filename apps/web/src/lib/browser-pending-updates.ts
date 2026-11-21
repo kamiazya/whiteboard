@@ -30,8 +30,18 @@ const STORE = 'pending'
 /** Past this an update is not logged: a delta this large is a paste or an import, and the put is synchronous. */
 export const MAX_PENDING_BYTES = 1024 * 1024
 
-/** An entry's key: the workspace, the document, and an order that is unique within this page. */
-export type PendingKey = readonly [workspaceId: string, documentId: string, at: number, n: number]
+/**
+ * An entry's key: the workspace, the document, an order within this page, and
+ * this page's own id — two tabs writing in the same millisecond with the same
+ * count would otherwise overwrite each other's entry.
+ */
+export type PendingKey = readonly [
+  workspaceId: string,
+  documentId: string,
+  at: number,
+  n: number,
+  page: string,
+]
 
 export interface PendingUpdate {
   readonly key: PendingKey
@@ -39,6 +49,7 @@ export interface PendingUpdate {
 }
 
 let counter = 0
+const PAGE = crypto.randomUUID()
 
 export class PendingUpdates {
   private db: IDBDatabase | null = null
@@ -67,7 +78,7 @@ export class PendingUpdates {
   put(workspaceId: string, documentId: string, bytes: Uint8Array): PendingKey | null {
     if (this.db === null || bytes.length === 0 || bytes.length > MAX_PENDING_BYTES) return null
     counter += 1
-    const key: PendingKey = [workspaceId, documentId, Date.now(), counter]
+    const key: PendingKey = [workspaceId, documentId, Date.now(), counter, PAGE]
     try {
       const tx = this.db.transaction(STORE, 'readwrite')
       tx.objectStore(STORE).put(bytes, key as unknown as IDBValidKey)
