@@ -11,7 +11,7 @@ use whiteboard_canvas_render::node_box::{NodeBoxOptions, NodeOutlines};
 use whiteboard_canvas_render::references::{LoadedReference, ReferenceWire, WireHost};
 use whiteboard_canvas_render::theme::geometry::SPATIAL_THEME_GEOMETRY;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
-use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
+use whiteboard_canvas_render::theme::spatial_theme::{SpatialTheme, create_spatial_theme};
 use whiteboard_canvas_render::typeset::NestedLayoutBudget;
 use whiteboard_facet_engine::registry::Registry;
 use whiteboard_plugin_visual::host::visual_registry;
@@ -33,18 +33,22 @@ fn wire() -> ReferenceWire {
     }
 }
 
-/// The runs `text` draws as a bubble body under `host`, as `(label, link)`.
-fn runs_of(
-    host: &WireHost<'_>,
-    registry: &Registry,
-    text: &str,
-) -> Vec<(String, Option<LinkProvenance>)> {
-    let measure = FakeMeasure::default();
-    let appearance = create_spatial_theme(SpatialThemeMode::Light, None);
-    let budget = NestedLayoutBudget::new();
-    let layout = LayoutOptions {
-        measure: &measure,
-        appearance: &appearance,
+/// What a bubble body is laid out under: the measurer, theme and budget the
+/// options borrow.
+struct Parts {
+    measure: FakeMeasure,
+    appearance: SpatialTheme,
+    budget: NestedLayoutBudget,
+}
+
+fn layout_options<'a>(
+    parts: &'a Parts,
+    registry: &'a Registry,
+    host: &'a WireHost<'a>,
+) -> LayoutOptions<'a> {
+    LayoutOptions {
+        measure: &parts.measure,
+        appearance: &parts.appearance,
         geometry: None,
         style: RenderStyle::Clean,
         themes: &[],
@@ -63,11 +67,25 @@ fn runs_of(
         body: BodySeams { inline: host, highlight: None, math: None, diagram: None, embeds: None },
         budget: None,
         embed_path: &[],
+    }
+}
+
+/// The runs `text` draws as a bubble body under `host`, as `(label, link)`.
+fn runs_of(
+    host: &WireHost<'_>,
+    registry: &Registry,
+    text: &str,
+) -> Vec<(String, Option<LinkProvenance>)> {
+    let parts = Parts {
+        measure: FakeMeasure::default(),
+        appearance: create_spatial_theme(SpatialThemeMode::Light, None),
+        budget: NestedLayoutBudget::new(),
     };
+    let layout = layout_options(&parts, registry, host);
     let options = ComposeOptions {
         node_box: NodeBoxOptions {
-            measure: &measure,
-            appearance: &appearance,
+            measure: &parts.measure,
+            appearance: &parts.appearance,
             geometry: SPATIAL_THEME_GEOMETRY,
             fit_to_box: true,
             theme: None,
@@ -76,7 +94,7 @@ fn runs_of(
         },
         theme_id: None,
         layout: &layout,
-        budget: &budget,
+        budget: &parts.budget,
         embed_path: &[],
         embed_depth: 0,
         empty_frames: &[],
