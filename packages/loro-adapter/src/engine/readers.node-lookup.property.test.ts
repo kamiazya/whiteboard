@@ -17,6 +17,8 @@ import {
   documentContainers,
   moveWorkspaceNodeToPath,
   resolveWorkspaceDocument,
+  WORKSPACE_TREE_KEY,
+  walk,
 } from '../workspace-tree.js'
 import { readQuery } from './readers.js'
 
@@ -28,6 +30,8 @@ type Step =
   | { op: 'move'; from: (typeof PATHS)[number]; to: (typeof PATHS)[number] }
   | { op: 'delete'; path: (typeof PATHS)[number] }
   | { op: 'edit'; path: (typeof PATHS)[number]; text: string }
+  | { op: 'rawRename'; path: (typeof PATHS)[number]; segment: 'a' | 'b' | 'x' }
+  | { op: 'rawDelete'; path: (typeof PATHS)[number] }
   | { op: 'commit' }
 
 const step: fc.Arbitrary<Step> = fc.oneof(
@@ -49,6 +53,15 @@ const step: fc.Arbitrary<Step> = fc.oneof(
       text: fc.string({ maxLength: 8 }),
     }),
   },
+  {
+    weight: 2,
+    arbitrary: fc.record({
+      op: fc.constant('rawRename' as const),
+      path,
+      segment: fc.constantFrom('a' as const, 'b' as const, 'x' as const),
+    }),
+  },
+  { weight: 2, arbitrary: fc.record({ op: fc.constant('rawDelete' as const), path }) },
   { weight: 2, arbitrary: fc.constant({ op: 'commit' as const }) },
 )
 
@@ -74,6 +87,15 @@ function apply(doc: LoroDoc, next: Step, minted: { count: number }): void {
       if (entry?.kind === 'markdown') {
         writeMarkdownBody(documentContainers(doc, entry.documentId), next.text)
       }
+    } else if (next.op === 'rawRename' || next.op === 'rawDelete') {
+      // Straight at the tree and never committed: the state the lookup was kept for
+      // is the one the record has left.
+      const hit = walk(doc).find(
+        (entry) => entry.read.type === 'document' && entry.path === next.path,
+      )
+      if (hit === undefined) return
+      if (next.op === 'rawRename') hit.node.data.set('segment', next.segment)
+      else doc.getTree(WORKSPACE_TREE_KEY).delete(hit.node.id)
     } else {
       doc.commit()
     }
