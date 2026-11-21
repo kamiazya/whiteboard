@@ -240,3 +240,23 @@ describe('an engine lease held in it', () => {
     expect(() => engine.version({ handle: lease.handle })).toThrow()
   })
 })
+
+describe('the loans that are out', () => {
+  it('counts a loan from the acquire to the give, however the entry is treated meanwhile', () => {
+    const records = cache({ maxEntries: 1 })
+    records.keep('a', 'wa', handle('a'))
+    expect(records.outstanding).toBe(0)
+
+    const first = records.acquire('a')
+    const second = records.acquire('a')
+    expect(records.outstanding).toBe(2)
+    records.evict('a')
+    expect(records.outstanding).toBe(2)
+
+    first?.give()
+    first?.give()
+    expect(records.outstanding).toBe(1)
+    second?.give()
+    expect(records.outstanding).toBe(0)
+  })
+})
