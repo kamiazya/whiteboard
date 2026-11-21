@@ -57,6 +57,11 @@
       "regions": 100,
       "reason": "first measured 2026-11-10 at 100.00% lines and regions: the generated payload types and the two pattern matchers, covered by their own tests"
     },
+    "core/reference-graph": {
+      "lines": 99,
+      "regions": 98,
+      "reason": "first measured 2026-11-21 at 99.29% lines and 98.86% regions, with the recorded graph-rules.jsonl replayed natively (tests/graph_rules_oracle.rs: every row, 807) beside the unit tests of the unit offsets, markup writer, bounds and path order; what is left are the arms a recorded row never builds (a name longer than its markup, a node that shows no text in a rewrite)"
+    },
     "core/scene": {
       "lines": 100,
       "regions": 96,
