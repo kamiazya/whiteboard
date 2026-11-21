@@ -12,7 +12,6 @@ import {
   useRef,
   useState,
 } from 'react'
-import { CommentReferencesProvider } from '../components/annotations/comment-references.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
 import {
@@ -52,6 +51,7 @@ import type {
 import type { ResolvedTheme } from '../lib/theme.js'
 import { createUserSettingsStore, type UserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
+import { CommentReferencesScope } from './comment-references-scope.js'
 import type { DocumentKeeper, DocumentKeeperEvents } from './document-keeper.js'
 import {
   type AnnounceNotice,
@@ -94,10 +94,9 @@ const log = getAppLogger('document-page')
  * comments, connections or history), which past state is being looked at, the
  * save-a-version flow, the seams the editor reads.
  *
- * Two components rather than one so the body's hooks run only while there is
- * a model to run them on — a keeper answering `terminal` renders its screen
- * and mounts nothing of the page, exactly as the keeper pages did before the
- * page was shared.
+ * Two components rather than one so the body's hooks run only while there is a model to
+ * run them on — a keeper answering `terminal` renders its screen and mounts nothing of the
+ * page, exactly as the keeper pages did before the page was shared.
  */
 export function DocumentPage<Props>({
   keeper,
@@ -119,7 +118,9 @@ export function DocumentPage<Props>({
   if (answer.kind === 'terminal') return answer.node
   const page: ReactNode = (
     <TagColouringProvider setTagColour={answer.model.tags?.setTagColour}>
-      <DocumentPageBody model={answer.model} versionRefreshSignal={versionRefreshSignal} />
+      <CommentReferencesScope model={answer.model}>
+        <DocumentPageBody model={answer.model} versionRefreshSignal={versionRefreshSignal} />
+      </CommentReferencesScope>
     </TagColouringProvider>
   )
   return answer.wrap === undefined ? page : answer.wrap(page)
@@ -595,19 +596,6 @@ function DocumentPageBody({
     loadImage: (ref) => files.adapter.loadImageUrl(ref),
   })
 
-  // The rail, the panel and the canvas card draw comment prose, whose
-  // `[[references]]` resolve through the same keeper loader the body's do.
-  const commentBodies = useMemo(
-    () => threads.annotations.flatMap((thread) => thread.messages.map((m) => m.body)).join('\n\n'),
-    [threads.annotations],
-  )
-  const commentReferences = useReferenceSeams({
-    body: commentBodies,
-    resolveAlias: files.resolveAlias,
-    resolveTitle: files.resolveTitle,
-    load: files.loadReference,
-  })
-
   const [notice, setNotice] = useTransientNotice()
   const { exportError, handleExport } = useSceneExport({
     onExport: (format, scope) =>
@@ -724,91 +712,89 @@ function DocumentPageBody({
   })
 
   return (
-    <CommentReferencesProvider value={commentReferences}>
-      <DocumentPageShell
-        srTitle={model.srTitle}
-        headingRef={headingRef}
-        aside={inspector === null ? undefined : lockedInspector(sync, inspectorPanels[inspector]())}
-        header={
-          <DocumentHeader
-            topBar={topBar}
-            isFullscreen={isFullscreen}
-            model={model}
-            rowActions={rowActions}
-            documentKey={documentKey}
-            preview={preview}
-            headingRef={headingRef}
-          />
-        }
-      >
-        {model.slots.replaceEditor ?? (
-          <EditorLock sync={sync} onLeave={topBar?.onNavigateBack}>
-            <EditorBehindPreview
-              preview={
-                preview ? (
-                  <VersionPreview past={preview.past} theme={resolvedTheme} tags={model.tags} />
-                ) : null
-              }
-            >
-              <DocumentEditorSurface
-                kind={documentKind}
-                documentKey={documentKey}
-                markdown={markdownPaneProps({
-                  model,
-                  resolvedTheme,
-                  references,
-                  threads,
-                  commentsRail,
-                  sync,
-                  decidePassage,
-                  announce: setNotice,
-                })}
-                spatial={() => (
-                  <SpatialEditorPane
-                    className="relative h-full min-h-0"
-                    editorKey={documentKey}
-                    editorRef={attachSpatialHandle}
-                    {...agentTouchProps(model.spatial)}
-                    canvas={sync.canvas}
-                    onChange={sync.onChange}
-                    externalVersion={sync.externalVersion}
-                    theme={resolvedTheme}
-                    {...(model.facetRegistry && { facetRegistry: model.facetRegistry })}
-                    {...(model.tags === undefined
-                      ? {}
-                      : { tagSuggestions: model.tags.inUse, tagLibrary: model.tags.library })}
-                    // File-node reference = the target's immutable id; the
-                    // same rows the link picker offers (open document
-                    // excluded), so the two pickers cannot label one
-                    // document two ways.
-                    fileRefOptions={fileRefOptions(files.pickerTargets)}
-                    onOpenDocument={model.openDocument}
-                    missingFileRef={files.missingFileRef}
-                    fileSeams={fileSeams}
-                    lockedNodeIds={sync.lockedNodeIds}
-                    lockedEdgeIds={sync.lockedEdgeIds}
-                    onToggleNodeLock={sync.setNodeLock}
-                    onToggleEdgeLock={sync.setEdgeLock}
-                    nodeInEditor={nodeInEditor}
-                    history={{
-                      onUndo: () => void sync.undo(),
-                      onRedo: () => void sync.redo(),
-                      canUndo: sync.canUndo(),
-                      canRedo: sync.canRedo(),
-                    }}
-                    overlayTitle={model.overlayTitle}
-                    linkTargets={files.pickerTargets}
-                    threads={threads.annotations}
-                    proposals={threads.proposals}
-                  >
-                    {model.spatial.children}
-                  </SpatialEditorPane>
-                )}
-              />
-            </EditorBehindPreview>
-          </EditorLock>
-        )}
-      </DocumentPageShell>
-    </CommentReferencesProvider>
+    <DocumentPageShell
+      srTitle={model.srTitle}
+      headingRef={headingRef}
+      aside={inspector === null ? undefined : lockedInspector(sync, inspectorPanels[inspector]())}
+      header={
+        <DocumentHeader
+          topBar={topBar}
+          isFullscreen={isFullscreen}
+          model={model}
+          rowActions={rowActions}
+          documentKey={documentKey}
+          preview={preview}
+          headingRef={headingRef}
+        />
+      }
+    >
+      {model.slots.replaceEditor ?? (
+        <EditorLock sync={sync} onLeave={topBar?.onNavigateBack}>
+          <EditorBehindPreview
+            preview={
+              preview ? (
+                <VersionPreview past={preview.past} theme={resolvedTheme} tags={model.tags} />
+              ) : null
+            }
+          >
+            <DocumentEditorSurface
+              kind={documentKind}
+              documentKey={documentKey}
+              markdown={markdownPaneProps({
+                model,
+                resolvedTheme,
+                references,
+                threads,
+                commentsRail,
+                sync,
+                decidePassage,
+                announce: setNotice,
+              })}
+              spatial={() => (
+                <SpatialEditorPane
+                  className="relative h-full min-h-0"
+                  editorKey={documentKey}
+                  editorRef={attachSpatialHandle}
+                  {...agentTouchProps(model.spatial)}
+                  canvas={sync.canvas}
+                  onChange={sync.onChange}
+                  externalVersion={sync.externalVersion}
+                  theme={resolvedTheme}
+                  {...(model.facetRegistry && { facetRegistry: model.facetRegistry })}
+                  {...(model.tags === undefined
+                    ? {}
+                    : { tagSuggestions: model.tags.inUse, tagLibrary: model.tags.library })}
+                  // File-node reference = the target's immutable id; the
+                  // same rows the link picker offers (open document
+                  // excluded), so the two pickers cannot label one
+                  // document two ways.
+                  fileRefOptions={fileRefOptions(files.pickerTargets)}
+                  onOpenDocument={model.openDocument}
+                  missingFileRef={files.missingFileRef}
+                  fileSeams={fileSeams}
+                  lockedNodeIds={sync.lockedNodeIds}
+                  lockedEdgeIds={sync.lockedEdgeIds}
+                  onToggleNodeLock={sync.setNodeLock}
+                  onToggleEdgeLock={sync.setEdgeLock}
+                  nodeInEditor={nodeInEditor}
+                  history={{
+                    onUndo: () => void sync.undo(),
+                    onRedo: () => void sync.redo(),
+                    canUndo: sync.canUndo(),
+                    canRedo: sync.canRedo(),
+                  }}
+                  overlayTitle={model.overlayTitle}
+                  linkTargets={files.pickerTargets}
+                  threads={threads.annotations}
+                  proposals={threads.proposals}
+                >
+                  {model.spatial.children}
+                </SpatialEditorPane>
+              )}
+            />
+          </EditorBehindPreview>
+        </EditorLock>
+      )}
+    </DocumentPageShell>
   )
 }
