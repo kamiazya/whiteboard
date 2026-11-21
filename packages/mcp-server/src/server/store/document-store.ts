@@ -4,6 +4,7 @@ import type {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   createWorkspaceDocumentAtPath,
+  documentFromSnapshot,
   readDocumentKind,
   readTrashEntries,
   readWorkspaceDocuments,
@@ -317,6 +318,17 @@ function notifyDocumentSaved(workspaceId: string, path: string): void {
 // that creates a document cannot replace one already at the path by mistake;
 // a write that replaces content in place (an update, an in-place restore)
 // passes `overwrite: true`.
+/** `saveDocument` for a document given as the snapshot bytes of one. */
+export async function saveDocumentBytes(
+  workspaceId: string,
+  path: string,
+  snapshot: Uint8Array,
+  options: { overwrite?: boolean; kind?: DocumentKind } = {},
+  scope: StoreScope = globalStoreScope,
+): Promise<void> {
+  await saveDocument(workspaceId, path, documentFromSnapshot(snapshot), options, scope)
+}
+
 export async function saveDocument(
   workspaceId: string,
   path: string,

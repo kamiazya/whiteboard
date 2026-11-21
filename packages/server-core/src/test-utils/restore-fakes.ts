@@ -6,6 +6,7 @@
 import {
   bindRecordOps,
   createWorkspaceDocumentAtPath,
+  documentFromSnapshot,
   legacyRecordOps,
   projectWorkspaceDocument,
   type RecordView,
@@ -240,6 +241,14 @@ export class FakeLive implements LiveDocuments {
       kind: options?.kind ?? existing?.kind ?? 'spatial',
       id: existing?.id ?? generateDocumentId(),
     })
+  }
+  async create(
+    workspaceId: string,
+    path: string,
+    snapshot: Uint8Array,
+    options?: { overwrite?: boolean; kind?: DocumentKind },
+  ): Promise<void> {
+    await this.save(workspaceId, path, documentFromSnapshot(snapshot), options)
   }
   async exists(workspaceId: string, path: string): Promise<boolean> {
     this.record('exists')

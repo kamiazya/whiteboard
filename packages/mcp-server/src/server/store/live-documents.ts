@@ -12,6 +12,7 @@ import {
   onWorkspaceDocUpdated,
   renameDocumentPath,
   saveDocument,
+  saveDocumentBytes,
   saveWorkspaceDoc,
   workspaceExists,
 } from './document-store.js'
@@ -33,6 +34,14 @@ export function liveDocuments(scope: StoreScope = globalStoreScope): LiveDocumen
     async save(workspaceId, path, doc, options) {
       try {
         await saveDocument(workspaceId, path, doc, options, scope)
+      } catch (err) {
+        if (err instanceof ConflictError) throw new DocumentPathTakenError(workspaceId, path)
+        throw err
+      }
+    },
+    async create(workspaceId, path, snapshot, options) {
+      try {
+        await saveDocumentBytes(workspaceId, path, snapshot, options, scope)
       } catch (err) {
         if (err instanceof ConflictError) throw new DocumentPathTakenError(workspaceId, path)
         throw err
