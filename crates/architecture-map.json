@@ -202,11 +202,13 @@
     "whiteboard-workspace-index": {
       "path": "crates/core/workspace-index",
       "layer": "core",
-      "status": "planned",
-      "description": "the document index over a workspace tree",
+      "status": "present",
+      "description": "the document index's pure rules over a workspace tree (names, paths, moves, entries); the operations over a workspace record wait for the CRDT engine",
       "targets": ["wasm32-unknown-unknown", "native"],
-      "allowedInternalDeps": ["whiteboard-det", "whiteboard-model", "whiteboard-crdt"],
-      "allowedThirdParty": {},
+      "allowedInternalDeps": ["whiteboard-det", "whiteboard-model"],
+      "allowedThirdParty": {
+        "unicode-normalization": "NFC for the display-name key, pure and no_std-capable so it holds on native and wasm32 alike; pinned exactly with default features off, as the search crate's generator pins it"
+      },
       "absorbs": ["packages/workspace-index"]
     },
     "whiteboard-reference-graph": {

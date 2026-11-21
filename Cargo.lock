@@ -721,6 +721,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "whiteboard-workspace-index"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "unicode-normalization",
+ "wasm-bindgen-test",
+ "whiteboard-det",
+]
+
+[[package]]
 name = "winapi-util"
 version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"

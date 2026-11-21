@@ -15,6 +15,7 @@ members = [
   "crates/core/plugin-visual",
   "crates/core/facet-engine",
   "crates/core/search",
+  "crates/core/workspace-index",
   "crates/bindings/wasm",
   "crates/bindings/native-fixture",
   "crates/xtask",

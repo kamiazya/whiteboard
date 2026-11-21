@@ -164,6 +164,18 @@
       "reason": "a text run's presence-only flags (emphasis, strong, code, deleted, truncated, overflows) mirror the vocabulary's fields one for one; a flags struct would be a second spelling of the same six words"
     },
     {
+      "crate": "crates/core/workspace-index",
+      "lint": "clippy::arithmetic_side_effects",
+      "count": 1,
+      "reason": "the proleptic Gregorian date of a day count, bounded by the ECMAScript time range (about 1e8 days), so every intermediate sits orders of magnitude inside i64"
+    },
+    {
+      "crate": "crates/core/workspace-index",
+      "lint": "clippy::cast_possible_truncation",
+      "count": 1,
+      "reason": "a millisecond time value truncated toward zero after the range check on the line before, which i64 holds"
+    },
+    {
       "crate": "crates/fuzz",
       "lint": "clippy::cast_possible_truncation",
       "count": 1,
