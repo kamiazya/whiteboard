@@ -364,13 +364,7 @@ export class BrowserBackend implements DocumentBackend {
       const since = lease.versionOf(record).entries
       const imported = lease.importBytes(record, bytes, 'text')
       if (imported.outcome === 'refused') {
-        getAppLogger('browser-backend').warn('refused an update past a text limit', {
-          documentId: this.target.documentId,
-          ...imported.breach,
-        })
-        // Refused bytes would be refused again on a replay.
-        if (pendingKey !== null) this.pending.remove(pendingKey)
-        this.refuse(refusalOf(imported.breach), record, handlers)
+        this.refuseImport(imported.breach, record, handlers, pendingKey)
         return
       }
       if (!(await this.trashRemoved(record, since, workspaceId, handlers))) return
@@ -396,6 +390,21 @@ export class BrowserBackend implements DocumentBackend {
       if (isWorkspaceRemovedError(err)) this.withdraw(record, handlers)
       else this.handlers?.onError?.('storage-failure')
     }
+  }
+
+  private refuseImport(
+    breach: wire.Breach,
+    record: RecordLease,
+    handlers: DocumentBackendHandlers | null,
+    pendingKey: PendingKey | null,
+  ): void {
+    getAppLogger('browser-backend').warn('refused an update past a text limit', {
+      documentId: this.target.documentId,
+      ...breach,
+    })
+    // Refused bytes would be refused again on a replay.
+    if (pendingKey !== null) this.pending.remove(pendingKey)
+    this.refuse(refusalOf(breach), record, handlers)
   }
 
   /**
