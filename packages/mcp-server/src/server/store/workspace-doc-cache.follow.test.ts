@@ -127,20 +127,19 @@ describe('following the live workspace record', () => {
     // so a write has to land between the two to leave anything to send.
     const read = LibsqlDocumentStore.prototype.loadDeltas
     let landed = false
-    vi.spyOn(LibsqlDocumentStore.prototype, 'loadDeltas').mockImplementation(async function (
-      this: InstanceType<typeof LibsqlDocumentStore>,
-      ...args
-    ) {
-      if (!landed) {
-        landed = true
-        await foreignWrite('late', '1')
-      }
-      return read.apply(this, args)
-    })
+    const spy = vi
+      .spyOn(LibsqlDocumentStore.prototype, 'loadDeltas')
+      .mockImplementation(async function (this: InstanceType<typeof LibsqlDocumentStore>, ...args) {
+        if (!landed) {
+          landed = true
+          await foreignWrite('late', '1')
+        }
+        return read.apply(this, args)
+      })
 
     const { result } = await heardDuring(() =>
       followWorkspaceRecord(WS, globalStoreScope, undefined),
-    )
+    ).finally(() => spy.mockRestore())
 
     expect(result.updates.length).toBeGreaterThan(0)
     for (const update of result.updates) replica.import(update)

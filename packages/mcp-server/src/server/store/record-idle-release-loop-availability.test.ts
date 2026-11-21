@@ -23,6 +23,14 @@ afterEach(async () => {
 
 const PROSE = 'A paragraph of ordinary prose about a workspace and what is in it. '.repeat(40)
 
+/**
+ * Built once per file. Building it leaves thousands of wasm wrappers whose
+ * finalizers run on this loop some turns later; built per run, a repeat's
+ * finalizers landed in the NEXT run's window and read as a 125-177ms stall of a
+ * sweep whose four releases take about 1ms in all.
+ */
+let snapshot: Uint8Array | undefined
+
 function workspaceSnapshot(documents: number): Uint8Array {
   const record = new LoroDoc()
   for (let i = 0; i < documents; i += 1) {
@@ -45,7 +53,7 @@ function workspaceSnapshot(documents: number): Uint8Array {
 describe('the idle release of workspace records', () => {
   it('stays inside the declared stall ceiling while it gives a full cache back', async () => {
     const kind = leaseKind(loadCrdtEngine)
-    const snapshot = workspaceSnapshot(360)
+    snapshot ??= workspaceSnapshot(360)
     recordIdleReleaseWorker.start()
     let released = 0
     let done: () => void = () => {}
@@ -54,7 +62,7 @@ describe('the idle release of workspace records', () => {
     })
     const records = new RecordCache<RecordLease>({
       maxEntries: 4,
-      idleMs: 50,
+      idleMs: 250,
       schedule: scheduleIdleRelease,
       release: (record) => {
         kind.release(record)
