@@ -27,7 +27,7 @@ const path = fc.constantFrom(...PATHS)
 
 type Step =
   | { op: 'create'; path: (typeof PATHS)[number]; kind: 'markdown' | 'spatial' }
-  | { op: 'move'; from: (typeof PATHS)[number]; to: (typeof PATHS)[number] }
+  | { op: 'move'; from: number; to: number }
   | { op: 'delete'; path: (typeof PATHS)[number] }
   | { op: 'edit'; path: (typeof PATHS)[number]; text: string }
   | { op: 'rawRename'; path: (typeof PATHS)[number]; segment: 'a' | 'b' | 'x' }
@@ -43,7 +43,13 @@ const step: fc.Arbitrary<Step> = fc.oneof(
       kind: fc.constantFrom('markdown' as const, 'spatial' as const),
     }),
   },
-  { weight: 4, arbitrary: fc.record({ op: fc.constant('move' as const), from: path, to: path }) },
+  // A move names its source among the documents that exist and its target among the paths
+  // that are free when it runs: drawn as two paths, most moves met an empty source or a
+  // taken target, and a run could land as few as 20.
+  {
+    weight: 4,
+    arbitrary: fc.record({ op: fc.constant('move' as const), from: fc.nat(), to: fc.nat() }),
+  },
   { weight: 2, arbitrary: fc.record({ op: fc.constant('delete' as const), path }) },
   {
     weight: 2,
@@ -79,7 +85,13 @@ function apply(doc: LoroDoc, next: Step, minted: { count: number }): void {
         kind: next.kind,
       })
     } else if (next.op === 'move') {
-      if (moveWorkspaceNodeToPath(doc, next.from, next.to)) reached.movesLanded++
+      const taken = walk(doc).map((entry) => entry.path)
+      const documents = walk(doc).filter((entry) => entry.read.type === 'document')
+      const free = PATHS.filter((where) => !taken.includes(where))
+      const from = documents[next.from % Math.max(documents.length, 1)]
+      const to = free[next.to % Math.max(free.length, 1)]
+      if (from === undefined || to === undefined) return
+      if (moveWorkspaceNodeToPath(doc, from.path, to)) reached.movesLanded++
     } else if (next.op === 'delete') {
       deleteWorkspaceNodeAtPath(doc, next.path)
     } else if (next.op === 'edit') {
