@@ -29,7 +29,7 @@ function harness() {
   const tail = createWorkspaceTail({
     subscribedWorkspaces: () => subscribed,
     docs,
-    liveDoc,
+    withLiveDoc: async (workspaceId, fn) => fn(await liveDoc(workspaceId)),
     emit: (workspaceId, update) => emitted.push({ workspaceId, update }),
     intervalMs: 50,
   })

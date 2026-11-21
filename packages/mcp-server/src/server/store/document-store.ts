@@ -51,9 +51,9 @@ import {
   catchUpWorkspaceDoc,
   compactionCutOfDoc,
   evictWorkspaceDocCache,
-  getWorkspaceDoc,
   saveWorkspaceDoc,
   withStoredWorkspaceRecord,
+  withWorkspaceDocument,
 } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -70,6 +70,7 @@ export {
   loadDocument,
   onWorkspaceDocUpdated,
   saveWorkspaceDoc,
+  withWorkspaceDocument,
 } from './workspace-doc-cache.js'
 
 // Give the error a stable name so callers, including MCP tools, can detect overwrite conflicts.
@@ -359,30 +360,31 @@ export async function saveDocument(
     // it); the documents rows are not written here — the tree is the
     // whole record of what exists.
     await upsertWorkspaceRow(db, workspaceId)
-    const workspaceDoc = await getWorkspaceDoc(workspaceId, scope)
-    const existingEntry = resolveWorkspaceDocument(workspaceDoc, path)
-    const existingDocumentId = existingEntry?.documentId ?? null
-    if (existingDocumentId !== null && options.overwrite !== true) {
-      throw new ConflictError(
-        `Document "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
-      )
-    }
-    // A ULID, not a nanoid: the document index creates documents in this
-    // same tree and the port's DocumentEntry accepts only a canonical ULID,
-    // so a second minting policy here would keep producing documents the
-    // agent surface has to skip. One tree, one id space.
-    const documentId = existingDocumentId ?? generateDocumentId()
-    placeDocumentInTree({
-      workspaceDoc,
-      workspaceId,
-      path,
-      documentId,
-      existingEntry,
-      requestedKind: options.kind,
-      doc,
-      scope,
+    await withWorkspaceDocument(workspaceId, scope, async (workspaceDoc) => {
+      const existingEntry = resolveWorkspaceDocument(workspaceDoc, path)
+      const existingDocumentId = existingEntry?.documentId ?? null
+      if (existingDocumentId !== null && options.overwrite !== true) {
+        throw new ConflictError(
+          `Document "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
+        )
+      }
+      // A ULID, not a nanoid: the document index creates documents in this
+      // same tree and the port's DocumentEntry accepts only a canonical ULID,
+      // so a second minting policy here would keep producing documents the
+      // agent surface has to skip. One tree, one id space.
+      const documentId = existingDocumentId ?? generateDocumentId()
+      placeDocumentInTree({
+        workspaceDoc,
+        workspaceId,
+        path,
+        documentId,
+        existingEntry,
+        requestedKind: options.kind,
+        doc,
+        scope,
+      })
+      await saveWorkspaceDoc(workspaceId, workspaceDoc, scope)
     })
-    await saveWorkspaceDoc(workspaceId, workspaceDoc, scope)
     notifyDocumentSaved(workspaceId, path)
   })
 }
@@ -634,50 +636,50 @@ export async function compactWorkspace(
     // The live cached workspace document IS the current state — every write
     // path mutates it under the lock held here — so the fold exports from
     // it instead of re-reading stored bytes.
-    const doc = await getWorkspaceDoc(workspaceId, scope)
-
-    // Causal, never by date: a carried row may date itself before its point.
-    const cut = compactionCutOfDoc(doc, points)
-    const shallow = cut === null ? null : doc.export({ mode: 'shallow-snapshot', frontiers: cut })
-    if (shallow === null || shallow.byteLength >= beforeBytes) {
-      return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
-    }
-    const { manifest: fresh, chunks } = chunkSnapshot(
-      new Uint8Array(shallow),
-      DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
-    )
-    const folded = await documentStore.saveCompactedSnapshot({
-      docRef,
-      manifest: fresh,
-      chunks,
-      frontier: new Uint8Array(doc.oplogVersion().encode()),
-      // Exactly the log this fold consumed. Anything appended since the read
-      // above is neither in `shallow` nor superseded by it, and dropping it
-      // would lose an edit that arrived while compaction ran.
-      supersededDeltaCount: storedDeltas.length,
-      // ADR-0020. The workspace lock above serialises writers inside THIS
-      // process; the fence is what covers a second process. Ignoring the
-      // refusal is deliberate here and only here: this path folds history
-      // that is already durable rather than carrying new ops, so losing the
-      // race costs a compaction, not an edit, and the next save folds again.
-      expectedGeneration: header.generation,
+    return withWorkspaceDocument(workspaceId, scope, async (doc) => {
+      // Causal, never by date: a carried row may date itself before its point.
+      const cut = compactionCutOfDoc(doc, points)
+      const shallow = cut === null ? null : doc.export({ mode: 'shallow-snapshot', frontiers: cut })
+      if (shallow === null || shallow.byteLength >= beforeBytes) {
+        return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
+      }
+      const { manifest: fresh, chunks } = chunkSnapshot(
+        new Uint8Array(shallow),
+        DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
+      )
+      const folded = await documentStore.saveCompactedSnapshot({
+        docRef,
+        manifest: fresh,
+        chunks,
+        frontier: new Uint8Array(doc.oplogVersion().encode()),
+        // Exactly the log this fold consumed. Anything appended since the read
+        // above is neither in `shallow` nor superseded by it, and dropping it
+        // would lose an edit that arrived while compaction ran.
+        supersededDeltaCount: storedDeltas.length,
+        // ADR-0020. The workspace lock above serialises writers inside THIS
+        // process; the fence is what covers a second process. Ignoring the
+        // refusal is deliberate here and only here: this path folds history
+        // that is already durable rather than carrying new ops, so losing the
+        // race costs a compaction, not an edit, and the next save folds again.
+        expectedGeneration: header.generation,
+      })
+      if (!folded.ok) {
+        // Another writer replaced the snapshot while this fold ran. Nothing was
+        // written and nothing was lost — this fold carried no new ops, only a
+        // shorter rendering of history that is already durable — so the honest
+        // answer is that no compaction happened, and the next save folds again.
+        return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'raced' }
+      }
+      // Compaction folds the WORKSPACE record's oplog, so the timestamp the
+      // storage report shows describes the workspace, on the workspace meta.
+      // Written after the compacted snapshot, as a small delta on top of it.
+      setWorkspaceLastCompactedAt(doc, Date.now())
+      await saveWorkspaceDoc(workspaceId, doc, scope)
+      // No eviction: the live workspace document keeps its full in-memory
+      // history and the frontier just written is its own current one, so both
+      // it and the projections served from it stay coherent with the store.
+      return { compacted: true, beforeBytes, afterBytes: shallow.byteLength, reason: 'ok' }
     })
-    if (!folded.ok) {
-      // Another writer replaced the snapshot while this fold ran. Nothing was
-      // written and nothing was lost — this fold carried no new ops, only a
-      // shorter rendering of history that is already durable — so the honest
-      // answer is that no compaction happened, and the next save folds again.
-      return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'raced' }
-    }
-    // Compaction folds the WORKSPACE record's oplog, so the timestamp the
-    // storage report shows describes the workspace, on the workspace meta.
-    // Written after the compacted snapshot, as a small delta on top of it.
-    setWorkspaceLastCompactedAt(doc, Date.now())
-    await saveWorkspaceDoc(workspaceId, doc, scope)
-    // No eviction: the live workspace document keeps its full in-memory
-    // history and the frontier just written is its own current one, so both
-    // it and the projections served from it stay coherent with the store.
-    return { compacted: true, beforeBytes, afterBytes: shallow.byteLength, reason: 'ok' }
   })
 }
 

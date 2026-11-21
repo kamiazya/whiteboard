@@ -53,6 +53,11 @@ import { withWorkspaceWriteLock, workspaceWriteLockInUse } from './workspace-loc
 // that wants to see the loans of a record end watches this instead.
 let releasedForTests: LoroDoc[] | null = null
 
+/** Test-only: how many loans of a record are out right now. */
+export function _workspaceRecordLoansForTests(): number {
+  return records.outstanding
+}
+
 /** Test-only: the records the cache has given back since this was first asked for. */
 export function _workspaceRecordReleasesForTests(): LoroDoc[] {
   releasedForTests ??= []
@@ -329,6 +334,46 @@ async function lendRecord(
     : { doc, give: lent.give }
 }
 
+/**
+ * The workspace record AS A DOCUMENT, on loan for the length of `fn`: minted
+ * empty inside a registered workspace, like `getWorkspaceDoc`. For the holders
+ * that cannot yet read the record through a session; the loan keeps the record
+ * from being given back to whatever lent it while they work on it.
+ */
+export async function withWorkspaceDocument<T>(
+  workspaceId: string,
+  scope: StoreScope,
+  fn: (doc: LoroDoc) => Promise<T>,
+): Promise<T> {
+  // `create` answers a document, so the loan is never null.
+  const lent = (await lendRecord(workspaceId, scope, (docs) => docs.create(workspaceId))) as Lent
+  try {
+    return await fn(lent.doc)
+  } finally {
+    lent.give()
+  }
+}
+
+/**
+ * The loans a cache-backed `WorkspaceDocs` has lent to its holders, by the
+ * document each lent. The index that holds one releases it through its record
+ * kind when its operation is done, and `releaseWorkspaceDocLoan` is that release.
+ */
+const lentToHolders = new WeakMap<LoroDoc, Lent[]>()
+
+function lendToHolder(lent: Lent | null): LoroDoc | null {
+  if (lent === null) return null
+  const held = lentToHolders.get(lent.doc) ?? []
+  held.push(lent)
+  lentToHolders.set(lent.doc, held)
+  return lent.doc
+}
+
+/** Gives back one loan a cache-backed `WorkspaceDocs` made of `doc`; a document it did not lend is nothing to give back. */
+export function releaseWorkspaceDocLoan(doc: LoroDoc): void {
+  lentToHolders.get(doc)?.pop()?.give()
+}
+
 /** Reads through a loan and gives it back, for a caller that keeps nothing of it. */
 function viaLoan(lent: Lent | null): LoroDoc | null {
   lent?.give()
@@ -466,8 +511,14 @@ export async function catchUpWorkspaceDoc(
  */
 export function cacheBackedWorkspaceDocs(scope: StoreScope = globalStoreScope): WorkspaceDocs {
   return {
-    open: (workspaceId) => openWorkspaceDocIfStored(workspaceId, scope),
-    create: (workspaceId) => getWorkspaceDoc(workspaceId, scope),
+    // Lent until the holder releases it (`releaseWorkspaceDocLoan`), so the record
+    // an index works on is not given back while it works.
+    open: async (workspaceId) =>
+      lendToHolder(await lendRecord(workspaceId, scope, (docs) => docs.open(workspaceId))),
+    create: async (workspaceId) =>
+      lendToHolder(
+        await lendRecord(workspaceId, scope, (docs) => docs.create(workspaceId)),
+      ) as LoroDoc,
     save: (workspaceId, doc) => saveWorkspaceDoc(workspaceId, doc, scope),
     // The tailing half is a STORE concern, so it delegates rather than being
     // reimplemented against the cache: the cursor describes the record, and

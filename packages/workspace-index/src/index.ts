@@ -3,6 +3,7 @@ export {
   RecordStoreWorkspaceDocs,
 } from './document-store-workspace-docs.js'
 export { firstFreeSegment } from './first-free-segment.js'
+export { type IndexRecordKind, loroIndexKind } from './index-record-kind.js'
 export type {
   TrashBlobNamedElsewhere,
   WorkspaceRegistry,
