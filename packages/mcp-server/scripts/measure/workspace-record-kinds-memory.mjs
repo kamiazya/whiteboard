@@ -3,7 +3,7 @@
  * kind: 4 workspaces of 360 documents each, held together, then given back the
  * way the idle release gives them back, then opened again.
  *
- * The record is built once by the parent and read from a file; each row is its
+ * The record is built once by the parent and handed to each child on stdin; each row is its
  * own child process, because WASM linear memory never shrinks and one
  * process's high-water mark would be the next row's baseline
  * (`lease-memory.mjs` carries that measurement). `rss` is the growth over a
@@ -16,10 +16,8 @@
  * `WORKSPACES` and `DOCUMENTS` size the fixture (4 and 360 by default).
  */
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { corpusSnapshot } from './corpus-record.mjs'
 
@@ -39,8 +37,9 @@ const settled = () => {
   return process.memoryUsage().rss / MB
 }
 
-async function openAll(kindName, file) {
-  const bytes = new Uint8Array(readFileSync(file))
+async function openAll(kindName) {
+  // The record arrives on stdin, so the child reads no path it was handed.
+  const bytes = new Uint8Array(readFileSync(0))
   const { LoroDoc } = require('loro-crdt')
   const adapter = await import('@kamiazya/whiteboard-loro-adapter')
   const lease = adapter.leaseKind(adapter.loadCrdtEngine)
@@ -57,36 +56,33 @@ async function openAll(kindName, file) {
   const released = settled() - baseline
   for (let i = 0; i < WORKSPACES; i += 1) held.push(await open())
   const reopened = settled() - released - baseline
-  void held
+  for (const record of held) give(record)
   process.stdout.write(`${JSON.stringify({ kindName, opened, released, reopened })}\n`)
 }
 
-function child(kindName, file) {
+function child(kindName, bytes) {
   const out = execFileSync(
     process.execPath,
-    ['--expose-gc', '--import', 'tsx/esm', fileURLToPath(import.meta.url), kindName, file],
-    { cwd: process.cwd(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] },
+    ['--expose-gc', '--import', 'tsx/esm', fileURLToPath(import.meta.url), kindName],
+    { cwd: process.cwd(), encoding: 'utf8', input: bytes, stdio: ['pipe', 'pipe', 'inherit'] },
   )
   return JSON.parse(out.trim().split('\n').at(-1))
 }
 
 if (process.argv[2] === undefined) {
-  const dir = mkdtempSync(join(tmpdir(), 'wb-record-kinds-'))
   const { bytes } = await corpusSnapshot(DOCUMENTS)
-  const file = join(dir, 'record.bin')
-  writeFileSync(file, bytes)
   console.log(
     `  ${WORKSPACES} workspaces x ${DOCUMENTS} documents, ${(bytes.byteLength / MB).toFixed(1)}MB each as a snapshot`,
   )
   console.log('  kind    held at once   after release   reopened (growth over after-release)')
   for (const kindName of ['loro', 'lease']) {
-    const row = child(kindName, file)
+    const row = child(kindName, bytes)
     console.log(
       `  ${kindName.padEnd(5)}   ${row.opened.toFixed(1).padStart(9)}MB   ${row.released.toFixed(1).padStart(10)}MB   ${row.reopened.toFixed(1).padStart(10)}MB`,
     )
   }
   process.exit(0)
 } else {
-  await openAll(process.argv[2], process.argv[3])
+  await openAll(process.argv[2])
   process.exit(0)
 }

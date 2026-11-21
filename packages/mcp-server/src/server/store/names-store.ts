@@ -50,7 +50,7 @@ export async function loadWorkspaceNames(
       pathById.set(entry.documentId, entry.path)
       if (entry.name !== undefined) documents[entry.path] = entry.name
     }
-    const index = await workspaceTreeIndex(scope)
+    const index = workspaceTreeIndex(scope)
     for (const documentId of await index.listPinnedDocuments({ workspaceId })) {
       const path = pathById.get(documentId)
       if (path !== undefined) pinned.push(path)
@@ -99,7 +99,7 @@ export async function setDocumentDisplayName(
   // (`DisplayNameTakenError`), so this route refuses what every other name
   // write refuses.
   try {
-    await (await workspaceTreeIndex(scope)).setDocumentName({
+    await workspaceTreeIndex(scope).setDocumentName({
       workspaceId,
       documentId,
       ...(trimmed.length > 0 ? { name: trimmed } : {}),
@@ -126,6 +126,6 @@ export async function setDocumentPinned(
   // The workspace record's pinned list is the only home this write has: the
   // rows are not maintained, so a failure surfaces. The index takes the
   // workspace write lock itself, as every other mutator of the record does.
-  await (await workspaceTreeIndex(scope)).setDocumentPinned({ workspaceId, documentId, pinned })
+  await workspaceTreeIndex(scope).setDocumentPinned({ workspaceId, documentId, pinned })
   return loadWorkspaceNames(workspaceId, scope)
 }

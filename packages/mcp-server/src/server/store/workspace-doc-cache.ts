@@ -399,7 +399,7 @@ async function lendRecord(
   // Kept a moment ago; a record already gone from the cache is the caller's
   // alone, and a different one kept under the key since is a loan nobody wants.
   const lent = recordCache().acquire(key)
-  if (lent !== undefined && lent.handle === doc) return { doc, give: lent.give }
+  if (lent?.handle === doc) return { doc, give: lent.give }
   lent?.give()
   return { doc, give: () => {} }
 }

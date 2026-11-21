@@ -223,9 +223,7 @@ export function workspaceRegistry(scope: StoreScope = globalStoreScope): Workspa
 }
 
 /** The tree index delete/rename/pin go through, so a daemon delete evacuates the same way a port delete does. */
-export async function workspaceTreeIndex(
-  scope: StoreScope,
-): Promise<LoroWorkspaceDocumentIndex<object>> {
+export function workspaceTreeIndex(scope: StoreScope): LoroWorkspaceDocumentIndex<object> {
   return new CacheCoherentDocumentIndex(
     cacheBackedWorkspaceDocs(scope),
     daemonBlobStore(scope.dataDir, scope.layout.tenantId),
@@ -504,7 +502,7 @@ export async function deleteDocument(
     if (held !== null) {
       // Cache-backed, so the index deletes on the same live instance every
       // other path writes through.
-      const index = await workspaceTreeIndex(scope)
+      const index = workspaceTreeIndex(scope)
       await index.deleteDocument({ workspaceId, path })
     }
 
@@ -719,7 +717,7 @@ async function moveThroughIndex(
   newPath: string,
   scope: StoreScope,
 ): Promise<void> {
-  const index = await workspaceTreeIndex(scope)
+  const index = workspaceTreeIndex(scope)
   try {
     await index.moveDocument({ workspaceId, from: oldPath, to: newPath })
   } catch (err) {
