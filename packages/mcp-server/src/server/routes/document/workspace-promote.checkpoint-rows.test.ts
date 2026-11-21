@@ -165,3 +165,22 @@ it('leaves a document at its manual ceiling out of `recorded` and records the re
   expect(second.recorded).not.toContain(ids.board)
   expect(second.recorded).toEqual(expect.arrayContaining([ids.noteA, ids.noteB, ids.emptyBoard]))
 })
+
+it('refuses a batch naming a document at a path the record does not show it at, and writes no row', async () => {
+  await promoteWorkspace(serverDeps, { workspaceId: WS, snapshot: record(), operator })
+  const rows = async () => (await getDb(tempDir)).selectFrom('versions').select('id').execute()
+  const before = (await rows()).length
+
+  await expect(
+    serverDeps.versions.saveAll(
+      WS,
+      [
+        { documentId: ids.noteB, path: 'notes/b' },
+        { documentId: ids.board, path: 'not/where/it/is' },
+      ],
+      { auto: false },
+    ),
+  ).rejects.toThrow(/not/i)
+
+  expect(await rows()).toHaveLength(before)
+})

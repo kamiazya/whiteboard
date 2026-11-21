@@ -17,6 +17,7 @@ export type VersionStoreMock = { [K in keyof VersionStore]: Mock<VersionStore[K]
 export function versionStoreMock(overrides: Partial<VersionStoreMock> = {}): VersionStoreMock {
   return {
     save: vi.fn(),
+    saveAll: vi.fn().mockResolvedValue([]),
     load: vi.fn(),
     openCheckouts: vi.fn(),
     loadWorkspaceAt: vi.fn(),

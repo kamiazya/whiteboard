@@ -12,16 +12,16 @@ import {
   sharedCrdtEngine,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { DocumentNotFoundError } from '@kamiazya/whiteboard-ports'
-import type { Insertable } from 'kysely'
 import { sql } from 'kysely'
 import { nanoid } from 'nanoid'
 import { getLogger } from '../log.js'
 import { validateDocumentPath, validateVersionId, validateWorkspaceId } from '../validators.js'
 import { corruptStoredData } from './corrupt-stored-data.js'
-import type { DatabaseSchema } from './db/schema.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { insertAdoptedRows } from './version-adopt-rows.js'
 import { refusePastManualCeiling, refusePastRestorePointCeiling } from './version-ceilings.js'
+import { insertCheckpoints, statedAtRecord } from './version-checkpoints.js'
+import { type SaveVersionOpts, versionRow } from './version-row.js'
 import { withPersistedWorkspaceRecord, withStoredWorkspaceRecord } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -217,56 +217,6 @@ function parseStoredAttestation(
   }
 }
 
-/** What `save` takes beyond the document itself. */
-type SaveVersionOpts = Parameters<FileVersionStore['save']>[2]
-
-/**
- * The row a saved version becomes. Every optional field is written as NULL
- * rather than omitted, because the column exists either way.
- */
-function versionRow({
-  id,
-  documentId,
-  workspaceId,
-  opts,
-  operator,
-  elementCount,
-  frontiers,
-  contentDigest,
-  createdAt,
-}: {
-  id: string
-  documentId: string
-  workspaceId: string
-  opts: SaveVersionOpts
-  operator: SaveVersionOpts['operator']
-  elementCount: number
-  frontiers: string
-  contentDigest: string
-  createdAt: number
-}): Insertable<DatabaseSchema['versions']> {
-  return {
-    id,
-    documentId,
-    workspaceId,
-    auto: opts.auto ? 1 : 0,
-    label: opts.label ?? null,
-    operatorKind: operator?.kind ?? '',
-    operatorActor: operator?.actor ?? '',
-    operatorDisplayName: operator?.displayName ?? null,
-    operatorAgentId: operator?.agentId ?? null,
-    operatorWorkspaceId: operator?.workspaceId ?? null,
-    elementCount,
-    frontiers,
-    contentDigest,
-    createdAt,
-    restoredFrom: opts.restoredFrom ?? null,
-    // Nothing saves a version with a person's evidence; the column is kept
-    // for the rows that already carry one, which `rowToEntry` still reads.
-    attestation: null,
-  }
-}
-
 /**
  * What the caller is told it saved. Spread-or-nothing on every optional
  * field, so a version with no label carries no `label` key at all rather
@@ -384,6 +334,32 @@ export class FileVersionStore implements VersionStore {
       await this.prune(workspaceId, documentId)
 
       return savedVersion({ id, path, createdAt, elementCount, operator, opts })
+    })
+  }
+
+  async saveAll(
+    workspaceId: string,
+    documents: readonly { documentId: string; path: string }[],
+    opts: { auto: boolean; operator?: OperatorInfo },
+  ): Promise<string[]> {
+    validateWorkspaceId(workspaceId)
+    for (const { path } of documents) validateDocumentPath(path)
+    if (documents.length === 0) return []
+    return withWorkspaceWriteLock(workspaceId, async () => {
+      const db = await this.scope.db()
+      const { frontiers, stated } = await withPersistedWorkspaceRecord(
+        workspaceId,
+        this.scope,
+        (record) => statedAtRecord(workspaceId, record, documents),
+      )
+      return insertCheckpoints({
+        db,
+        workspaceId,
+        opts,
+        frontiers,
+        stated,
+        prune: (documentId) => this.prune(workspaceId, documentId),
+      })
     })
   }
 
