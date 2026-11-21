@@ -107,6 +107,37 @@ mod tests {
         assert_eq!(iso_string(951_782_400_000.0).as_deref(), Ok("2000-02-29T00:00:00.000Z"));
     }
 
+    /// The calendar's own rule, written independently of the port: day counts
+    /// that follow one another name dates that follow one another.
+    fn days_in_month(year: i64, month: i64) -> i64 {
+        let leap = (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+        match month {
+            2 if leap => 29,
+            2 => 28,
+            4 | 6 | 9 | 11 => 30,
+            _ => 31,
+        }
+    }
+
+    #[test]
+    fn consecutive_days_are_consecutive_dates_across_centuries() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        let mut previous = civil_from_days(-300_000);
+        for days in -299_999..=300_000 {
+            let (year, month, day) = previous;
+            let expected = if day < days_in_month(year, month) {
+                (year, month, day + 1)
+            } else if month < 12 {
+                (year, month + 1, 1)
+            } else {
+                (year + 1, 1, 1)
+            };
+            let next = civil_from_days(days);
+            assert_eq!(next, expected, "day {days}");
+            previous = next;
+        }
+    }
+
     #[test]
     fn a_time_outside_the_date_range_is_refused() {
         assert_eq!(iso_string(8.64e15 + 1.0), Err(EntryError::InvalidTime));
