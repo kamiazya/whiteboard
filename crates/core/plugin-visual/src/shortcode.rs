@@ -10,7 +10,6 @@
 //! scan runs over UTF-8 and only the ranges an icon answers are counted in
 //! UTF-16 code units, as the typesetter is handed them.
 
-use std::collections::BTreeSet;
 use std::sync::OnceLock;
 
 use whiteboard_model::Value;
@@ -111,21 +110,21 @@ pub fn expand_emoji_shortcodes(text: &str) -> String {
 /// The names `table` (an icon asset file) holds, whatever each entry is: the
 /// nameable set is the vendored file's keys (`BUILT_IN_ICON_NAMES`), not every
 /// icon the plugin registers.
-fn icon_names(table: &str) -> BTreeSet<String> {
+fn icon_names(table: &str) -> Vec<String> {
     match json::parse(table) {
         Ok(Value::Map(entries)) => entries.into_iter().map(|(name, _)| name).collect(),
-        _ => BTreeSet::new(),
+        _ => Vec::new(),
     }
 }
 
 /// The vendored file's names, parsed once: the file is a constant, and parsing
 /// it is the whole of a call's cost.
-fn lucide_names() -> &'static BTreeSet<String> {
-    static NAMES: OnceLock<BTreeSet<String>> = OnceLock::new();
+fn lucide_names() -> &'static [String] {
+    static NAMES: OnceLock<Vec<String>> = OnceLock::new();
     NAMES.get_or_init(|| icon_names(crate::render::LUCIDE))
 }
 
-fn icon_ranges_with(names: &BTreeSet<String>, text: &str) -> Vec<IconShortcodeRange> {
+fn icon_ranges_with(names: &[String], text: &str) -> Vec<IconShortcodeRange> {
     let found = candidates(text, ":icon-", icon_byte);
     if found.is_empty() {
         return Vec::new();
@@ -142,7 +141,7 @@ fn icon_ranges_with(names: &BTreeSet<String>, text: &str) -> Vec<IconShortcodeRa
     for candidate in found {
         let from = units_to(candidate.from);
         let to = units_to(candidate.to);
-        if names.contains(candidate.name) {
+        if names.iter().any(|name| name == candidate.name) {
             ranges.push(IconShortcodeRange { from, to, name: candidate.name.to_owned() });
         }
     }
