@@ -418,6 +418,10 @@ describe('restoreVersion subtree mode', () => {
       )
       expect(live.paths()).toEqual(['canvas-a', `canvas-a${suffix}`].sort())
     },
+    // 200 subtree restores, each building a workspace record: measured 1.7 to
+    // 2.0 s alone and 2.7 s a pass under `--repeats`, and past the 5 s default
+    // in CI's parallel stress job.
+    20_000,
   )
 
   it('records the merge point on every document a subtree rollback moved, and on no other', async () => {
