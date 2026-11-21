@@ -182,11 +182,13 @@
     "whiteboard-crdt": {
       "path": "crates/core/crdt",
       "layer": "core",
-      "status": "planned",
-      "description": "the loro bridge, workspace tree, file references, text-limit judge",
+      "status": "present",
+      "description": "the loro bridge, workspace tree, file references, text-limit judge; today the reading of the bytes npm loro-crdt writes (deep value, version vector, frontiers), native-only until the wasm export lands",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det", "whiteboard-model"],
-      "allowedThirdParty": {},
+      "allowedThirdParty": {
+        "loro": "the CRDT itself: the Rust crate npm loro-crdt is built from, pinned exactly in lock-step with the npm version (ADR-0054 decision 13; tools/arch-lint's loro-lock-step test compares the lockfiles, loro-internal included, which the manifest pin alone leaves floating); pure Rust with no I/O in the shared layer; verified before adopting against deny.toml (MIT), the unsafe ledger and the wasm32 import scan"
+      },
       "absorbs": ["packages/loro-adapter"]
     },
     "whiteboard-history": {
