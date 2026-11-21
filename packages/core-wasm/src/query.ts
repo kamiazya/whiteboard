@@ -237,7 +237,7 @@ export function layoutQuery(
       undefined,
     )
   }
-  const wire = wireOf(request, 0, true)
+  const wire = wireOf(request, 0, true, true)
   if (wire === undefined) throw errors.refused(OPERATION, 'malformed', 'wire')
   const text = JSON.stringify(wire)
   if (text.length > LAYOUT_QUERY_CAPS.maxBytes) {

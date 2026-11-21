@@ -15,6 +15,19 @@
 export const isWellFormed = (s: string): boolean =>
   (s as string & { isWellFormed(): boolean }).isWellFormed()
 
+/**
+ * A string as the wire carries it. A value a caller drew from content (a note's
+ * body, a node's text) may hold a lone surrogate, which a Rust string cannot; with
+ * `repair` it crosses as U+FFFD, as `TextEncoder` would send it and as the search
+ * entry does, rather than refusing the whole call. Without it the string is
+ * refused, which is what a document's own values need: a repaired key or value
+ * would no longer be the one that was stored.
+ */
+function repairedOrRefused(text: string, repair: boolean): string | undefined {
+  if (isWellFormed(text)) return text
+  return repair ? (text as string & { toWellFormed(): string }).toWellFormed() : undefined
+}
+
 const bits = new DataView(new ArrayBuffer(8))
 
 function numberOf(hex: unknown): number | undefined {
@@ -64,9 +77,9 @@ const hex = (n: number): string => {
  * document holds: an `undefined`, a function, a symbol, a class instance, a
  * string with a lone surrogate, a cycle or a sparse list.
  */
-export function wireOf(value: unknown, depth: number, compact = false): unknown {
+export function wireOf(value: unknown, depth: number, compact = false, repair = false): unknown {
   if (value === null || typeof value === 'boolean') return value
-  if (typeof value === 'string') return isWellFormed(value) ? value : undefined
+  if (typeof value === 'string') return repairedOrRefused(value, repair)
   if (typeof value === 'number') {
     return compact && Number.isSafeInteger(value) && !Object.is(value, -0)
       ? value
@@ -75,27 +88,37 @@ export function wireOf(value: unknown, depth: number, compact = false): unknown 
   if (typeof value === 'bigint') return ['b', value.toString()]
   if (typeof value !== 'object' || depth > WIRE_DEPTH) return undefined
   return Array.isArray(value)
-    ? wireOfList(value, depth, compact)
-    : wireOfRecord(value, depth, compact)
+    ? wireOfList(value, depth, compact, repair)
+    : wireOfRecord(value, depth, compact, repair)
 }
 
-function wireOfList(list: unknown[], depth: number, compact: boolean): unknown[] | undefined {
+function wireOfList(
+  list: unknown[],
+  depth: number,
+  compact: boolean,
+  repair: boolean,
+): unknown[] | undefined {
   const out: unknown[] = ['s']
   for (let i = 0; i < list.length; i++) {
-    const item = i in list ? wireOf(list[i], depth + 1, compact) : undefined
+    const item = i in list ? wireOf(list[i], depth + 1, compact, repair) : undefined
     if (item === undefined) return undefined
     out.push(item)
   }
   return out
 }
 
-function wireOfRecord(record: object, depth: number, compact: boolean): unknown[] | undefined {
+function wireOfRecord(
+  record: object,
+  depth: number,
+  compact: boolean,
+  repair: boolean,
+): unknown[] | undefined {
   const proto = Object.getPrototypeOf(record)
   if (proto !== Object.prototype && proto !== null) return undefined
   const out: unknown[] = ['m']
   for (const [key, item] of Object.entries(record)) {
     if (compact && item === undefined) continue
-    const wire = isWellFormed(key) ? wireOf(item, depth + 1, compact) : undefined
+    const wire = isWellFormed(key) ? wireOf(item, depth + 1, compact, repair) : undefined
     if (wire === undefined) return undefined
     out.push(key, wire)
   }

@@ -126,4 +126,40 @@ describe('the queries through the shim over the built artifact', () => {
     const inner = core.layoutQuery({ query: 'outline-content-box', box: [0, 0, 10, 10] })
     expect(inner).toEqual({ numbers: [[0, 0, 10, 10]] })
   })
+
+  it('answers a query over boxes whose body holds a lone surrogate as it does with U+FFFD in its place', async () => {
+    const core = await loadCore(bytes())
+    const ask = (content: string) =>
+      core.layoutQuery({
+        query: 'label-obstacles',
+        nodes: [{ ...box('a', 0), resource: { mimeType: 'text/markdown', content } }],
+        runs: [['node', 'a', [0, -20, 40, 16]]],
+      })
+
+    const drawn = ask('before \ud800 after')
+
+    expect('numbers' in drawn, JSON.stringify(drawn)).toBe(true)
+    expect(drawn).toEqual(ask('before \ufffd after'))
+  })
+
+  it('lays out an edge layer whose canvas holds a lone surrogate in a body or a label', async () => {
+    const core = await loadCore(bytes())
+    const ask = (text: string) => {
+      const request = {
+        query: 'edges',
+        canvas: {
+          nodes: canvas.nodes,
+          edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' }, label: text }],
+        },
+        mode: 'light',
+        expand: false,
+      } as const
+      return core.layoutQuery({ ...request, measure: { kind: 'fake', factor: 0.6 } })
+    }
+
+    const drawn = ask('flows \ud800')
+
+    expect('nodes' in drawn, JSON.stringify(drawn)).toBe(true)
+    expect(drawn).toEqual(ask('flows \ufffd'))
+  })
 })
