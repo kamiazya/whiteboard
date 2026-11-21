@@ -114,6 +114,25 @@ fn a_target_nobody_holds_is_a_placeholder_labelled_with_its_address() {
 }
 
 #[test]
+fn a_target_nobody_holds_but_the_host_names_is_labelled_with_the_name() {
+    let host = Host { title: Some("Trip plan"), ..Host::default() };
+    let scene = typeset(
+        Some(&Targets::default()),
+        None,
+        &host,
+        vec![embed("x", None), embed("y", Some("Part"))],
+    );
+    let SceneNode::EmbedPlaceholder(whole) = first(&scene) else {
+        panic!("scene node is not the expected variant")
+    };
+    assert_eq!((whole.title.as_str(), whole.reason), ("Trip plan", EmbedReason::Unresolvable));
+    let SceneNode::EmbedPlaceholder(part) = &scene.nodes[1] else {
+        panic!("scene node is not the expected variant")
+    };
+    assert_eq!(part.title, "Trip plan \u{203a} Part");
+}
+
+#[test]
 fn a_target_still_loading_is_a_framed_name_with_a_loading_line() {
     let host = Host { pending: true, title: Some("Listed"), ..Host::default() };
     let scene = typeset(Some(&Targets::default()), None, &host, vec![embed("x", None)]);

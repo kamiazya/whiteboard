@@ -30,6 +30,19 @@ use whiteboard_wasm::spatial_layout::layout_spatial_canvas;
 /// past which the core draws the literal text rather than read the body
 /// differently. Every record of these, on every surface, differs from the
 /// recording, and no other does.
+/// The recorded notes that embed a document the host holds only a name for: the
+/// TypeScript drew its placeholder with the reference id, the core with the name,
+/// so each must differ from the recording, at that one node's title and nowhere else.
+const NAMED_EMBEDS: &[&str] = &[
+    "daemon/embed parts#1",
+    "daemon/embed parts#2",
+    "daemon/embed parts#3",
+    "preview/embed parts#0",
+    "preview/embed parts#1",
+    "thumbnail/embed parts#0",
+    "thumbnail/embed parts#1",
+];
+
 const TOLERATED: &[&str] = &[
     "quote 33 deep",
     "list 39 deep",
@@ -343,7 +356,7 @@ fn every_recorded_markdown_layout_is_answered_as_the_typescript_answered_it() {
     let digests = jsonl(&dir.join("layout-markdown-digests.jsonl"));
     let mut failures = Vec::new();
     let mut by_surface = Vec::new();
-    let (mut total, mut literal) = (0_usize, 0_usize);
+    let (mut total, mut literal, mut named) = (0_usize, 0_usize, 0_usize);
     for surface in ["comment", "daemon", "outline", "preview", "thumbnail"] {
         let file = read(&dir.join(format!("layout-markdown.{surface}.jsonl")));
         let mut lines = file.lines();
@@ -353,6 +366,14 @@ fn every_recorded_markdown_layout_is_answered_as_the_typescript_answered_it() {
             let record = parse(line);
             let id = text(&record, "id").unwrap_or_default();
             let got = answer(&record, &meta, &table);
+            if NAMED_EMBEDS.contains(&id.as_str()) {
+                match judge(line, &got, &digests) {
+                    Some(why) if why.starts_with("at /nodes/2/title:") => named += 1,
+                    other => failures
+                        .push(format!("{id}: expected a renamed placeholder, got {other:?}")),
+                }
+                continue;
+            }
             if TOLERATED.contains(&body_name(&id)) {
                 if !got.starts_with(r#"["ok","#) {
                     failures.push(format!("{id}: not drawn as its literal text: {got:.80}"));
@@ -374,6 +395,7 @@ fn every_recorded_markdown_layout_is_answered_as_the_typescript_answered_it() {
         literal += tolerated;
     }
     // Every surface's hand and boundary bodies, and the repository's documents.
+    assert_eq!(named, NAMED_EMBEDS.len(), "every renamed placeholder is answered");
     assert!(total >= 400 && literal == 50, "{}", by_surface.join("\n"));
     assert!(failures.is_empty(), "{} differ:\n{}", failures.len(), failures.join("\n"));
 }

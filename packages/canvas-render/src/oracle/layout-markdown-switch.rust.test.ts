@@ -9,6 +9,7 @@ import {
   bodyName,
   type MarkdownMeta,
   type MarkdownRecord,
+  NAMES_A_NAME_ONLY_EMBED,
   PAST_THE_PARSER,
   sortedSceneDigest,
 } from '../test-utils/markdown-document-oracle/oracle.js'
@@ -72,6 +73,10 @@ describe.runIf(built)('the recorded notes through the core', () => {
         const scene = lay(record, meta)
         if ('refused' in record) {
           expect(scene, record.id).toBeUndefined()
+        } else if (NAMES_A_NAME_ONLY_EMBED.has(record.id)) {
+          const held = 'scene' in record ? recorded(record) : digests.get(record.id)
+          expect(held, `${record.id} has a recording`).toBeDefined()
+          expect(drawn(scene), record.id).not.toEqual(held)
         } else if (PAST_THE_PARSER.has(bodyName(record.id))) {
           expect(scene?.refusal, record.id).toBeUndefined()
           const held = 'scene' in record ? recorded(record) : digests.get(record.id)

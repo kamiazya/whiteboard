@@ -46,6 +46,24 @@ export const PAST_THE_PARSER: ReadonlySet<string> = new Set([
   '1100 delimiter runs',
 ])
 
+/**
+ * The recorded notes that embed a document the host holds only a name for (a
+ * record the load budget cut to its name): the TypeScript drew the placeholder
+ * with the reference id, the core draws it with that name, so a replay holds
+ * each as a tolerated record that must differ from the recording rather than
+ * equal it. Each differs at one node's title and nowhere else
+ * (`crates/bindings/wasm/tests/markdown_oracle.rs` holds the path).
+ */
+export const NAMES_A_NAME_ONLY_EMBED: ReadonlySet<string> = new Set([
+  'daemon/embed parts#1',
+  'daemon/embed parts#2',
+  'daemon/embed parts#3',
+  'preview/embed parts#0',
+  'preview/embed parts#1',
+  'thumbnail/embed parts#0',
+  'thumbnail/embed parts#1',
+])
+
 /** The body a record's id names: what follows its surface, less its variant. */
 export const bodyName = (id: string): string => id.split('/').slice(1).join('/').split('#')[0] ?? ''
 

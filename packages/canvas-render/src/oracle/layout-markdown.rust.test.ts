@@ -6,6 +6,7 @@ import {
   bodyName,
   type MarkdownMeta,
   type MarkdownRecord,
+  NAMES_A_NAME_ONLY_EMBED,
   PAST_THE_PARSER,
   sortedSceneDigest,
 } from '../test-utils/markdown-document-oracle/oracle.js'
@@ -73,6 +74,11 @@ const digests = new Map(
 function judged(core: Core, record: MarkdownRecord, meta: MarkdownMeta): string | undefined {
   const answer = core.layoutMarkdown(requestOf(record, meta), highlightCode)
   const differs = difference(answer, record)
+  if (NAMES_A_NAME_ONLY_EMBED.has(record.id)) {
+    return differs === undefined
+      ? 'draws as the TypeScript did; drop it from NAMES_A_NAME_ONLY_EMBED'
+      : undefined
+  }
   if (!PAST_THE_PARSER.has(bodyName(record.id))) return differs
   if (!('scene' in answer)) return `not drawn as its literal text: ${JSON.stringify(answer)}`
   return differs === undefined
