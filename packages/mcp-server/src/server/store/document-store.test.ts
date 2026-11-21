@@ -155,33 +155,25 @@ describe('route saves and tool writes serialize on the workspace document', () =
     expect(reloaded.getMap('nodes').keys().sort()).toEqual(['agent', 'base', 'web'])
   })
 
-  // Sequential shape of the same guarantee, pinning the MECHANISM: the tool
-  // surface reads and writes THROUGH the cached projection the route path
-  // mutates, so a tool save is a CRDT merge into the same lineage — the
-  // live cached doc gains the tool's op instead of being left stale (or
-  // evicted, which would break every per-document socket's lineage).
+  // Sequential shape of the same guarantee: a tool save lands in the workspace
+  // record itself, so the route flow that follows reads it and writes on top.
   it("a route save after an out-of-band tool write preserves both writers' ops", async () => {
-    const { resolveDocumentIdAtPath, getDoc } = await import('./document-store.js')
-    const { peekDoc } = await import('./doc-cache.js')
+    const { resolveDocumentIdAtPath } = await import('./document-store.js')
 
     const seed = new LoroDoc()
     seed.getMap('nodes').set('base', { id: 'base' })
     seed.commit()
     await saveDocument(SESSION1, 'merge-race', seed, { overwrite: true })
-    // Warm the projection cache the way a WS session would.
-    await getDoc(SESSION1, 'merge-race')
-    expect(peekDoc(SESSION1, 'merge-race')).toBeDefined()
 
     const { routed } = await toolStores()
     const documentId = (await resolveDocumentIdAtPath(SESSION1, 'merge-race'))!
     await toolWrite(routed, documentId, 'agent')
 
-    // The cached projection STAYS, and already carries the tool's op —
-    // a WS session holding it keeps its lineage and sees the edit.
-    const cached = peekDoc(SESSION1, 'merge-race')
-    expect(cached).toBeDefined()
-    expect(cached!.getMap('nodes').keys().sort()).toEqual(['agent', 'base'])
-    // The route flow writes through the same instance and both ops survive.
+    expect((await loadDocument(SESSION1, 'merge-race')).getMap('nodes').keys().sort()).toEqual([
+      'agent',
+      'base',
+    ])
+    // The route flow writes on top of it and both ops survive.
     await routeWrite('merge-race', 'web')
     const reloaded = await loadDocument(SESSION1, 'merge-race')
     expect(reloaded.getMap('nodes').keys().sort()).toEqual(['agent', 'base', 'web'])

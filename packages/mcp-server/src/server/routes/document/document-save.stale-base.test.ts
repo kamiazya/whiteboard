@@ -91,12 +91,18 @@ async function seededApp() {
   return app
 }
 
+// Where each tool copy was loaded, as the tool's session keeps it: handed back
+// on the first save, and gone once the copy has been saved.
+const loadedAt = new WeakMap<LoroDoc, Uint8Array>()
+
 async function loadFor(documentId: string): Promise<LoroDoc> {
   const loaded = await serverDeps.documentStore.loadSnapshot({
     docRef: { kind: 'document', workspaceId: WS, documentId },
   })
   if (loaded === null) throw new Error('no stored document')
-  return LoroDoc.fromSnapshot(reassembleSnapshot(loaded.manifest, loaded.chunks))
+  const copy = LoroDoc.fromSnapshot(reassembleSnapshot(loaded.manifest, loaded.chunks))
+  loadedAt.set(copy, loaded.frontier)
+  return copy
 }
 
 async function saveFrom(documentId: string, doc: LoroDoc): Promise<void> {
@@ -109,7 +115,9 @@ async function saveFrom(documentId: string, doc: LoroDoc): Promise<void> {
     manifest,
     chunks,
     frontier: new Uint8Array(doc.oplogVersion().encode()),
+    ...(loadedAt.has(doc) ? { basedOn: loadedAt.get(doc) as Uint8Array<ArrayBuffer> } : {}),
   })
+  loadedAt.delete(doc)
 }
 
 async function recordOf(app: Awaited<ReturnType<typeof seededApp>>): Promise<LoroDoc> {
