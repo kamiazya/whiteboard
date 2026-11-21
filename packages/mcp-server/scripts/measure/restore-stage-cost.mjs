@@ -1,9 +1,8 @@
 /**
  * Where the time of one in-place restore goes, per stage, over a workspace of N
  * documents through the real store: the reads and writes the restore makes of
- * the record (open, path read, content write, name seed, save, projection
- * eviction) and the write observer, or on a tree that restores through live
- * documents, their get and save. Medians of 15 restores, wall milliseconds;
+ * the record (open, path read, content write, name seed, save) and the write
+ * observer. Medians of 15 restores, wall milliseconds;
  * `total` is the whole operation.
  *
  * Run (from packages/mcp-server):
@@ -28,6 +27,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import { restoreVersion, wbDocumentCreate } from '@kamiazya/whiteboard-server-core'
+import { LoroDoc } from 'loro-crdt'
 import { bootSelfHostDeps } from '../../src/di/boot-self-host-deps.ts'
 import { disposeAutoCompact, uninstallAutoCompact } from '../../src/server/store/auto-compact.ts'
 import { clearDbCacheForTests, closeDb } from '../../src/server/store/db/index.ts'
@@ -59,16 +59,19 @@ try {
   const live = serverDeps.liveDocuments
   const setBody = (text) =>
     live.withWriteLock(WORKSPACE, async () => {
-      const doc = await live.get(WORKSPACE, target)
+      const doc = new LoroDoc()
       writeMarkdownBody(doc, text)
       doc.commit()
-      await live.save(WORKSPACE, target, doc, { overwrite: true })
+      await live.create(WORKSPACE, target, doc.export({ mode: 'snapshot' }), {
+        overwrite: true,
+        kind: 'markdown',
+      })
     })
   await setBody('# State A')
   const stateA = await store.save(WORKSPACE, target, { auto: false })
   await setBody('# State B')
   const stateB = await store.save(WORKSPACE, target, { auto: false })
-  // Stage timers: whichever of these a tree's restore calls.
+  // Stage timers: the record's reads and writes, and the write observer.
   const stages = new Map()
   const note = (label, ms) => stages.set(label, (stages.get(label) ?? 0) + ms)
   const timed =
@@ -81,33 +84,30 @@ try {
         note(label, performance.now() - t)
       }
     }
-  const realGet = live.get.bind(live)
-  const realSave = live.save.bind(live)
+  const wd = serverDeps.workspaceDocuments
   const instrumented = {
     ...serverDeps,
-    liveDocuments: { ...live, get: timed('live.get', realGet), save: timed('live.save', realSave) },
-  }
-  if (serverDeps.workspaceDocuments.open) {
-    const wd = serverDeps.workspaceDocuments
-    instrumented.workspaceDocuments = {
+    workspaceDocuments: {
       ...wd,
-      open: async (ws) => {
+      withRecord: (ws, fn) => {
         const t = performance.now()
-        const session = await wd.open(ws)
-        note('open', performance.now() - t)
-        return {
-          ...session,
-          read: timed('read', (q, shape) => session.read(q, shape)),
-          write: (batch) => {
-            const t2 = performance.now()
-            const out = session.write(batch)
-            note(`write ${batch[0]?.op}`, performance.now() - t2)
-            return out
-          },
-          save: timed('save', () => session.save()),
-        }
+        return wd
+          .withRecord(ws, (session) =>
+            fn({
+              ...session,
+              read: timed('read', (q, shape) => session.read(q, shape)),
+              write: (batch) => {
+                const t2 = performance.now()
+                const out = session.write(batch)
+                note(`write ${batch[0]?.op}`, performance.now() - t2)
+                return out
+              },
+              save: timed('save', () => session.save()),
+            }),
+          )
+          .finally(() => note('withRecord', performance.now() - t))
       },
-    }
+    },
   }
   if (serverDeps.documentWritten)
     instrumented.documentWritten = timed('documentWritten', serverDeps.documentWritten)
