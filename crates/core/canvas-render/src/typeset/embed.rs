@@ -80,7 +80,10 @@ pub(super) fn layout_embed(
         return if opts.seams.embed_pending(id) {
             layout_pending(&target, cursor, opts)
         } else {
-            placeholder(EmbedReason::Unresolvable, None, &target, cursor, opts)
+            // Held by nobody, but a host may still know the name (a title table, or a
+            // record the load budget cut to its name): that reads better than the id.
+            let name = opts.seams.document_title(id);
+            placeholder(EmbedReason::Unresolvable, name.as_deref(), &target, cursor, opts)
         };
     };
     layout_resolved(&resolved, &target, cursor, opts, path)

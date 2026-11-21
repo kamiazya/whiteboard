@@ -46,6 +46,63 @@ export const PAST_THE_PARSER: ReadonlySet<string> = new Set([
   '1100 delimiter runs',
 ])
 
+/**
+ * The recorded notes that embed a document the host holds only a name for (a
+ * record the load budget cut to its name): the TypeScript drew the placeholder
+ * with the reference id, the core draws it with that name, so a replay holds
+ * each as a tolerated record that must differ from the recording rather than
+ * equal it. Each differs at one node's title and nowhere else
+ * (`crates/bindings/wasm/tests/markdown_oracle.rs` holds the path).
+ */
+export const NAMES_A_NAME_ONLY_EMBED: ReadonlySet<string> = new Set([
+  'daemon/embed parts#1',
+  'daemon/embed parts#2',
+  'daemon/embed parts#3',
+  'preview/embed parts#0',
+  'preview/embed parts#1',
+  'thumbnail/embed parts#0',
+  'thumbnail/embed parts#1',
+])
+
+/**
+ * A `NAMES_A_NAME_ONLY_EMBED` record's recorded scene as the core draws it:
+ * each unresolvable placeholder the TypeScript titled with its reference id,
+ * where the references name that document, retitled with the name. Nothing else moves, so a replay compares the WHOLE scene against this
+ * rather than accepting any difference. Throws when it renames nothing — a
+ * recording that no longer holds the case it is listed for.
+ */
+export function renamedScene(scene: string, meta: MarkdownMeta): string {
+  // A record carrying a name and nothing to draw, or the title table's entry.
+  const names = new Map(meta.references.titles)
+  for (const [, loaded] of meta.references.entries) {
+    if (loaded?.documentId !== undefined && loaded.name !== undefined) {
+      names.set(loaded.documentId, loaded.name)
+    }
+  }
+  let renamed = 0
+  const retitle = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(retitle)
+    if (typeof value !== 'object' || value === null) return value
+    const node = Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, retitle(item)]),
+    ) as Record<string, unknown>
+    const name = typeof node.documentId === 'string' ? names.get(node.documentId) : undefined
+    if (
+      node.kind === 'embedPlaceholder' &&
+      node.reason === 'unresolvable' &&
+      node.title === node.documentId &&
+      name !== undefined
+    ) {
+      renamed += 1
+      return { ...node, title: name }
+    }
+    return node
+  }
+  const out = JSON.stringify(retitle(JSON.parse(scene)))
+  if (renamed === 0) throw new Error('markdown-document-oracle: no placeholder to rename')
+  return out
+}
+
 /** The body a record's id names: what follows its surface, less its variant. */
 export const bodyName = (id: string): string => id.split('/').slice(1).join('/').split('#')[0] ?? ''
 

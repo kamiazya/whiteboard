@@ -30,6 +30,19 @@ use whiteboard_wasm::spatial_layout::layout_spatial_canvas;
 /// past which the core draws the literal text rather than read the body
 /// differently. Every record of these, on every surface, differs from the
 /// recording, and no other does.
+/// The recorded notes that embed a document the host holds only a name for: the
+/// TypeScript drew its placeholder with the reference id, the core with the name,
+/// so each must differ from the recording, at that one node's title and nowhere else.
+const NAMED_EMBEDS: &[&str] = &[
+    "daemon/embed parts#1",
+    "daemon/embed parts#2",
+    "daemon/embed parts#3",
+    "preview/embed parts#0",
+    "preview/embed parts#1",
+    "thumbnail/embed parts#0",
+    "thumbnail/embed parts#1",
+];
+
 const TOLERATED: &[&str] = &[
     "quote 33 deep",
     "list 39 deep",
@@ -332,6 +345,76 @@ fn judge(line: &str, raw: &str, digests: &[Json]) -> Option<String> {
         .then(|| format!("digest {mine:?}, recorded {held:?} and n {}", recorded["n"]))
 }
 
+/// Document id -> the name the meta line's references hold for it: a loaded
+/// record's own name, or the title table's entry.
+fn reference_names(meta: &str) -> std::collections::HashMap<String, String> {
+    let meta: Json = serde_json::from_str(meta).unwrap_or(Json::Null);
+    let refs = &meta["references"];
+    let mut names = std::collections::HashMap::new();
+    for pair in refs["titles"].as_array().into_iter().flatten() {
+        if let (Some(id), Some(name)) = (pair[0].as_str(), pair[1].as_str()) {
+            names.insert(id.to_owned(), name.to_owned());
+        }
+    }
+    for pair in refs["entries"].as_array().into_iter().flatten() {
+        if let (Some(id), Some(name)) = (pair[1]["documentId"].as_str(), pair[1]["name"].as_str()) {
+            names.insert(id.to_owned(), name.to_owned());
+        }
+    }
+    names
+}
+
+/// Retitles, in place, each unresolvable placeholder titled with its own
+/// document id whose document `names` holds a name for; answers how many.
+fn retitle(node: &mut Json, names: &std::collections::HashMap<String, String>) -> usize {
+    match node {
+        Json::Array(items) => items.iter_mut().map(|item| retitle(item, names)).sum(),
+        Json::Object(map) => {
+            let inner: usize = map.values_mut().map(|item| retitle(item, names)).sum();
+            let placeholder = map.get("kind") == Some(&json!("embedPlaceholder"))
+                && map.get("reason") == Some(&json!("unresolvable"))
+                && map.get("title") == map.get("documentId");
+            let name = map.get("documentId").and_then(Json::as_str).and_then(|id| names.get(id));
+            match name {
+                Some(name) if placeholder => {
+                    map.insert("title".to_owned(), json!(name));
+                    inner + 1
+                }
+                _ => inner,
+            }
+        }
+        _ => 0,
+    }
+}
+
+/// A `NAMED_EMBEDS` record judged against its recording as the core draws it:
+/// the placeholder retitled with the name, and the WHOLE answer equal to that,
+/// so a wrong name or any other difference fails.
+fn judge_renamed(
+    line: &str,
+    raw: &str,
+    names: &std::collections::HashMap<String, String>,
+) -> Option<String> {
+    let got: Json = serde_json::from_str(raw).unwrap_or(Json::Null);
+    let recorded: Json = serde_json::from_str(line).unwrap_or(Json::Null);
+    if got.get(0) != Some(&json!("ok")) {
+        return Some(format!("answered {}", raw.chars().take(200).collect::<String>()));
+    }
+    if recorded.get("asked") != got.get(4) {
+        return Some(format!("asked {:?}, recorded {:?}", got.get(4), recorded.get("asked")));
+    }
+    let Some(scene) = recorded.get("scene").and_then(Json::as_str) else {
+        return Some("listed without a recorded scene".to_owned());
+    };
+    let mut want: Json = serde_json::from_str(scene).unwrap_or(Json::Null);
+    if retitle(&mut want, names) == 0 {
+        return Some("no placeholder to rename in the recording".to_owned());
+    }
+    let at = first_difference(&got[1], &want, "")?;
+    let part = |v: &Json| v.pointer(&at).map(ToString::to_string).unwrap_or_default();
+    Some(format!("at {at}: got {} want {}", part(&got[1]), part(&want)))
+}
+
 fn jsonl(path: &Path) -> Vec<Json> {
     read(path).lines().map(|line| serde_json::from_str(line).unwrap_or(Json::Null)).collect()
 }
@@ -343,16 +426,25 @@ fn every_recorded_markdown_layout_is_answered_as_the_typescript_answered_it() {
     let digests = jsonl(&dir.join("layout-markdown-digests.jsonl"));
     let mut failures = Vec::new();
     let mut by_surface = Vec::new();
-    let (mut total, mut literal) = (0_usize, 0_usize);
+    let (mut total, mut literal, mut named) = (0_usize, 0_usize, 0_usize);
     for surface in ["comment", "daemon", "outline", "preview", "thumbnail"] {
         let file = read(&dir.join(format!("layout-markdown.{surface}.jsonl")));
         let mut lines = file.lines();
-        let meta = parse(lines.next().unwrap_or_default());
+        let meta_line = lines.next().unwrap_or_default();
+        let meta = parse(meta_line);
+        let known = reference_names(meta_line);
         let (mut answered, mut tolerated) = (0_usize, 0_usize);
         for line in lines {
             let record = parse(line);
             let id = text(&record, "id").unwrap_or_default();
             let got = answer(&record, &meta, &table);
+            if NAMED_EMBEDS.contains(&id.as_str()) {
+                match judge_renamed(line, &got, &known) {
+                    None => named += 1,
+                    Some(why) => failures.push(format!("{id}: {why}")),
+                }
+                continue;
+            }
             if TOLERATED.contains(&body_name(&id)) {
                 if !got.starts_with(r#"["ok","#) {
                     failures.push(format!("{id}: not drawn as its literal text: {got:.80}"));
@@ -374,6 +466,7 @@ fn every_recorded_markdown_layout_is_answered_as_the_typescript_answered_it() {
         literal += tolerated;
     }
     // Every surface's hand and boundary bodies, and the repository's documents.
+    assert_eq!(named, NAMED_EMBEDS.len(), "every renamed placeholder is answered");
     assert!(total >= 400 && literal == 50, "{}", by_surface.join("\n"));
     assert!(failures.is_empty(), "{} differ:\n{}", failures.len(), failures.join("\n"));
 }
