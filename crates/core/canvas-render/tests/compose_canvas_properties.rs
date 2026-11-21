@@ -55,10 +55,6 @@ impl ComposeHost for Plain {
         None
     }
 
-    fn parse_markdown(&self, _: &str) -> Result<Root, ParseFailed> {
-        Err(ParseFailed)
-    }
-
     fn degrade(&self, _: Degradation) {}
 }
 

@@ -78,7 +78,7 @@ pub(crate) struct Context {
     pub(crate) themes: Vec<(String, ThemeTokens)>,
     pub(crate) library: TagLibrary,
     bodies: BTreeMap<String, Root>,
-    /// A comment's markdown as parsed alone; `None` is a body that throws.
+    /// A comment's markdown as recorded, parsed alone; `None` is a body that throws.
     markdown: BTreeMap<String, Option<Root>>,
     references: BTreeMap<String, SpatialCanvas>,
     embeds: BTreeMap<String, (String, SpatialCanvas)>,
@@ -213,10 +213,20 @@ impl<'c> Host<'c> {
 
 impl ComposeHost for Host<'_> {
     fn parse_body(&self, text: &str) -> Result<Root, ParseFailed> {
-        self.context.bodies.get(text).cloned().ok_or_else(|| {
-            self.miss(format!("a body {text:?}"));
-            ParseFailed
-        })
+        if let Some(root) = self.context.bodies.get(text) {
+            return Ok(root.clone());
+        }
+        // A comment's body takes this parse too. The recording holds those
+        // texts apart, taken before reference resolution joined their parse;
+        // that is the same tree wherever the text holds no reference.
+        match self.context.markdown.get(text) {
+            Some(Some(root)) => Ok(root.clone()),
+            Some(None) => Err(ParseFailed),
+            None => {
+                self.miss(format!("a body {text:?}"));
+                Err(ParseFailed)
+            }
+        }
     }
 
     fn resolve_reference(&self, reference: &str) -> Option<ResolvedReference> {
@@ -233,17 +243,6 @@ impl ComposeHost for Host<'_> {
             self.miss(format!("a fragment of {document_id}"));
         }
         self.context.embeds.get(document_id).map(|(_, canvas)| canvas.clone())
-    }
-
-    fn parse_markdown(&self, text: &str) -> Result<Root, ParseFailed> {
-        match self.context.markdown.get(text) {
-            Some(Some(root)) => Ok(root.clone()),
-            Some(None) => Err(ParseFailed),
-            None => {
-                self.miss(format!("a comment's markdown {text:?}"));
-                Err(ParseFailed)
-            }
-        }
     }
 
     fn degrade(&self, event: Degradation) {

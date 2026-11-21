@@ -232,9 +232,9 @@ fn a_body_past_the_parser_bounds_fails_its_own_parse_and_draws_as_its_literal_te
         ..ReferenceWire::default()
     };
     let host = WireHost::new(&wire, true);
-    // A node's own body and a comment's: the composer degrades them (D7a).
+    // A node's own body, and a comment's, which takes the same parse: the
+    // composer degrades them (D7a).
     assert!(host.parse_body(&long).is_err());
-    assert!(host.parse_markdown(&long).is_err());
     // A referenced body: one paragraph of its literal text.
     let literal = crate::comments::body::literal_root(&long);
     assert_eq!(
@@ -242,10 +242,6 @@ fn a_body_past_the_parser_bounds_fails_its_own_parse_and_draws_as_its_literal_te
         Some(Embedded::Document { title: Some("Big".to_owned()), root: literal.clone() })
     );
     assert_eq!(host.resolve_reference("big").and_then(|r| r.markdown), Some(literal));
-    assert_eq!(
-        host.parse_markdown("[[x]]"),
-        parse_markdown_body("[[x]]").map_err(|_| unreachable())
-    );
 }
 
 #[test]
@@ -268,10 +264,6 @@ fn an_embed_is_pending_while_an_extra_marks_it_so_by_id_or_by_a_target_naming_it
 /// The parser's byte bound (`whiteboard_markdown::limits::MAX_BYTES`).
 const fn whiteboard_markdown_max() -> usize {
     786_432
-}
-
-fn unreachable() -> crate::compose_node::ParseFailed {
-    crate::compose_node::ParseFailed
 }
 
 #[test]
