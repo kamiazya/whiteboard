@@ -6,14 +6,12 @@ import {
   createWorkspaceDocumentAtPath,
   documentFromSnapshot,
   readDocumentKind,
-  readTrashEntries,
   readWorkspaceDocuments,
-  readWorkspaceMeta,
   readWorkspaceNodes,
   resolveWorkspaceDocument,
-  resolveWorkspaceDocumentById,
   setWorkspaceLastCompactedAt,
   updateWorkspaceDocumentMeta,
+  type WorkspaceDocumentEntry,
   writeDocumentContentAndName,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
@@ -54,7 +52,6 @@ import {
   compactionCutOfDoc,
   evictWorkspaceDocCache,
   getWorkspaceDoc,
-  openWorkspaceDocIfStored,
   saveWorkspaceDoc,
   withStoredWorkspaceRecord,
 } from './workspace-doc-cache.js'
@@ -72,7 +69,6 @@ export {
   getWorkspaceDoc,
   loadDocument,
   onWorkspaceDocUpdated,
-  openWorkspaceDocIfStored,
   saveWorkspaceDoc,
 } from './workspace-doc-cache.js'
 
@@ -95,10 +91,26 @@ export async function resolveDocumentIdAtPath(
   path: string,
   scope: StoreScope = globalStoreScope,
 ): Promise<string | null> {
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
-  if (workspaceDoc === null) return null
-  const entry = resolveWorkspaceDocument(workspaceDoc, path)
+  const entry = await entryAtPath(workspaceId, path, scope)
   return entry === null ? null : entry.documentId
+}
+
+const assertedAs = <T>() => ({ parse: (value: unknown) => value as T })
+
+/** The document the tree places at `path`, read off the stored record; `null` when it places none, or holds no record. */
+async function entryAtPath(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope,
+): Promise<{ documentId: string; kind: DocumentKind } | null> {
+  return withStoredWorkspaceRecord(workspaceId, scope, async (record) =>
+    record === null
+      ? null
+      : record.read(
+          { query: 'workspaceDocumentEntry', args: { path } },
+          assertedAs<{ documentId: string; kind: DocumentKind } | null>(),
+        ),
+  )
 }
 
 /** `resolveDocumentIdAtPath` that throws the routes' 404-mapped error instead of answering null. */
@@ -491,9 +503,11 @@ async function isInTrash(
   documentId: string,
   scope: StoreScope,
 ): Promise<boolean> {
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
-  if (workspaceDoc === null) return false
-  return readTrashEntries(workspaceDoc).some((entry) => entry.documentId === documentId)
+  return withStoredWorkspaceRecord(workspaceId, scope, async (record) => {
+    if (record === null) return false
+    const trash = await record.read({ query: 'trash' }, assertedAs<{ documentId: string }[]>())
+    return trash.some((entry) => entry.documentId === documentId)
+  })
 }
 
 export async function deleteDocument(
@@ -518,8 +532,15 @@ export async function deleteDocument(
     // keeps the same recoverability promise the agent-facing port makes.
     // `documentId` came from the tree above, so the node is guaranteed to
     // still be there unless a concurrent delete already removed it.
-    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
-    if (workspaceDoc !== null && resolveWorkspaceDocumentById(workspaceDoc, documentId) !== null) {
+    const held = await withStoredWorkspaceRecord(workspaceId, scope, async (record) =>
+      record === null
+        ? null
+        : record.read(
+            { query: 'workspaceDocumentEntry', args: { documentId } },
+            assertedAs<{ documentId: string } | null>(),
+          ),
+    )
+    if (held !== null) {
       // Cache-backed, so the index deletes on the same live instance every
       // other path writes through.
       const index = await workspaceTreeIndex(scope)
@@ -553,9 +574,7 @@ export async function getDocumentKind(
 ): Promise<DocumentKind | null> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
-  if (workspaceDoc === null) return null
-  return resolveWorkspaceDocument(workspaceDoc, path)?.kind ?? null
+  return (await entryAtPath(workspaceId, path, scope))?.kind ?? null
 }
 
 /**
@@ -672,9 +691,12 @@ export async function readLatestCompactedAt(
   const workspaces = await db.selectFrom('workspaces').select(['id']).execute()
   let latest: number | null = null
   for (const { id } of workspaces) {
-    const workspaceDoc = await openWorkspaceDocIfStored(id, scope)
-    if (workspaceDoc === null) continue
-    const at = readWorkspaceMeta(workspaceDoc).lastCompactedAt
+    const at = await withStoredWorkspaceRecord(id, scope, async (record) =>
+      record === null
+        ? undefined
+        : (await record.read({ query: 'meta' }, assertedAs<{ lastCompactedAt?: number }>()))
+            .lastCompactedAt,
+    )
     if (at !== undefined && (latest === null || at > latest)) latest = at
   }
   return latest
@@ -704,8 +726,7 @@ export async function renameDocumentPath(
   validateDocumentPath(oldPath)
   validateDocumentPath(newPath)
   return withWorkspaceWriteLock(workspaceId, async () => {
-    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
-    const entry = workspaceDoc === null ? null : resolveWorkspaceDocument(workspaceDoc, oldPath)
+    const entry = await entryAtPath(workspaceId, oldPath, scope)
     // The tree is the only place a document is placed: a path it does not
     // hold names nothing, and "already gone" is the answer.
     if (entry === null) return null
@@ -748,9 +769,12 @@ export async function listDocuments(
   Pick<DocumentSummary, 'path' | 'documentId' | 'name' | 'updatedAt' | 'kind' | 'contentDigest'>[]
 > {
   validateWorkspaceId(workspaceId)
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
-  if (workspaceDoc === null) return []
-  return readWorkspaceDocuments(workspaceDoc).map((entry) => ({
+  const entries = await withStoredWorkspaceRecord(workspaceId, scope, async (record) =>
+    record === null
+      ? []
+      : record.read({ query: 'documents' }, assertedAs<WorkspaceDocumentEntry[]>()),
+  )
+  return entries.map((entry) => ({
     path: entry.path,
     documentId: entry.documentId,
     // Absent rather than null when unset: a document nobody renamed has no

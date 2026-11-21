@@ -20,6 +20,7 @@ import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { corruptStoredData, isCorruptStoredDataError } from './corrupt-stored-data.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
+import { RecordCache } from './record-cache.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { withWorkspaceWriteLock, workspaceWriteLockInUse } from './workspace-lock.js'
@@ -47,7 +48,16 @@ import { withWorkspaceWriteLock, workspaceWriteLockInUse } from './workspace-loc
  * therefore asks the store whether the record holds ops this document lacks
  * (`followRecord`) before it serves the document.
  */
-const workspaceDocCache = new Map<string, { workspaceId: string; doc: LoroDoc }>()
+
+// What giving a `LoroDoc` back does: nothing, since collecting it frees it. A test
+// that wants to see the loans of a record end watches this instead.
+let releasedForTests: LoroDoc[] | null = null
+
+/** Test-only: the records the cache has given back since this was first asked for. */
+export function _workspaceRecordReleasesForTests(): LoroDoc[] {
+  releasedForTests ??= []
+  return releasedForTests
+}
 
 /**
  * How many workspace records stay resident, least recently used dropped first.
@@ -85,19 +95,6 @@ const workspaceDocCache = new Map<string, { workspaceId: string; doc: LoroDoc }>
  */
 export const WORKSPACE_DOC_CACHE_MAX_ENTRIES = 16
 
-function cachedRecord(key: string): LoroDoc | undefined {
-  const entry = workspaceDocCache.get(key)
-  if (entry === undefined) return undefined
-  // Reinserted so Map order is recency order, oldest first.
-  workspaceDocCache.delete(key)
-  workspaceDocCache.set(key, entry)
-  // A record kept past the bound because its lock was in use is trimmed by
-  // whichever access comes next, so the cache returns to the bound once
-  // the lock is released rather than staying over it until another miss.
-  trimToBound(key)
-  return entry.doc
-}
-
 /**
  * The encoded version each record was dropped at by the bound, so a reopen
  * can announce what arrived while nothing here followed it. Only the bound
@@ -120,23 +117,19 @@ function rememberDropped(key: string, doc: LoroDoc): void {
   }
 }
 
-function keepRecord(key: string, workspaceId: string, doc: LoroDoc): void {
-  workspaceDocCache.delete(key)
-  workspaceDocCache.set(key, { workspaceId, doc })
-  trimToBound(key)
-}
-
-/** Drops least recently used records over the bound, never `keep` nor a locked one. */
-function trimToBound(keep: string): void {
-  let excess = workspaceDocCache.size - WORKSPACE_DOC_CACHE_MAX_ENTRIES
-  for (const [candidate, entry] of workspaceDocCache) {
-    if (excess <= 0) break
-    if (candidate === keep || workspaceWriteLockInUse(entry.workspaceId)) continue
-    workspaceDocCache.delete(candidate)
-    rememberDropped(candidate, entry.doc)
-    excess -= 1
-  }
-}
+/**
+ * The records themselves. Generic over what a record is held as: here a `LoroDoc`,
+ * for which giving back is nothing, so no idle time is set and nothing is
+ * released for being unused. A cache of engine leases sets both.
+ */
+const records = new RecordCache<LoroDoc>({
+  maxEntries: WORKSPACE_DOC_CACHE_MAX_ENTRIES,
+  release: (doc) => {
+    releasedForTests?.push(doc)
+  },
+  pinned: workspaceWriteLockInUse,
+  onBoundDrop: (key, doc) => rememberDropped(key, doc),
+})
 
 /**
  * Where each cached document last read the record up to.
@@ -176,8 +169,9 @@ function rethrowOpenFailure(workspaceId: string, err: unknown): never {
 
 /** Test-only: drops every cached live workspace document, simulating a restart. */
 export function _clearWorkspaceDocCacheForTests(): void {
-  workspaceDocCache.clear()
+  records.clear()
   droppedVersions.clear()
+  if (releasedForTests !== null) releasedForTests.length = 0
 }
 
 /**
@@ -191,7 +185,7 @@ export function evictWorkspaceDocCache(
   scope: StoreScope = globalStoreScope,
 ): void {
   const key = workspaceDocCacheKey(scope, workspaceId)
-  workspaceDocCache.delete(key)
+  records.evict(key)
   droppedVersions.delete(key)
 }
 
@@ -289,7 +283,7 @@ async function openFollowed(
   if (doc === null) return null
   followedTo.set(doc, cursor)
   const key = workspaceDocCacheKey(scope, workspaceId)
-  keepRecord(key, workspaceId, doc)
+  records.keep(key, workspaceId, doc)
   const dropped = droppedVersions.get(key)
   if (dropped !== undefined) {
     droppedVersions.delete(key)
@@ -298,17 +292,57 @@ async function openFollowed(
   return doc
 }
 
+/** A record on loan from the cache: it stays open until the loan is given back. */
+interface Lent {
+  readonly doc: LoroDoc
+  give(): void
+}
+
+/**
+ * The cached record, lent, caught up with the stored one; opened (and kept) when
+ * the cache holds none. The loan is taken before anything is awaited, so the
+ * entry being trimmed or evicted meanwhile cannot give the record back under
+ * the caller.
+ */
+async function lendRecord(
+  workspaceId: string,
+  scope: StoreScope,
+  open: (docs: DocumentStoreWorkspaceDocs) => Promise<LoroDoc | null>,
+): Promise<Lent | null> {
+  const key = workspaceDocCacheKey(scope, workspaceId)
+  const held = records.acquire(key)
+  if (held !== undefined) {
+    try {
+      await followRecord(workspaceId, held.handle, scope)
+    } catch (err) {
+      held.give()
+      throw err
+    }
+    return { doc: held.handle, give: held.give }
+  }
+  const doc = await openFollowed(workspaceId, scope, open)
+  if (doc === null) return null
+  // Kept a moment ago; a record already gone from the cache is the caller's alone.
+  const lent = records.acquire(key)
+  return lent === undefined || lent.handle !== doc
+    ? { doc, give: () => {} }
+    : { doc, give: lent.give }
+}
+
+/** Reads through a loan and gives it back, for a caller that keeps nothing of it. */
+function viaLoan(lent: Lent | null): LoroDoc | null {
+  lent?.give()
+  return lent === null ? null : lent.doc
+}
+
 export async function getWorkspaceDoc(
   workspaceId: string,
   scope: StoreScope = globalStoreScope,
 ): Promise<LoroDoc> {
-  const cached = cachedRecord(workspaceDocCacheKey(scope, workspaceId))
-  if (cached !== undefined) {
-    await followRecord(workspaceId, cached, scope)
-    return cached
-  }
   // `create` answers a document, so the null arm is unreachable.
-  return (await openFollowed(workspaceId, scope, (docs) => docs.create(workspaceId))) as LoroDoc
+  return (await viaLoan(
+    await lendRecord(workspaceId, scope, (docs) => docs.create(workspaceId)),
+  )) as LoroDoc
 }
 
 /** The workspace doc when one is STORED (or cached); null otherwise — a read path must not mint one. */
@@ -316,12 +350,7 @@ export async function openWorkspaceDocIfStored(
   workspaceId: string,
   scope: StoreScope = globalStoreScope,
 ): Promise<LoroDoc | null> {
-  const cached = cachedRecord(workspaceDocCacheKey(scope, workspaceId))
-  if (cached !== undefined) {
-    await followRecord(workspaceId, cached, scope)
-    return cached
-  }
-  return openFollowed(workspaceId, scope, (docs) => docs.open(workspaceId))
+  return viaLoan(await lendRecord(workspaceId, scope, (docs) => docs.open(workspaceId)))
 }
 
 type WorkspaceDocUpdatedListener = (workspaceId: string, update: Uint8Array) => void
@@ -410,7 +439,7 @@ export async function catchUpWorkspaceDoc(
   scope: StoreScope = globalStoreScope,
 ): Promise<WorkspaceDocCursor> {
   const docs = cacheBackedWorkspaceDocs(scope)
-  const cached = cachedRecord(workspaceDocCacheKey(scope, workspaceId))
+  const cached = records.get(workspaceDocCacheKey(scope, workspaceId))
   if (cached === undefined) return docs.readCursor(workspaceId)
   // A COLD cursor, not the record's current one. Nothing tracks where the
   // cached document stands — it is mutated in place by every local write —
@@ -502,25 +531,25 @@ export async function withStoredWorkspaceRecord<T>(
   scope: StoreScope,
   fn: (record: RecordSession | null) => Promise<T>,
 ): Promise<T> {
-  const doc = await openWorkspaceDocIfStored(workspaceId, scope)
-  return heldFor(doc === null ? null : sessionOver(workspaceId, doc, scope), fn)
+  const lent = await lendRecord(workspaceId, scope, (docs) => docs.open(workspaceId))
+  return heldFor(lent === null ? null : sessionOver(workspaceId, lent, scope), fn)
 }
 
 /**
  * The live workspace record for the length of `fn`: minted empty inside a
  * registered workspace, like `getWorkspaceDoc`, and given back when `fn`
- * returns or throws.
- *
- * ponytail: releasing is a no-op while the cache holds a `LoroDoc`; it is where
- * the cache counts its users once it holds engine leases, so that dropping an
- * entry never closes one a bracket is still reading.
+ * returns or throws. The cache counts the bracket as a user, so the record is
+ * not given back to whatever lent it while the bracket reads it, whatever the
+ * cache does with its entry meanwhile.
  */
 export async function withWorkspaceRecord<T>(
   workspaceId: string,
   scope: StoreScope,
   fn: (record: RecordSession) => Promise<T>,
 ): Promise<T> {
-  return heldFor(sessionOver(workspaceId, await getWorkspaceDoc(workspaceId, scope), scope), fn)
+  // `create` answers a document, so the loan is never null.
+  const lent = (await lendRecord(workspaceId, scope, (docs) => docs.create(workspaceId))) as Lent
+  return heldFor(sessionOver(workspaceId, lent, scope), fn)
 }
 
 /** Runs `fn` on `session` and releases it however `fn` ends; a missing record is handed over as `null`. */
@@ -549,26 +578,37 @@ export async function withPersistedWorkspaceRecord<T>(
   scope: StoreScope,
   fn: (record: RecordSession | null) => Promise<T>,
 ): Promise<T> {
-  const cached = await openWorkspaceDocIfStored(workspaceId, scope)
-  if (cached === null) return fn(null)
+  const lent = await lendRecord(workspaceId, scope, (docs) => docs.open(workspaceId))
+  if (lent === null) return fn(null)
   const store = await documentStoreReady(scope)
   const stored = await store.readFrontier({ docRef: { kind: 'workspace-tree', workspaceId } })
   if (
     stored !== null &&
-    cached.oplogVersion().compare(VersionVector.decode(stored.frontier)) === 0
+    lent.doc.oplogVersion().compare(VersionVector.decode(stored.frontier)) === 0
   ) {
-    return heldFor(sessionOver(workspaceId, cached, scope), fn)
+    return heldFor(sessionOver(workspaceId, lent, scope), fn)
   }
+  // The cache holds ops the store does not: the stored record is read instead, a
+  // document of its own that no cache lent.
+  lent.give()
   const persisted = await new DocumentStoreWorkspaceDocs(
     new LibsqlDocumentStore(await scope.db()),
   ).open(workspaceId)
-  return heldFor(persisted === null ? null : sessionOver(workspaceId, persisted, scope), fn)
+  return heldFor(
+    persisted === null ? null : sessionOver(workspaceId, { doc: persisted, give: () => {} }, scope),
+    fn,
+  )
 }
 
-function sessionOver(workspaceId: string, doc: LoroDoc, scope: StoreScope): RecordSession {
-  return bindRecordOps(legacyRecordOps, doc, async (held) => {
-    await saveWorkspaceDoc(workspaceId, held, scope)
-  })
+function sessionOver(workspaceId: string, lent: Lent, scope: StoreScope): RecordSession {
+  return bindRecordOps(
+    legacyRecordOps,
+    lent.doc,
+    async (held) => {
+      await saveWorkspaceDoc(workspaceId, held, scope)
+    },
+    lent.give,
+  )
 }
 
 // ── load LoroDoc, returning an empty document when no snapshot exists ──

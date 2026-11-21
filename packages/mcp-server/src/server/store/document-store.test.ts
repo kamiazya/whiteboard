@@ -638,7 +638,7 @@ describe('listDocuments', () => {
   // left the row saying 'spatial' while the tree node still said
   // 'markdown' — the kind sync above only wrote the row.
   it('an explicit-kind re-save updates the TREE node kind, not only the row', async () => {
-    const { openWorkspaceDocIfStored } = await import('./document-store.js')
+    const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
     const { resolveWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')
     await saveDocument(SESSION1, 'note', new LoroDoc(), { kind: 'markdown' })
     await saveDocument(SESSION1, 'note', new LoroDoc(), { overwrite: true, kind: 'spatial' })

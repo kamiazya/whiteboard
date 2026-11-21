@@ -6,7 +6,7 @@ import {
   DEFAULT_FILE_GRACE_MS,
   documentFromSnapshot,
   type FileReferenceReads,
-  scanFileReferences,
+  scanFileReferencesOfRecord,
   type UnjudgedFileHolder,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { z } from 'zod'
@@ -16,11 +16,12 @@ import { workspaceDir } from '../tenant/data-layout.js'
 import { validateWorkspaceId } from '../validators.js'
 import { daemonBlobStore } from './backup-guarded-blob-store.js'
 import { backupIsInProgress } from './backup-in-progress.js'
-import { catchUpWorkspaceDoc, openWorkspaceDocIfStored } from './document-store.js'
+import { catchUpWorkspaceDoc } from './document-store.js'
 import { assertPathWithinDir } from './path-guard.js'
 import { parseFileGcGraceMs } from './storage-env.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import type { VersionCheckouts, VersionStore } from './version-store.js'
+import { withStoredWorkspaceRecord } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Garbage-collect files in a workspace's files directory that no document
@@ -227,26 +228,34 @@ async function collectReferencedFileIds(
   scope: StoreScope,
   versionStore: GcVersionReader,
 ): Promise<Set<string>> {
-  const record = await openWorkspaceDocIfStored(workspaceId, scope)
-  if (record === null) return new Set()
   const blobs = daemonBlobStore(scope.dataDir, scope.layout.tenantId)
   const versions = versionReads(workspaceId, versionStore)
-  let scan: Awaited<ReturnType<typeof scanFileReferences>>
+  let scan: Awaited<ReturnType<typeof scanFileReferencesOfRecord>> | null
   try {
-    scan = await scanFileReferences(record, {
-      between: () => yieldToLoop(),
-      trashBytes: async (entry) => {
-        const stored = await blobs.get({ ref: entry.blob })
-        if (stored === null) {
-          log.warning({ workspaceId, documentId: entry.documentId }, 'trash entry has no bytes')
-        }
-        return stored?.bytes ?? null
-      },
-      versions: versions.reads,
-    })
+    // The loan is held across the whole scan, yields and all: the record is not
+    // given back to whatever lent it while a version or a trash blob is awaited.
+    scan = await withStoredWorkspaceRecord(workspaceId, scope, async (record) =>
+      record === null
+        ? null
+        : scanFileReferencesOfRecord(record, {
+            between: () => yieldToLoop(),
+            trashBytes: async (entry) => {
+              const stored = await blobs.get({ ref: entry.blob })
+              if (stored === null) {
+                log.warning(
+                  { workspaceId, documentId: entry.documentId },
+                  'trash entry has no bytes',
+                )
+              }
+              return stored?.bytes ?? null
+            },
+            versions: versions.reads,
+          }),
+    )
   } finally {
     await versions.release()
   }
+  if (scan === null) return new Set()
   if (scan.unjudged.length > 0) {
     for (const target of scan.unjudged) logUnjudged(workspaceId, target)
     throw new IncompleteFileGcScanError(workspaceId, scan.unjudged)

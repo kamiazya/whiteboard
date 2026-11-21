@@ -563,7 +563,8 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
   // through the daemon's store, so its verdict is the one a pass would reach
   // had no backup been running: the bytes are gone.
   it('reads a trash entry whose delete a backup deferred as already gone', async () => {
-    const { deleteDocument, openWorkspaceDocIfStored } = await import('./document-store.js')
+    const { deleteDocument } = await import('./document-store.js')
+    const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
     const { globalStoreScope } = await import('./store-scope.js')
     const { readTrashEntries } = await import('@kamiazya/whiteboard-loro-adapter')
     const { daemonBlobStore } = await import('./backup-guarded-blob-store.js')

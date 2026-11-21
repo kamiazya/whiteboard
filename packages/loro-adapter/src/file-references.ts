@@ -20,6 +20,8 @@
 import { LoroDoc } from 'loro-crdt'
 import type { DocumentContainers } from './containers.js'
 import { collectImageRefIds } from './image-refs.js'
+import type { RecordSession } from './record-ops.js'
+import { RetiredStoredShapeError } from './retired-stored-shape.js'
 import { readTrashEntries, type TrashEntry } from './workspace-trash.js'
 import {
   documentContainers,
@@ -194,17 +196,17 @@ async function versionContent(
   return past
 }
 
-export function scanFileReferences(
-  record: LoroDoc,
-  reads: FileReferenceReads,
-): Promise<FileReferenceScan> {
+/** What a scan asks of the record itself: its unreadable nodes, trash, documents and the images a document draws. */
+type RecordReads = Pick<
+  FileReferenceSource,
+  'unreadableNodes' | 'trashEntries' | 'liveDocuments' | 'liveImageRefIds'
+>
+
+/** The scan over a record answered by `record`, with the keeper's own I/O from `reads`. */
+function scanWith(record: RecordReads, reads: FileReferenceReads): Promise<FileReferenceScan> {
   const { versions } = reads
   return walkFileReferences({
-    unreadableNodes: async () => unreadableWorkspaceNodes(record),
-    trashEntries: async () => readTrashEntries(record),
-    liveDocuments: async () => readWorkspaceDocuments(record),
-    liveImageRefIds: async (documentId) =>
-      collectImageRefIds(documentContainers(record, documentId)),
+    ...record,
     trashBytes: (entry) => reads.trashBytes(entry),
     trashedImageRefIds: async (entry, bytes) => collectImageRefIds(trashedContent(entry, bytes)),
     ...(versions === undefined
@@ -218,4 +220,65 @@ export function scanFileReferences(
         }),
     between: () => reads.between?.() ?? Promise.resolve(),
   })
+}
+
+export function scanFileReferences(
+  record: LoroDoc,
+  reads: FileReferenceReads,
+): Promise<FileReferenceScan> {
+  return scanWith(
+    {
+      unreadableNodes: async () => unreadableWorkspaceNodes(record),
+      trashEntries: async () => readTrashEntries(record),
+      liveDocuments: async () => readWorkspaceDocuments(record),
+      liveImageRefIds: async (documentId) =>
+        collectImageRefIds(documentContainers(record, documentId)),
+    },
+    reads,
+  )
+}
+
+// The readers answer in the shapes the functions above return; the session's read asserts the type.
+const asserted = <T>() => ({ parse: (value: unknown) => value as T })
+
+/**
+ * The same scan for a keeper that holds the record through a session: every
+ * answer about the record is a read of it, so the record can be a document or an
+ * engine lease. The trash's evacuated bytes and a version's state are the
+ * keeper's own, read as `scanFileReferences` reads them.
+ */
+export function scanFileReferencesOfRecord(
+  record: RecordSession,
+  reads: FileReferenceReads,
+): Promise<FileReferenceScan> {
+  return scanWith(
+    {
+      unreadableNodes: () => record.read({ query: 'unreadableNodes' }, asserted<string[]>()),
+      trashEntries: () => record.read({ query: 'trash' }, asserted<TrashEntry[]>()),
+      liveDocuments: () =>
+        record.read({ query: 'documents' }, asserted<ReturnType<typeof readWorkspaceDocuments>>()),
+      liveImageRefIds: (documentId) => liveImageRefIdsOf(record, documentId),
+    },
+    reads,
+  )
+}
+
+/**
+ * The images a live document names. A read's refusal crosses the engine as its
+ * class and no message, so a document in a retired shape is asked what it holds
+ * and refused as the document itself refuses: a keeper that deletes on the
+ * strength of this scan has to tell an operator which shape stopped it.
+ */
+async function liveImageRefIdsOf(record: RecordSession, documentId: string): Promise<string[]> {
+  try {
+    return await record.read({ query: 'imageRefIds', args: { documentId } }, asserted<string[]>())
+  } catch (err) {
+    if (!(err instanceof Error) || err.name !== 'RetiredStoredShapeError') throw err
+    const found = await record.read(
+      { query: 'retiredStoredShape', args: { documentId } },
+      asserted<string | null>(),
+    )
+    if (found === null) throw err
+    throw new RetiredStoredShapeError(found)
+  }
 }
