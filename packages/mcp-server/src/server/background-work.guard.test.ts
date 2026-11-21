@@ -165,6 +165,7 @@ const TIMER_OWNERS: Record<
   'auto-compact.ts': { worker: 'auto-compact' },
   'backup-scheduler.ts': { worker: 'backup-scheduler' },
   'file-gc-sweeper.ts': { worker: 'file-gc-sweeper' },
+  'record-idle-release.ts': { worker: 'record-idle-release' },
   'workspace-tail.ts': { worker: 'workspace-tail' },
   // Keeps a marker file warm for exactly as long as a backup pass runs.
   'backup-in-progress.ts': { within: 'backup-scheduler' },

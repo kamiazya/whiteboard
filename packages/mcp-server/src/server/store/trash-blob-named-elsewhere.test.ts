@@ -1,8 +1,9 @@
+import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { recordTrashEntry } from '@kamiazya/whiteboard-loro-adapter'
-import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import { RecordStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
@@ -85,7 +86,7 @@ it('keeps the blob, and says why, when another workspace record will not open', 
   try {
     await storeRecordNaming('ws-a', REF)
     await storeRecordNaming('ws-b', OTHER_REF)
-    vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open').mockRejectedValue(new Error('torn'))
+    vi.spyOn(RecordStoreWorkspaceDocs.prototype, 'open').mockRejectedValue(new Error('torn'))
 
     expect(await trashBlobNamedElsewhere(storeScope(dir))({ workspaceId: 'ws-a', ref: REF })).toBe(
       true,
@@ -108,7 +109,7 @@ describe('cost of one answer', () => {
     await storeOthers()
     const ask = trashBlobNamedElsewhere(storeScope(dir))
     await ask({ workspaceId: 'ws-a', ref: REF })
-    const open = vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open')
+    const open = vi.spyOn(RecordStoreWorkspaceDocs.prototype, 'open')
 
     expect(await ask({ workspaceId: 'ws-a', ref: REF })).toBe(false)
     expect(open).not.toHaveBeenCalled()
@@ -119,7 +120,7 @@ describe('cost of one answer', () => {
     const ask = trashBlobNamedElsewhere(storeScope(dir))
     expect(await ask({ workspaceId: 'ws-a', ref: REF })).toBe(false)
     await storeRecordNaming('ws-other-3', REF, '01BRWAAAAAAAAAAAAAAAAAAAA3')
-    const open = vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open')
+    const open = vi.spyOn(RecordStoreWorkspaceDocs.prototype, 'open')
 
     expect(await ask({ workspaceId: 'ws-a', ref: REF })).toBe(true)
     expect(open.mock.calls).toEqual([['ws-other-3']])
@@ -149,7 +150,7 @@ describe('the bound on what is remembered', () => {
       const ask = trashBlobNamedElsewhere(storeScope(dir))
       await ask({ workspaceId: 'ws-a', ref: REF })
       expect(_namedDigestsHeldForTests()).toBe(2)
-      const open = vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open')
+      const open = vi.spyOn(RecordStoreWorkspaceDocs.prototype, 'open')
 
       expect(await ask({ workspaceId: 'ws-a', ref: REF })).toBe(false)
       expect(open).toHaveBeenCalledWith('ws-other-0')
@@ -167,7 +168,7 @@ describe('the bound on what is remembered', () => {
       await ask({ workspaceId: 'ws-c', ref: REF })
       // ws-a answers from memory, so ws-b is the one ws-c's decode displaces.
       await ask({ workspaceId: 'ws-b', ref: REF })
-      const open = vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open')
+      const open = vi.spyOn(RecordStoreWorkspaceDocs.prototype, 'open')
 
       await ask({ workspaceId: 'ws-c', ref: REF })
       expect(open.mock.calls).toEqual([['ws-b']])
@@ -185,7 +186,7 @@ describe('the bound on what is remembered', () => {
       const ask = trashBlobNamedElsewhere(storeScope(dir))
       await ask({ workspaceId: 'ws-a', ref: REF })
       expect(_namedDigestsHeldForTests()).toBe(1)
-      const open = vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'open')
+      const open = vi.spyOn(RecordStoreWorkspaceDocs.prototype, 'open')
 
       expect(await ask({ workspaceId: 'ws-a', ref: REF })).toBe(false)
       expect(open.mock.calls).toEqual([['ws-wide']])

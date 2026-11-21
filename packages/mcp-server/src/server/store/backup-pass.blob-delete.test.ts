@@ -32,7 +32,7 @@ afterEach(async () => {
 })
 
 /** Both places the daemon hands the tree index its blob store. */
-const INDEX_SOURCES: Record<string, () => Promise<LoroWorkspaceDocumentIndex>> = {
+const INDEX_SOURCES: Record<string, () => Promise<LoroWorkspaceDocumentIndex<object>>> = {
   'the container binding': async () => {
     const container = createContainer(createSelfHostStoreLocalModule(await getDb(dataDir), dataDir))
     const index = container.get(TOKENS.DocumentIndex)
@@ -43,7 +43,7 @@ const INDEX_SOURCES: Record<string, () => Promise<LoroWorkspaceDocumentIndex>> =
   workspaceTreeIndex: () => workspaceTreeIndex(storeScope(dataDir, SELF_HOST_TENANT_ID)),
 }
 
-async function trashedDocument(index: LoroWorkspaceDocumentIndex): Promise<string> {
+async function trashedDocument(index: LoroWorkspaceDocumentIndex<object>): Promise<string> {
   await index.createWorkspace({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })
   await index.createDocument({
     workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',

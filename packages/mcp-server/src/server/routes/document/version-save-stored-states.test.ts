@@ -1,3 +1,4 @@
+import '../../store/_test-loro-records.js'
 // What saving a version does for a document in each stored state, through the tool and the route.
 // The outcomes were recorded on the code that loaded the document first, so a save that reads the
 // stored record instead stays the same answer: a retired shape saves, a record that cannot be

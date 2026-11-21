@@ -7,6 +7,7 @@ import {
   parseBackupSchedule,
   parseFileGcGraceMs,
   parseFileGcIntervalMs,
+  parseRecordKind,
   parseWorkspaceTailMs,
 } from './storage-env.js'
 
@@ -424,5 +425,25 @@ describe('the scheduled-backup settings', () => {
       expect(issue.reason).not.toMatch(/secret-looking-path/)
       expect(issue.variable).not.toMatch(/secret-looking-path/)
     }
+  })
+})
+
+describe('WHITEBOARD_RECORD_KIND', () => {
+  it('takes lease when unset or blank, and the kind it names otherwise', () => {
+    expect(parseRecordKind({})).toEqual({ ok: true, value: 'lease' })
+    expect(parseRecordKind({ WHITEBOARD_RECORD_KIND: '  ' })).toEqual({ ok: true, value: 'lease' })
+    expect(parseRecordKind({ WHITEBOARD_RECORD_KIND: 'loro' })).toEqual({ ok: true, value: 'loro' })
+    expect(parseRecordKind({ WHITEBOARD_RECORD_KIND: ' lease ' })).toEqual({
+      ok: true,
+      value: 'lease',
+    })
+  })
+
+  it('aborts startup on a value it cannot honour, naming the variable and not the value', () => {
+    const issues = collectStorageEnvIssues(DATA_DIR, { WHITEBOARD_RECORD_KIND: 'doc' })
+    expect(issues).toContainEqual({
+      variable: 'WHITEBOARD_RECORD_KIND',
+      reason: 'must be `lease` or `loro`',
+    })
   })
 })

@@ -5,6 +5,7 @@
  * every folder its path names that the tree does not hold yet: a version
  * restored to a new path.
  */
+import '../../store/_test-loro-records.js'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { readWorkspaceNodes, WORKSPACE_TREE_KEY } from '@kamiazya/whiteboard-loro-adapter'

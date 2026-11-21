@@ -16,6 +16,7 @@
  * cannot satisfy.
  */
 
+import '../server/store/_test-loro-records.js'
 import { mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

@@ -1,31 +1,37 @@
 import {
   bindRecordOps,
-  legacyRecordOps,
-  projectWorkspaceDocument,
+  documentFromSnapshot,
+  type LegacyRecord,
+  loroDocKind,
   type RecordSession,
-  resolveWorkspaceDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { isDatabaseBusy } from '@kamiazya/whiteboard-ports'
 import {
   type CaughtUp,
-  DocumentStoreWorkspaceDocs,
+  type IndexRecordKind,
+  RecordStoreWorkspaceDocs,
   type WorkspaceDocCursor,
   type WorkspaceDocs,
 } from '@kamiazya/whiteboard-workspace-index'
-import { LoroDoc, VersionVector } from 'loro-crdt'
 import { getLogger } from '../log.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { corruptStoredData, isCorruptStoredDataError } from './corrupt-stored-data.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
-import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { RecordCache } from './record-cache.js'
+import { scheduleIdleRelease } from './record-idle-release.js'
+import type { RecordKindName } from './storage-env.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { withWorkspaceWriteLock, workspaceWriteLockInUse } from './workspace-lock.js'
+import {
+  type WorkspaceRecordKind,
+  workspaceRecordKindFromEnv,
+  workspaceRecordKindNamed,
+} from './workspace-record-kind.js'
 
 /**
- * The live WORKSPACE documents this process serves and writes through, one
+ * The live WORKSPACE records this process serves and writes through, one
  * per workspace. This is the daemon's twin of the browser backend holding
  * its workspace doc across a session: `DocumentStoreWorkspaceDocs.open`
  * reads the whole stored record, so opening per save would cost
@@ -48,13 +54,38 @@ import { withWorkspaceWriteLock, workspaceWriteLockInUse } from './workspace-loc
  * (`followRecord`) before it serves the document.
  */
 
-// What giving a `LoroDoc` back does: nothing, since collecting it frees it. A test
-// that wants to see the loans of a record end watches this instead.
-let releasedForTests: LoroDoc[] | null = null
+// A record is held as `object`: which kind it is (a `LoroDoc`, an engine lease)
+// is the active kind's business (`workspace-record-kind.ts`), and nothing here
+// reads a record except through it.
+type Held = object
+
+let active: WorkspaceRecordKind | undefined
+
+/** The kind this process holds workspace records as, from the environment until a test says otherwise. */
+function recordKind(): WorkspaceRecordKind {
+  active ??= workspaceRecordKindFromEnv()
+  return active
+}
+
+/**
+ * Test-only: holds records as `name` from now on (`null` returns to the
+ * environment's choice). What the cache held is given back first, since it was
+ * loaded by the other kind.
+ */
+export function _setWorkspaceRecordKindForTests(name: RecordKindName | null): void {
+  records?.clear()
+  records = undefined
+  droppedVersions.clear()
+  active = name === null ? undefined : workspaceRecordKindNamed(name)
+}
+
+// What giving a record back is seen as by a test that wants to watch the loans of
+// a record end.
+let releasedForTests: Held[] | null = null
 
 /** Test-only: how many loans of a record are out right now. */
 export function _workspaceRecordLoansForTests(): number {
-  return records.outstanding
+  return records?.outstanding ?? 0
 }
 
 /**
@@ -79,7 +110,7 @@ export function _watchWorkspaceRecordLoansForTests(): {
 let loanWatch: { counts: Map<object, number>; taken: number } | null = null
 
 /** Test-only: the records the cache has given back since this was first asked for. */
-export function _workspaceRecordReleasesForTests(): LoroDoc[] {
+export function _workspaceRecordReleasesForTests(): Held[] {
   releasedForTests ??= []
   return releasedForTests
 }
@@ -90,10 +121,9 @@ export function _workspaceRecordReleasesForTests(): LoroDoc[] {
  * Without a bound every record the process ever opened stayed for its
  * lifetime — the daily file-GC sweep opens every workspace it keeps — and in
  * server mode one process serves every tenant over one WASM heap.
- * `scripts/measure/workspace-record-memory.mjs` puts a live record at 8.5MB
- * for 90 documents and 64.5MB for 360 (super-linear in document count), so 16
- * holds about 136MB of typical workspaces and about 1GiB of 360-document ones,
- * well inside a wasm32 heap with room left for an export's amplification.
+ * The count is the active kind's (`workspace-record-kind.ts` carries the
+ * measurement behind each): a lease takes about four times what a `LoroDoc` does,
+ * so fewer are kept.
  * A miss costs one read of the stored record, which is what a restart costs.
  *
  * Dropping a record is safe because this module already serves a writer it
@@ -118,7 +148,9 @@ export function _workspaceRecordReleasesForTests(): LoroDoc[] {
  * ponytail: a bound by count, not bytes. A byte-weighted bound needs a size
  * this module does not have on a hit without an export, which is O(record).
  */
-export const WORKSPACE_DOC_CACHE_MAX_ENTRIES = 16
+export function workspaceDocCacheMaxEntries(): number {
+  return recordKind().maxEntries
+}
 
 /**
  * The encoded version each record was dropped at by the bound, so a reopen
@@ -133,9 +165,9 @@ export const WORKSPACE_DOC_CACHE_MAX_ENTRIES = 16
 const droppedVersions = new Map<string, Uint8Array>()
 const DROPPED_VERSIONS_MAX_ENTRIES = 1024
 
-function rememberDropped(key: string, doc: LoroDoc): void {
+function rememberDropped(key: string, record: Held): void {
   droppedVersions.delete(key)
-  droppedVersions.set(key, doc.version().encode())
+  droppedVersions.set(key, recordKind().index.encodedVersion(record))
   for (const oldest of droppedVersions.keys()) {
     if (droppedVersions.size <= DROPPED_VERSIONS_MAX_ENTRIES) break
     droppedVersions.delete(oldest)
@@ -143,23 +175,32 @@ function rememberDropped(key: string, doc: LoroDoc): void {
 }
 
 /**
- * The records themselves. Generic over what a record is held as: here a `LoroDoc`,
- * for which giving back is nothing, so no idle time is set and nothing is
- * released for being unused. A cache of engine leases sets both.
+ * The records themselves, bounded and released as the active kind says: a
+ * `LoroDoc` is given back by collecting it, so that kind sets no idle time,
+ * while a cache of engine leases drops one nobody used for a while.
  */
-const records = new RecordCache<LoroDoc>({
-  maxEntries: WORKSPACE_DOC_CACHE_MAX_ENTRIES,
-  release: (doc) => {
-    releasedForTests?.push(doc)
-  },
-  pinned: workspaceWriteLockInUse,
-  onLoan: (record, change) => {
-    if (loanWatch === null) return
-    loanWatch.counts.set(record, (loanWatch.counts.get(record) ?? 0) + change)
-    if (change === 1) loanWatch.taken += 1
-  },
-  onBoundDrop: (key, doc) => rememberDropped(key, doc),
-})
+let records: RecordCache<Held> | undefined
+
+function recordCache(): RecordCache<Held> {
+  if (records !== undefined) return records
+  const kind = recordKind()
+  records = new RecordCache<Held>({
+    maxEntries: kind.maxEntries,
+    ...(kind.idleMs === null ? {} : { idleMs: kind.idleMs, schedule: scheduleIdleRelease }),
+    release: (record) => {
+      kind.index.release(record)
+      releasedForTests?.push(record)
+    },
+    pinned: workspaceWriteLockInUse,
+    onLoan: (record, change) => {
+      if (loanWatch === null) return
+      loanWatch.counts.set(record, (loanWatch.counts.get(record) ?? 0) + change)
+      if (change === 1) loanWatch.taken += 1
+    },
+    onLapse: (key, record) => rememberDropped(key, record),
+  })
+  return records
+}
 
 /**
  * Where each cached document last read the record up to.
@@ -168,7 +209,7 @@ const records = new RecordCache<LoroDoc>({
  * second cleanup: the entry goes with the instance, and a replacement starts
  * from the cursor it was opened at.
  */
-const followedTo = new WeakMap<LoroDoc, WorkspaceDocCursor>()
+const followedTo = new WeakMap<Held, WorkspaceDocCursor>()
 
 /** "Where this document stands is not known" — `catchUp` re-reads the record. */
 const COLD_CURSOR: WorkspaceDocCursor = { generation: null, afterSeq: null }
@@ -199,7 +240,7 @@ function rethrowOpenFailure(workspaceId: string, err: unknown): never {
 
 /** Test-only: drops every cached live workspace document, simulating a restart. */
 export function _clearWorkspaceDocCacheForTests(): void {
-  records.clear()
+  records?.clear()
   droppedVersions.clear()
   loanWatch = null
   if (releasedForTests !== null) releasedForTests.length = 0
@@ -216,7 +257,7 @@ export function evictWorkspaceDocCache(
   scope: StoreScope = globalStoreScope,
 ): void {
   const key = workspaceDocCacheKey(scope, workspaceId)
-  records.evict(key)
+  records?.evict(key)
   droppedVersions.delete(key)
 }
 
@@ -236,15 +277,20 @@ export function evictWorkspaceDocCache(
  */
 async function recordIsAhead(
   workspaceId: string,
-  doc: LoroDoc,
+  record: Held,
   scope: StoreScope,
 ): Promise<boolean> {
   const stored = await (await documentStoreReady(scope)).readFrontier({
     docRef: { kind: 'workspace-tree', workspaceId },
   })
   if (stored === null) return false
-  const order = doc.oplogVersion().compare(VersionVector.decode(stored.frontier))
-  return order === undefined || order < 0
+  const order = recordKind().index.compareVersion(record, stored.frontier)
+  return order === 'behind' || order === 'concurrent'
+}
+
+/** The stored record as this process's kind reads it. */
+async function storedDocs(scope: StoreScope): Promise<RecordStoreWorkspaceDocs<Held>> {
+  return new RecordStoreWorkspaceDocs<Held>(await documentStoreReady(scope), recordKind().index)
 }
 
 /**
@@ -254,24 +300,21 @@ async function recordIsAhead(
  */
 async function importRecord(
   workspaceId: string,
-  doc: LoroDoc,
+  record: Held,
   cursor: WorkspaceDocCursor,
   scope: StoreScope,
-): Promise<{ caught: CaughtUp; before: VersionVector }> {
-  const before = doc.version()
-  const caught = await new DocumentStoreWorkspaceDocs(await documentStoreReady(scope)).catchUp(
-    workspaceId,
-    doc,
-    cursor,
-  )
-  followedTo.set(doc, caught.cursor)
+): Promise<{ caught: CaughtUp; before: Uint8Array }> {
+  const before = recordKind().index.encodedVersion(record)
+  const caught = await (await storedDocs(scope)).catchUp(workspaceId, record, cursor)
+  followedTo.set(record, caught.cursor)
   return { caught, before }
 }
 
-/** Tell the subscribers what `doc` gained since `before`, if anything. */
-function announceGain(workspaceId: string, doc: LoroDoc, before: VersionVector): void {
-  if (doc.version().compare(before) === 0) return
-  emitWorkspaceDocUpdated(workspaceId, doc.export({ mode: 'update', from: before }))
+/** Tell the subscribers what `record` gained since the version `before` encodes, if anything. */
+function announceGain(workspaceId: string, record: Held, before: Uint8Array): void {
+  const kind = recordKind().index
+  if (kind.atVersion(record, before)) return
+  emitWorkspaceDocUpdated(workspaceId, kind.exportUpdateSince(record, before))
 }
 
 /**
@@ -284,16 +327,16 @@ function announceGain(workspaceId: string, doc: LoroDoc, before: VersionVector):
  * The common answer is "nothing moved", which costs `recordIsAhead`'s one
  * read and takes no lock.
  */
-async function followRecord(workspaceId: string, doc: LoroDoc, scope: StoreScope): Promise<void> {
-  if (!(await recordIsAhead(workspaceId, doc, scope))) return
+async function followRecord(workspaceId: string, record: Held, scope: StoreScope): Promise<void> {
+  if (!(await recordIsAhead(workspaceId, record, scope))) return
   await withWorkspaceWriteLock(workspaceId, async () => {
     const { before } = await importRecord(
       workspaceId,
-      doc,
-      followedTo.get(doc) ?? COLD_CURSOR,
+      record,
+      followedTo.get(record) ?? COLD_CURSOR,
       scope,
     )
-    announceGain(workspaceId, doc, before)
+    announceGain(workspaceId, record, before)
   })
 }
 
@@ -306,26 +349,26 @@ async function followRecord(workspaceId: string, doc: LoroDoc, scope: StoreScope
 async function openFollowed(
   workspaceId: string,
   scope: StoreScope,
-  open: (docs: DocumentStoreWorkspaceDocs) => Promise<LoroDoc | null>,
-): Promise<LoroDoc | null> {
-  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady(scope))
+  open: (docs: RecordStoreWorkspaceDocs<Held>) => Promise<Held | null>,
+): Promise<Held | null> {
+  const docs = await storedDocs(scope)
   const cursor = await docs.readCursor(workspaceId)
-  const doc = await open(docs).catch((err) => rethrowOpenFailure(workspaceId, err))
-  if (doc === null) return null
-  followedTo.set(doc, cursor)
+  const record = await open(docs).catch((err) => rethrowOpenFailure(workspaceId, err))
+  if (record === null) return null
+  followedTo.set(record, cursor)
   const key = workspaceDocCacheKey(scope, workspaceId)
-  records.keep(key, workspaceId, doc)
+  recordCache().keep(key, workspaceId, record)
   const dropped = droppedVersions.get(key)
   if (dropped !== undefined) {
     droppedVersions.delete(key)
-    announceGain(workspaceId, doc, VersionVector.decode(dropped))
+    announceGain(workspaceId, record, dropped)
   }
-  return doc
+  return record
 }
 
 /** A record on loan from the cache: it stays open until the loan is given back. */
 interface Lent {
-  readonly doc: LoroDoc
+  readonly doc: Held
   give(): void
 }
 
@@ -338,10 +381,10 @@ interface Lent {
 async function lendRecord(
   workspaceId: string,
   scope: StoreScope,
-  open: (docs: DocumentStoreWorkspaceDocs) => Promise<LoroDoc | null>,
+  open: (docs: RecordStoreWorkspaceDocs<Held>) => Promise<Held | null>,
 ): Promise<Lent | null> {
   const key = workspaceDocCacheKey(scope, workspaceId)
-  const held = records.acquire(key)
+  const held = recordCache().acquire(key)
   if (held !== undefined) {
     try {
       await followRecord(workspaceId, held.handle, scope)
@@ -355,7 +398,7 @@ async function lendRecord(
   if (doc === null) return null
   // Kept a moment ago; a record already gone from the cache is the caller's
   // alone, and a different one kept under the key since is a loan nobody wants.
-  const lent = records.acquire(key)
+  const lent = recordCache().acquire(key)
   if (lent !== undefined && lent.handle === doc) return { doc, give: lent.give }
   lent?.give()
   return { doc, give: () => {} }
@@ -381,17 +424,17 @@ export async function followWorkspaceRecord(
   scope: StoreScope,
   cursor: WorkspaceDocCursor | undefined,
 ): Promise<CaughtUp> {
-  // `create` answers a document, so the loan is never null.
+  // `create` answers a record, so the loan is never null.
   const lent = (await lendRecord(workspaceId, scope, (docs) => docs.create(workspaceId))) as Lent
   try {
     const docs = cacheBackedWorkspaceDocs(scope)
     if (cursor !== undefined) return await docs.catchUp(workspaceId, lent.doc, cursor)
-    const before = lent.doc.version()
+    const kind = recordKind().index
+    const before = kind.encodedVersion(lent.doc)
     const reconciled = await docs.catchUp(workspaceId, lent.doc, COLD_CURSOR)
-    const gained =
-      lent.doc.version().compare(before) === 0
-        ? []
-        : [lent.doc.export({ mode: 'update', from: before })]
+    const gained = kind.atVersion(lent.doc, before)
+      ? []
+      : [kind.exportUpdateSince(lent.doc, before)]
     return { cursor: reconciled.cursor, updates: gained }
   } finally {
     lent.give()
@@ -403,9 +446,9 @@ export async function followWorkspaceRecord(
  * document each lent. The index that holds one releases it through its record
  * kind when its operation is done, and `releaseWorkspaceDocLoan` is that release.
  */
-const lentToHolders = new WeakMap<LoroDoc, Lent[]>()
+const lentToHolders = new WeakMap<Held, Lent[]>()
 
-function lendToHolder(lent: Lent | null): LoroDoc | null {
+function lendToHolder(lent: Lent | null): Held | null {
   if (lent === null) return null
   const held = lentToHolders.get(lent.doc) ?? []
   held.push(lent)
@@ -414,31 +457,49 @@ function lendToHolder(lent: Lent | null): LoroDoc | null {
 }
 
 /** Gives back one loan a cache-backed `WorkspaceDocs` made of `doc`; a document it did not lend is nothing to give back. */
-export function releaseWorkspaceDocLoan(doc: LoroDoc): void {
+export function releaseWorkspaceDocLoan(doc: Held): void {
   lentToHolders.get(doc)?.pop()?.give()
 }
 
+/** The active kind as an index runs over it: the record it operates on is given back to the cache, not freed. */
+export function cacheBackedRecordKind(): IndexRecordKind<Held> {
+  return { ...recordKind().index, release: releaseWorkspaceDocLoan }
+}
+
 /** Reads through a loan and gives it back, for a caller that keeps nothing of it. */
-function viaLoan(lent: Lent | null): LoroDoc | null {
+function viaLoan(lent: Lent | null): LegacyRecord | null {
   lent?.give()
-  return lent === null ? null : lent.doc
+  return lent === null ? null : asLegacy(lent.doc)
+}
+
+/**
+ * The record as the `LoroDoc` a caller mutates and hands back to `saveWorkspaceDoc`.
+ * That reading exists only while records are held as `LoroDoc`s; an engine lease
+ * is not one, and a caller that asks for it under the other kind has to say so
+ * rather than be handed something it cannot use.
+ */
+function asLegacy(record: Held): LegacyRecord {
+  if (recordKind().name !== 'loro') {
+    throw new Error('a workspace record is a LoroDoc only under WHITEBOARD_RECORD_KIND=loro')
+  }
+  return record as LegacyRecord
 }
 
 export async function getWorkspaceDoc(
   workspaceId: string,
   scope: StoreScope = globalStoreScope,
-): Promise<LoroDoc> {
-  // `create` answers a document, so the null arm is unreachable.
-  return (await viaLoan(
+): Promise<LegacyRecord> {
+  // `create` answers a record, so the null arm is unreachable.
+  return viaLoan(
     await lendRecord(workspaceId, scope, (docs) => docs.create(workspaceId)),
-  )) as LoroDoc
+  ) as LegacyRecord
 }
 
 /** The workspace doc when one is STORED (or cached); null otherwise — a read path must not mint one. */
 export async function openWorkspaceDocIfStored(
   workspaceId: string,
   scope: StoreScope = globalStoreScope,
-): Promise<LoroDoc | null> {
+): Promise<LegacyRecord | null> {
   return viaLoan(await lendRecord(workspaceId, scope, (docs) => docs.open(workspaceId)))
 }
 
@@ -483,8 +544,16 @@ export function onWorkspaceDocUpdated(listener: WorkspaceDocUpdatedListener): ()
 
 export async function saveWorkspaceDoc(
   workspaceId: string,
-  doc: LoroDoc,
+  doc: LegacyRecord,
   scope: StoreScope = globalStoreScope,
+): Promise<Uint8Array | null> {
+  return saveRecord(workspaceId, doc, scope)
+}
+
+async function saveRecord(
+  workspaceId: string,
+  doc: Held,
+  scope: StoreScope,
 ): Promise<Uint8Array | null> {
   // The workspaces table is the REGISTRY of workspaces this daemon keeps
   // (workspaceExists reads it to refuse ids it never heard of), and this is
@@ -493,7 +562,7 @@ export async function saveWorkspaceDoc(
   // saveDocument. Without this, a workspace minted by an MCP tool has a
   // stored record but no registry row, and the workspace-document route refuses it (404).
   await upsertWorkspaceRow(await scope.db(), workspaceId)
-  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady(scope))
+  const docs = await storedDocs(scope)
   let update: Uint8Array | null
   try {
     update = await docs.save(workspaceId, doc)
@@ -528,7 +597,7 @@ export async function catchUpWorkspaceDoc(
   scope: StoreScope = globalStoreScope,
 ): Promise<WorkspaceDocCursor> {
   const docs = cacheBackedWorkspaceDocs(scope)
-  const cached = records.get(workspaceDocCacheKey(scope, workspaceId))
+  const cached = recordCache().get(workspaceDocCacheKey(scope, workspaceId))
   if (cached === undefined) return docs.readCursor(workspaceId)
   // A COLD cursor, not the record's current one. Nothing tracks where the
   // cached document stands — it is mutated in place by every local write —
@@ -538,7 +607,7 @@ export async function catchUpWorkspaceDoc(
   // record's current cursor instead would say "already up to date" and
   // import nothing, leaving the caller with exactly the stale view it asked
   // to be rid of.
-  const before = cached.version()
+  const before = recordKind().index.encodedVersion(cached)
   const { cursor } = await docs.catchUp(workspaceId, cached, COLD_CURSOR)
   // Nobody else is told what this imported, so say it here: a subscriber that
   // missed these ops would otherwise never get them, since the next
@@ -553,7 +622,9 @@ export async function catchUpWorkspaceDoc(
  * delete/rename, the dual-plane index) shares the same instance the save
  * path diffs against, so no path can leave another holding a stale doc.
  */
-export function cacheBackedWorkspaceDocs(scope: StoreScope = globalStoreScope): WorkspaceDocs {
+export function cacheBackedWorkspaceDocs(
+  scope: StoreScope = globalStoreScope,
+): WorkspaceDocs<Held> {
   return {
     // Lent until the holder releases it (`releaseWorkspaceDocLoan`), so the record
     // an index works on is not given back while it works.
@@ -562,15 +633,13 @@ export function cacheBackedWorkspaceDocs(scope: StoreScope = globalStoreScope): 
     create: async (workspaceId) =>
       lendToHolder(
         await lendRecord(workspaceId, scope, (docs) => docs.create(workspaceId)),
-      ) as LoroDoc,
-    save: (workspaceId, doc) => saveWorkspaceDoc(workspaceId, doc, scope),
+      ) as Held,
+    save: (workspaceId, doc) => saveRecord(workspaceId, doc, scope),
     // The tailing half is a STORE concern, so it delegates rather than being
     // reimplemented against the cache: the cursor describes the record, and
     // the only thing this wrapper adds is which doc gets caught up.
-    readCursor: async (workspaceId) =>
-      new DocumentStoreWorkspaceDocs(await documentStoreReady(scope)).readCursor(workspaceId),
-    storedVersion: async (workspaceId) =>
-      new DocumentStoreWorkspaceDocs(await documentStoreReady(scope)).storedVersion(workspaceId),
+    readCursor: async (workspaceId) => (await storedDocs(scope)).readCursor(workspaceId),
+    storedVersion: async (workspaceId) => (await storedDocs(scope)).storedVersion(workspaceId),
     // Under the workspace write barrier, because this MUTATES the live cached
     // document that every in-process writer is diffing against. Importing
     // another instance's ops into it while a local save is computing its own
@@ -621,7 +690,7 @@ export async function withWorkspaceRecord<T>(
   scope: StoreScope,
   fn: (record: RecordSession) => Promise<T>,
 ): Promise<T> {
-  // `create` answers a document, so the loan is never null.
+  // `create` answers a record, so the loan is never null.
   const lent = (await lendRecord(workspaceId, scope, (docs) => docs.create(workspaceId))) as Lent
   return heldFor(sessionOver(workspaceId, lent, scope), fn)
 }
@@ -656,30 +725,28 @@ export async function withPersistedWorkspaceRecord<T>(
   if (lent === null) return fn(null)
   const store = await documentStoreReady(scope)
   const stored = await store.readFrontier({ docRef: { kind: 'workspace-tree', workspaceId } })
-  if (
-    stored !== null &&
-    lent.doc.oplogVersion().compare(VersionVector.decode(stored.frontier)) === 0
-  ) {
+  if (stored !== null && recordKind().index.compareVersion(lent.doc, stored.frontier) === 'equal') {
     return heldFor(sessionOver(workspaceId, lent, scope), fn)
   }
   // The cache holds ops the store does not: the stored record is read instead, a
-  // document of its own that no cache lent.
+  // record of its own that no cache lent, so the bracket that reads it frees it.
   lent.give()
-  const persisted = await new DocumentStoreWorkspaceDocs(
-    new LibsqlDocumentStore(await scope.db()),
-  ).open(workspaceId)
+  const persisted = await (await storedDocs(scope)).open(workspaceId)
+  const kind = recordKind().index
   return heldFor(
-    persisted === null ? null : sessionOver(workspaceId, { doc: persisted, give: () => {} }, scope),
+    persisted === null
+      ? null
+      : sessionOver(workspaceId, { doc: persisted, give: () => kind.release(persisted) }, scope),
     fn,
   )
 }
 
 function sessionOver(workspaceId: string, lent: Lent, scope: StoreScope): RecordSession {
   return bindRecordOps(
-    legacyRecordOps,
+    recordKind().ops,
     lent.doc,
     async (held) => {
-      await saveWorkspaceDoc(workspaceId, held, scope)
+      await saveRecord(workspaceId, held, scope)
     },
     lent.give,
   )
@@ -690,25 +757,32 @@ export async function loadDocument(
   workspaceId: string,
   path: string,
   scope: StoreScope = globalStoreScope,
-): Promise<LoroDoc> {
-  return (await loadPlacedDocument(workspaceId, path, scope)) ?? new LoroDoc()
+): Promise<LegacyRecord> {
+  return (await loadPlacedDocument(workspaceId, path, scope)) ?? loroDocKind.empty()
 }
+
+const assertedAs = <T>() => ({ parse: (value: unknown) => value as T })
 
 /** The document the tree places at `path`, or `null` when it places none there. */
 async function loadPlacedDocument(
   workspaceId: string,
   path: string,
   scope: StoreScope,
-): Promise<LoroDoc | null> {
+): Promise<LegacyRecord | null> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   // The workspace tree answers first, and resolves the PATH itself:
   // the tree is the address book now, so a document lists and serves even
   // if its mirror row is skewed or gone. The projection is a VALUE copy
   // with its own oplog.
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
-  if (workspaceDoc === null) return null
-  const entry = resolveWorkspaceDocument(workspaceDoc, path)
-  if (entry === null) return null
-  return projectWorkspaceDocument(workspaceDoc, entry.documentId) ?? new LoroDoc()
+  return withStoredWorkspaceRecord(workspaceId, scope, async (record) => {
+    if (record === null) return null
+    const entry = await record.read(
+      { query: 'workspaceDocumentEntry', args: { path } },
+      assertedAs<{ documentId: string } | null>(),
+    )
+    if (entry === null) return null
+    const projected = record.exportProjection(entry.documentId)
+    return projected === null ? loroDocKind.empty() : documentFromSnapshot(projected)
+  })
 }

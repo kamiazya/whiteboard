@@ -13,6 +13,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { describeUnderBothRecordKinds } from './_test-record-kinds.js'
 
 let tempDir: string
 vi.mock('../config.js', () => ({
@@ -57,18 +58,26 @@ function unreadableSource(): LoroDoc {
   return doc
 }
 
-it('a save that throws after placing its node leaves nothing for the next save to persist', async () => {
-  await saveDocument('0104Y7DY19FTA30KQYKDRRMNBN', 'kept', canvasDoc('first'), { kind: 'spatial' })
+describeUnderBothRecordKinds('a failed save', () => {
+  it('a save that throws after placing its node leaves nothing for the next save to persist', async () => {
+    await saveDocument('0104Y7DY19FTA30KQYKDRRMNBN', 'kept', canvasDoc('first'), {
+      kind: 'spatial',
+    })
 
-  await expect(
-    saveDocument('0104Y7DY19FTA30KQYKDRRMNBN', 'phantom', unreadableSource(), { kind: 'spatial' }),
-  ).rejects.toThrow()
-  await saveDocument('0104Y7DY19FTA30KQYKDRRMNBN', 'kept', canvasDoc('second'), { overwrite: true })
+    await expect(
+      saveDocument('0104Y7DY19FTA30KQYKDRRMNBN', 'phantom', unreadableSource(), {
+        kind: 'spatial',
+      }),
+    ).rejects.toThrow()
+    await saveDocument('0104Y7DY19FTA30KQYKDRRMNBN', 'kept', canvasDoc('second'), {
+      overwrite: true,
+    })
 
-  const stored = await new DocumentStoreWorkspaceDocs(
-    new LibsqlDocumentStore(await getDb(tempDir)),
-  ).open('0104Y7DY19FTA30KQYKDRRMNBN')
-  if (stored === null) throw new Error('the workspace record was never stored')
-  expect(resolveWorkspaceDocument(stored, 'kept')).not.toBeNull()
-  expect(resolveWorkspaceDocument(stored, 'phantom')).toBeNull()
+    const stored = await new DocumentStoreWorkspaceDocs(
+      new LibsqlDocumentStore(await getDb(tempDir)),
+    ).open('0104Y7DY19FTA30KQYKDRRMNBN')
+    if (stored === null) throw new Error('the workspace record was never stored')
+    expect(resolveWorkspaceDocument(stored, 'kept')).not.toBeNull()
+    expect(resolveWorkspaceDocument(stored, 'phantom')).toBeNull()
+  })
 })

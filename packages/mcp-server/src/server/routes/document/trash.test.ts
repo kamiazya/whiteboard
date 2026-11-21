@@ -8,6 +8,7 @@
  * route.
  */
 
+import '../../store/_test-loro-records.js'
 import {
   listTrashResponseSchema,
   purgeTrashEntryResponseSchema,

@@ -101,6 +101,18 @@ export const LOOP_COSTS = {
       'yielding.',
     measuredOn: '2026-10-01',
   },
+  'record-idle-release': {
+    runs: 'in-process',
+    // No yield to add: releasing a lease is one engine call that frees its
+    // document, and the sweep gives back every record that went idle together,
+    // at most the four the bound keeps.
+    stallCeilingMs: 100,
+    fixture:
+      'asserted by record-idle-release-loop-availability.test.ts, which holds four leases ' +
+      'of a 360-document workspace, lets them all go idle at once and reads 11-23ms there ' +
+      'for the whole sweep, over four runs.',
+    measuredOn: '2026-11-21',
+  },
   'backup-scheduler': {
     runs: 'subprocess',
     because:

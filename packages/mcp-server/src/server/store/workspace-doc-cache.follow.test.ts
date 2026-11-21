@@ -7,11 +7,15 @@
  * catch-up, and nothing is out afterwards.
  */
 
+import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
-import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import {
+  DocumentStoreWorkspaceDocs,
+  RecordStoreWorkspaceDocs,
+} from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -112,6 +116,36 @@ describe('following the live workspace record', () => {
     expect(_workspaceRecordLoansForTests()).toBe(0)
   })
 
+  it('sends on first sight what a write landing after the lend added, which nothing else announces', async () => {
+    const live = await getWorkspaceDoc(WS)
+    live.getMap('meta').set('own', '1')
+    live.commit()
+    await saveWorkspaceDoc(WS, live)
+    const replica = new LoroDoc()
+    replica.import(live.export({ mode: 'snapshot' }))
+    // The lend has caught the record up by the time the reconcile reads the log,
+    // so a write has to land between the two to leave anything to send.
+    const read = LibsqlDocumentStore.prototype.loadDeltas
+    let landed = false
+    const spy = vi
+      .spyOn(LibsqlDocumentStore.prototype, 'loadDeltas')
+      .mockImplementation(async function (this: InstanceType<typeof LibsqlDocumentStore>, ...args) {
+        if (!landed) {
+          landed = true
+          await foreignWrite('late', '1')
+        }
+        return read.apply(this, args)
+      })
+
+    const { result } = await heardDuring(() =>
+      followWorkspaceRecord(WS, globalStoreScope, undefined),
+    ).finally(() => spy.mockRestore())
+
+    expect(result.updates.length).toBeGreaterThan(0)
+    for (const update of result.updates) replica.import(update)
+    expect(replica.getMap('meta').get('late')).toBe('1')
+  })
+
   it('sends what the store gained since the cursor, and nothing when it gained nothing', async () => {
     const live = await getWorkspaceDoc(WS)
     live.getMap('meta').set('own', '1')
@@ -137,7 +171,7 @@ describe('following the live workspace record', () => {
   it('gives its loan back when the catch-up fails', async () => {
     await getWorkspaceDoc(WS)
     const failing = vi
-      .spyOn(DocumentStoreWorkspaceDocs.prototype, 'catchUp')
+      .spyOn(RecordStoreWorkspaceDocs.prototype, 'catchUp')
       .mockRejectedValueOnce(new Error('store gone'))
 
     await expect(followWorkspaceRecord(WS, globalStoreScope, undefined)).rejects.toThrow(

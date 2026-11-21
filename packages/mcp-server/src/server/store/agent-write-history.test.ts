@@ -3,6 +3,7 @@
 // document-written observer is told, and which writes the automatic checkpoint
 // takes. Through the production container, since each is a join between the
 // tool in server-core and a keeper in this package.
+import './_test-loro-records.js'
 import {
   createCanvasEditTool,
   type DocumentWritten,

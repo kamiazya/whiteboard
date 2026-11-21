@@ -5,6 +5,7 @@
  * agent edit the web app cannot see, or vice versa, is silent divergence.
  */
 
+import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -20,7 +21,10 @@ import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { describeDocumentStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
-import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import {
+  DocumentStoreWorkspaceDocs,
+  RecordStoreWorkspaceDocs,
+} from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { blobsRoot } from '../tenant/data-layout.js'
@@ -353,7 +357,7 @@ it('does not keep serving an agent write whose persistence failed', async () => 
     1_000_000,
   )
   const saveSpy = vi
-    .spyOn(DocumentStoreWorkspaceDocs.prototype, 'save')
+    .spyOn(RecordStoreWorkspaceDocs.prototype, 'save')
     .mockRejectedValueOnce(new Error('simulated persistence failure'))
   await expect(
     routed.saveSnapshot({

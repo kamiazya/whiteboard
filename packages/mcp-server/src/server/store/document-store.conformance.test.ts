@@ -9,6 +9,7 @@
  * suite lives beside the port (ports/test-utils) precisely so this file is
  * one wiring, not a second copy of 38 cases.
  */
+import './_test-loro-records.js'
 import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -135,7 +136,7 @@ async function placeInRecord(input: {
   path: string
 }): Promise<void> {
   const docs = cacheBackedWorkspaceDocs()
-  const doc = await docs.create(input.workspaceId)
+  const doc = (await docs.create(input.workspaceId)) as LoroDoc
   try {
     createWorkspaceDocumentAtPath(doc, { ...input, kind: 'markdown' })
     await docs.save(input.workspaceId, doc)
