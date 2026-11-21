@@ -110,6 +110,7 @@ try {
           note('versions.save', ms)
         }
       },
+      saveAll: timed('versions.saveAll', (...args) => serverDeps.versions.saveAll(...args)),
       adopt: timed('versions.adopt', (...args) => serverDeps.versions.adopt(...args)),
     },
   }
@@ -171,15 +172,20 @@ try {
   const outer = rows
     .filter((row) => /^withRecord #\d+$/.test(row.stage) || row.stage.startsWith('versions.'))
     // checkpoints run inside bracket 3, so its time already holds versions.save
-    .filter((row) => row.stage !== 'versions.save')
+    .filter((row) => row.stage !== 'versions.save' && row.stage !== 'versions.saveAll')
     .reduce((sum, row) => sum + row.ms, 0)
   console.log(
     JSON.stringify({
       documents: COUNT,
       totalMs: Number(total.toFixed(1)),
       unattributedMs: Number((total - outer).toFixed(1)),
-      saveFirstTenthMedianMs: Number(median(saves.slice(0, tenth)).toFixed(2)),
-      saveLastTenthMedianMs: Number(median(saves.slice(-tenth)).toFixed(2)),
+      // Per-call medians exist only when the promote saves a document at a time.
+      ...(saves.length === 0
+        ? {}
+        : {
+            saveFirstTenthMedianMs: Number(median(saves.slice(0, tenth)).toFixed(2)),
+            saveLastTenthMedianMs: Number(median(saves.slice(-tenth)).toFixed(2)),
+          }),
       afterwards: parts,
       stages: rows,
     }),
