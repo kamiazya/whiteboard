@@ -45,9 +45,10 @@ export interface WorkspaceTailOptions {
    *  picked up without this module knowing what a client is. */
   subscribedWorkspaces: () => Iterable<string>
   docs: WorkspaceDocs
-  /** The document the fan-out's audience is reading, which is what has to be
-   *  brought up to date — not a fresh copy nobody holds. */
-  liveDoc: (workspaceId: string) => Promise<LoroDoc>
+  /** Runs `fn` on the document the fan-out's audience is reading, which is what
+   *  has to be brought up to date — not a fresh copy nobody holds. The document
+   *  is lent for the length of `fn`. */
+  withLiveDoc: <T>(workspaceId: string, fn: (doc: LoroDoc) => Promise<T>) => Promise<T>
   /** Where a caught-up update goes. Wired to the same funnel a local write
    *  uses, so a remote update reaches every connected client by one path
    *  rather than one per transport. */
@@ -118,26 +119,27 @@ async function follow(
   workspaceId: string,
 ): Promise<void> {
   const cursor = cursors.get(workspaceId)
-  const doc = await options.liveDoc(workspaceId)
-  if (cursor === undefined) {
-    // First sight. A client is sent the live document when it subscribes,
-    // and that document can be OLDER than the record — loaded before another
-    // instance wrote. Baselining at the record's cursor would skip that gap
-    // for good, so the live document is reconciled from the record (a cold
-    // cursor, which `catchUp` answers by re-reading it) and only what it
-    // GAINED goes out: the client already holds the rest. One instance's own
-    // cache is level with the record, so this sends nothing there.
-    const before = doc.version()
-    const reconciled = await options.docs.catchUp(workspaceId, doc, COLD_CURSOR)
-    cursors.set(workspaceId, reconciled.cursor)
-    if (doc.version().compare(before) !== 0) {
-      options.emit(workspaceId, doc.export({ mode: 'update', from: before }))
+  return options.withLiveDoc(workspaceId, async (doc) => {
+    if (cursor === undefined) {
+      // First sight. A client is sent the live document when it subscribes,
+      // and that document can be OLDER than the record — loaded before another
+      // instance wrote. Baselining at the record's cursor would skip that gap
+      // for good, so the live document is reconciled from the record (a cold
+      // cursor, which `catchUp` answers by re-reading it) and only what it
+      // GAINED goes out: the client already holds the rest. One instance's own
+      // cache is level with the record, so this sends nothing there.
+      const before = doc.version()
+      const reconciled = await options.docs.catchUp(workspaceId, doc, COLD_CURSOR)
+      cursors.set(workspaceId, reconciled.cursor)
+      if (doc.version().compare(before) !== 0) {
+        options.emit(workspaceId, doc.export({ mode: 'update', from: before }))
+      }
+      return
     }
-    return
-  }
-  const caughtUp = await options.docs.catchUp(workspaceId, doc, cursor)
-  cursors.set(workspaceId, caughtUp.cursor)
-  for (const update of caughtUp.updates) options.emit(workspaceId, update)
+    const caughtUp = await options.docs.catchUp(workspaceId, doc, cursor)
+    cursors.set(workspaceId, caughtUp.cursor)
+    for (const update of caughtUp.updates) options.emit(workspaceId, update)
+  })
 }
 
 export function createWorkspaceTail(options: WorkspaceTailOptions): WorkspaceTail {

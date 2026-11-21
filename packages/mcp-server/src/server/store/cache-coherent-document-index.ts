@@ -12,6 +12,7 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import {
   LoroWorkspaceDocumentIndex,
+  loroIndexKind,
   type WorkspaceDocs,
   type WorkspaceRegistry,
 } from '@kamiazya/whiteboard-workspace-index'
@@ -24,6 +25,7 @@ import {
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { trashBlobNamedElsewhere } from './trash-blob-named-elsewhere.js'
+import { releaseWorkspaceDocLoan } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 /** Creates in one namespace, one at a time per instance — see `createWorkspace`. */
@@ -66,7 +68,11 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
     registry: WorkspaceRegistry,
     private readonly scope: StoreScope = globalStoreScope,
   ) {
-    super(docs, blobs, registry, { trashBlobNamedElsewhere: trashBlobNamedElsewhere(scope) })
+    super(docs, blobs, registry, {
+      trashBlobNamedElsewhere: trashBlobNamedElsewhere(scope),
+      // The records `docs` lends are given back to the cache when an operation is done with them.
+      kind: { ...loroIndexKind, release: releaseWorkspaceDocLoan },
+    })
   }
 
   // Every mutator holds the workspace write lock, not only the two that

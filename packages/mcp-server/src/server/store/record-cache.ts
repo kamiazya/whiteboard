@@ -53,6 +53,7 @@ interface Entry<H> {
 export class RecordCache<H> {
   private readonly entries = new Map<string, Entry<H>>()
   private timer: { cancel(): void } | undefined
+  private lent = 0
 
   constructor(private readonly options: RecordCacheOptions<H>) {}
 
@@ -62,6 +63,11 @@ export class RecordCache<H> {
 
   get size(): number {
     return this.entries.size
+  }
+
+  /** How many loans are out: taken by `acquire` and not yet given back, whether or not the entry is still here. */
+  get outstanding(): number {
+    return this.lent
   }
 
   /** The handle kept under `key`, counted as a use; the entry stays where it is when none holds one. */
@@ -75,12 +81,14 @@ export class RecordCache<H> {
     const entry = this.touched(key)
     if (entry === undefined) return undefined
     entry.refs += 1
+    this.lent += 1
     let given = false
     return {
       handle: entry.handle,
       give: () => {
         if (given) return
         given = true
+        this.lent -= 1
         entry.refs -= 1
         entry.lastUsed = this.now()
         if (entry.gone && entry.refs === 0) this.options.release(entry.handle)

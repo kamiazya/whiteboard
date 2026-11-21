@@ -12,7 +12,7 @@ import { createBackupLease, createBackupScheduler } from './store/backup-schedul
 import {
   cacheBackedWorkspaceDocs,
   emitWorkspaceDocUpdated,
-  getWorkspaceDoc,
+  withWorkspaceDocument,
 } from './store/document-store.js'
 import { createFileGcSweeper } from './store/file-gc-sweeper.js'
 import {
@@ -220,7 +220,7 @@ function createTail(
     // The CACHED document, which is what every reader on this instance is
     // served from — catching up a fresh copy would leave the one people
     // actually read untouched.
-    liveDoc: (workspaceId) => getWorkspaceDoc(workspaceId, scope),
+    withLiveDoc: (workspaceId, fn) => withWorkspaceDocument(workspaceId, scope, fn),
     emit: emitWorkspaceDocUpdated,
     intervalMs,
   })

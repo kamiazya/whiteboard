@@ -176,10 +176,10 @@ describe('the shared workers over a dir the process global does not name', () =>
       },
     })
 
-    const live = await docs?.liveDoc(WS)
-    expect(live ? readWorkspaceDocuments(live).map((entry) => entry.path) : []).toContain(
-      SERVED_ONLY,
+    const paths = await docs?.withLiveDoc(WS, async (live) =>
+      readWorkspaceDocuments(live).map((entry) => entry.path),
     )
+    expect(paths ?? []).toContain(SERVED_ONLY)
     // Present in one record only, so a tail over the other cannot open it.
     await boot.serverDeps.documentIndex.createWorkspace({
       workspaceId: '0167ZVW5JTK6PNPG242QD3F8DE',
