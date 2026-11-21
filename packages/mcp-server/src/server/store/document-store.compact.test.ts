@@ -21,13 +21,10 @@ vi.mock('../config.js', () => ({
 }))
 
 // Use dynamic import so it runs after the mock is resolved.
-const {
-  saveDocument,
-  loadDocument,
-  compactWorkspace,
-  setDocumentSavedListener,
-  openWorkspaceDocIfStored,
-} = await import('./document-store.js')
+const { saveDocument, loadDocument, compactWorkspace, setDocumentSavedListener } = await import(
+  './document-store.js'
+)
+const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
 const {
   scheduleAutoCompact,
   installAutoCompact,
@@ -254,7 +251,7 @@ describe('compactWorkspace', () => {
     // on the workspace record's oplog, so the shared timestamp lives on the
     // workspace meta — and only successful compaction writes it, same as the
     // row stamp ('untouched' compacted nothing above).
-    const { openWorkspaceDocIfStored } = await import('./document-store.js')
+    const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
     const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
     const workspaceDoc = await openWorkspaceDocIfStored(SESSION1)
     expect(workspaceDoc).not.toBeNull()
@@ -478,7 +475,7 @@ describe('auto-compact', () => {
     scheduleAutoCompact(SESSION1, store, { debounceMs: 50 })
     await _awaitAutoCompactIdleForTests()
     {
-      const { openWorkspaceDocIfStored } = await import('./document-store.js')
+      const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
       const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
       const workspaceDoc = await openWorkspaceDocIfStored(SESSION1)
       expect(

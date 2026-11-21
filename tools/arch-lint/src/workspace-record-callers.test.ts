@@ -25,9 +25,7 @@ const HOME = 'packages/mcp-server/src/server/store/workspace-doc-cache.ts'
 /** Shipped files calling an accessor, with how many calls each makes. Shrink-only. */
 const CALLERS: Readonly<Record<string, number>> = {
   'packages/mcp-server/src/server/shared-background-work.ts': 1,
-  'packages/mcp-server/src/server/store/document-store.ts': 9,
-  'packages/mcp-server/src/server/store/file-gc.ts': 1,
-  'packages/mcp-server/src/server/store/names-store.ts': 1,
+  'packages/mcp-server/src/server/store/document-store.ts': 2,
 }
 
 /** How many calls to an accessor the file makes, by name: a re-export or an import is not one. */

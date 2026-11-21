@@ -1,14 +1,11 @@
 import type { WorkspaceNames } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
+import type { WorkspaceDocumentEntry } from '@kamiazya/whiteboard-loro-adapter'
 import { isDocumentNotFoundError } from '@kamiazya/whiteboard-ports'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
-import {
-  openWorkspaceDocIfStored,
-  requireDocumentAtPath,
-  workspaceTreeIndex,
-} from './document-store.js'
+import { requireDocumentAtPath, workspaceTreeIndex } from './document-store.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
+import { withStoredWorkspaceRecord } from './workspace-doc-cache.js'
 
 export type { WorkspaceNames }
 
@@ -39,9 +36,15 @@ export async function loadWorkspaceNames(
   // pre-fold row-only state into it before this can be asked.
   const documents: Record<string, string> = {}
   const pinned: string[] = []
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
-  if (workspaceDoc !== null) {
-    const entries = readWorkspaceDocuments(workspaceDoc)
+  const entries = await withStoredWorkspaceRecord(workspaceId, scope, async (record) =>
+    record === null
+      ? null
+      : record.read(
+          { query: 'documents' },
+          { parse: (value) => value as WorkspaceDocumentEntry[] },
+        ),
+  )
+  if (entries !== null) {
     const pathById = new Map<string, string>()
     for (const entry of entries) {
       pathById.set(entry.documentId, entry.path)
