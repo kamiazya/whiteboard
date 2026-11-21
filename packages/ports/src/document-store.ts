@@ -51,6 +51,15 @@ export const saveSnapshotInputSchema = z
     manifest: snapshotManifestSchema,
     chunks: z.array(snapshotChunkSchema),
     frontier: frontierSchema,
+    /**
+     * The `frontier` the `loadSnapshot` answered for the bytes this snapshot was
+     * derived from, when a caller loaded before it saved. A keeper that merges a
+     * save into a document other writers also change compares it with where the
+     * document stands now, and so tells a save over an unchanged document from
+     * one over a document that moved since the load. Opaque to the caller; a
+     * keeper that only stores the bytes ignores it.
+     */
+    basedOn: frontierSchema.optional(),
   })
   .strict()
   .refine(manifestChunksConsistent, manifestChunksConsistencyIssue)
@@ -221,6 +230,10 @@ export interface DocumentStore {
    * `StoredDocumentUnreadableError`, so a caller can tell "you have no such
    * document" from "your build cannot read this one" — which are opposite
    * things to tell a user about their own data.
+   *
+   * `frontier` names the state the bytes were cut at. A caller that saves what
+   * it derived from them hands it back as `basedOn`, so a keeper that merges
+   * saves can tell whether the document moved in between.
    */
   loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult>
   /**

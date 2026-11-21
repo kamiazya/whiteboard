@@ -7,19 +7,8 @@ import type { ServerDeps } from '../server-deps.js'
 /** The daemon's side of `reference-graph`'s port: its document store. */
 function contentSourceFromDeps(deps: ServerDeps): DocumentContentSource {
   return {
-    // Only asked for a listing entry with no content digest. One read per
-    // document: the daemon holds a live document per path, so its frontier
-    // IS that document's version and there is nothing to batch.
-    async readVersions(workspaceId, documentIds) {
-      const versions = new Map<string, Uint8Array | null>()
-      for (const documentId of documentIds) {
-        const read = await deps.documentStore.readFrontier({
-          docRef: { kind: 'document', workspaceId, documentId },
-        })
-        versions.set(documentId, read === null ? null : read.frontier)
-      }
-      return versions
-    },
+    // No `readVersions`: the daemon's listing carries a content digest for every
+    // document, and that digest is the stamp the cache validates on.
     async loadContent(workspaceId, entry) {
       try {
         return await withDocument(deps, workspaceId, entry.documentId, (session) =>

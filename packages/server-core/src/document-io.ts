@@ -200,6 +200,8 @@ export async function storeSnapshot(
   at: { readonly workspaceId: string; readonly documentId: DocumentId },
   snapshot: Uint8Array,
   frontier: Uint8Array,
+  /** The frontier the document was loaded at, when it was loaded before this save. */
+  basedOn?: Uint8Array,
 ): Promise<void> {
   const { manifest, chunks } = chunkSnapshot(snapshot, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)
   await deps.documentStore.saveSnapshot({
@@ -207,6 +209,7 @@ export async function storeSnapshot(
     manifest,
     chunks,
     frontier: frontier as Uint8Array<ArrayBuffer>,
+    ...(basedOn === undefined ? {} : { basedOn: basedOn as Uint8Array<ArrayBuffer> }),
   })
 }
 

@@ -116,12 +116,16 @@ describe('ContentFactsCache', () => {
 
     await write(b.documentId, 'beta body two')
     const loads = vi.spyOn(deps.documentStore, 'loadSnapshot')
-    const facts = await cache.factsFor(WS, entries)
+    // A listing read again after the edit, as each request reads its own.
+    const facts = await cache.factsFor(
+      WS,
+      await deps.documentIndex.listDocuments({ workspaceId: WS }),
+    )
     expect(loads).toHaveBeenCalledTimes(1)
     expect(facts.get(b.documentId)?.texts[0]).toContain('beta body two')
   })
 
-  it('evicts a vanished document and serves never-written ones as empty facts without loading', async () => {
+  it('evicts a vanished document and serves never-written ones as empty facts, read again each time for lack of a digest', async () => {
     const deps = makeDeps()
     const { a } = await seedTwo(deps)
     // Index row without any snapshot: wb_document_create seeds content, so
@@ -137,8 +141,11 @@ describe('ContentFactsCache', () => {
     const all = await deps.documentIndex.listDocuments({ workspaceId: WS })
     const facts = await cache.factsFor(WS, all)
     expect(facts.get(empty.documentId)).toEqual({ refs: [], texts: [], bearers: [] })
-    // Two seeded documents loaded; the snapshotless one never was.
-    expect(loads).toHaveBeenCalledTimes(2)
+    // Two seeded documents loaded, and the snapshotless one tried: with no
+    // digest to validate on it is read again whenever it is asked for.
+    expect(loads).toHaveBeenCalledTimes(3)
+    await cache.factsFor(WS, all)
+    expect(loads).toHaveBeenCalledTimes(4)
 
     await deps.documentIndex.deleteDocument({ workspaceId: WS, path: 'a' })
     const after = await cache.factsFor(
