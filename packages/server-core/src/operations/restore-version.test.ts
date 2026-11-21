@@ -328,6 +328,8 @@ describe('restoreVersion subtree mode', () => {
     expect(live.stored('canvas-a/deleted')?.kind).toBe('markdown')
     // The recreated document (no live row) is evicted; reconciled ones are not.
     expect(live.evicted).toEqual(['canvas-a/deleted'])
+    // And the recreated document is announced, as every document a restore writes is.
+    expect(live.written).toContain('canvas-a/deleted')
     expect(events).toEqual([
       { workspaceId: WS, path: 'canvas-a', phase: 'started', label: 'ws' },
       { workspaceId: WS, path: 'canvas-a', phase: 'complete' },

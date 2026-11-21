@@ -14,20 +14,20 @@ describe('what a restore announces', () => {
     expect(live.written).toEqual(['canvas-a'])
   })
 
-  it('announces a restore in place that moved nothing', async () => {
+  it('announces nothing for a restore in place that moved nothing', async () => {
     const live = new FakeLive()
     live.seed('canvas-a', spatialDoc(['n1']))
     await run(live, versionsWith({ v1: { doc: spatialDoc(['n1']) } }))
-    expect(live.written).toEqual(['canvas-a'])
+    expect(live.written).toEqual([])
   })
 
-  it('announces nothing for the new document a restore into a fresh target creates', async () => {
+  it('announces the new document a restore into a fresh target creates', async () => {
     const live = new FakeLive()
     live.seed('canvas-a', spatialDoc(['n1']))
     await run(live, versionsWith({ v1: { doc: spatialDoc(['n1', 'n2']) } }), {
       targetPath: 'canvas-new',
     })
-    expect(live.written).toEqual([])
+    expect(live.written).toEqual(['canvas-new'])
     expect(live.paths()).toContain('canvas-new')
   })
 })
