@@ -24,13 +24,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { documentOf } from '../server/routes/_test-helpers.js'
 import { disposeAutoCompact, uninstallAutoCompact } from '../server/store/auto-compact.js'
 import { clearDbCacheForTests, closeDb, getDb } from '../server/store/db/index.js'
-import { getWorkspaceDoc, saveWorkspaceDoc } from '../server/store/document-store.js'
+import { getWorkspaceDoc } from '../server/store/document-store.js'
 import { purgeDanglingFiles } from '../server/store/file-gc.js'
 import { createFileGcSweeper } from '../server/store/file-gc-sweeper.js'
 import { loadWorkspaceNames, setWorkspaceName } from '../server/store/names-store.js'
 import { storeScope } from '../server/store/store-scope.js'
 import { FileVersionStore } from '../server/store/version-store.js'
-import { _clearWorkspaceDocCacheForTests } from '../server/store/workspace-doc-cache.js'
+import {
+  _clearWorkspaceDocCacheForTests,
+  saveWorkspaceDoc,
+} from '../server/store/workspace-doc-cache.js'
 import { SELF_HOST_TENANT_ID } from '../server/tenant/id.js'
 import { resetDataDirForTests, setDataDirForTests } from '../shared/data-dir-secure.js'
 import { bootSelfHostDeps } from './boot-self-host-deps.js'

@@ -11,9 +11,8 @@
  * directions, so a read that moves onto a bracket must lower its count, and a new
  * caller must be answered for.
  */
-import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { parseSource } from './ast-helpers.js'
+import { countNamedUses } from './named-use-scan.js'
 import { readRepoSources } from './scan-roots.js'
 import { isShippedPath } from './source-scan.js'
 
@@ -28,27 +27,15 @@ const HOME = 'packages/mcp-server/src/server/store/workspace-doc-cache.ts'
 const CALLERS: Readonly<Record<string, number>> = {}
 
 /**
- * Shipped files that hold the record as a `LoroDoc` inside a loan, with how
- * many brackets each opens. These are what a lease cannot serve until each reads
- * the record through a session; shrink-only.
+ * Shipped files that hold the record as a `LoroDoc` inside a loan, with how many
+ * brackets each opens. Empty: every holder reads the record through a session, so
+ * a lease can serve it.
  */
-const HOLDERS: Readonly<Record<string, number>> = {
-  'packages/mcp-server/src/server/shared-background-work.ts': 1,
-  'packages/mcp-server/src/server/store/document-store.ts': 2,
-}
+const HOLDERS: Readonly<Record<string, number>> = {}
 
-/** How many calls to one of `names` the file makes, by name: a re-export or an import is not one. */
+/** How many uses of one of `names` the file makes: a call, a property access or a local alias counts, an import or a re-export does not. */
 function callsOf(path: string, text: string, names: ReadonlySet<string> = ACCESSORS): number {
-  const source = parseSource(path, text, false)
-  let calls = 0
-  const visit = (node: ts.Node): void => {
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
-      if (names.has(node.expression.text)) calls += 1
-    }
-    ts.forEachChild(node, visit)
-  }
-  visit(source)
-  return calls
+  return countNamedUses(path, text, [...names])
 }
 
 function scan(
@@ -97,14 +84,26 @@ describe('the holders that read the record as a document inside a loan', () => {
   })
 })
 
-describe('the scan counts calls and nothing else', () => {
+describe('the scan counts uses and nothing else', () => {
   const at = `${STORE}server/store/x.ts`
   it.each([
     ['a call', 'const a = await getWorkspaceDoc(ws, scope)', 1],
     ['both accessors', 'await getWorkspaceDoc(a); await openWorkspaceDocIfStored(b)', 2],
     ['an import', "import { getWorkspaceDoc } from './workspace-doc-cache.js'", 0],
     ['a re-export', "export { getWorkspaceDoc } from './workspace-doc-cache.js'", 0],
-    ['a method of the same name', 'store.getWorkspaceDoc(ws)', 0],
+    ['a property access', 'await cache.getWorkspaceDoc(ws)', 1],
+    ['a bracket access', "await cache['getWorkspaceDoc'](ws)", 1],
+    [
+      'an alias bound by import',
+      "import { getWorkspaceDoc as open } from './workspace-doc-cache.js'\nawait open(ws)",
+      1,
+    ],
+    [
+      'an alias bound by destructuring',
+      'const { getWorkspaceDoc: open } = cache\nawait open(ws)',
+      1,
+    ],
+    ['a mention in a comment or a string', "// getWorkspaceDoc\nconst s = 'getWorkspaceDoc'", 0],
   ])('%s', (_name, text, calls) => {
     expect(callsOf(at, text)).toBe(calls)
   })

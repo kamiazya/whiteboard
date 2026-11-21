@@ -74,15 +74,9 @@ it('serves the stored content after a save that failed to persist', async () => 
 it('serves the stored content after a save whose source could not be read', async () => {
   await saveDocument(WS, 'kept', canvasDoc('stored'), { kind: 'spatial' })
   const unreadable = new LoroDoc()
-  Object.defineProperty(unreadable, 'toJSON', {
-    value: () => {
-      throw new Error('this source cannot be read')
-    },
-  })
+  Object.defineProperty(unreadable, 'export', { value: () => new Uint8Array([1, 2, 3, 4]) })
 
-  await expect(saveDocument(WS, 'kept', unreadable, { overwrite: true })).rejects.toThrow(
-    'this source cannot be read',
-  )
+  await expect(saveDocument(WS, 'kept', unreadable, { overwrite: true })).rejects.toThrow()
 
   expect(await textAt('kept')).toBe('stored')
 })

@@ -17,7 +17,6 @@
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import { type ServerDeps, wbDocumentCreate } from '@kamiazya/whiteboard-server-core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
@@ -34,7 +33,11 @@ import { disposeAutoCompact, uninstallAutoCompact } from './store/auto-compact.j
 import { type BackupSchedulerOptions, createBackupScheduler } from './store/backup-scheduler.js'
 import { clearDbCacheForTests, closeDb, getDb } from './store/db/index.js'
 import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
-import { _clearWorkspaceDocCacheForTests } from './store/workspace-doc-cache.js'
+import { globalStoreScope } from './store/store-scope.js'
+import {
+  _clearWorkspaceDocCacheForTests,
+  withStoredWorkspaceRecord,
+} from './store/workspace-doc-cache.js'
 
 const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 const SERVED_ONLY = 'only-in-served'
@@ -176,14 +179,27 @@ describe('the shared workers over a dir the process global does not name', () =>
       },
     })
 
-    const paths = await docs?.withLiveDoc(WS, async (live) =>
-      readWorkspaceDocuments(live).map((entry) => entry.path),
-    )
-    expect(paths ?? []).toContain(SERVED_ONLY)
-    // Present in one record only, so a tail over the other cannot open it.
-    await boot.serverDeps.documentIndex.createWorkspace({
-      workspaceId: '0167ZVW5JTK6PNPG242QD3F8DE',
-    })
-    expect(await docs?.docs.open('0167ZVW5JTK6PNPG242QD3F8DE')).not.toBeNull()
+    // Follows the record of the served directory.
+    const followed = await docs?.follow(WS, undefined)
+    expect(followed?.cursor).toBeDefined()
+    expect(
+      await withStoredWorkspaceRecord(WS, boot.scope, async (record) =>
+        record === null
+          ? []
+          : (
+              await record.read(
+                { query: 'documents' },
+                { parse: (value) => value as { path: string }[] },
+              )
+            ).map((entry) => entry.path),
+      ),
+    ).toContain(SERVED_ONLY)
+    // Present in one record only, so a tail over the other cannot follow it without minting.
+    const SERVED_ONLY_WORKSPACE_ID = '0167ZVW5JTK6PNPG242QD3F8DE'
+    await boot.serverDeps.documentIndex.createWorkspace({ workspaceId: SERVED_ONLY_WORKSPACE_ID })
+    expect(await docs?.follow(SERVED_ONLY_WORKSPACE_ID, undefined)).toBeDefined()
+    expect(
+      await withStoredWorkspaceRecord(SERVED_ONLY_WORKSPACE_ID, globalStoreScope, async (r) => r),
+    ).toBeNull()
   })
 })

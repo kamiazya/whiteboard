@@ -35,7 +35,7 @@ const {
   resolveDocumentIdAtPath,
   _clearWorkspaceDocCacheForTests,
 } = await import('./document-store.js')
-const { _workspaceRecordLoansForTests } = await import('./workspace-doc-cache.js')
+const { _watchWorkspaceRecordLoansForTests } = await import('./workspace-doc-cache.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { globalStoreScope } = await import('./store-scope.js')
 
@@ -53,64 +53,82 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true })
 })
 
-/** The loans out each time a persisted workspace update goes out, while `work` runs. */
-async function loansDuring(work: () => Promise<unknown>): Promise<number[]> {
+/**
+ * The loans the operation itself holds each time a persisted workspace update
+ * goes out while `work` runs, and what it still holds when it is done: counted
+ * by the records it took them of, not by what the process has out.
+ */
+async function loansDuring(
+  work: () => Promise<unknown>,
+): Promise<{ seen: number[]; left: () => number; taken: () => number }> {
+  const watch = _watchWorkspaceRecordLoansForTests()
   const seen: number[] = []
-  const stop = onWorkspaceDocUpdated(() => seen.push(_workspaceRecordLoansForTests()))
+  const stop = onWorkspaceDocUpdated(() => seen.push(watch.total()))
   try {
     await work()
   } finally {
     stop()
   }
-  return seen
+  return { seen, left: watch.total, taken: watch.taken }
 }
 
 describe('a writer of the workspace record', () => {
   it('holds a loan while it saves a document, and none after', async () => {
-    const seen = await loansDuring(() => saveDocument(WS, 'a', new LoroDoc(), { kind: 'markdown' }))
+    const { seen, left, taken } = await loansDuring(() =>
+      saveDocument(WS, 'a', new LoroDoc(), { kind: 'markdown' }),
+    )
 
     expect(seen.length).toBeGreaterThan(0)
     expect(seen.every((loans) => loans >= 1)).toBe(true)
-    expect(_workspaceRecordLoansForTests()).toBe(0)
+    expect(taken()).toBeGreaterThan(0)
+    expect(left()).toBe(0)
   })
 
   it('holds a loan while it moves a document, and none after', async () => {
     await saveDocument(WS, 'a', new LoroDoc(), { kind: 'markdown' })
 
-    const seen = await loansDuring(() => renameDocumentPath(WS, 'a', 'b'))
+    const { seen, left, taken } = await loansDuring(() => renameDocumentPath(WS, 'a', 'b'))
 
     expect(seen.length).toBeGreaterThan(0)
     expect(seen.every((loans) => loans >= 1)).toBe(true)
     expect(await resolveDocumentIdAtPath(WS, 'b')).not.toBeNull()
-    expect(_workspaceRecordLoansForTests()).toBe(0)
+    expect(taken()).toBeGreaterThan(0)
+    expect(left()).toBe(0)
   })
 
   it('holds a loan while it deletes a document, and none after', async () => {
     await saveDocument(WS, 'a', new LoroDoc(), { kind: 'markdown' })
 
-    const seen = await loansDuring(() => deleteDocument(WS, 'a'))
+    const { seen, left, taken } = await loansDuring(() => deleteDocument(WS, 'a'))
 
     expect(seen.length).toBeGreaterThan(0)
     expect(seen.every((loans) => loans >= 1)).toBe(true)
-    expect(_workspaceRecordLoansForTests()).toBe(0)
+    expect(taken()).toBeGreaterThan(0)
+    expect(left()).toBe(0)
   })
 
   it('holds a loan while the index duplicates a document, and none after', async () => {
     await saveDocument(WS, 'a', new LoroDoc(), { kind: 'markdown' })
     const index = await workspaceTreeIndex(globalStoreScope)
 
-    const seen = await loansDuring(() => index.duplicateDocument({ workspaceId: WS, path: 'a' }))
+    const { seen, left, taken } = await loansDuring(() =>
+      index.duplicateDocument({ workspaceId: WS, path: 'a' }),
+    )
 
     expect(seen.length).toBeGreaterThan(0)
     expect(seen.every((loans) => loans >= 1)).toBe(true)
-    expect(_workspaceRecordLoansForTests()).toBe(0)
+    expect(taken()).toBeGreaterThan(0)
+    expect(left()).toBe(0)
   })
 
   it('gives its loan back when the write fails', async () => {
     await saveDocument(WS, 'a', new LoroDoc(), { kind: 'markdown' })
 
+    const watch = _watchWorkspaceRecordLoansForTests()
+
     await expect(saveDocument(WS, 'a', new LoroDoc())).rejects.toThrow(/already exists/)
 
-    expect(_workspaceRecordLoansForTests()).toBe(0)
+    expect(watch.taken()).toBeGreaterThan(0)
+    expect(watch.total()).toBe(0)
   })
 })

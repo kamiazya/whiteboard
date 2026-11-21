@@ -1,4 +1,3 @@
-import { compactionCut } from '@kamiazya/whiteboard-history'
 import {
   bindRecordOps,
   legacyRecordOps,
@@ -14,7 +13,7 @@ import {
   type WorkspaceDocCursor,
   type WorkspaceDocs,
 } from '@kamiazya/whiteboard-workspace-index'
-import { type Frontiers, LoroDoc, type PeerID, VersionVector } from 'loro-crdt'
+import { LoroDoc, VersionVector } from 'loro-crdt'
 import { getLogger } from '../log.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { corruptStoredData, isCorruptStoredDataError } from './corrupt-stored-data.js'
@@ -57,6 +56,27 @@ let releasedForTests: LoroDoc[] | null = null
 export function _workspaceRecordLoansForTests(): number {
   return records.outstanding
 }
+
+/**
+ * Test-only: starts counting the loans taken of each record from here on, and
+ * answers how many a record has out. For a test that asks what an operation
+ * itself held, which the process-wide count mixes with every other loan.
+ */
+export function _watchWorkspaceRecordLoansForTests(): {
+  /** How many loans are out of the records watched so far. */
+  total(): number
+  /** How many loans were taken at all, so a count of none is not an empty watch. */
+  taken(): number
+} {
+  const watch = { counts: new Map<object, number>(), taken: 0 }
+  loanWatch = watch
+  return {
+    total: () => [...watch.counts.values()].reduce((sum, held) => sum + held, 0),
+    taken: () => watch.taken,
+  }
+}
+
+let loanWatch: { counts: Map<object, number>; taken: number } | null = null
 
 /** Test-only: the records the cache has given back since this was first asked for. */
 export function _workspaceRecordReleasesForTests(): LoroDoc[] {
@@ -133,6 +153,11 @@ const records = new RecordCache<LoroDoc>({
     releasedForTests?.push(doc)
   },
   pinned: workspaceWriteLockInUse,
+  onLoan: (record, change) => {
+    if (loanWatch === null) return
+    loanWatch.counts.set(record, (loanWatch.counts.get(record) ?? 0) + change)
+    if (change === 1) loanWatch.taken += 1
+  },
   onBoundDrop: (key, doc) => rememberDropped(key, doc),
 })
 
@@ -176,6 +201,7 @@ function rethrowOpenFailure(workspaceId: string, err: unknown): never {
 export function _clearWorkspaceDocCacheForTests(): void {
   records.clear()
   droppedVersions.clear()
+  loanWatch = null
   if (releasedForTests !== null) releasedForTests.length = 0
 }
 
@@ -327,28 +353,46 @@ async function lendRecord(
   }
   const doc = await openFollowed(workspaceId, scope, open)
   if (doc === null) return null
-  // Kept a moment ago; a record already gone from the cache is the caller's alone.
+  // Kept a moment ago; a record already gone from the cache is the caller's
+  // alone, and a different one kept under the key since is a loan nobody wants.
   const lent = records.acquire(key)
-  return lent === undefined || lent.handle !== doc
-    ? { doc, give: () => {} }
-    : { doc, give: lent.give }
+  if (lent !== undefined && lent.handle === doc) return { doc, give: lent.give }
+  lent?.give()
+  return { doc, give: () => {} }
 }
 
 /**
- * The workspace record AS A DOCUMENT, on loan for the length of `fn`: minted
- * empty inside a registered workspace, like `getWorkspaceDoc`. For the holders
- * that cannot yet read the record through a session; the loan keeps the record
- * from being given back to whatever lent it while they work on it.
+ * Brings the live workspace record level with the stored one, from where a
+ * follower last read it, and answers the bytes its audience has not been sent.
+ *
+ * `cursor` is where the follower stood, or `undefined` on first sight. A client
+ * is sent the live record when it subscribes, and that record can be OLDER than
+ * the stored one — loaded before another instance wrote. Baselining at the
+ * stored cursor would skip that gap for good, so on first sight the record is
+ * reconciled from the store (a cold cursor, which `catchUp` answers by re-reading
+ * it) and only what it GAINED goes out: the client already holds the rest. One
+ * instance's own cache is level with the store, so that sends nothing there.
+ *
+ * The record is lent for the whole catch-up and what it gained is read off it
+ * here, so a follower sees cursors and bytes and never the record.
  */
-export async function withWorkspaceDocument<T>(
+export async function followWorkspaceRecord(
   workspaceId: string,
   scope: StoreScope,
-  fn: (doc: LoroDoc) => Promise<T>,
-): Promise<T> {
+  cursor: WorkspaceDocCursor | undefined,
+): Promise<CaughtUp> {
   // `create` answers a document, so the loan is never null.
   const lent = (await lendRecord(workspaceId, scope, (docs) => docs.create(workspaceId))) as Lent
   try {
-    return await fn(lent.doc)
+    const docs = cacheBackedWorkspaceDocs(scope)
+    if (cursor !== undefined) return await docs.catchUp(workspaceId, lent.doc, cursor)
+    const before = lent.doc.version()
+    const reconciled = await docs.catchUp(workspaceId, lent.doc, COLD_CURSOR)
+    const gained =
+      lent.doc.version().compare(before) === 0
+        ? []
+        : [lent.doc.export({ mode: 'update', from: before })]
+    return { cursor: reconciled.cursor, updates: gained }
   } finally {
     lent.give()
   }
@@ -548,27 +592,6 @@ export function cacheBackedWorkspaceDocs(scope: StoreScope = globalStoreScope): 
       )
     },
   }
-}
-
-/**
- * `compactionCut` over a live record: its frontiers are turned into version
- * vectors here, where the op log is, and the cut is turned back. A point the
- * record does not hold has no vector, and then there is nothing to cut.
- */
-export function compactionCutOfDoc(doc: LoroDoc, points: readonly Frontiers[]): Frontiers | null {
-  let vectors: Array<Map<string, number>>
-  try {
-    vectors = points.map((point) => new Map<string, number>(doc.frontiersToVV(point).toJSON()))
-  } catch {
-    return null
-  }
-  // The root's own vector, not `shallowSinceVV()`: that one stops one op short
-  // of the root, so a cut one op before the root compared equal to it.
-  const root = new Map<string, number>(doc.frontiersToVV(doc.shallowSinceFrontiers()).toJSON())
-  const cut = compactionCut(vectors, root)
-  return cut === null
-    ? null
-    : doc.vvToFrontiers(VersionVector.parseJSON(new Map(cut) as Map<PeerID, number>))
 }
 
 /**

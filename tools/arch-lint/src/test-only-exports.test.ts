@@ -203,6 +203,8 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/mcp-server/src/server/store/workspace-doc-cache.ts#saveWorkspaceDoc':
+    'persists a record a test edited as a document and announces it, which the store and route tests do to a record they changed directly; every shipped write saves through its record session, which calls it',
   'packages/mcp-server/src/server/store/workspace-doc-cache.ts#openWorkspaceDocIfStored':
     "the stored-or-nothing record as a document, which the cache's own tests and the store tests inspect the cached instance through; shipped reads take it through `withStoredWorkspaceRecord`, which lends it, and the cache's `WorkspaceDocs.open` is its one shipped caller",
   'packages/mcp-server/src/server/store/document-store.ts#saveDocument':

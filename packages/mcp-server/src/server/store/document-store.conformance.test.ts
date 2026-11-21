@@ -51,6 +51,7 @@ const {
   workspaceRegistry,
 } = await import('./document-store.js')
 const { FsBlobStore } = await import('./fs/fs-blob-store.js')
+const { releaseWorkspaceDocLoan } = await import('./workspace-doc-cache.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 async function makeProductionIndex() {
@@ -135,8 +136,12 @@ async function placeInRecord(input: {
 }): Promise<void> {
   const docs = cacheBackedWorkspaceDocs()
   const doc = await docs.create(input.workspaceId)
-  createWorkspaceDocumentAtPath(doc, { ...input, kind: 'markdown' })
-  await docs.save(input.workspaceId, doc)
+  try {
+    createWorkspaceDocumentAtPath(doc, { ...input, kind: 'markdown' })
+    await docs.save(input.workspaceId, doc)
+  } finally {
+    releaseWorkspaceDocLoan(doc)
+  }
 }
 
 /** Every file under the tenant's blob root: the trash suite trashes documents only, so each is an evacuation. */

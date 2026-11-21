@@ -31,7 +31,8 @@ import { DENY_ALL_STRATEGY } from './security/_test-helpers.js'
 import { createRelyingParty } from './security/oidc-relying-party.js'
 import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
 import { createIsolatedDb, type IsolatedDbHandle } from './store/db/test-helpers.js'
-import { getWorkspaceDoc, saveWorkspaceDoc } from './store/document-store.js'
+import { getWorkspaceDoc } from './store/document-store.js'
+import { saveWorkspaceDoc } from './store/workspace-doc-cache.js'
 
 const tmp = withTempDataDir('whiteboard-client-urls-')
 

@@ -23,7 +23,8 @@ import { join } from 'node:path'
 import { deleteWorkspaceNodeAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import { hasDocumentTrash } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getWorkspaceDoc, saveWorkspaceDoc } from './document-store.js'
+import { getWorkspaceDoc } from './document-store.js'
+import { saveWorkspaceDoc } from './workspace-doc-cache.js'
 
 let tempDir: string
 
