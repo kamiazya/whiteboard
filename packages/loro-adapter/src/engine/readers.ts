@@ -129,13 +129,13 @@ function documentJudgement(doc: LoroDoc, documentId: string | undefined) {
   }
 }
 
-function judgementOf(document: LoroDoc) {
+function judgementOf(content: LoroDoc) {
   return {
-    stateSize: stateSize(document),
-    contentDigest: contentDigestOfDocument(document),
-    textLimitBreach: judgeStateWithinTextLimits(document),
-    spatialNodeCount: countSpatialNodes(document),
-    statedKind: readDocumentKind(document) ?? null,
+    stateSize: stateSize(content),
+    contentDigest: contentDigestOfDocument(content),
+    textLimitBreach: judgeStateWithinTextLimits(content),
+    spatialNodeCount: countSpatialNodes(content),
+    statedKind: readDocumentKind(content) ?? null,
   }
 }
 
