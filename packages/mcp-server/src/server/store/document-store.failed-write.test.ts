@@ -50,14 +50,10 @@ function canvasDoc(text: string): LoroDoc {
   return doc
 }
 
-/** A source the content write cannot read, so it throws after the node was placed. */
+/** A source whose snapshot is not a document, so the content write throws after the node was placed. */
 function unreadableSource(): LoroDoc {
   const doc = new LoroDoc()
-  Object.defineProperty(doc, 'toJSON', {
-    value: () => {
-      throw new Error('this source cannot be read')
-    },
-  })
+  Object.defineProperty(doc, 'export', { value: () => new Uint8Array([1, 2, 3, 4]) })
   return doc
 }
 
@@ -66,7 +62,7 @@ it('a save that throws after placing its node leaves nothing for the next save t
 
   await expect(
     saveDocument('0104Y7DY19FTA30KQYKDRRMNBN', 'phantom', unreadableSource(), { kind: 'spatial' }),
-  ).rejects.toThrow('this source cannot be read')
+  ).rejects.toThrow()
   await saveDocument('0104Y7DY19FTA30KQYKDRRMNBN', 'kept', canvasDoc('second'), { overwrite: true })
 
   const stored = await new DocumentStoreWorkspaceDocs(
