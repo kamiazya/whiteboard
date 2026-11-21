@@ -19,6 +19,7 @@ import { type BlobStore, isStoredDocumentUnreadableError } from '@kamiazya/white
 import type { WorkspaceDocCursor, WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { z } from 'zod'
 import { getAppLogger } from './app-logger.js'
+import { type PendingKey, PendingUpdates } from './browser-pending-updates.js'
 import { saveAndAnnounce } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { BrowserWorkspaceRecords } from './browser-workspace-records.js'
@@ -193,6 +194,8 @@ export class BrowserBackend implements DocumentBackend {
    * lands on the one that replaced it.
    */
   private readonly replaced = new Map<RecordLease, RecordLease>()
+  /** What was handed over and not yet saved, so a tab closed mid-save loses none of it. */
+  private readonly pending = new PendingUpdates()
   /** Serializes all write operations (pushLocalUpdate) to prevent TOCTOU races. */
   private _writeQueue: Promise<void> = Promise.resolve()
   /** This connection's end of the record's channel to the other tabs. */
@@ -217,6 +220,8 @@ export class BrowserBackend implements DocumentBackend {
     this.workspaceId = null
     this.removed = false
     this.cursor = null
+    // Open before the first push needs it: the put cannot wait for an open.
+    void this.pending.open()
     // Fire synchronously so the caller can observe onConnected immediately.
     handlers.onConnected()
     this.loadAndDeliver(handlers).catch(() => {
@@ -231,6 +236,10 @@ export class BrowserBackend implements DocumentBackend {
     this.workspaceId = null
     this.releaseRecord()
     this.closeBroadcast()
+    const closePending = () => {
+      if (this.disconnected) this.pending.close()
+    }
+    void this._writeQueue.then(closePending, closePending)
   }
 
   /**
@@ -259,8 +268,12 @@ export class BrowserBackend implements DocumentBackend {
     const record = this.record
     const workspaceId = this.workspaceId
     const handlers = this.handlers
+    // Issued here, not in the queued write: the queue and everything behind it
+    // is what a closing tab does not outlive.
+    const pendingKey =
+      workspaceId === null ? null : this.pending.put(workspaceId, this.target.documentId, bytes)
     this._writeQueue = this._writeQueue.then(() =>
-      this._doWrite(bytes, record, workspaceId, handlers),
+      this._doWrite(bytes, record, workspaceId, handlers, pendingKey),
     )
     return this._writeQueue
   }
@@ -336,6 +349,7 @@ export class BrowserBackend implements DocumentBackend {
     record: RecordLease | null,
     workspaceId: string | null,
     handlers: DocumentBackendHandlers | null,
+    pendingKey: PendingKey | null = null,
   ): Promise<void> {
     // A push before the snapshot was delivered has nothing to land on — the
     // session cannot produce one, since its doc exists only after onSnapshot.
@@ -354,6 +368,8 @@ export class BrowserBackend implements DocumentBackend {
           documentId: this.target.documentId,
           ...imported.breach,
         })
+        // Refused bytes would be refused again on a replay.
+        if (pendingKey !== null) this.pending.remove(pendingKey)
         this.refuse(refusalOf(imported.breach), record, handlers)
         return
       }
@@ -366,6 +382,7 @@ export class BrowserBackend implements DocumentBackend {
         { op: 'seedNameFromTitle', args: { documentId: this.target.documentId } },
       ])
       await this.saveAndTellOtherTabs(workspaceId, record)
+      if (pendingKey !== null) this.pending.remove(pendingKey)
       // The session reads the name (the open page's title follows it), and it
       // must HOLD those ops either way: every later edit anywhere depends on
       // them, and a doc missing a dependency keeps that edit pending.
@@ -623,6 +640,18 @@ export class BrowserBackend implements DocumentBackend {
     }
   }
 
+  /**
+   * What a tab closed mid-save left: each entry goes through the write a push
+   * does, before the record is delivered, so the session's snapshot already
+   * holds it. One that landed is a no-op, and one that fails stays for the next
+   * connect.
+   */
+  private async replayPending(workspaceId: string, record: RecordLease): Promise<void> {
+    for (const { key, bytes } of await this.pending.list(workspaceId, this.target.documentId)) {
+      await this._doWrite(bytes, record, workspaceId, null, key)
+    }
+  }
+
   private async loadAndDeliver(handlers: DocumentBackendHandlers): Promise<void> {
     const workspaceId = getBrowserWorkspaceId()
     const hear = this.hearFromTheStart(workspaceId, handlers)
@@ -662,6 +691,7 @@ export class BrowserBackend implements DocumentBackend {
         const settled = await this.placeMissingDocument(workspaceId, record, handlers)
         if (!settled) return
       }
+      await this.replayPending(workspaceId, record)
       if (this.isStale(handlers)) return
       this.deliver(workspaceId, record, hear, handlers)
       delivered = true
