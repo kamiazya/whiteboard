@@ -20,15 +20,14 @@ impl<'a> UnitOffsets<'a> {
         Self { text, byte: 0, unit: 0 }
     }
 
-    /// The unit offset of the char boundary `byte`.
+    /// The unit offset of the char boundary `byte`. A backwards ask has no
+    /// slice ahead of the last offset, so it counts again from the start.
     pub fn at(&mut self, byte: usize) -> usize {
-        if byte < self.byte {
-            self.byte = 0;
-            self.unit = 0;
-        }
-        let step = self.text.get(self.byte..byte).map_or(0, utf16::len);
+        self.unit = match self.text.get(self.byte..byte) {
+            Some(ahead) => self.unit.saturating_add(utf16::len(ahead)),
+            None => self.text.get(..byte).map_or(0, utf16::len),
+        };
         self.byte = byte;
-        self.unit = self.unit.saturating_add(step);
         self.unit
     }
 }
