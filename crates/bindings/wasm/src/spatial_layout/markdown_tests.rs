@@ -151,6 +151,55 @@ fn comment(body: &str, density: &str) -> String {
     m(&fields).to_string()
 }
 
+/// A wire resolving the alias `notes` to a document titled `Design notes`.
+fn notes_wire() -> Json {
+    let entry = m(&[("documentId", json!("N")), ("name", json!("Design notes"))]);
+    m(&[
+        ("entries", s(vec![s(vec![json!("notes"), entry])])),
+        ("aliases", s(vec![])),
+        ("titles", s(vec![s(vec![json!("N"), json!("Design notes")])])),
+        ("extras", s(vec![])),
+    ])
+}
+
+fn comment_with(body: &str, extra: &[(&str, Json)]) -> Json {
+    let mut fields = vec![
+        ("kind", json!("comment")),
+        ("body", json!(body)),
+        ("maxWidth", json!(200)),
+        ("measure", fake()),
+        ("density", json!("compact")),
+    ];
+    fields.extend(extra.iter().map(|(key, value)| (*key, value.clone())));
+    answer(&m(&fields).to_string())
+}
+
+/// A comment's `[[alias]]` resolves through the wire a request carries, as a
+/// note's does, and a request with none draws the brackets as written.
+#[test]
+fn a_comment_resolves_a_reference_through_the_wire_it_carries() {
+    let body = "see [[notes]] first";
+    let wired = comment_with(body, &[("references", notes_wire())]);
+    assert_eq!(wired.get(0), Some(&json!("ok")), "{wired}");
+    assert_eq!(count(&wired, "Design notes"), 1, "{wired}");
+    assert_eq!(count(&wired, "\"documentId\":\"N\""), 1, "{wired}");
+    assert_eq!(count(&wired, "[["), 0, "{wired}");
+    let bare = comment_with(body, &[]);
+    assert_eq!(count(&bare, "Design notes"), 0, "{bare}");
+    assert_eq!(count(&bare, "notes"), 1, "{bare}");
+}
+
+/// A comment's wire is held to the caps a note's is.
+#[test]
+fn a_comment_wire_past_the_caps_is_refused() {
+    let many: Vec<&str> = vec![""; MAX_REFERENCED_ELEMENTS + 1];
+    let refused = comment_with("x", &[("references", board_wire(&many))]);
+    assert_eq!(refused, json!(["refused", "input-too-large", "referenced-elements"]));
+    let half = "a".repeat(MAX_BODY_BYTES / 2 + 1);
+    let bodies = comment_with(&half, &[("references", board_wire(&[&half]))]);
+    assert_eq!(bodies, json!(["refused", "input-too-large", "bodies"]));
+}
+
 #[test]
 fn a_body_past_the_parser_bounds_draws_its_literal_text_and_one_within_is_drawn() {
     // Owner decision q81, D7a: one paragraph of the literal text, never a decline.
