@@ -7,7 +7,17 @@
 //! character, which carries under 6 bits and names no byte. Trailing bits of
 //! the final character are not required to be zero.
 
-const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+/// The alphabet character of a six-bit value.
+fn symbol(six: u8) -> char {
+    let byte = match six {
+        0..=25 => six.saturating_add(b'A'),
+        26..=51 => six.saturating_sub(26).saturating_add(b'a'),
+        52..=61 => six.saturating_sub(52).saturating_add(b'0'),
+        62 => b'+',
+        _ => b'/',
+    };
+    char::from(byte)
+}
 
 /// Standard alphabet, padded.
 pub fn bytes_to_base64(bytes: &[u8]) -> String {
@@ -19,11 +29,12 @@ pub fn bytes_to_base64(bytes: &[u8]) -> String {
         }
         let [a, b, c] = group;
         let word = u32::from_be_bytes([0, a, b, c]);
-        // A sextet is the word shifted down and masked to six bits.
-        let sextets = chunk.len().saturating_add(1);
-        for index in 0..4u32 {
-            if usize::try_from(index).is_ok_and(|i| i < sextets) {
-                out.push(char::from(sextet(word, index)));
+        // A chunk of n bytes fills n + 1 sextets; the rest is padding.
+        let filled = chunk.len().saturating_add(1);
+        for (index, shift) in [18u32, 12, 6, 0].into_iter().enumerate() {
+            if index < filled {
+                let [.., six] = ((word >> shift) & 0x3f).to_be_bytes();
+                out.push(symbol(six));
             } else {
                 out.push('=');
             }
@@ -32,17 +43,11 @@ pub fn bytes_to_base64(bytes: &[u8]) -> String {
     out
 }
 
-fn sextet(word: u32, index: u32) -> u8 {
-    let shift = 18u32.saturating_sub(index.saturating_mul(6));
-    let six = usize::try_from((word >> shift) & 0x3f).unwrap_or(0);
-    ALPHABET.get(six).copied().unwrap_or(b'A')
-}
-
 fn value_of(byte: u8) -> Option<u32> {
     let value = match byte {
-        b'A'..=b'Z' => byte.checked_sub(b'A')?,
-        b'a'..=b'z' => byte.checked_sub(b'a')?.checked_add(26)?,
-        b'0'..=b'9' => byte.checked_sub(b'0')?.checked_add(52)?,
+        b'A'..=b'Z' => byte.saturating_sub(b'A'),
+        b'a'..=b'z' => byte.saturating_sub(b'a').saturating_add(26),
+        b'0'..=b'9' => byte.saturating_sub(b'0').saturating_add(52),
         b'+' => 62,
         b'/' => 63,
         _ => return None,
@@ -55,24 +60,20 @@ pub fn base64_to_bytes(text: &str) -> Option<Vec<u8>> {
     let all = text.as_bytes();
     let body = all.strip_suffix(b"==").or_else(|| all.strip_suffix(b"=")).unwrap_or(all);
     let padding = all.len().saturating_sub(body.len());
-    let remainder = body.len() % 4;
-    if remainder == 1 || (padding > 0 && !body.len().saturating_add(padding).is_multiple_of(4)) {
+    if body.len() % 4 == 1 || (padding > 0 && !body.len().saturating_add(padding).is_multiple_of(4))
+    {
         return None;
     }
     let mut out = Vec::with_capacity(body.len().saturating_mul(3) / 4);
     for quartet in body.chunks(4) {
         let mut word = 0u32;
-        for byte in quartet {
-            word = word.checked_mul(64)?.checked_add(value_of(*byte)?)?;
+        // A short final quartet is read as if padded with zero sextets.
+        for position in 0..4 {
+            let sextet = quartet.get(position).map_or(Some(0), |byte| value_of(*byte))?;
+            word = word.saturating_mul(64).saturating_add(sextet);
         }
-        // A short final quartet is left-aligned to 24 bits.
-        let missing = 4usize.saturating_sub(quartet.len());
-        word <<= u32::try_from(missing.saturating_mul(6)).unwrap_or(0);
-        let produced = quartet.len().saturating_mul(6) / 8;
-        for index in 0..produced {
-            let shift = 16u32.saturating_sub(u32::try_from(index).unwrap_or(0).saturating_mul(8));
-            out.push(u8::try_from((word >> shift) & 0xff).unwrap_or(0));
-        }
+        let [_, first, second, third] = word.to_be_bytes();
+        out.extend([first, second, third].into_iter().take(quartet.len().saturating_mul(6) / 8));
     }
     Some(out)
 }
