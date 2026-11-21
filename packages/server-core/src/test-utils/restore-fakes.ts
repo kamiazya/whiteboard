@@ -197,6 +197,7 @@ export class FakeLive implements LiveDocuments {
 
   seed(path: string, doc: LoroDoc, kind: DocumentKind = 'spatial', id = generateDocumentId()) {
     this.docs.set(this.key(WS, path), { doc, kind, id })
+    this.keptRecord = null
     return id
   }
   stored(path: string): StoredDoc | undefined {
