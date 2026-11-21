@@ -381,6 +381,21 @@ export interface VersionHistory {
     },
   ): Promise<VersionEntry>
   /**
+   * `save` for many documents of one workspace at once, each at the state the
+   * record stands at when the call opens it: one hold of the workspace's write
+   * lock and one open of the record for the whole batch, where a `save` per
+   * document walks the record's tree again for each. Each document is named by
+   * the id and the path it holds it at, and one the record does not show there
+   * as the owner of that path is a `DocumentNotFoundError`. A document whose
+   * history is full (`TooManyVersionsError` from a `save` of it) is left out of
+   * the answer without failing the rest. Answers the ids that got a version.
+   */
+  saveAll(
+    workspaceId: string,
+    documents: readonly { documentId: string; path: string }[],
+    options: { auto: boolean; operator?: OperatorInfo },
+  ): Promise<readonly string[]>
+  /**
    * The past state of ONE document, as the bytes of a document of its own —
    * the stored record at this version's frontiers, projected. Null only when
    * the version does not exist, or the document is not in the record at it.

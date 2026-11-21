@@ -8,7 +8,6 @@ import { WORKSPACE_MAX_DOCUMENTS } from '@kamiazya/whiteboard-model'
 import { DocumentEngineTrapError, runEvictingOnEngineTrapLater } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import type { OperatorInfo } from '../versions/version-entry.js'
-import { TooManyVersionsError } from '../versions/version-refusal.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 import {
   type CarriedTrashBytes,
@@ -219,8 +218,8 @@ async function checkpointPromoted(
 ): Promise<{ recorded: string[]; shadowed: string[] }> {
   const held = await merged.read({ query: 'documents' }, assertedAs<DocumentEntries>())
   const byId = new Map(held.map((entry) => [entry.documentId, entry]))
-  const recorded: string[] = []
   const shadowed: string[] = []
+  const owned: { documentId: string; path: string }[] = []
   for (const documentId of promoted) {
     const entry = byId.get(documentId)
     if (entry === undefined) continue
@@ -228,19 +227,16 @@ async function checkpointPromoted(
       shadowed.push(documentId)
       continue
     }
-    try {
-      await deps.versions.save(input.workspaceId, entry.path, {
-        auto: false,
-        operator: input.operator,
-      })
-    } catch (err) {
-      // The merge has already landed, so a full history must not fail the
-      // promote: the content is kept and only this document's point is
-      // skipped, which `recorded` leaving it out says.
-      if (err instanceof TooManyVersionsError) continue
-      throw err
-    }
-    recorded.push(documentId)
+    owned.push({ documentId, path: entry.path })
   }
+  // The merge has already landed, so a full history must not fail the promote:
+  // the content is kept and only that document's point is skipped, which the
+  // answer leaving it out says.
+  const recorded = [
+    ...(await deps.versions.saveAll(input.workspaceId, owned, {
+      auto: false,
+      operator: input.operator,
+    })),
+  ]
   return { recorded, shadowed }
 }

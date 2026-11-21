@@ -17,6 +17,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import { restoreVersion, wbDocumentCreate } from '@kamiazya/whiteboard-server-core'
+import { LoroDoc } from 'loro-crdt'
 import { bootSelfHostDeps } from '../../src/di/boot-self-host-deps.ts'
 import { disposeAutoCompact, uninstallAutoCompact } from '../../src/server/store/auto-compact.ts'
 import { clearDbCacheForTests, closeDb } from '../../src/server/store/db/index.ts'
@@ -52,10 +53,13 @@ try {
   const live = serverDeps.liveDocuments
   const setBody = (text) =>
     live.withWriteLock(WORKSPACE, async () => {
-      const doc = await live.get(WORKSPACE, target)
+      const doc = new LoroDoc()
       writeMarkdownBody(doc, text)
       doc.commit()
-      await live.save(WORKSPACE, target, doc, { overwrite: true })
+      await live.create(WORKSPACE, target, doc.export({ mode: 'snapshot' }), {
+        overwrite: true,
+        kind: 'markdown',
+      })
     })
   await setBody('# State A')
   const stateA = await store.save(WORKSPACE, target, { auto: false })

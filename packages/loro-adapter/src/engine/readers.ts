@@ -34,7 +34,11 @@ import { judgeStateWithinTextLimits } from '../sync-text-limits.js'
 import { readThreadMarks } from '../thread-marks.js'
 import { documentsTouchedSince, organisationChangedSince } from '../touched-documents.js'
 import { readWorkspaceFolderNames } from '../workspace-folder-name.js'
-import { resolveIndexedWorkspaceDocument } from '../workspace-node-index.js'
+import {
+  nodeByDocumentId,
+  resolveIndexedWorkspaceDocument,
+  resolveIndexedWorkspaceDocumentAtPath,
+} from '../workspace-node-index.js'
 import { readTrashEntries } from '../workspace-trash.js'
 import {
   documentContainers,
@@ -43,7 +47,6 @@ import {
   readWorkspaceDocuments,
   readWorkspaceMeta,
   readWorkspaceNodes,
-  resolveWorkspaceDocument,
   unreadableWorkspaceNodes,
 } from '../workspace-tree.js'
 import { type Answer, answer, answerLater, attempt, versionOfPairs } from './answers.js'
@@ -71,7 +74,9 @@ type ReadArgs = z.infer<typeof readArgsSchema>
 type Reader = (doc: LoroDoc, args: ReadArgs) => unknown
 
 function hostOf(doc: LoroDoc, args: ReadArgs): DocumentContainers {
-  return args.documentId === undefined ? doc : documentContainers(doc, args.documentId)
+  return args.documentId === undefined
+    ? doc
+    : documentContainers(doc, args.documentId, nodeByDocumentId)
 }
 
 const content =
@@ -99,7 +104,7 @@ const wholeDocument =
   (read: (doc: LoroDoc) => unknown): Reader =>
   (doc, args) => {
     if (args.documentId === undefined) return read(doc)
-    const projected = projectWorkspaceDocument(doc, args.documentId)
+    const projected = projectWorkspaceDocument(doc, args.documentId, undefined, nodeByDocumentId)
     if (projected === null)
       throw new RangeError(`No document "${args.documentId}" in this workspace`)
     try {
@@ -120,7 +125,7 @@ const wholeDocument =
  */
 function documentJudgement(doc: LoroDoc, documentId: string | undefined) {
   if (documentId === undefined) return judgementOf(doc)
-  const projected = projectWorkspaceDocument(doc, documentId)
+  const projected = projectWorkspaceDocument(doc, documentId, undefined, nodeByDocumentId)
   if (projected === null) throw new RangeError(`No document "${documentId}" in this workspace`)
   try {
     return judgementOf(projected)
@@ -190,10 +195,10 @@ export const READERS: Record<documentEngine.QueryName, Reader> = {
     }
     return args.path === undefined
       ? resolveIndexedWorkspaceDocument(doc, requiredId(args))
-      : resolveWorkspaceDocument(doc, args.path)
+      : resolveIndexedWorkspaceDocumentAtPath(doc, args.path)
   },
   workspaceDocumentProjection: (doc, args) => {
-    const projected = projectWorkspaceDocument(doc, requiredId(args))
+    const projected = projectWorkspaceDocument(doc, requiredId(args), undefined, nodeByDocumentId)
     return projected === null
       ? null
       : {

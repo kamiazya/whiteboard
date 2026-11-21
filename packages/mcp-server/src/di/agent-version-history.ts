@@ -1,3 +1,4 @@
+import type { OperatorInfo } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import type { VersionHistory } from '@kamiazya/whiteboard-server-core'
 import type { VersionStore } from '../server/store/version-store.js'
 
@@ -16,18 +17,19 @@ import type { VersionStore } from '../server/store/version-store.js'
  * per-process `DAEMON_AGENT_ACTOR` — correct for the live socket — cannot.
  */
 export function agentVersionHistory(store: VersionStore, daemonActor?: string): VersionHistory {
+  const operatorOf = (named: OperatorInfo | undefined): OperatorInfo =>
+    named ?? {
+      kind: 'ai',
+      // Absent when the composition named no device. The row then says
+      // an agent saved it and declines to say which daemon, which is
+      // true; a stand-in here would be a value nobody could resolve.
+      ...(daemonActor === undefined ? {} : { actor: daemonActor }),
+    }
   return {
     save: (workspaceId, path, options) =>
-      store.save(workspaceId, path, {
-        ...options,
-        operator: options.operator ?? {
-          kind: 'ai',
-          // Absent when the composition named no device. The row then says
-          // an agent saved it and declines to say which daemon, which is
-          // true; a stand-in here would be a value nobody could resolve.
-          ...(daemonActor === undefined ? {} : { actor: daemonActor }),
-        },
-      }),
+      store.save(workspaceId, path, { ...options, operator: operatorOf(options.operator) }),
+    saveAll: (workspaceId, documents, options) =>
+      store.saveAll(workspaceId, documents, { ...options, operator: operatorOf(options.operator) }),
     load: (workspaceId, id) => store.load(workspaceId, id),
     loadWorkspaceAt: (workspaceId, id) => store.loadWorkspaceAt(workspaceId, id),
     list: (workspaceId, path) => store.list(workspaceId, path),

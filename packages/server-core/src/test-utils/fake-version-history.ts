@@ -5,6 +5,7 @@ import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import type { AdoptedVersion, VersionHistory } from '../server-deps.js'
 import type { VersionEntry } from '../versions/version-entry.js'
+import { TooManyVersionsError } from '../versions/version-refusal.js'
 import type { FakeDocumentStore } from './fake-document-store.js'
 
 /**
@@ -66,6 +67,23 @@ export class FakeVersionHistory implements VersionHistory {
     }
     this.rows.set(entry.id, { entry, snapshot: doc.export({ mode: 'snapshot' }) })
     return entry
+  }
+  async saveAll(
+    workspaceId: string,
+    documents: readonly { documentId: string; path: string }[],
+    options: Parameters<VersionHistory['saveAll']>[2],
+  ): Promise<readonly string[]> {
+    const recorded: string[] = []
+    for (const { documentId, path } of documents) {
+      try {
+        await this.save(workspaceId, path, options)
+      } catch (err) {
+        if (err instanceof TooManyVersionsError) continue
+        throw err
+      }
+      recorded.push(documentId)
+    }
+    return recorded
   }
   async load(_workspaceId: string, id: string): Promise<Uint8Array | null> {
     return this.rows.get(id)?.snapshot ?? null

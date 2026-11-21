@@ -1,4 +1,4 @@
-import type { LoroDoc, TreeID } from 'loro-crdt'
+import type { LoroDoc, LoroTreeNode, TreeID } from 'loro-crdt'
 import {
   entryOfDocumentNode,
   WORKSPACE_TREE_KEY,
@@ -7,17 +7,26 @@ import {
 } from './workspace-tree.js'
 
 /**
- * Which tree node holds each document id, for a record that is held and read
- * many times between edits. Finding a document by walking the tree costs the
- * record, so a listing that asks once per document costs the record squared.
+ * Which tree node holds each document id and each path, for a record that is
+ * held and read many times between edits. Finding a document by walking the
+ * tree costs the record, so a listing that asks once per document costs the
+ * record squared, and a read that names one document costs the record each time.
  *
- * The ids are kept for the state they were read in, named by the frontiers the
- * state is at: any change to what the record holds, an edit, an import, an
+ * The nodes are kept for the state they were read in, named by the frontiers
+ * the state is at: any change to what the record holds, an edit, an import, an
  * undo, or a view moved to other versions, moves them, and a record at the same
- * frontiers holds the same nodes. Only a record whose edits are all committed
- * answers true to that, which is every record an engine holds.
+ * frontiers holds the same nodes. Reading the frontiers commits what is pending
+ * first, so an edit nobody committed moves them as well:
+ * `readers.node-lookup.property.test.ts` makes such edits straight at the tree
+ * and holds the lookups to a walk of it.
  */
-const kept = new WeakMap<LoroDoc, { readonly at: string; readonly nodes: Map<string, TreeID> }>()
+interface Held {
+  readonly at: string
+  readonly byId: Map<string, TreeID>
+  readonly byPath: Map<string, TreeID>
+}
+
+const kept = new WeakMap<LoroDoc, Held>()
 
 function stateOf(doc: LoroDoc): string {
   return doc
@@ -26,27 +35,50 @@ function stateOf(doc: LoroDoc): string {
     .join(',')
 }
 
-function nodesOf(doc: LoroDoc): Map<string, TreeID> {
-  const at = stateOf(doc)
-  const held = kept.get(doc)
-  if (held?.at === at) return held.nodes
-  const nodes = new Map<string, TreeID>()
+function build(doc: LoroDoc, at: string): Held {
+  const byId = new Map<string, TreeID>()
+  const byPath = new Map<string, TreeID>()
   // Tree order, first one wins: the document a lookup by walking would find.
-  for (const { node, read } of walk(doc)) {
-    if (read.type === 'document' && !nodes.has(read.meta.documentId)) {
-      nodes.set(read.meta.documentId, node.id)
-    }
+  for (const { node, read, path } of walk(doc)) {
+    if (read.type !== 'document') continue
+    if (!byId.has(read.meta.documentId)) byId.set(read.meta.documentId, node.id)
+    if (!byPath.has(path)) byPath.set(path, node.id)
   }
-  kept.set(doc, { at, nodes })
-  return nodes
+  const held = { at, byId, byPath }
+  kept.set(doc, held)
+  return held
 }
 
-/** `resolveWorkspaceDocumentById`, answering from the ids kept for the record's state. */
+/** The kept lookups for the state the record is at, built by a walk when it has moved since they were. */
+function heldFor(doc: LoroDoc): Held {
+  const at = stateOf(doc)
+  const held = kept.get(doc)
+  return held?.at === at ? held : build(doc, at)
+}
+
+function nodeOf(doc: LoroDoc, id: TreeID | undefined): LoroTreeNode | null {
+  return id === undefined ? null : (doc.getTree(WORKSPACE_TREE_KEY).getNodeByID(id) ?? null)
+}
+
+/** The node of the document `documentId`, as a walk of the tree would find it; `null` when the record holds none. */
+export function nodeByDocumentId(doc: LoroDoc, documentId: string): LoroTreeNode | null {
+  return nodeOf(doc, heldFor(doc).byId.get(documentId))
+}
+
+/** `resolveWorkspaceDocumentById`, answering from the nodes kept for the record's state. */
 export function resolveIndexedWorkspaceDocument(
   doc: LoroDoc,
   documentId: string,
 ): WorkspaceDocumentEntry | null {
-  const id = nodesOf(doc).get(documentId)
-  const node = id === undefined ? undefined : doc.getTree(WORKSPACE_TREE_KEY).getNodeByID(id)
-  return node === undefined ? null : entryOfDocumentNode(node)
+  const node = nodeByDocumentId(doc, documentId)
+  return node === null ? null : entryOfDocumentNode(node)
+}
+
+/** `resolveWorkspaceDocument`, answering from the nodes kept for the record's state. */
+export function resolveIndexedWorkspaceDocumentAtPath(
+  doc: LoroDoc,
+  path: string,
+): WorkspaceDocumentEntry | null {
+  const node = nodeOf(doc, heldFor(doc).byPath.get(path))
+  return node === null ? null : entryOfDocumentNode(node)
 }

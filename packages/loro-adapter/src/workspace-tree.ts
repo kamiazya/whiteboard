@@ -997,8 +997,13 @@ export function deleteWorkspaceNodeAtPath(doc: LoroDoc, path: string): boolean {
  * (segment, kind, name, documentId) are tree bookkeeping and stay behind —
  * only containers are content.
  */
-export function projectWorkspaceDocument(doc: LoroDoc, id: string, omit = new Set<string>()) {
-  const node = nodeById(doc, id)
+export function projectWorkspaceDocument(
+  doc: LoroDoc,
+  id: string,
+  omit = new Set<string>(),
+  locate: (doc: LoroDoc, documentId: string) => LoroTreeNode | null = nodeById,
+) {
+  const node = locate(doc, id)
   if (node === null) return null
   const out = new LoroDoc()
   for (const key of node.data.keys()) {
@@ -1049,8 +1054,12 @@ export function reconcileDocContent(target: LoroDoc, past: LoroDoc): void {
  * everything the first one put there. Measured — `setContainer` on an
  * occupied key leaves `{}`.
  */
-export function documentContainers(doc: LoroDoc, documentId: string): DocumentContainers {
-  const node = nodeById(doc, documentId)
+export function documentContainers(
+  doc: LoroDoc,
+  documentId: string,
+  locate: (doc: LoroDoc, documentId: string) => LoroTreeNode | null = nodeById,
+): DocumentContainers {
+  const node = locate(doc, documentId)
   if (node === null) throw new Error(`No document "${documentId}" in this workspace`)
   const id: TreeID = node.id
   // Resolved per call rather than captured, so a handle stays valid across a

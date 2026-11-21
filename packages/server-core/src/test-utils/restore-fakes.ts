@@ -313,6 +313,14 @@ export class FakeVersions implements VersionHistory {
       ...(options.restoredFrom === undefined ? {} : { restoredFrom: options.restoredFrom }),
     }
   }
+  async saveAll(
+    workspaceId: string,
+    documents: readonly { documentId: string; path: string }[],
+    options: { auto: boolean },
+  ): Promise<readonly string[]> {
+    for (const { path } of documents) await this.save(workspaceId, path, options)
+    return documents.map(({ documentId }) => documentId)
+  }
   async load(_workspaceId: string, id: string): Promise<Uint8Array | null> {
     return this.byId.get(id)?.doc?.export({ mode: 'snapshot' }) ?? null
   }
