@@ -248,12 +248,25 @@ const shapeFor: Record<string, (input: fc.Arbitrary<unknown>) => fc.Arbitrary<un
       fc.record({ node: facetsByTarget.node, edge: facetsByTarget.edge }),
     ),
   wb_version_restore: (inputs) =>
-    // The one saved version is the board's.
-    mostly(inputs, (input: object) => ({
-      ...inSeededWorkspace(input),
-      documentId: SPATIAL_ID,
-      versionId: 'v1',
-    })),
+    // The one saved version is the board's, restored onto a path of its own.
+    // An in-place restore writes through the workspace record, which this
+    // seeding holds only as a refusing double, and a subtree rollback needs a
+    // workspace-scoped version it does not save: steered at neither, the row
+    // answered 9 to 22 draws in 100 and fell under the floor on a CI seed.
+    // The path is fresh per draw because the live documents outlive a draw:
+    // a second restore onto one path overwrites through the record too.
+    // The unshaped quarter keeps both refusals reachable.
+    mostly(
+      inputs,
+      (input: object, fresh) => ({
+        ...inSeededWorkspace(input),
+        documentId: SPATIAL_ID,
+        versionId: 'v1',
+        targetPath: `restored-${fresh}`,
+        subtree: undefined,
+      }),
+      fc.nat(),
+    ),
   // Every document named is one the workspace holds.
   wb_version_save: (inputs) =>
     mostly(inputs, (input: { documentIds: string[] }) => {
