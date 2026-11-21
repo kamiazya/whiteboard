@@ -24,14 +24,32 @@ export interface TouchedDocument {
   readonly contentWritten: boolean
 }
 
-function pathOf(node: LoroTreeNode): string | null {
-  const segments: string[] = []
-  for (let at: LoroTreeNode | undefined = node; at !== undefined; at = at.parent()) {
-    const segment = at.data.get('segment')
-    if (typeof segment !== 'string') return null
-    segments.unshift(segment)
+/**
+ * A node's path, remembering every ancestor's on the way: a touched node's
+ * ancestors are usually touched too (a folder chain is created whole), and
+ * walking each one to the root again is quadratic in the depth. Each walk also
+ * mints a wrapper per ancestor that only a finalizer frees, so a deep chain
+ * left the heap to the collector — measured on a 512-deep chain, applying the
+ * same update four times took 2.4, 18, 26 and 38 s, three quarters of it GC.
+ */
+function pathsOf() {
+  const known = new Map<TreeID, string | null>()
+  const pathOf = (node: LoroTreeNode): string | null => {
+    const cached = known.get(node.id)
+    if (cached !== undefined) return cached
+    const segment = node.data.get('segment')
+    const parent = node.parent()
+    const above = parent === undefined ? undefined : pathOf(parent)
+    const path =
+      typeof segment !== 'string' || above === null
+        ? null
+        : above === undefined
+          ? segment
+          : `${above}/${segment}`
+    known.set(node.id, path)
+    return path
   }
-  return segments.join('/')
+  return pathOf
 }
 
 /**
@@ -89,13 +107,16 @@ function nodesWritten(workspace: LoroDoc, since: VersionVector): Map<TreeID, boo
  */
 export function documentsTouchedSince(workspace: LoroDoc, since: VersionVector): TouchedDocument[] {
   const tree = workspace.getTree(WORKSPACE_TREE_KEY)
+  const pathOf = pathsOf()
   const touched: TouchedDocument[] = []
   for (const [id, contentWritten] of nodesWritten(workspace, since)) {
     const node = tree.getNodeByID(id)
     if (node === undefined || node.isDeleted()) continue
+    // A folder holds no document: it needs no path.
     const documentId = node.data.get('documentId')
+    if (typeof documentId !== 'string') continue
     const path = pathOf(node)
-    if (typeof documentId !== 'string' || path === null) continue
+    if (path === null) continue
     touched.push({ documentId, node: id, path, contentWritten })
   }
   return touched

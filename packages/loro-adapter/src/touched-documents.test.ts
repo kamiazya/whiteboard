@@ -139,6 +139,33 @@ describe('documentsTouchedSince', () => {
     ])
   })
 
+  it('answers the whole path of documents created under shared new folders', () => {
+    const workspace = keeper()
+    const deep = '01J0000000000000000000DEEP'
+    const since = imported(workspace, (replica) => {
+      createWorkspaceDocumentAtPath(replica, {
+        path: 'a/b/c/first',
+        documentId: FRESH,
+        kind: 'markdown',
+      })
+      createWorkspaceDocumentAtPath(replica, {
+        path: 'a/b/second',
+        documentId: deep,
+        kind: 'markdown',
+      })
+    })
+
+    const paths = documentsTouchedSince(workspace, since)
+      .map(({ documentId, path }) => ({ documentId, path }))
+      .sort((x, y) => x.path.localeCompare(y.path))
+
+    // The folders the import created are no documents, and are not answered.
+    expect(paths).toEqual([
+      { documentId: FRESH, path: 'a/b/c/first' },
+      { documentId: deep, path: 'a/b/second' },
+    ])
+  })
+
   it('leaves out a document nothing in the import wrote to', () => {
     const workspace = keeper()
     const since = imported(workspace, type(NOTE, 'hello'))
