@@ -39,6 +39,8 @@ export interface RecordCacheOptions<H> {
   /** The entry the bound dropped, as it leaves; not called for an eviction by name. */
   readonly onBoundDrop?: (key: string, handle: H) => void
   readonly now?: () => number
+  /** A handle taken on loan (+1) or given back (-1), for a caller that accounts for loans by handle. */
+  readonly onLoan?: (handle: H, change: 1 | -1) => void
 }
 
 interface Entry<H> {
@@ -82,6 +84,7 @@ export class RecordCache<H> {
     if (entry === undefined) return undefined
     entry.refs += 1
     this.lent += 1
+    this.options.onLoan?.(entry.handle, 1)
     let given = false
     return {
       handle: entry.handle,
@@ -89,6 +92,7 @@ export class RecordCache<H> {
         if (given) return
         given = true
         this.lent -= 1
+        this.options.onLoan?.(entry.handle, -1)
         entry.refs -= 1
         entry.lastUsed = this.now()
         if (entry.gone && entry.refs === 0) this.options.release(entry.handle)

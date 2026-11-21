@@ -57,6 +57,27 @@ export function _workspaceRecordLoansForTests(): number {
   return records.outstanding
 }
 
+/**
+ * Test-only: starts counting the loans taken of each record from here on, and
+ * answers how many a record has out. For a test that asks what an operation
+ * itself held, which the process-wide count mixes with every other loan.
+ */
+export function _watchWorkspaceRecordLoansForTests(): {
+  /** How many loans are out of the records watched so far. */
+  total(): number
+  /** How many loans were taken at all, so a count of none is not an empty watch. */
+  taken(): number
+} {
+  const watch = { counts: new Map<object, number>(), taken: 0 }
+  loanWatch = watch
+  return {
+    total: () => [...watch.counts.values()].reduce((sum, held) => sum + held, 0),
+    taken: () => watch.taken,
+  }
+}
+
+let loanWatch: { counts: Map<object, number>; taken: number } | null = null
+
 /** Test-only: the records the cache has given back since this was first asked for. */
 export function _workspaceRecordReleasesForTests(): LoroDoc[] {
   releasedForTests ??= []
@@ -132,6 +153,11 @@ const records = new RecordCache<LoroDoc>({
     releasedForTests?.push(doc)
   },
   pinned: workspaceWriteLockInUse,
+  onLoan: (record, change) => {
+    if (loanWatch === null) return
+    loanWatch.counts.set(record, (loanWatch.counts.get(record) ?? 0) + change)
+    if (change === 1) loanWatch.taken += 1
+  },
   onBoundDrop: (key, doc) => rememberDropped(key, doc),
 })
 
@@ -175,6 +201,7 @@ function rethrowOpenFailure(workspaceId: string, err: unknown): never {
 export function _clearWorkspaceDocCacheForTests(): void {
   records.clear()
   droppedVersions.clear()
+  loanWatch = null
   if (releasedForTests !== null) releasedForTests.length = 0
 }
 
