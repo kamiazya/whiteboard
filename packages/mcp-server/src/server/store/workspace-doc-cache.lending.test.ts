@@ -125,7 +125,7 @@ describe('a bracket over the workspace record', () => {
     // A second cold open's keep lands between this one's keep and its acquire.
     const keep = RecordCache.prototype.keep
     let interleaved = false
-    vi.spyOn(RecordCache.prototype, 'keep').mockImplementation(function (
+    const spy = vi.spyOn(RecordCache.prototype, 'keep').mockImplementation(function (
       this: InstanceType<typeof RecordCache>,
       key: string,
       workspaceId: string,
@@ -137,7 +137,11 @@ describe('a bracket over the workspace record', () => {
       keep.call(this, key, workspaceId, new LoroDoc())
     })
 
-    await withStoredWorkspaceRecord(ws(0), globalStoreScope, async () => {})
+    try {
+      await withStoredWorkspaceRecord(ws(0), globalStoreScope, async () => {})
+    } finally {
+      spy.mockRestore()
+    }
 
     expect(interleaved).toBe(true)
     expect(_workspaceRecordLoansForTests()).toBe(0)
