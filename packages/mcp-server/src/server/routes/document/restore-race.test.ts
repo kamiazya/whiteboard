@@ -114,16 +114,18 @@ describe('restore targetPath-overwrite vs delete race', () => {
     const { promise: getDocGate, resolve: releaseGetDoc } = Promise.withResolvers<void>()
     const { promise: getDocCalled, resolve: signalGetDocCalled } = Promise.withResolvers<void>()
     let gateArmed = true
-    const realOpen = serverDeps.workspaceDocuments.open.bind(serverDeps.workspaceDocuments)
+    const realWithRecord = serverDeps.workspaceDocuments.withRecord.bind(
+      serverDeps.workspaceDocuments,
+    )
     serverDeps.workspaceDocuments = {
       ...serverDeps.workspaceDocuments,
-      open: async (workspaceId) => {
+      withRecord: async (workspaceId, fn) => {
         if (gateArmed) {
           gateArmed = false
           signalGetDocCalled()
           await getDocGate
         }
-        return realOpen(workspaceId)
+        return realWithRecord(workspaceId, fn)
       },
     }
 
@@ -207,16 +209,18 @@ describe('restore in-place vs delete race', () => {
     const { promise: getDocGate, resolve: releaseGetDoc } = Promise.withResolvers<void>()
     const { promise: getDocCalled, resolve: signalGetDocCalled } = Promise.withResolvers<void>()
     let gateArmed = true
-    const realOpen = serverDeps.workspaceDocuments.open.bind(serverDeps.workspaceDocuments)
+    const realWithRecord = serverDeps.workspaceDocuments.withRecord.bind(
+      serverDeps.workspaceDocuments,
+    )
     serverDeps.workspaceDocuments = {
       ...serverDeps.workspaceDocuments,
-      open: async (workspaceId) => {
+      withRecord: async (workspaceId, fn) => {
         if (gateArmed) {
           gateArmed = false
           signalGetDocCalled()
           await getDocGate
         }
-        return realOpen(workspaceId)
+        return realWithRecord(workspaceId, fn)
       },
     }
 

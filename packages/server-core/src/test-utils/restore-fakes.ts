@@ -78,6 +78,8 @@ export class FakeLive implements LiveDocuments {
   readonly calls: { method: string; lockDepth: number }[] = []
   failNextSave: Error | null = null
   private lockDepth = 0
+  /** The record `open` hands out, until it is dropped. */
+  private keptRecord: LoroDoc | null = null
 
   private key(workspaceId: string, path: string) {
     return `${workspaceId}${KEY_SEPARATOR}${path}`
@@ -94,20 +96,53 @@ export class FakeLive implements LiveDocuments {
   workspaceDocuments(): WorkspaceDocuments {
     return {
       ...unusedWorkspaceDocuments(),
-      open: async () => {
+      withRecord: async (_workspaceId, fn) => {
         this.record('open')
-        const record = this.recordOfDocuments()
-        return bindRecordOps(legacyRecordOps, record, () => this.saveRecord(record))
+        const record = this.heldRecord()
+        const session = bindRecordOps(legacyRecordOps, record, () => this.saveRecord(record))
+        try {
+          return await fn(session)
+        } finally {
+          session.release()
+        }
       },
       evict: (workspaceId) => {
         this.record('evictRecord')
         this.recordsDropped.push(workspaceId)
+        this.keptRecord = null
       },
       evictProjections: (workspaceId) => {
         this.record('evictProjections')
         this.projectionsDropped.push(workspaceId)
       },
     }
+  }
+
+  /**
+   * The node ids the record holds for the canvas at `path`, read as the next
+   * operation to open the record would read them: through the kept record, so
+   * a write that was dropped is absent and one that was not is there. Not a
+   * logged call: it is the test looking, not the operation.
+   */
+  async nodeIdsInRecord(path: string): Promise<string[]> {
+    const record = this.heldRecord()
+    const session = bindRecordOps(legacyRecordOps, record, async () => {})
+    const asserted = <T>() => ({ parse: (value: unknown) => value as T })
+    const entry = await session.read(
+      { query: 'workspaceDocumentEntry', args: { path } },
+      asserted<{ documentId: string } | null>(),
+    )
+    if (entry === null) return []
+    const canvas = await session.read(
+      { query: 'spatialCanvas', args: { documentId: entry.documentId } },
+      asserted<{ canvas: { nodes: Array<{ id: string }> } }>(),
+    )
+    return canvas.canvas.nodes.map((node) => node.id)
+  }
+
+  private heldRecord(): LoroDoc {
+    this.keptRecord ??= this.recordOfDocuments()
+    return this.keptRecord
   }
 
   /** A workspace record holding the documents its path grammar admits; a restore never writes to the rest. */
@@ -192,6 +227,9 @@ export class FakeLive implements LiveDocuments {
       this.failNextSave = null
       throw err
     }
+    // The daemon's store writes through the record it keeps; this fake builds
+    // the record from the documents, so it is rebuilt after one changes.
+    this.keptRecord = null
     const existing = this.docs.get(this.key(workspaceId, path))
     if (existing !== undefined && existing.doc !== doc && options?.overwrite !== true) {
       throw new DocumentPathTakenError(workspaceId, path)
@@ -221,6 +259,7 @@ export class FakeLive implements LiveDocuments {
   }
   async rename(workspaceId: string, oldPath: string, newPath: string): Promise<void> {
     this.record('rename')
+    this.keptRecord = null
     const entry = this.docs.get(this.key(workspaceId, oldPath))
     if (entry === undefined) return
     this.docs.delete(this.key(workspaceId, oldPath))
@@ -228,6 +267,7 @@ export class FakeLive implements LiveDocuments {
   }
   async delete(workspaceId: string, path: string): Promise<void> {
     this.record('delete')
+    this.keptRecord = null
     this.docs.delete(this.key(workspaceId, path))
   }
   evict(_workspaceId: string, path: string): void {

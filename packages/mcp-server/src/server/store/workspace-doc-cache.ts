@@ -515,7 +515,36 @@ export async function withStoredWorkspaceRecord<T>(
   fn: (record: RecordSession | null) => Promise<T>,
 ): Promise<T> {
   const doc = await openWorkspaceDocIfStored(workspaceId, scope)
-  return fn(doc === null ? null : sessionOver(workspaceId, doc, scope))
+  return heldFor(doc === null ? null : sessionOver(workspaceId, doc, scope), fn)
+}
+
+/**
+ * The live workspace record for the length of `fn`: minted empty inside a
+ * registered workspace, like `getWorkspaceDoc`, and given back when `fn`
+ * returns or throws.
+ *
+ * ponytail: releasing is a no-op while the cache holds a `LoroDoc`; it is where
+ * the cache counts its users once it holds engine leases, so that dropping an
+ * entry never closes one a bracket is still reading.
+ */
+export async function withWorkspaceRecord<T>(
+  workspaceId: string,
+  scope: StoreScope,
+  fn: (record: RecordSession) => Promise<T>,
+): Promise<T> {
+  return heldFor(sessionOver(workspaceId, await getWorkspaceDoc(workspaceId, scope), scope), fn)
+}
+
+/** Runs `fn` on `session` and releases it however `fn` ends; a missing record is handed over as `null`. */
+async function heldFor<S extends RecordSession | null, T>(
+  session: S,
+  fn: (record: S) => Promise<T>,
+): Promise<T> {
+  try {
+    return await fn(session)
+  } finally {
+    session?.release()
+  }
 }
 
 /**
@@ -540,12 +569,12 @@ export async function withPersistedWorkspaceRecord<T>(
     stored !== null &&
     cached.oplogVersion().compare(VersionVector.decode(stored.frontier)) === 0
   ) {
-    return fn(sessionOver(workspaceId, cached, scope))
+    return heldFor(sessionOver(workspaceId, cached, scope), fn)
   }
   const persisted = await new DocumentStoreWorkspaceDocs(
     new LibsqlDocumentStore(await scope.db()),
   ).open(workspaceId)
-  return fn(persisted === null ? null : sessionOver(workspaceId, persisted, scope))
+  return heldFor(persisted === null ? null : sessionOver(workspaceId, persisted, scope), fn)
 }
 
 function sessionOver(workspaceId: string, doc: LoroDoc, scope: StoreScope): RecordSession {

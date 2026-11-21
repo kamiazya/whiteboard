@@ -104,34 +104,43 @@ export async function applyWorkspaceDocumentUpdate(
   deps: Pick<ServerDeps, 'liveDocuments' | 'workspaceDocuments' | 'blobStore'>,
   input: ApplyWorkspaceDocumentUpdateInput,
 ): Promise<ApplyWorkspaceDocumentUpdateResult> {
+  const { workspaceId } = input
+  return deps.liveDocuments.withWriteLock(workspaceId, () =>
+    deps.workspaceDocuments.withRecord(workspaceId, (record) => applyToRecord(deps, input, record)),
+  )
+}
+
+/** The import, the placement check, the trash, the naming and the save, over the record held for the call. */
+async function applyToRecord(
+  deps: Pick<ServerDeps, 'workspaceDocuments' | 'blobStore'>,
+  input: ApplyWorkspaceDocumentUpdateInput,
+  record: RecordSession,
+): Promise<ApplyWorkspaceDocumentUpdateResult> {
   const { workspaceId, update } = input
-  return deps.liveDocuments.withWriteLock(workspaceId, async () => {
-    const record = await deps.workspaceDocuments.open(workspaceId)
-    const target = droppableRecord(deps, workspaceId)
-    const since: Since = record.version().entries.map(({ peer, counter }) => [peer, counter])
-    try {
-      importWithinSyncLimits(record, update, target)
-    } catch (err: unknown) {
-      if (isSyncWriteRefusal(err)) {
-        throw err
-      }
-      log.warning('workspace-document update rejected: the import was refused or not judged', {
-        workspaceId,
-        updateBytes: update.byteLength,
-        err,
-      })
-      return { kind: 'malformed-update' }
-    }
-    // From here the cached record holds the update, so a throw anywhere
-    // before the save completes drops it unsaved: kept, it would ride the
-    // next ordinary save by anyone, unrefused.
-    try {
-      return await keepImported(deps, input, record, since, target)
-    } catch (err) {
-      target.evict()
+  const target = droppableRecord(deps, workspaceId)
+  const since: Since = record.version().entries.map(({ peer, counter }) => [peer, counter])
+  try {
+    importWithinSyncLimits(record, update, target)
+  } catch (err: unknown) {
+    if (isSyncWriteRefusal(err)) {
       throw err
     }
-  })
+    log.warning('workspace-document update rejected: the import was refused or not judged', {
+      workspaceId,
+      updateBytes: update.byteLength,
+      err,
+    })
+    return { kind: 'malformed-update' }
+  }
+  // From here the cached record holds the update, so a throw anywhere
+  // before the save completes drops it unsaved: kept, it would ride the
+  // next ordinary save by anyone, unrefused.
+  try {
+    return await keepImported(deps, input, record, since, target)
+  } catch (err) {
+    target.evict()
+    throw err
+  }
 }
 
 /**

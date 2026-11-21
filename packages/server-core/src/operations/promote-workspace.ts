@@ -194,12 +194,16 @@ async function promoteFrom(
 
   // The LISTING, not a by-id lookup: only the walk that sees every sibling
   // can say which document at a contested path is the shadowed one.
-  const merged = await deps.workspaceDocuments.open(input.workspaceId)
-  const trashStored = await storeCarriedTrash(deps.blobStore, merged, carried.trash)
+  const trashStored = await deps.workspaceDocuments.withRecord(input.workspaceId, (merged) =>
+    storeCarriedTrash(deps.blobStore, merged, carried.trash),
+  )
   // Before the move's own checkpoints, so the history lists in the order it
   // was taken: the carried rows keep their createdAt and the move's is now.
   const versionsKept = await deps.versions.adopt(input.workspaceId, carried.versions)
-  const { recorded, shadowed } = await checkpointPromoted(deps, input, merged, promoted)
+  const { recorded, shadowed } = await deps.workspaceDocuments.withRecord(
+    input.workspaceId,
+    (merged) => checkpointPromoted(deps, input, merged, promoted),
+  )
   return { kind: 'promoted', recorded, shadowed, trashStored, versionsKept }
 }
 

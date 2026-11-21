@@ -145,6 +145,8 @@ describe('restoreVersion in-place mode', () => {
     expect(live.recordsDropped).toEqual([WS])
     expect(live.projectionsDropped).toEqual([WS])
     expect(nodeIdsAt(live, 'canvas-a')).toEqual(['n1'])
+    // And the next open does not meet the unsaved write: nothing of it was kept.
+    expect(await live.nodeIdsInRecord('canvas-a')).toEqual(['n1'])
     expectAllCallsLocked(live)
   })
 
