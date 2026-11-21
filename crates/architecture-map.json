@@ -192,7 +192,7 @@
     "whiteboard-history": {
       "path": "crates/core/history",
       "layer": "core",
-      "status": "planned",
+      "status": "present",
       "description": "checkpoint scheduling, version retention, frontier encoding",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det", "whiteboard-model", "whiteboard-crdt"],

@@ -14,6 +14,7 @@ pub mod annotation;
 pub mod checks;
 #[path = "generated/crdt.rs"]
 pub mod crdt;
+pub mod encoding;
 pub mod frames;
 pub mod json;
 pub mod mdast;
