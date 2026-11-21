@@ -19,7 +19,6 @@ const { resolveTestServerDeps } = await import('../server/routes/_test-helpers.j
 const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
   '../server/store/document-store.js'
 )
-const { clearDocCacheForTests } = await import('../server/store/doc-cache.js')
 const { createDaemonIdentity } = await import('../server/security/daemon-identity.js')
 
 /**
@@ -32,7 +31,6 @@ const { createDaemonIdentity } = await import('../server/security/daemon-identit
  */
 describe('the self-host ServerDeps', () => {
   it('stamps an unnamed agent save with this daemon’s did:key', async () => {
-    clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
     await mkdir(join(tmp.dir, '011K0CCH776JA60YJHJTYXASRK'), { recursive: true })
     await saveDocument('011K0CCH776JA60YJHJTYXASRK', 'canvas-a', new LoroDoc(), { kind: 'spatial' })

@@ -31,7 +31,6 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentMetadataRouter: createMetadataRouter } = await import('./metadata.js')
 const { resolveDocumentAddress } = await import('./path-route.js')
 
@@ -49,12 +48,8 @@ function createDocumentMetadataRouter(options: Parameters<typeof createMetadataR
   return app
 }
 
-beforeEach(() => {
-  clearDocCacheForTests()
-})
-afterEach(() => {
-  clearDocCacheForTests()
-})
+beforeEach(() => {})
+afterEach(() => {})
 
 const put = (app: Hono, path: string, body: unknown) =>
   app.request(path, {

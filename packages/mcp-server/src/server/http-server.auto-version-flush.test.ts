@@ -34,7 +34,6 @@ vi.mock('./config.js', () => ({
 
 const { startHttpServer } = await import('./http-server.js')
 const { saveDocument, _clearWorkspaceDocCacheForTests } = await import('./store/document-store.js')
-const { clearDocCacheForTests } = await import('./store/doc-cache.js')
 const { FileVersionStore } = await import('./store/version-store.js')
 
 describe('startHttpServer takes the pending checkpoint on the way out', () => {
@@ -43,7 +42,6 @@ describe('startHttpServer takes the pending checkpoint on the way out', () => {
   beforeEach(async () => {
     tmpRoot = await mkdtemp(join(tmpdir(), 'whiteboard-autoversion-flush-'))
     await mkdir(join(tmpRoot, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
-    clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
     await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
   })
@@ -51,7 +49,6 @@ describe('startHttpServer takes the pending checkpoint on the way out', () => {
   afterEach(async () => {
     await running?.close()
     running = undefined
-    clearDocCacheForTests()
     await rm(tmpRoot, { recursive: true, force: true })
   })
 

@@ -4,7 +4,6 @@ import type { RecordSession, RecordView } from '@kamiazya/whiteboard-loro-adapte
 import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
 import type { HonoRequest } from 'hono'
-import type { LoroDoc } from 'loro-crdt'
 import type { AgentActivityTouched } from './agent-activity-touched.js'
 import type { Embedder } from './search/embedder.js'
 import type { ThemeFontSource } from './theme-font.js'
@@ -256,14 +255,14 @@ export interface ServerDeps {
    */
   versions: VersionHistory
   /**
-   * The workspace's LIVE documents — the cached, mutable doc instances every
-   * connected client shares — as an operation needs to touch them.
+   * The workspace's LIVE documents — what the daemon holds at a path — as an
+   * operation needs to touch them.
    *
    * Narrow-seam rules as `versions`: these are the calls the restore
    * operation makes, not the daemon store's whole surface, and structural
    * typing lets the implementation be larger without a wrapper. Not a
-   * `packages/ports` port for the same reason `versions` is not — the
-   * methods answer with a `LoroDoc`.
+   * `packages/ports` port because it answers for the daemon's own record,
+   * which a port does not name.
    *
    * REQUIRED, like `documentTeardown`: a composition root that forgets it
    * should be a compile error, not a server whose restore route throws at
@@ -290,33 +289,17 @@ export interface WorkspaceDocuments {
   /** Whether the workspace is registered at all — a refusal, not a mint. */
   exists(workspaceId: string): Promise<boolean>
   /**
-   * The live workspace doc. Inside a registered workspace a missing record
-   * is minted empty: the workspace is real, it just has no tree-plane
-   * documents yet.
-   */
-  get(workspaceId: string): Promise<LoroDoc>
-  /**
-   * The same live record as `get`, bound to the operations that read and write
-   * it and to its save, for the length of `fn`: the session is released when
-   * `fn` returns or throws, and answers nothing afterwards. `get` stays for the
-   * operations not yet moved. An operation holds the record this way so a
-   * holder that counts its users (a cache holding engine leases) knows when the
-   * last one is done; it never releases the session itself.
+   * The live workspace record, bound to the operations that read and write it
+   * and to its save, for the length of `fn`: the session is released when `fn`
+   * returns or throws, and answers nothing afterwards. Inside a registered
+   * workspace a missing record is minted empty: the workspace is real, it just
+   * has no tree-plane documents yet. An operation holds the record this way so
+   * a holder that counts its users (a cache holding engine leases) knows when
+   * the last one is done; it never releases the session itself.
    */
   withRecord<T>(workspaceId: string, fn: (record: RecordSession) => Promise<T>): Promise<T>
   /**
-   * Persists the workspace doc. Fan-out to update subscribers happens
-   * INSIDE the implementation, so a caller never broadcasts separately.
-   */
-  save(workspaceId: string, doc: LoroDoc): Promise<void>
-  /**
-   * Drops every cached per-document projection of this workspace. After a
-   * workspace-granularity import each projection is stale, and a stale one
-   * would diff old content back over the import on its next save.
-   */
-  evictProjections(workspaceId: string): void
-  /**
-   * Drops the cached workspace doc itself, so the next `get` reloads
+   * Drops the cached workspace doc itself, so the next access reloads
    * durable bytes — the recovery move when a failure may have left the
    * in-memory doc ahead of what persisted.
    */
@@ -335,29 +318,19 @@ export interface WorkspaceDocuments {
 /**
  * `withWriteLock` is ON the seam, not around it, because the operation is
  * what must hold it: every read and write of a restore runs inside one hold
- * (an unlocked get->save window lets a concurrent delete/rename insert a
+ * (an unlocked read-then-write window lets a concurrent delete/rename insert a
  * phantom canvas), and a lock the adapter takes is a lock a second surface
- * forgets. The bracket must be re-entrant — `save`/`rename`/`delete`
+ * forgets. The bracket must be re-entrant — `create`/`rename`/`delete`
  * implementations may take the same lock again.
  */
 export interface LiveDocuments {
   /**
-   * Persists `doc` at `path`. Without `overwrite`, a path already held —
-   * checked again inside the store, not only by the caller's `exists` —
-   * rejects with ports' `DocumentPathTakenError`, which is the one failure
-   * an operation turns into a result rather than propagating.
-   */
-  save(
-    workspaceId: string,
-    path: string,
-    doc: LoroDoc,
-    options?: { overwrite?: boolean; kind?: DocumentKind },
-  ): Promise<void>
-  /**
-   * `save` for a document given as the snapshot bytes of one: stores them as
-   * the content at `path`, under the same rules (`overwrite`, `kind`, the
-   * path already held). What an operation uses for a document it holds only
-   * as bytes, so it never opens one.
+   * Stores a document given as the snapshot bytes of one as the content at
+   * `path`. Without `overwrite`, a path already held — checked again inside the
+   * store, not only by the caller's `exists` — rejects with ports'
+   * `DocumentPathTakenError`, which is the one failure an operation turns into
+   * a result rather than propagating. What an operation uses for a document it
+   * holds only as bytes, so it never opens one.
    */
   create(
     workspaceId: string,
@@ -372,11 +345,6 @@ export interface LiveDocuments {
   list(workspaceId: string): Promise<readonly { documentId?: string; path: string }[]>
   rename(workspaceId: string, oldPath: string, newPath: string): Promise<void>
   delete(workspaceId: string, path: string): Promise<void>
-  /**
-   * Drops the cached doc instance so the next read reloads durable state —
-   * the recovery move after a failed write left the cache ahead of disk.
-   */
-  evict(workspaceId: string, path: string): void
   withWriteLock<T>(workspaceId: string, fn: () => Promise<T>): Promise<T>
 }
 

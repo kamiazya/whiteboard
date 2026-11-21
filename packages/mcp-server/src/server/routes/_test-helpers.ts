@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import {
   type DocumentContainers,
   documentContainers,
@@ -163,6 +164,23 @@ export function resolvingDocumentIds(
 export const UNKNOWN_DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 /**
+ * The document each `writeDocumentUpdate` of one fixture last wrote, by workspace and path. A
+ * Loro update is a delta over the history of the document it was cut from, and
+ * a copy loaded from the record has a history of its own, so a delta imported
+ * into one waits for operations it never receives. The writer keeps the
+ * instance a delta was built against, for as long as the stored content is the
+ * content that instance wrote.
+ */
+const lineages = new WeakMap<object, Map<string, Map<string, LoroDoc>>>()
+
+/** Whether every root the writer's instance holds reads the same in the stored one, which may hold more roots. */
+function holdsAsStored(written: LoroDoc, stored: LoroDoc): boolean {
+  const roots = written.toJSON() as Record<string, unknown>
+  const other = stored.toJSON() as Record<string, unknown>
+  return Object.entries(roots).every(([key, value]) => isDeepStrictEqual(other[key], value))
+}
+
+/**
  * Imports a Loro update into the document at `path` and saves it, creating
  * the document when no document holds the path — how a fixture seeds content.
  * Nothing serves a per-document write over HTTP (editors sync the workspace
@@ -176,12 +194,19 @@ export async function writeDocumentUpdate(
   update: Uint8Array,
 ): Promise<void> {
   const live = deps.liveDocuments
-  // The per-document projection cache, imported late so a test's data-dir mock is in place.
-  const { getDoc } = await import('../store/document-store.js')
+  // Imported late so a test's data-dir mock is in place.
+  const { loadDocument } = await import('../store/document-store.js')
+  const byWorkspace = lineages.get(live) ?? new Map<string, Map<string, LoroDoc>>()
+  lineages.set(live, byWorkspace)
+  const held = byWorkspace.get(workspaceId) ?? new Map<string, LoroDoc>()
+  byWorkspace.set(workspaceId, held)
   await live.withWriteLock(workspaceId, async () => {
-    const doc = await getDoc(workspaceId, path)
+    const stored = await loadDocument(workspaceId, path)
+    const kept = held.get(path)
+    const doc = kept !== undefined && holdsAsStored(kept, stored) ? kept : stored
     doc.import(update)
-    await live.save(workspaceId, path, doc, { overwrite: true })
+    await live.create(workspaceId, path, doc.export({ mode: 'snapshot' }), { overwrite: true })
+    held.set(path, doc)
   })
 }
 

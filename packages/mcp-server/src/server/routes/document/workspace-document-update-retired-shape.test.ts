@@ -37,15 +37,12 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 
 const WS = '01M8BBN7JS60N0ZAR13NP8SXBF'
 const PATH = 'canvas-a'
 
-afterEach(() => {
-  clearDocCacheForTests()
-})
+afterEach(() => {})
 
 async function boardApp() {
   await createTestDocument(serverDeps, { workspaceId: WS, path: PATH })

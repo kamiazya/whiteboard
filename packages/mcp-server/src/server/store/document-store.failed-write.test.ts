@@ -25,7 +25,6 @@ vi.mock('../config.js', () => ({
 }))
 
 const { saveDocument, _clearWorkspaceDocCacheForTests } = await import('./document-store.js')
-const { clearDocCacheForTests } = await import('./doc-cache.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { getDb } = await import('./db/index.js')
 const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
@@ -35,7 +34,6 @@ let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'doc-store-failed-write-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
 })
 afterEach(async () => {

@@ -35,17 +35,14 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { saveDocument, getDoc } = await import('../../store/document-store.js')
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
+const { saveDocument, loadDocument } = await import('../../store/document-store.js')
 const { createDocumentRouter } = await import('../document.js')
 const { createContainer, resolveServerDeps } = await import('../../../di/container.js')
 const { createSelfHostStoreLocalModule } = await import('../../../di/store-local.module.js')
 const { prepareDataDir } = await import('../../store/db/prepare.js')
 const { getDb } = await import('../../store/db/index.js')
 
-beforeEach(() => {
-  clearDocCacheForTests()
-})
+beforeEach(() => {})
 
 const WS = '01RVSYAFF984RBYQRQTG8KAZQD'
 
@@ -68,7 +65,7 @@ function commented(body: string): LoroDoc {
 }
 
 const threadIds = async (path: string): Promise<string[]> =>
-  readCommentThreads(await getDoc(WS, path)).map((thread) => thread.id)
+  readCommentThreads(await loadDocument(WS, path)).map((thread) => thread.id)
 
 async function appWithRealDeps() {
   await prepareDataDir(tmp.dir)
@@ -95,7 +92,9 @@ describe('POST …/documents/:documentId/duplicate', () => {
     const { document } = duplicateDocumentResponseSchema.parse(await res.json())
     expect(document).toMatchObject({ path: 'notes/roadmap-copy', kind: 'markdown' })
     expect(document.name).toBe('roadmap (copy)')
-    expect(readMarkdownBody(await getDoc(WS, 'notes/roadmap-copy'))).toBe('# Roadmap\n\nship it')
+    expect(readMarkdownBody(await loadDocument(WS, 'notes/roadmap-copy'))).toBe(
+      '# Roadmap\n\nship it',
+    )
   })
 
   it('names the copy of an unnamed document at a generated address after its "Untitled 3" label', async () => {
@@ -154,7 +153,7 @@ describe('POST …/documents/:documentId/duplicate', () => {
     // The echo is how a client tells this daemon from one that never read
     // the body and copied the comments anyway.
     expect(answered.withoutAnnotations).toBe(true)
-    expect(readMarkdownBody(await getDoc(WS, 'notes/roadmap-copy'))).toBe('ship it')
+    expect(readMarkdownBody(await loadDocument(WS, 'notes/roadmap-copy'))).toBe('ship it')
     await expect(threadIds('notes/roadmap-copy')).resolves.toEqual([])
     await expect(threadIds('notes/roadmap')).resolves.toEqual(['t1'])
   })

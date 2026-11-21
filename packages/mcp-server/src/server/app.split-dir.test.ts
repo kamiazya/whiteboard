@@ -27,8 +27,7 @@ import { createApp } from './app.js'
 import { documentIdAt, documentOf } from './routes/_test-helpers.js'
 import { disposeAutoCompact, uninstallAutoCompact } from './store/auto-compact.js'
 import { clearDbCacheForTests, closeDb } from './store/db/index.js'
-import { clearDocCacheForTests } from './store/doc-cache.js'
-import { getDoc } from './store/document-store.js'
+import { getWorkspaceDoc, saveWorkspaceDoc } from './store/document-store.js'
 import { loadWorkspaceNames } from './store/names-store.js'
 import { storeScope } from './store/store-scope.js'
 import { _clearWorkspaceDocCacheForTests } from './store/workspace-doc-cache.js'
@@ -51,7 +50,6 @@ beforeEach(async () => {
 afterEach(async () => {
   uninstallAutoCompact()
   await disposeAutoCompact()
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   await closeDb(served)
   await closeDb(ambient)
@@ -80,7 +78,9 @@ async function bootBoth() {
   // one is told apart from one that did not by what it drew or counted.
   const doc = await documentOf(boot.serverDeps, WS, 'note')
   writeSpatialNode(doc, textNode({ id: 'n1', x: 0, y: 0, width: 120, height: 40, text: MARK }))
-  await boot.serverDeps.liveDocuments.save(WS, 'note', doc, { overwrite: true })
+  await boot.serverDeps.liveDocuments.create(WS, 'note', doc.export({ mode: 'snapshot' }), {
+    overwrite: true,
+  })
   const version = await boot.serverDeps.versions.save(WS, 'note', { auto: false })
   const app = createApp({
     authMode: 'local-daemon',
@@ -182,28 +182,23 @@ describe('createApp over a dir the process global does not name', () => {
     expect(await readdir(files)).toEqual([])
   })
 
-  it('reports the served workspaces, documents and cache on the debug dump', async () => {
-    const { app, scope } = await bootBoth()
-    // Resident in the served cache, and nowhere in the ambient one.
-    await getDoc(WS, MARK, scope)
+  it('reports the served workspaces and documents on the debug dump', async () => {
+    const { app } = await bootBoth()
     const res = await app.request('/api/debug')
     const body = (await res.json()) as {
-      workspaces: { workspaceId: string; documents: { path: string; cached: boolean }[] }[]
-      cache: { keys: string[] }
+      workspaces: { workspaceId: string; documents: { path: string }[] }[]
     }
     // Both halves of the listing: which workspaces exist, then which documents.
     expect(body.workspaces.map((w) => w.workspaceId)).toContain(SERVED_ONLY_WORKSPACE)
     const ws = body.workspaces.find((w) => w.workspaceId === WS)
     expect(ws?.documents.map((d) => d.path)).toContain(MARK)
-    expect(ws?.documents.find((d) => d.path === MARK)?.cached).toBe(true)
-    expect(body.cache.keys).toContain(`${WS}/${MARK}`)
   })
 
   it('reads the last compaction stamp off the served dir', async () => {
-    const { app, boot } = await bootBoth()
-    const workspaceDoc = await boot.serverDeps.workspaceDocuments.get(WS)
+    const { app, scope } = await bootBoth()
+    const workspaceDoc = await getWorkspaceDoc(WS, scope)
     setWorkspaceLastCompactedAt(workspaceDoc, 1_234_567)
-    await boot.serverDeps.workspaceDocuments.save(WS, workspaceDoc)
+    await saveWorkspaceDoc(WS, workspaceDoc, scope)
 
     const res = await app.request('/api/runtime/storage')
     expect(((await res.json()) as { lastAutoCompactedAt: number | null }).lastAutoCompactedAt).toBe(
@@ -216,13 +211,13 @@ describe('createApp over a dir the process global does not name', () => {
     [2_000, 1_000],
   ] as const) {
     it(`reports the newest compaction stamp across workspaces (${first} then ${second})`, async () => {
-      const { app, boot } = await bootBoth()
-      const a = await boot.serverDeps.workspaceDocuments.get(WS)
+      const { app, scope } = await bootBoth()
+      const a = await getWorkspaceDoc(WS, scope)
       setWorkspaceLastCompactedAt(a, first)
-      await boot.serverDeps.workspaceDocuments.save(WS, a)
-      const b = await boot.serverDeps.workspaceDocuments.get(SERVED_ONLY_WORKSPACE)
+      await saveWorkspaceDoc(WS, a, scope)
+      const b = await getWorkspaceDoc(SERVED_ONLY_WORKSPACE, scope)
       setWorkspaceLastCompactedAt(b, second)
-      await boot.serverDeps.workspaceDocuments.save(SERVED_ONLY_WORKSPACE, b)
+      await saveWorkspaceDoc(SERVED_ONLY_WORKSPACE, b, scope)
 
       const res = await app.request('/api/runtime/storage')
       expect(

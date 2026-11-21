@@ -404,8 +404,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
 
   mountFolderNameRoute(app, options.serverDeps)
 
-  // Delete a document: evacuate it into the trash, then drop its doc-cache
-  // entry. Its saved versions stay while the trash holds it, so a restore
+  // Delete a document: evacuate it into the trash. Its saved versions stay while the trash holds it, so a restore
   // rejoins them; a purge is what deletes them. Idempotent-shaped 404 for a
   // missing document rather than a throw.
   //

@@ -31,6 +31,7 @@ import { DENY_ALL_STRATEGY } from './security/_test-helpers.js'
 import { createRelyingParty } from './security/oidc-relying-party.js'
 import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
 import { createIsolatedDb, type IsolatedDbHandle } from './store/db/test-helpers.js'
+import { getWorkspaceDoc, saveWorkspaceDoc } from './store/document-store.js'
 
 const tmp = withTempDataDir('whiteboard-client-urls-')
 
@@ -53,7 +54,6 @@ vi.mock('./config.js', () => ({
 
 const { createApp } = await import('./app.js')
 const { createContainer, resolveServerDeps } = await import('../di/container.js')
-const { clearDocCacheForTests } = await import('./store/doc-cache.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
 
 /**
@@ -327,9 +327,7 @@ describe('daemon client URLs reach a route', () => {
   afterAll(async () => {
     await db.dispose()
   })
-  beforeEach(() => {
-    clearDocCacheForTests()
-  })
+  beforeEach(() => {})
   afterEach(() => {
     vi.restoreAllMocks()
   })
@@ -340,7 +338,7 @@ describe('daemon client URLs reach a route', () => {
   async function localDaemonApp() {
     const serverDeps = resolveServerDeps(createContainer(storeMemoryModule))
     await serverDeps.documentIndex.createWorkspace({ workspaceId: WS, segment: 'urls' })
-    await serverDeps.workspaceDocuments.save(WS, await serverDeps.workspaceDocuments.get(WS))
+    await saveWorkspaceDoc(WS, await getWorkspaceDoc(WS))
     return createApp({
       authMode: 'local-daemon',
       token: TOKEN,

@@ -15,11 +15,14 @@ import {
 import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { LoroDoc, type LoroText } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
+import type { LiveDocuments } from '../server-deps.js'
 import { StoredDoc } from '../test-utils/stored-doc.js'
 import { unusedBlobStore } from '../test-utils/unused-blob-store.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
-import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
+import {
+  unusedWorkspaceDocuments,
+  type WorkspaceDocumentsOverDoc,
+} from '../test-utils/unused-workspace-documents.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 import { CausalGapError, syncWriteAnswer } from './sync-write-refusals.js'
 
@@ -54,12 +57,11 @@ describe('a workspace-document sync update that builds on a change the keeper la
   }
 
   function deps(stored: StoredDoc) {
-    const workspaceDocuments: WorkspaceDocuments = {
+    const workspaceDocuments: WorkspaceDocumentsOverDoc = {
       ...unusedWorkspaceDocuments(),
       get: async () => stored.get(),
       save: async (_workspaceId, doc) => stored.save(doc),
       evict: () => stored.evict(),
-      evictProjections: () => {},
     }
     const liveDocuments: LiveDocuments = {
       ...unusedLiveDocuments(),

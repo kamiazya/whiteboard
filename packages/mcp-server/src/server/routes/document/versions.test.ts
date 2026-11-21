@@ -40,7 +40,6 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
   '../../store/document-store.js'
 )
@@ -87,16 +86,13 @@ describe('versions router', () => {
 describe('versions API', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
-    clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
     // Version save refuses a path with no document; seed the canvases the
     // routes below checkpoint — the shape production always has.
     await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
     await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-b', new LoroDoc(), { kind: 'spatial' })
   })
-  afterEach(() => {
-    clearDocCacheForTests()
-  })
+  afterEach(() => {})
 
   it('saves an auto-version immediately when autoVersionQuietMs=0', async () => {
     const app = createDocumentRouter(
@@ -269,7 +265,6 @@ describe('versions API', () => {
     const first = await save()
     // Drop the cached LoroDoc so the second save reads the document back off
     // disk — the state a restarted daemon is always in.
-    clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
     const second = await save()
 
@@ -575,14 +570,11 @@ async function carryManualRows(
 describe('GET /versions/:id/document', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
-    clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
     await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
     await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-b', new LoroDoc(), { kind: 'spatial' })
   })
-  afterEach(() => {
-    clearDocCacheForTests()
-  })
+  afterEach(() => {})
 
   it('answers the canvas as it stood, not as it stands', async () => {
     const app = createDocumentRouter(

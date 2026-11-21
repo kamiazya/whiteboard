@@ -14,11 +14,14 @@ import {
 import { DOCUMENT_NAME_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
+import type { LiveDocuments } from '../server-deps.js'
 import { StoredDoc } from '../test-utils/stored-doc.js'
 import { unusedBlobStore } from '../test-utils/unused-blob-store.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
-import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
+import {
+  unusedWorkspaceDocuments,
+  type WorkspaceDocumentsOverDoc,
+} from '../test-utils/unused-workspace-documents.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 import { DocumentNameTooLongError, UnreadableDocumentMetaError } from './sync-write-refusals.js'
 
@@ -36,12 +39,11 @@ function workspaceSeed(body: string): LoroDoc {
 }
 
 function workspaceDeps(store: StoredDoc) {
-  const workspaceDocuments: WorkspaceDocuments = {
+  const workspaceDocuments: WorkspaceDocumentsOverDoc = {
     ...unusedWorkspaceDocuments(),
     get: async () => store.get(),
     save: async (_workspaceId, doc) => store.save(doc),
     evict: () => store.evict(),
-    evictProjections: () => {},
   }
   const liveDocuments: LiveDocuments = {
     ...unusedLiveDocuments(),

@@ -19,17 +19,6 @@ export class FakeLiveDocuments implements LiveDocuments {
   readonly docs = new Map<string, LoroDoc>()
   /** Kinds by path; a path with no entry is spatial. */
   readonly kinds = new Map<string, DocumentKind>()
-  async get(_workspaceId: string, path: string): Promise<LoroDoc> {
-    let doc = this.docs.get(path)
-    if (doc === undefined) {
-      doc = new LoroDoc()
-      this.docs.set(path, doc)
-    }
-    return doc
-  }
-  async save(_workspaceId: string, path: string, doc: LoroDoc): Promise<void> {
-    this.docs.set(path, doc)
-  }
   async create(_workspaceId: string, path: string, snapshot: Uint8Array): Promise<void> {
     this.docs.set(path, documentFromSnapshot(snapshot))
   }
@@ -84,7 +73,6 @@ export class FakeLiveDocuments implements LiveDocuments {
         }
       },
       evict() {},
-      evictProjections() {},
     }
   }
   async rename(): Promise<void> {
@@ -93,7 +81,6 @@ export class FakeLiveDocuments implements LiveDocuments {
   async delete(): Promise<void> {
     throw new Error('not exercised')
   }
-  evict(): void {}
   async withWriteLock<T>(_workspaceId: string, fn: () => Promise<T>): Promise<T> {
     return fn()
   }

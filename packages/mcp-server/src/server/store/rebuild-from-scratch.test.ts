@@ -37,7 +37,6 @@ const {
   workspaceExists,
   _clearWorkspaceDocCacheForTests,
 } = await import('./document-store.js')
-const { clearDocCacheForTests } = await import('./doc-cache.js')
 const { loadWorkspaceNames, setDocumentDisplayName, setDocumentPinned } = await import(
   './names-store.js'
 )
@@ -49,7 +48,6 @@ let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'rebuild-scratch-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
 })
 afterEach(async () => {
@@ -88,7 +86,6 @@ it('the whole document surface works with no documents table at all, across a re
 
   // ── Restart: drop every in-memory cache, exactly as a fresh daemon
   //    process would over this data dir ──
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
 
   // ── Everything answers from the stored workspace records alone ──

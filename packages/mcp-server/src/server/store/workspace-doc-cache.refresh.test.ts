@@ -36,11 +36,10 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { saveDocument, getDoc, listDocuments, getWorkspaceDoc, onWorkspaceDocUpdated } =
+const { saveDocument, loadDocument, listDocuments, getWorkspaceDoc, onWorkspaceDocUpdated } =
   await import('./document-store.js')
 const { cacheBackedWorkspaceDocs, catchUpWorkspaceDoc, _clearWorkspaceDocCacheForTests } =
   await import('./workspace-doc-cache.js')
-const { clearDocCacheForTests } = await import('./doc-cache.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { getDb } = await import('./db/index.js')
 const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
@@ -51,7 +50,6 @@ const WS = '01RAZ9RNDPVKYWSQEWJ2PKYRZJ'
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'ws-doc-refresh-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
 })
 afterEach(async () => {
@@ -110,11 +108,11 @@ describe('a cached workspace record next to a second process', () => {
 
   it("serves the other process's edit through a per-document projection it already cached", async () => {
     await saveDocument(WS, 'shared', canvasDoc('before'), { kind: 'spatial' })
-    expect(textOf(await getDoc(WS, 'shared'))).toBe('before')
+    expect(textOf(await loadDocument(WS, 'shared'))).toBe('before')
 
     await otherProcessEdits('shared', 'after')
 
-    expect(textOf(await getDoc(WS, 'shared'))).toBe('after')
+    expect(textOf(await loadDocument(WS, 'shared'))).toBe('after')
   })
 
   it('keeps both writes when this process saves after the other one wrote', async () => {
@@ -172,7 +170,7 @@ describe('a cached workspace record next to a second process', () => {
       await saveDocument(WS, 'mine', canvasDoc('mine again'), { kind: 'spatial', overwrite: true })
       const afterSave = heard.length
       await listDocuments(WS)
-      await getDoc(WS, 'mine')
+      await loadDocument(WS, 'mine')
       expect(heard).toHaveLength(afterSave)
     } finally {
       stop()

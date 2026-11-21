@@ -3,14 +3,26 @@ import {
   legacyRecordOps,
   type RecordSession,
 } from '@kamiazya/whiteboard-loro-adapter'
+import type { LoroDoc } from 'loro-crdt'
 import type { WorkspaceDocuments } from '../server-deps.js'
+
+/**
+ * A `WorkspaceDocuments` whose record a test holds as a `LoroDoc`: `get` and
+ * `save` are the test's own, and `withRecord` binds a session over them, so a
+ * double written against the document serves an operation that holds the record
+ * as a session without being written twice. Neither is part of the seam.
+ */
+export interface WorkspaceDocumentsOverDoc extends WorkspaceDocuments {
+  get(workspaceId: string): Promise<LoroDoc>
+  save(workspaceId: string, doc: LoroDoc): Promise<void>
+}
 
 /**
  * A `WorkspaceDocuments` that REFUSES rather than answers — the same idiom
  * and reasoning as `unusedLiveDocuments`: a no-op double would let a test
  * that accidentally reaches the workspace doc pass while asserting nothing.
  */
-export function unusedWorkspaceDocuments(): WorkspaceDocuments {
+export function unusedWorkspaceDocuments(): WorkspaceDocumentsOverDoc {
   const refuse = (method: string) => (): never => {
     throw new Error(
       `WorkspaceDocuments.${method} was called by a test that passed unusedWorkspaceDocuments().` +
@@ -20,11 +32,8 @@ export function unusedWorkspaceDocuments(): WorkspaceDocuments {
   return {
     exists: refuse('exists'),
     get: refuse('get'),
-    // Over whatever `get` and `save` a test supplies, so a double written
-    // against the record as a `LoroDoc` serves an operation that holds it as a
-    // session without being written twice.
     async withRecord<T>(
-      this: WorkspaceDocuments,
+      this: WorkspaceDocumentsOverDoc,
       workspaceId: string,
       fn: (record: RecordSession) => Promise<T>,
     ): Promise<T> {
@@ -37,7 +46,6 @@ export function unusedWorkspaceDocuments(): WorkspaceDocuments {
       }
     },
     save: refuse('save'),
-    evictProjections: refuse('evictProjections'),
     evict: refuse('evict'),
     onUpdated: refuse('onUpdated'),
   }

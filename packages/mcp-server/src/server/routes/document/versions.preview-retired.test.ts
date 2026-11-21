@@ -9,7 +9,7 @@ import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   documentIdAt,
   resolveTestServerDeps,
@@ -36,11 +36,8 @@ beforeEach(async () => {
   await serverDeps.documentIndex.createWorkspace({ workspaceId: WS })
 })
 
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 await import('../../sync-audience.js')
-beforeEach(clearDocCacheForTests)
-afterEach(clearDocCacheForTests)
 
 function updateOf(edit: (doc: LoroDoc) => void): Uint8Array<ArrayBuffer> {
   const doc = new LoroDoc()

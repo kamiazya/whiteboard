@@ -277,9 +277,6 @@ async function createTarget(
     }
     throw err
   }
-  // Guard against a stale cache entry from a since-deleted document at
-  // this path being served instead of the just-written snapshot.
-  live.evict(workspaceId, targetPath)
   await recordMerge(versions, workspaceId, targetPath, versionId)
   const documentId = await documentIdAt(live, workspaceId, targetPath)
   // A document a restore creates is written like any other: its checkpoint and
@@ -422,7 +419,6 @@ async function restoreOneDocument(
   // by path + kind).
   const recreate = async () => {
     await live.create(workspaceId, node.path, pastBytes, { kind: node.meta.kind })
-    live.evict(workspaceId, node.path)
     await announceWritten(
       deps,
       workspaceId,
@@ -547,12 +543,10 @@ async function writePastAtNode(
     })
   } catch (err) {
     workspaceDocuments.evict(workspaceId)
-    workspaceDocuments.evictProjections(workspaceId)
     throw err
   }
   // Nothing to write into: nothing was changed, and the record is as it was.
   if (written === null) return null
-  workspaceDocuments.evictProjections(workspaceId)
   if (written.changed) await announceWritten(deps, workspaceId, written.documentId, path)
   return written
 }
@@ -644,7 +638,6 @@ async function writePast(
       await withinSyncLimits(past, targetPath, recorded)
     } catch (err) {
       deps.workspaceDocuments.evict(workspaceId)
-      deps.workspaceDocuments.evictProjections(workspaceId)
       throw err
     }
     return await writePastAtNode(deps, workspaceId, targetPath, pastBytes, kind, countElements)

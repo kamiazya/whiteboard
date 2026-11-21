@@ -451,17 +451,12 @@ describe('auto-compact', () => {
     expect(await readLastCompactedAt()).toBe(settled)
   })
 
-  it('keeps the cached doc coherent through an auto-compact — the next save does not clobber the compacted record', async () => {
-    // The legacy trap was a cached full doc re-exporting its entire history
-    // over a freshly shallowed record. The workspace record's compaction
-    // writes its OWN live doc's frontier, so the cache needs no eviction —
-    // this pins that a post-compact edit round-trips instead of resurrecting
-    // pre-compact bytes or losing the edit.
+  it('survives an auto-compact — the next save does not clobber the compacted record', async () => {
+    // The legacy trap was a full doc re-exporting its entire history over a
+    // freshly shallowed record. The workspace record's compaction writes its
+    // OWN live doc's frontier — this pins that a post-compact edit round-trips
+    // instead of resurrecting pre-compact bytes or losing the edit.
     const { LoroMap } = await import('loro-crdt')
-    const { peekDoc, clearDocCacheForTests } = await import('./doc-cache.js')
-    const { getDoc } = await import('./document-store.js')
-
-    clearDocCacheForTests()
 
     const doc = new LoroDoc()
     const list = doc.getMovableList('elements')
@@ -480,9 +475,6 @@ describe('auto-compact', () => {
     doc.commit()
     await saveDocument(SESSION1, 'cached', doc, { overwrite: true })
 
-    await getDoc(SESSION1, 'cached')
-    expect(peekDoc(SESSION1, 'cached')).toBeDefined()
-
     scheduleAutoCompact(SESSION1, store, { debounceMs: 50 })
     await _awaitAutoCompactIdleForTests()
     {
@@ -496,12 +488,11 @@ describe('auto-compact', () => {
 
     // Edit and save AFTER the compaction, then reload from stored bytes
     // only: everything survives.
-    const live = await getDoc(SESSION1, 'cached')
+    const live = await loadDocument(SESSION1, 'cached')
     live.getMap('root').set('post-compact', 'edit')
     live.commit()
     await saveDocument(SESSION1, 'cached', live, { overwrite: true })
     const { _clearWorkspaceDocCacheForTests } = await import('./document-store.js')
-    clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
     const reloaded = await loadDocument(SESSION1, 'cached')
     expect(reloaded.getMovableList('elements').length).toBe(60)

@@ -32,19 +32,14 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
-
 const { saveDocument } = await import('../../store/document-store.js')
 const { createLiveDocRouter } = await import('./live-doc.js')
 const { createDocumentRouter } = await import('../document.js')
 
 beforeEach(async () => {
   await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
-  clearDocCacheForTests()
 })
-afterEach(() => {
-  clearDocCacheForTests()
-})
+afterEach(() => {})
 
 describe('live-doc router', () => {
   it('returns a Hono instance', () => {

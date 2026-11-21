@@ -130,10 +130,9 @@ describe('route saves and tool writes serialize on the workspace document', () =
   // The route flow exactly as live-doc.ts and workspace-document.ts run it: resolve the doc
   // AND persist it inside one workspace-lock hold.
   async function routeWrite(path: string, marker: string): Promise<void> {
-    const { getDoc } = await import('./document-store.js')
     const { withWorkspaceWriteLock } = await import('./workspace-lock.js')
     await withWorkspaceWriteLock(SESSION1, async () => {
-      const doc = await getDoc(SESSION1, path)
+      const doc = await loadDocument(SESSION1, path)
       doc.getMap('nodes').set(marker, { id: marker })
       doc.commit()
       await saveDocument(SESSION1, path, doc, { overwrite: true })

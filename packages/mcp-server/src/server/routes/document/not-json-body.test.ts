@@ -21,13 +21,11 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 
 let serverDeps: ServerDeps
 let realId = ''
 beforeEach(async () => {
-  clearDocCacheForTests()
   serverDeps = await resolveTestServerDeps(tmp.dir)
   await createTestDocument(serverDeps, { workspaceId: 'ws1', path: 'real', kind: 'markdown' })
   // 'ws1' is a segment; the index is asked by the canonical id it minted.

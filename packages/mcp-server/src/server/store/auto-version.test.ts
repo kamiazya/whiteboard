@@ -36,7 +36,6 @@ vi.mock('../config.js', () => ({
 
 const { createAutoVersionTrigger } = await import('./auto-version.js')
 const { corruptStoredData } = await import('./corrupt-stored-data.js')
-const { clearDocCacheForTests } = await import('./doc-cache.js')
 const { loadDocument } = await import('./document-store.js')
 const { createDocumentRouter } = await import('../routes/document.js')
 const wsModule = await import('../sync-audience.js')
@@ -129,11 +128,8 @@ describe('createAutoVersionTrigger', () => {
 describe('auto-version corruption handling', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
-    clearDocCacheForTests()
   })
-  afterEach(() => {
-    clearDocCacheForTests()
-  })
+  afterEach(() => {})
 
   it('returns 200 and skips version_created when auto-version save reports corruption', async () => {
     const sendVersionCreated = vi
@@ -171,7 +167,6 @@ describe('auto-version corruption handling', () => {
     expect(versionStore.save).toHaveBeenCalledTimes(1)
     expect(sendVersionCreated).not.toHaveBeenCalled()
 
-    clearDocCacheForTests()
     const serverDoc = await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
     expect(readSpatialCanvas(serverDoc).nodes.map((node) => node.id)).toEqual(['e1'])
   })
@@ -191,11 +186,8 @@ describe('auto-version corruption handling', () => {
 describe('an unchanged document', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
-    clearDocCacheForTests()
   })
-  afterEach(() => {
-    clearDocCacheForTests()
-  })
+  afterEach(() => {})
 
   it('takes no second checkpoint when the newest version already holds this state', async () => {
     const store = new FileVersionStore()

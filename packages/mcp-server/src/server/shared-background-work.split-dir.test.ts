@@ -33,7 +33,6 @@ import {
 import { disposeAutoCompact, uninstallAutoCompact } from './store/auto-compact.js'
 import { type BackupSchedulerOptions, createBackupScheduler } from './store/backup-scheduler.js'
 import { clearDbCacheForTests, closeDb, getDb } from './store/db/index.js'
-import { clearDocCacheForTests } from './store/doc-cache.js'
 import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
 import { _clearWorkspaceDocCacheForTests } from './store/workspace-doc-cache.js'
 
@@ -54,7 +53,6 @@ afterEach(async () => {
   vi.useRealTimers()
   uninstallAutoCompact()
   await disposeAutoCompact()
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   await closeDb(served)
   await closeDb(ambient)
@@ -150,7 +148,9 @@ describe('the shared workers over a dir the process global does not name', () =>
       )
       work.worker?.start()
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
-      await boot.serverDeps.liveDocuments.save(WS, 'note', doc, { overwrite: true })
+      await boot.serverDeps.liveDocuments.create(WS, 'note', doc.export({ mode: 'snapshot' }), {
+        overwrite: true,
+      })
       await vi.advanceTimersByTimeAsync(31_000)
       vi.useRealTimers()
       await work.worker?.stop()

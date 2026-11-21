@@ -49,6 +49,7 @@ import type * as versionEntry from '@kamiazya/whiteboard-server-core/versions/ve
 import { PROMOTE_MAX_JUDGED_SIZE } from '@kamiazya/whiteboard-server-core/versions/version-entry'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { getWorkspaceDoc } from '../../store/document-store.js'
 import {
   documentIdAt,
   documentOf,
@@ -83,7 +84,6 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { createDocumentRouter } = await import('../document.js')
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { _clearWorkspaceDocCacheForTests } = await import('../../store/document-store.js')
 const { createIsolatedDb } = await import('../../store/db/test-helpers.js')
 const { FileVersionStore } = await import('../../store/version-store.js')
@@ -92,7 +92,6 @@ let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'promote-route-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   await seedWorkspaceRow(tempDir, '01M8BBN7JS60N0ZAR13NP8SXBF')
   serverDeps = await resolveTestServerDeps(tempDir)
@@ -440,7 +439,7 @@ it('carries a trashed document so the daemon restores it with its content', asyn
     },
   )
   expect(restored.status).toBe(200)
-  const workspaceDoc = await serverDeps.workspaceDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF')
+  const workspaceDoc = await getWorkspaceDoc('01M8BBN7JS60N0ZAR13NP8SXBF')
   expect(readMarkdownBody(documentContainers(workspaceDoc, GONE_ID))).toBe(
     '# trashed in the browser',
   )
@@ -464,7 +463,7 @@ it.each([
     },
   )
   expect(restored.status).toBe(404)
-  const workspaceDoc = await serverDeps.workspaceDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF')
+  const workspaceDoc = await getWorkspaceDoc('01M8BBN7JS60N0ZAR13NP8SXBF')
   expect(resolveWorkspaceDocumentById(workspaceDoc, GONE_ID)).toBeNull()
 })
 
@@ -499,7 +498,7 @@ it.each([
     },
   )
   expect(other.status).toBe(200)
-  const workspaceDoc = await serverDeps.workspaceDocuments.get('01GMPGTKWFGGGN52ZV6JFQP5HM')
+  const workspaceDoc = await getWorkspaceDoc('01GMPGTKWFGGGN52ZV6JFQP5HM')
   expect(readMarkdownBody(documentContainers(workspaceDoc, GONE_ID))).toBe(
     '# trashed in the browser',
   )
@@ -538,7 +537,7 @@ it('carries saved versions: listed for their document, label kept, restorable to
     { method: 'POST' },
   )
   expect(restored.status).toBe(200)
-  const workspaceDoc = await serverDeps.workspaceDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF')
+  const workspaceDoc = await getWorkspaceDoc('01M8BBN7JS60N0ZAR13NP8SXBF')
   expect(readMarkdownBody(documentContainers(workspaceDoc, ROADMAP_ID))).toBe('# as drafted')
 })
 
@@ -679,9 +678,14 @@ it('answers a restore of a saved state past a sync limit with 413 in the sync re
     edges: [],
   })
   // Stored past the sync judge, as a carried version once was.
-  await serverDeps.liveDocuments.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', oversized, {
-    kind: 'spatial',
-  })
+  await serverDeps.liveDocuments.create(
+    '01M8BBN7JS60N0ZAR13NP8SXBF',
+    'canvas-a',
+    oversized.export({ mode: 'snapshot' }),
+    {
+      kind: 'spatial',
+    },
+  )
   const version = await serverDeps.versions.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', {
     auto: false,
   })
@@ -690,9 +694,14 @@ it('answers a restore of a saved state past a sync limit with 413 in the sync re
     nodes: [textNode({ id: 'kept', text: 'k', x: 0, y: 0, width: 1, height: 1 })],
     edges: [],
   })
-  await serverDeps.liveDocuments.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', live, {
-    overwrite: true,
-  })
+  await serverDeps.liveDocuments.create(
+    '01M8BBN7JS60N0ZAR13NP8SXBF',
+    'canvas-a',
+    live.export({ mode: 'snapshot' }),
+    {
+      overwrite: true,
+    },
+  )
 
   const canvasId = await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
   const res = await app.request(

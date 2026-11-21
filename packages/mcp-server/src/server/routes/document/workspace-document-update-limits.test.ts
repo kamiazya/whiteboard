@@ -30,6 +30,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { getWorkspaceDoc, saveWorkspaceDoc } from '../../store/document-store.js'
 import {
   createTestDocument,
   resolveTestServerDeps,
@@ -53,7 +54,6 @@ const { createDocumentRouter } = await import('../document.js')
 const { loadDocument, _clearWorkspaceDocCacheForTests } = await import(
   '../../store/document-store.js'
 )
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createIsolatedDb } = await import('../../store/db/test-helpers.js')
 
 const WS = '01M8BBN7JS60N0ZAR13NP8SXBF'
@@ -61,7 +61,6 @@ let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'ws-doc-update-limits-'))
   handle = await createIsolatedDb({ dataDir: tempDir })
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   await seedWorkspaceRow(tempDir, WS)
   serverDeps = await resolveTestServerDeps(tempDir)
@@ -103,7 +102,6 @@ async function setup() {
 
 /** What a restarted daemon finds: the board read from storage with every cache dropped. */
 async function nodesAfterRestart(): Promise<string[]> {
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   const doc = await loadDocument(WS, 'c')
   return readSpatialCanvas(doc).nodes.map((node) => node.id)
@@ -182,11 +180,10 @@ describe('a record holding a container under a key past the bound from before it
   /** Plants the key straight into the stored record, as a write before the bound did. */
   async function plantedSetup() {
     const context = await setup()
-    const record = await serverDeps.workspaceDocuments.get(WS)
+    const record = await getWorkspaceDoc(WS)
     nestUnderLongKey(documentContainers(record, context.documentId).getMap('threads'))
     record.commit()
-    await serverDeps.workspaceDocuments.save(WS, record)
-    serverDeps.workspaceDocuments.evictProjections(WS)
+    await saveWorkspaceDoc(WS, record)
     expect(await nodesAfterRestart()).toEqual(['n-a'])
     return context
   }
@@ -217,9 +214,9 @@ describe('a record holding a container under a key past the bound from before it
     const restored = await app.request(trashRestoreApiUrl(WS, documentId), { method: 'POST' })
 
     expect(restored.status).toBe(404)
-    expect(
-      readTrashEntries(await serverDeps.workspaceDocuments.get(WS)).map((row) => row.documentId),
-    ).toEqual([documentId])
+    expect(readTrashEntries(await getWorkspaceDoc(WS)).map((row) => row.documentId)).toEqual([
+      documentId,
+    ])
     expect(await nodesAfterRestart()).toEqual([])
   })
 })

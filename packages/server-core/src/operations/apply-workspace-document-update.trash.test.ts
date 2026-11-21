@@ -19,11 +19,14 @@ import {
 import type { BlobStore } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
+import type { LiveDocuments } from '../server-deps.js'
 import { FakeBlobStore } from '../test-utils/fake-blob-store.js'
 import { StoredDoc } from '../test-utils/stored-doc.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
-import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
+import {
+  unusedWorkspaceDocuments,
+  type WorkspaceDocumentsOverDoc,
+} from '../test-utils/unused-workspace-documents.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 
 const WS = 'ws-1'
@@ -42,12 +45,11 @@ function seed(): LoroDoc {
 }
 
 function deps(store: StoredDoc, blobStore: BlobStore) {
-  const workspaceDocuments: WorkspaceDocuments = {
+  const workspaceDocuments: WorkspaceDocumentsOverDoc = {
     ...unusedWorkspaceDocuments(),
     get: async () => store.get(),
     save: async (_workspaceId, doc) => store.save(doc),
     evict: () => store.evict(),
-    evictProjections: () => {},
   }
   const liveDocuments: LiveDocuments = {
     ...unusedLiveDocuments(),

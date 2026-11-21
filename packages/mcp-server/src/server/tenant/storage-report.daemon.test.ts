@@ -21,7 +21,6 @@ import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { createApp } from '../app.js'
 import { disposeAutoCompact, uninstallAutoCompact } from '../store/auto-compact.js'
 import { clearDbCacheForTests, closeDb } from '../store/db/index.js'
-import { clearDocCacheForTests } from '../store/doc-cache.js'
 import { _clearWorkspaceDocCacheForTests } from '../store/workspace-doc-cache.js'
 import { computeStorageReport } from './storage-report.js'
 
@@ -38,7 +37,6 @@ beforeEach(async () => {
 afterEach(async () => {
   uninstallAutoCompact()
   await disposeAutoCompact()
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   await closeDb(dataDir)
   clearDbCacheForTests()

@@ -6,11 +6,14 @@ import {
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { applyWorkspaceDocumentUpdate } from '../operations/apply-workspace-document-update.js'
-import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
+import type { LiveDocuments } from '../server-deps.js'
 import type { StoredDoc } from './stored-doc.js'
 import { unusedBlobStore } from './unused-blob-store.js'
 import { unusedLiveDocuments } from './unused-live-documents.js'
-import { unusedWorkspaceDocuments } from './unused-workspace-documents.js'
+import {
+  unusedWorkspaceDocuments,
+  type WorkspaceDocumentsOverDoc,
+} from './unused-workspace-documents.js'
 
 /** The one document a `recordHolding` record holds. */
 const RECORD_DOCUMENT_ID = '01BRWAAAAAAAAAAAAAAAAAAAB0'
@@ -38,12 +41,11 @@ export function contentOf(record: LoroDoc): DocumentContainers {
  * sync write takes.
  */
 export function sendRecordEdit(store: StoredDoc, edit: (content: DocumentContainers) => void) {
-  const workspaceDocuments: WorkspaceDocuments = {
+  const workspaceDocuments: WorkspaceDocumentsOverDoc = {
     ...unusedWorkspaceDocuments(),
     get: async () => store.get(),
     save: async (_workspaceId, saved) => store.save(saved),
     evict: () => store.evict(),
-    evictProjections: () => {},
   }
   const liveDocuments: LiveDocuments = {
     ...unusedLiveDocuments(),

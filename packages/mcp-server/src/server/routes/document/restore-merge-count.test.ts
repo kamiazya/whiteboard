@@ -28,7 +28,7 @@ beforeEach(async () => {
   await serverDeps.documentIndex.createWorkspace({ workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF' })
 })
 
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
+const { _clearWorkspaceDocCacheForTests } = await import('../../store/workspace-doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 // Pre-loaded for the same dynamic-import cycle restore.test.ts works around.
 await import('../../sync-audience.js')
@@ -36,8 +36,8 @@ await import('../../sync-audience.js')
 const createRouter = () =>
   createDocumentRouter(testDocumentRouterOptions({ serverDeps, autoVersionQuietMs: 60_000 }))
 
-beforeEach(clearDocCacheForTests)
-afterEach(clearDocCacheForTests)
+beforeEach(_clearWorkspaceDocCacheForTests)
+afterEach(_clearWorkspaceDocCacheForTests)
 
 function nodesModelDocUpdate(nodeIds: string[]): Uint8Array<ArrayBuffer> {
   const doc = new LoroDoc()

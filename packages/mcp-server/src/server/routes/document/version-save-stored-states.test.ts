@@ -26,7 +26,6 @@ vi.mock('../../config.js', () => ({
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
 }))
-const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
   '../../store/document-store.js'
 )
@@ -116,7 +115,6 @@ async function plant(deps: ServerDeps, state: State): Promise<{ id: string; path
     await saveWorkspaceDoc(WS, rec)
   }
   if (state === 'e-corrupt') await corruptRecord()
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   return { id, path }
 }

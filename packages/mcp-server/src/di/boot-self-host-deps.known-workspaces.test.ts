@@ -11,7 +11,6 @@ import { wbDocumentList } from '@kamiazya/whiteboard-server-core'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { disposeAutoCompact, uninstallAutoCompact } from '../server/store/auto-compact.js'
 import { clearDbCacheForTests, closeDb } from '../server/store/db/index.js'
-import { clearDocCacheForTests } from '../server/store/doc-cache.js'
 import { _clearWorkspaceDocCacheForTests } from '../server/store/workspace-doc-cache.js'
 import { resetDataDirForTests, setDataDirForTests } from '../shared/data-dir-secure.js'
 import { bootLocalDeps } from './boot-local-deps.js'
@@ -27,7 +26,6 @@ beforeEach(async () => {
 afterEach(async () => {
   uninstallAutoCompact()
   await disposeAutoCompact()
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   await closeDb(dataDir)
   clearDbCacheForTests()

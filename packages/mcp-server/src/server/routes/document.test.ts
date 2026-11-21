@@ -27,8 +27,6 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { clearDocCacheForTests } = await import('../store/doc-cache.js')
-
 // Dynamically import the Hono app.
 const { createDocumentRouter } = await import('./document.js')
 
@@ -40,12 +38,8 @@ const { createDocumentRouter } = await import('./document.js')
 // itself — a nested document path routed correctly across every sub-router
 // in one request sequence.
 describe('createDocumentRouter composition', () => {
-  beforeEach(() => {
-    clearDocCacheForTests()
-  })
-  afterEach(() => {
-    clearDocCacheForTests()
-  })
+  beforeEach(() => {})
+  afterEach(() => {})
 
   // The router composes nothing of its own: the version store is the root's,
   // so leaving it out is a compile error rather than a second composition path

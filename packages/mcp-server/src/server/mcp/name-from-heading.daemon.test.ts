@@ -166,7 +166,9 @@ describe('a daemon note at a generated path is named after its heading', () => {
     writeMarkdownBody(doc, '# Weekly review\n\nbody')
     doc.commit()
 
-    await deps.liveDocuments.save(WS, 'untitled-3', doc, { kind: 'markdown' })
+    await deps.liveDocuments.create(WS, 'untitled-3', doc.export({ mode: 'snapshot' }), {
+      kind: 'markdown',
+    })
 
     const [entry] = await deps.documentIndex.listDocuments({ workspaceId: WS })
     expect(entry?.path).toBe('untitled-3')

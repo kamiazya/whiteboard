@@ -18,7 +18,6 @@ import { createCanvasEditTool, wbDocumentCreate } from '@kamiazya/whiteboard-ser
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { disposeAutoCompact, uninstallAutoCompact } from '../server/store/auto-compact.js'
 import { clearDbCacheForTests, closeDb } from '../server/store/db/index.js'
-import { clearDocCacheForTests } from '../server/store/doc-cache.js'
 import { _clearWorkspaceDocCacheForTests } from '../server/store/workspace-doc-cache.js'
 import { resetDataDirForTests, setDataDirForTests } from '../shared/data-dir-secure.js'
 import { bootSelfHostDeps } from './boot-self-host-deps.js'
@@ -60,7 +59,6 @@ beforeEach(async () => {
 afterEach(async () => {
   uninstallAutoCompact()
   await disposeAutoCompact()
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   await closeDb(served)
   clearDbCacheForTests()

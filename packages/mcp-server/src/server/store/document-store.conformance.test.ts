@@ -46,12 +46,11 @@ vi.mock('../config.js', () => ({
 const {
   CacheCoherentDocumentIndex,
   cacheBackedWorkspaceDocs,
-  getDoc,
+  loadDocument,
   saveDocument,
   workspaceRegistry,
 } = await import('./document-store.js')
 const { FsBlobStore } = await import('./fs/fs-blob-store.js')
-const { clearDocCacheForTests } = await import('./doc-cache.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 async function makeProductionIndex() {
@@ -62,7 +61,6 @@ async function makeProductionIndex() {
   // previous case is exactly the class this wrapper exists to manage.
   tempDir = await mkdtemp(join(tmpdir(), 'prod-index-conformance-'))
   const handle = await createIsolatedDb({ dataDir: tempDir })
-  clearDocCacheForTests()
   const index = new CacheCoherentDocumentIndex(
     cacheBackedWorkspaceDocs(),
     new FsBlobStore(blobsRoot(tempDir, SELF_HOST_TENANT_ID), tempDir),
@@ -105,15 +103,15 @@ async function makeProductionIndex() {
 /** A document's body through the live-document seam every daemon route reads and saves by. */
 const liveMarkdownContent = {
   async write(workspaceId: string, path: string, marker: string): Promise<void> {
-    const doc = await getDoc(workspaceId, path)
+    const doc = await loadDocument(workspaceId, path)
     writeMarkdownBody(doc, marker)
     await saveDocument(workspaceId, path, doc, { kind: 'markdown', overwrite: true })
   },
   async read(workspaceId: string, path: string): Promise<string> {
-    return readMarkdownBody(await getDoc(workspaceId, path))
+    return readMarkdownBody(await loadDocument(workspaceId, path))
   },
   async comment(workspaceId: string, path: string, threadId: string): Promise<void> {
-    const doc = await getDoc(workspaceId, path)
+    const doc = await loadDocument(workspaceId, path)
     writeCommentThread(doc, {
       id: threadId,
       anchor: { kind: 'document' },
@@ -123,7 +121,7 @@ const liveMarkdownContent = {
     await saveDocument(workspaceId, path, doc, { kind: 'markdown', overwrite: true })
   },
   async threadIds(workspaceId: string, path: string): Promise<string[]> {
-    return readCommentThreads(await getDoc(workspaceId, path))
+    return readCommentThreads(await loadDocument(workspaceId, path))
       .map((thread) => thread.id)
       .sort()
   },
@@ -176,7 +174,7 @@ describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
       await index.createWorkspace({ workspaceId })
       await index.createDocument({ workspaceId, path: 'note', kind: 'markdown' })
       await liveMarkdownContent.write(workspaceId, 'note', 'the source')
-      expect(readMarkdownBody(await getDoc(workspaceId, 'note-copy'))).toBe('')
+      expect(readMarkdownBody(await loadDocument(workspaceId, 'note-copy'))).toBe('')
 
       await index.duplicateDocument({ workspaceId, path: 'note' })
 
@@ -197,13 +195,12 @@ describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
       const created = await index.createDocument({ workspaceId, path: 'note', kind: 'markdown' })
       await liveMarkdownContent.write(workspaceId, 'note', 'the source')
       await index.deleteDocument({ workspaceId, path: 'note' })
-      expect(readMarkdownBody(await getDoc(workspaceId, 'note'))).toBe('')
+      expect(readMarkdownBody(await loadDocument(workspaceId, 'note'))).toBe('')
 
       await index.restoreDocument({ workspaceId, documentId: created.documentId })
 
       await expect(liveMarkdownContent.read(workspaceId, 'note')).resolves.toBe('the source')
       await liveMarkdownContent.write(workspaceId, 'note', 'the source + edit')
-      clearDocCacheForTests()
       await expect(liveMarkdownContent.read(workspaceId, 'note')).resolves.toBe('the source + edit')
     } finally {
       await dispose()
@@ -221,12 +218,12 @@ describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
       writeDocumentKind(first, 'markdown')
       writeMarkdownBody(first, 'the deleted document')
       await saveDocument(workspaceId, 'note', first, { kind: 'markdown' })
-      expect(readMarkdownBody(await getDoc(workspaceId, 'note'))).toBe('the deleted document')
+      expect(readMarkdownBody(await loadDocument(workspaceId, 'note'))).toBe('the deleted document')
 
       await index.deleteDocument({ workspaceId, path: 'note' })
       await index.createDocument({ workspaceId, path: 'note', kind: 'markdown' })
 
-      expect(readMarkdownBody(await getDoc(workspaceId, 'note'))).toBe('')
+      expect(readMarkdownBody(await loadDocument(workspaceId, 'note'))).toBe('')
     } finally {
       await dispose()
     }

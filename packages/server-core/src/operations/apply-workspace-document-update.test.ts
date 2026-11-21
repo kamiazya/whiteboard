@@ -9,10 +9,13 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
 import { setLogSink } from '../log.js'
-import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
+import type { LiveDocuments } from '../server-deps.js'
 import { unusedBlobStore } from '../test-utils/unused-blob-store.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
-import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
+import {
+  unusedWorkspaceDocuments,
+  type WorkspaceDocumentsOverDoc,
+} from '../test-utils/unused-workspace-documents.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 
 const WS = 'ws-1'
@@ -37,8 +40,6 @@ function fakes() {
   let lockDepth = 0
   const workspaceDoc = new LoroDoc()
   let saved = false
-  let evicted = false
-  let evictedBeforeUnlock = false
   const live: LiveDocuments = {
     ...unusedLiveDocuments(),
     async withWriteLock<T>(_workspaceId: string, fn: () => Promise<T>): Promise<T> {
@@ -46,12 +47,11 @@ function fakes() {
       try {
         return await fn()
       } finally {
-        evictedBeforeUnlock = evicted
         lockDepth -= 1
       }
     },
   }
-  const workspaceDocuments: WorkspaceDocuments = {
+  const workspaceDocuments: WorkspaceDocumentsOverDoc = {
     ...unusedWorkspaceDocuments(),
     async get(_workspaceId) {
       calls.push({ method: 'get', lockDepth })
@@ -61,10 +61,6 @@ function fakes() {
       calls.push({ method: 'save', lockDepth })
       saved = true
     },
-    evictProjections(_workspaceId) {
-      calls.push({ method: 'evictProjections', lockDepth })
-      evicted = true
-    },
   }
   return {
     live,
@@ -72,8 +68,6 @@ function fakes() {
     calls,
     workspaceDoc,
     wasSaved: () => saved,
-    wasEvicted: () => evicted,
-    wasEvictedBeforeUnlock: () => evictedBeforeUnlock,
   }
 }
 
@@ -91,7 +85,7 @@ function cachingWorkspaceDocuments() {
   const cache = new Map<string, LoroDoc>()
   const dropped: string[] = []
   let saves = 0
-  const workspaceDocuments: WorkspaceDocuments = {
+  const workspaceDocuments: WorkspaceDocumentsOverDoc = {
     ...unusedWorkspaceDocuments(),
     async get(workspaceId) {
       const cached = cache.get(workspaceId) ?? new LoroDoc()
@@ -100,9 +94,6 @@ function cachingWorkspaceDocuments() {
     },
     async save() {
       saves += 1
-    },
-    evictProjections(workspaceId) {
-      dropped.push(`projections ${workspaceId}`)
     },
     evict(workspaceId) {
       dropped.push(`record ${workspaceId}`)
@@ -125,7 +116,7 @@ afterEach(() => {
 })
 
 describe('applyWorkspaceDocumentUpdate', () => {
-  it('imports a valid update, saves, and evicts projections before the lock releases', async () => {
+  it('imports a valid update and saves it inside the workspace lock', async () => {
     const fake = fakes()
     const result = await applyWorkspaceDocumentUpdate(
       {
@@ -138,11 +129,7 @@ describe('applyWorkspaceDocumentUpdate', () => {
     expect(result).toMatchObject({ kind: 'applied' })
     expect(fake.wasSaved()).toBe(true)
     expect(readWorkspaceDocuments(fake.workspaceDoc).map((d) => d.path)).toEqual(['canvas-a'])
-    // Dropped INSIDE the lock: a reader grabbing a stale per-document
-    // projection between import and eviction would diff old content back
-    // over this import on its next save.
-    expect(fake.wasEvictedBeforeUnlock()).toBe(true)
-    expect(fake.calls.map((c) => c.method)).toEqual(['get', 'save', 'evictProjections'])
+    expect(fake.calls.map((c) => c.method)).toEqual(['get', 'save'])
     for (const call of fake.calls) {
       expect(call, `${call.method} ran outside the workspace write lock`).toMatchObject({
         lockDepth: 1,
@@ -150,7 +137,7 @@ describe('applyWorkspaceDocumentUpdate', () => {
     }
   })
 
-  it('answers malformed-update for garbage bytes, saving and evicting NOTHING', async () => {
+  it('answers malformed-update for garbage bytes, saving NOTHING', async () => {
     const fake = fakes()
     const result = await applyWorkspaceDocumentUpdate(
       {
@@ -162,10 +149,9 @@ describe('applyWorkspaceDocumentUpdate', () => {
     )
     expect(result).toEqual({ kind: 'malformed-update' })
     expect(fake.wasSaved()).toBe(false)
-    expect(fake.wasEvicted()).toBe(false)
   })
 
-  it('an engine trap drops the poisoned record and its projections, and is not called malformed', async () => {
+  it('an engine trap drops the poisoned record, and is not called malformed', async () => {
     // A trap leaves the instance holding a lock it never released, so every
     // later call on it traps too: kept cached, it takes the whole workspace
     // down until the daemon restarts.
@@ -186,7 +172,7 @@ describe('applyWorkspaceDocumentUpdate', () => {
     ).catch((err: unknown) => err)
 
     expect(failure).toBeInstanceOf(DocumentEngineTrapError)
-    expect(fake.dropped).toEqual([`record ${WS}`, `projections ${WS}`])
+    expect(fake.dropped).toEqual([`record ${WS}`])
     expect(fake.saves()).toBe(0)
     expect(await fake.workspaceDocuments.get(WS)).not.toBe(poisoned)
     expect(records).toContainEqual(
@@ -227,7 +213,7 @@ describe('applyWorkspaceDocumentUpdate', () => {
 
       expect(result).toEqual({ kind: 'placement-refused' })
       expect(fake.saves()).toBe(0)
-      expect(fake.dropped).toEqual([`record ${WS}`, `projections ${WS}`])
+      expect(fake.dropped).toEqual([`record ${WS}`])
       expect(readWorkspaceDocuments(await fake.workspaceDocuments.get(WS))).toEqual([])
     })
 

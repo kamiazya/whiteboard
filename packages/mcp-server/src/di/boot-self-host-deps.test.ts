@@ -24,7 +24,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { documentOf } from '../server/routes/_test-helpers.js'
 import { disposeAutoCompact, uninstallAutoCompact } from '../server/store/auto-compact.js'
 import { clearDbCacheForTests, closeDb, getDb } from '../server/store/db/index.js'
-import { clearDocCacheForTests } from '../server/store/doc-cache.js'
+import { getWorkspaceDoc, saveWorkspaceDoc } from '../server/store/document-store.js'
 import { purgeDanglingFiles } from '../server/store/file-gc.js'
 import { createFileGcSweeper } from '../server/store/file-gc-sweeper.js'
 import { loadWorkspaceNames, setWorkspaceName } from '../server/store/names-store.js'
@@ -47,7 +47,6 @@ beforeEach(async () => {
 afterEach(async () => {
   uninstallAutoCompact()
   await disposeAutoCompact()
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   await closeDb(served)
   clearDbCacheForTests()
@@ -69,7 +68,12 @@ describe('bootSelfHostDeps over a dir the process global does not name', () => {
     })
 
     const doc = await documentOf(deps, '01ZVM89A4A1V9FS03Z9J64KEK1', 'note')
-    await deps.liveDocuments.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'note', doc, { overwrite: true })
+    await deps.liveDocuments.create(
+      '01ZVM89A4A1V9FS03Z9J64KEK1',
+      'note',
+      doc.export({ mode: 'snapshot' }),
+      { overwrite: true },
+    )
     const version = await deps.versions.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'note', {
       auto: false,
     })
@@ -83,9 +87,10 @@ describe('bootSelfHostDeps over a dir the process global does not name', () => {
       displayName: 'Served',
     })
     expect(await deps.workspaceDocuments.exists('01ZVM89A4A1V9FS03Z9J64KEK1')).toBe(true)
-    await deps.workspaceDocuments.save(
+    await saveWorkspaceDoc(
       '01ZVM89A4A1V9FS03Z9J64KEK1',
-      await deps.workspaceDocuments.get('01ZVM89A4A1V9FS03Z9J64KEK1'),
+      await getWorkspaceDoc('01ZVM89A4A1V9FS03Z9J64KEK1', storeScope(served)),
+      storeScope(served),
     )
     expect(
       (await deps.liveDocuments.list('01ZVM89A4A1V9FS03Z9J64KEK1')).map((entry) => entry.path),

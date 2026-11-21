@@ -44,17 +44,14 @@ vi.mock('./headless-renderer.js', () => ({
 
 const { exportCanvasHeadless, exportCanvasHeadlessSvg } = await import('./headless-export.js')
 const { saveDocument, documentExists } = await import('../store/document-store.js')
-const { clearDocCacheForTests } = await import('../store/doc-cache.js')
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-headless-export-test-'))
-  clearDocCacheForTests()
   renderSpy.mockClear()
   renderSvgSpy.mockClear()
 })
 
 afterEach(async () => {
-  clearDocCacheForTests()
   await rm(tempDir, { recursive: true, force: true })
 })
 

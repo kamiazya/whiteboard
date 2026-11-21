@@ -543,7 +543,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/store/db/index.ts#buildDb': 62,
   // Renamed from compactDocument: the per-document address went.
   'packages/mcp-server/src/server/store/document-store.ts#compactWorkspace': 87,
-  'packages/mcp-server/src/server/store/document-store.ts#saveDocument': 54,
   'packages/mcp-server/src/server/store/file-gc-sweeper.ts#createFileGcSweeper': 113,
   'packages/mcp-server/src/server/store/file-gc.ts#purgeDanglingFiles': 80,
   'packages/mcp-server/src/server/store/libsql/libsql-document-store.ts#saveCompactedSnapshot': 75,

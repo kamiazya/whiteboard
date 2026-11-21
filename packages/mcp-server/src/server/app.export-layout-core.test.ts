@@ -20,7 +20,6 @@ import { createApp } from './app.js'
 import { documentIdAt, documentOf } from './routes/_test-helpers.js'
 import { disposeAutoCompact, uninstallAutoCompact } from './store/auto-compact.js'
 import { clearDbCacheForTests, closeDb } from './store/db/index.js'
-import { clearDocCacheForTests } from './store/doc-cache.js'
 import { _clearWorkspaceDocCacheForTests } from './store/workspace-doc-cache.js'
 
 const WS = '01ZVM89A4A1V9FS03Z9J64KEK2'
@@ -35,7 +34,6 @@ beforeEach(async () => {
 afterEach(async () => {
   uninstallAutoCompact()
   await disposeAutoCompact()
-  clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
   await closeDb(dataDir)
   clearDbCacheForTests()
@@ -49,7 +47,9 @@ async function appAskingForTheCore() {
   await wbDocumentCreate(boot.serverDeps, { workspaceId: WS, path: 'board', kind: 'spatial' })
   const doc = await documentOf(boot.serverDeps, WS, 'board')
   writeSpatialNode(doc, textNode({ id: 'n1', x: 0, y: 0, width: 120, height: 40, text: 'hi' }))
-  await boot.serverDeps.liveDocuments.save(WS, 'board', doc, { overwrite: true })
+  await boot.serverDeps.liveDocuments.create(WS, 'board', doc.export({ mode: 'snapshot' }), {
+    overwrite: true,
+  })
   const real = boot.serverDeps.layoutCore
   if (real === undefined) throw new Error('the booted deps carry no layout core')
   const layoutCore = vi.fn((): Promise<LayoutCore> => real())
