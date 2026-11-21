@@ -1,15 +1,22 @@
 import { bytesToBase64, newImageRef } from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
-import { LoroDoc } from 'loro-crdt'
+import { LoroDoc, LoroMap } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { DocumentContainers } from './containers.js'
 import { createCrdtEngine } from './engine/engine.js'
 import { ownedLease, withLease } from './engine/lease.js'
 import { scanFileReferencesOfLease } from './engine/lease-file-references.js'
-import { type FileReferenceReads, scanFileReferences } from './file-references.js'
+import {
+  type FileReferenceReads,
+  scanFileReferences,
+  scanFileReferencesOfRecord,
+} from './file-references.js'
 import { collectImageRefIds } from './image-refs.js'
+import { legacyRecordOps } from './legacy-record-ops.js'
 import { writeSpatialCanvas } from './loro-bridge.js'
 import { writeProposal } from './proposals.js'
+import { bindRecordOps } from './record-ops.js'
+import { RetiredStoredShapeError } from './retired-stored-shape.js'
 import { recordTrashEntry, type TrashEntry } from './workspace-trash.js'
 import {
   createWorkspaceDocumentAtPath,
@@ -89,8 +96,16 @@ async function scanThroughLease(record: LoroDoc, reads: FileReferenceReads) {
   )
 }
 
+/** The scan as a keeper holding the record through a session reads it. */
+const scanThroughSession = (record: LoroDoc, reads: FileReferenceReads) =>
+  scanFileReferencesOfRecord(
+    bindRecordOps(legacyRecordOps, record, async () => {}),
+    reads,
+  )
+
 const SCANS = [
   ['a LoroDoc', scanFileReferences],
+  ['a record session', scanThroughSession],
   ['an engine lease', scanThroughLease],
 ] as const
 
@@ -291,5 +306,24 @@ describe.each(SCANS)('scanFileReferences over %s', (_name, scanOf) => {
 
     // One trash entry, one live document, and one version for each of them.
     expect(yields).toBe(4)
+  })
+})
+
+describe.each([
+  ['a LoroDoc', scanFileReferences],
+  ['a record session', scanThroughSession],
+] as const)('scanFileReferences over %s, for a document in a retired shape', (_name, scanOf) => {
+  it('refuses with the error the document itself raises, so the operator is told what to do', async () => {
+    const record = new LoroDoc()
+    createWorkspaceDocumentAtPath(record, { path: 'old', documentId: LIVE, kind: 'spatial' })
+    const retired = new LoroDoc()
+    const elements = retired.getMovableList('elements')
+    elements.insertContainer(0, new LoroMap()).set('id', 'e1')
+    retired.commit()
+    writeWorkspaceDocumentContent(record, LIVE, retired)
+
+    await expect(scanOf(record, { trashBytes: noTrash })).rejects.toBeInstanceOf(
+      RetiredStoredShapeError,
+    )
   })
 })

@@ -60,6 +60,7 @@ export {
   type FileReferenceHolder,
   type FileReferenceReads,
   scanFileReferences,
+  scanFileReferencesOfRecord,
   type UnjudgedFileHolder,
 } from './file-references.js'
 export { collectImageRefIds } from './image-refs.js'
