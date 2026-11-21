@@ -536,6 +536,17 @@ export async function getDocumentKind(
   return (await entryAtPath(workspaceId, path, scope))?.kind ?? null
 }
 
+/** What the stored record weighs, snapshot and log together, and how many deltas the log holds. */
+async function storedSize(
+  store: Awaited<ReturnType<typeof documentStoreReady>>,
+  docRef: { kind: 'workspace-tree'; workspaceId: string },
+  manifest: { totalBytes: number },
+): Promise<{ beforeBytes: number; deltaCount: number }> {
+  const { updates } = await store.loadDeltas({ docRef, afterSeq: null })
+  const logBytes = updates.reduce((sum, delta) => sum + delta.byteLength, 0)
+  return { beforeBytes: manifest.totalBytes + logBytes, deltaCount: updates.length }
+}
+
 /**
  * Compacts the WORKSPACE record: a shallow snapshot cut at the earliest
  * frontiers any workspace-scoped version still needs, superseding the delta
@@ -577,13 +588,7 @@ export async function compactWorkspace(
     if (header === null) {
       return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
     }
-    const { manifest } = header
-    const { updates: storedDeltas } = await documentStore.loadDeltas({
-      docRef,
-      afterSeq: null,
-    })
-    const beforeBytes =
-      manifest.totalBytes + storedDeltas.reduce((sum, delta) => sum + delta.byteLength, 0)
+    const { beforeBytes, deltaCount } = await storedSize(documentStore, docRef, header.manifest)
 
     const points = await versionStore.workspaceVersionFrontiers(workspaceId)
     if (points.length === 0) {
@@ -615,7 +620,7 @@ export async function compactWorkspace(
         // Exactly the log this fold consumed. Anything appended since the read
         // above is neither in `shallow` nor superseded by it, and dropping it
         // would lose an edit that arrived while compaction ran.
-        supersededDeltaCount: storedDeltas.length,
+        supersededDeltaCount: deltaCount,
         // ADR-0020. The workspace lock above serialises writers inside THIS
         // process; the fence is what covers a second process. Ignoring the
         // refusal is deliberate here and only here: this path folds history
