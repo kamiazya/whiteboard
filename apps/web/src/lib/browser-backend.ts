@@ -357,19 +357,7 @@ export class BrowserBackend implements DocumentBackend {
         this.refuse(refusalOf(imported.breach), record, handlers)
         return
       }
-      // What the update removed is in the trash before it is saved, so the
-      // removal never reaches the store without a way back.
-      try {
-        await evacuateRemoved(this.blobs, record, since)
-      } catch (err) {
-        // The removal is already in this copy and has no way back. Not saved,
-        // and not kept: the stored record replaces it and the push is refused
-        // as a whole, so the session pushes what it holds again.
-        getAppLogger('browser-backend').warn('trashing what an update removed failed', err)
-        await this.reloadFromStorage(workspaceId, record, handlers)
-        this.handlers?.onError?.('storage-failure')
-        return
-      }
+      if (!(await this.trashRemoved(record, since, workspaceId, handlers))) return
       // A note is named after its body's heading while nobody has named it —
       // before the save, so the name rides the same write. No kind check: a
       // canvas has an empty body container, so it announces no title and the
@@ -390,6 +378,30 @@ export class BrowserBackend implements DocumentBackend {
     } catch (err) {
       if (isWorkspaceRemovedError(err)) this.withdraw(record, handlers)
       else this.handlers?.onError?.('storage-failure')
+    }
+  }
+
+  /**
+   * What the update removed goes to the trash before it is saved, so the
+   * removal never reaches the store without a way back. When that fails the
+   * removal is already in this copy with no way back: not saved, and not
+   * kept — the stored record replaces it and the push is refused as a whole,
+   * so the session pushes what it holds again. Answers whether to go on.
+   */
+  private async trashRemoved(
+    record: RecordLease,
+    since: Parameters<typeof evacuateRemoved>[2],
+    workspaceId: string,
+    handlers: DocumentBackendHandlers | null,
+  ): Promise<boolean> {
+    try {
+      await evacuateRemoved(this.blobs, record, since)
+      return true
+    } catch (err) {
+      getAppLogger('browser-backend').warn('trashing what an update removed failed', err)
+      await this.reloadFromStorage(workspaceId, record, handlers)
+      this.handlers?.onError?.('storage-failure')
+      return false
     }
   }
 
