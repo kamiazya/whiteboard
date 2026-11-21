@@ -28,8 +28,18 @@ function harness() {
   }
   const tail = createWorkspaceTail({
     subscribedWorkspaces: () => subscribed,
-    docs,
-    withLiveDoc: async (workspaceId, fn) => fn(await liveDoc(workspaceId)),
+    follow: async (workspaceId, cursor) => {
+      const doc = await liveDoc(workspaceId)
+      if (cursor !== undefined) return docs.catchUp(workspaceId, doc, cursor)
+      // First sight: reconciled from the record, and only what the document gained goes out.
+      const before = doc.version()
+      const reconciled = await docs.catchUp(workspaceId, doc, { generation: null, afterSeq: null })
+      return {
+        cursor: reconciled.cursor,
+        updates:
+          doc.version().compare(before) === 0 ? [] : [doc.export({ mode: 'update', from: before })],
+      }
+    },
     emit: (workspaceId, update) => emitted.push({ workspaceId, update }),
     intervalMs: 50,
   })

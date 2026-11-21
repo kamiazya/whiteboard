@@ -179,9 +179,14 @@ it('saving a workspace record registers the workspace — a tool-created workspa
   // workspaceExists=false — so the WS route refuses the very workspace the
   // tool just created (4404) and the browser never gets a snapshot.
   const { cacheBackedWorkspaceDocs, workspaceExists } = await import('./document-store.js')
+  const { releaseWorkspaceDocLoan } = await import('./workspace-doc-cache.js')
   const docs = cacheBackedWorkspaceDocs()
   const record = await docs.create('0111YQJVD91QDJQ5RSC3CAAVNH')
-  await docs.save('0111YQJVD91QDJQ5RSC3CAAVNH', record)
+  try {
+    await docs.save('0111YQJVD91QDJQ5RSC3CAAVNH', record)
+  } finally {
+    releaseWorkspaceDocLoan(record)
+  }
 
   expect(await workspaceExists('0111YQJVD91QDJQ5RSC3CAAVNH')).toBe(true)
 })

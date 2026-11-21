@@ -3,16 +3,10 @@ import type {
   DocumentSummary,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
-  createWorkspaceDocumentAtPath,
   documentFromSnapshot,
+  type RecordSession,
   readDocumentKind,
-  readWorkspaceDocuments,
-  readWorkspaceNodes,
-  resolveWorkspaceDocument,
-  setWorkspaceLastCompactedAt,
-  updateWorkspaceDocumentMeta,
   type WorkspaceDocumentEntry,
-  writeDocumentContentAndName,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import {
@@ -25,8 +19,6 @@ import {
   DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
   DocumentNotFoundError,
   DocumentPathTakenError,
-  refuseNewDocuments,
-  refuseNewFoldersAt,
   type WorkspaceEntry,
   type WorkspaceLookup,
   WorkspaceNotFoundError,
@@ -36,24 +28,23 @@ import type {
   LoroWorkspaceDocumentIndex,
   WorkspaceRegistry,
 } from '@kamiazya/whiteboard-workspace-index'
-import type { LoroDoc } from 'loro-crdt'
+import { encodeFrontiers, type LoroDoc } from 'loro-crdt'
 import { getLogger } from '../log.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { daemonBlobStore } from './backup-guarded-blob-store.js'
 import { CacheCoherentDocumentIndex } from './cache-coherent-document-index.js'
+import { compactionCutOfRecord } from './compaction-cut.js'
 import { CorruptStoredDataError } from './corrupt-stored-data.js'
 import { renameWorkspaceRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
+import { placeDocumentInTree } from './document-placement.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import type { VersionStore } from './version-store.js'
 import {
   cacheBackedWorkspaceDocs,
   catchUpWorkspaceDoc,
-  compactionCutOfDoc,
-  evictWorkspaceDocCache,
-  saveWorkspaceDoc,
   withStoredWorkspaceRecord,
-  withWorkspaceDocument,
+  withWorkspaceRecord,
 } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -66,11 +57,10 @@ export {
   catchUpWorkspaceDoc,
   emitWorkspaceDocUpdated,
   evictWorkspaceDocCache,
+  followWorkspaceRecord,
   getWorkspaceDoc,
   loadDocument,
   onWorkspaceDocUpdated,
-  saveWorkspaceDoc,
-  withWorkspaceDocument,
 } from './workspace-doc-cache.js'
 
 // Give the error a stable name so callers, including MCP tools, can detect overwrite conflicts.
@@ -97,6 +87,17 @@ export async function resolveDocumentIdAtPath(
 }
 
 const assertedAs = <T>() => ({ parse: (value: unknown) => value as T })
+
+/** The document the tree places at `path`, as `record` holds it. */
+function entryAtPathIn(
+  record: RecordSession,
+  path: string,
+): Promise<{ documentId: string; kind: DocumentKind } | null> {
+  return record.read(
+    { query: 'workspaceDocumentEntry', args: { path } },
+    assertedAs<{ documentId: string; kind: DocumentKind } | null>(),
+  )
+}
 
 /** The document the tree places at `path`, read off the stored record; `null` when it places none, or holds no record. */
 async function entryAtPath(
@@ -232,71 +233,6 @@ export async function workspaceTreeIndex(scope: StoreScope): Promise<LoroWorkspa
 }
 
 /**
- * Put this document's content in the workspace tree, creating its node when
- * the path is new.
- *
- * A save that names no kind and finds none on the tree or in the doc's own
- * bytes is a lazy-create of an empty document (an update route hit on an
- * unknown path); the spatial editor is what opens those, so `'spatial'` is
- * the honest default — not a guess about someone else's data.
- *
- * An EXPLICIT kind is an intentional sync request (restore reconciling a
- * different-kind source's content onto an existing target); a plain re-save
- * omits it and must never touch the value.
- *
- * The write answers false when the tree already gave this path to a
- * DIFFERENT document. With no legacy plane to fall back to, writing anywhere
- * else would fork storage silently, so it refuses loudly instead.
- */
-function placeDocumentInTree({
-  workspaceDoc,
-  workspaceId,
-  path,
-  documentId,
-  existingEntry,
-  requestedKind,
-  doc,
-  scope,
-}: {
-  workspaceDoc: LoroDoc
-  workspaceId: string
-  path: string
-  documentId: string
-  existingEntry: ReturnType<typeof resolveWorkspaceDocument>
-  requestedKind: DocumentKind | undefined
-  doc: LoroDoc
-  scope: StoreScope
-}): void {
-  const kindForTree = requestedKind ?? existingEntry?.kind ?? readDocumentKind(doc) ?? 'spatial'
-  if (existingEntry === null) {
-    // A path the tree does not hold is a NEW document — the per-document
-    // update's lazy create among them — so it answers to the workspace's
-    // document and folder ceilings like every other mint: placing it
-    // creates every folder on its path the tree does not hold yet.
-    refuseNewDocuments(readWorkspaceDocuments(workspaceDoc).length)
-    refuseNewFoldersAt(readWorkspaceNodes(workspaceDoc), path)
-  }
-  try {
-    if (existingEntry === null) {
-      createWorkspaceDocumentAtPath(workspaceDoc, { path, documentId, kind: kindForTree })
-    } else if (requestedKind !== undefined && existingEntry.kind !== requestedKind) {
-      updateWorkspaceDocumentMeta(workspaceDoc, documentId, { kind: requestedKind })
-    }
-    if (!writeDocumentContentAndName(workspaceDoc, documentId, doc)) {
-      throw new ConflictError(
-        `Path "${workspaceId}/${path}" is held by a different document in the workspace tree.`,
-      )
-    }
-  } catch (err) {
-    // These write into the CACHED record as they go, so a throw part-way
-    // leaves ops — a new node, the roots written so far — that the next save
-    // of any document here would persist as though this one had succeeded.
-    evictWorkspaceDocCache(workspaceId, scope)
-    throw err
-  }
-}
-
-/**
  * Called after every successful `saveDocument`.
  *
  * A plain notification, not a compaction hook: the store does not name a
@@ -339,6 +275,49 @@ export async function saveDocumentBytes(
   await saveDocument(workspaceId, path, documentFromSnapshot(snapshot), options, scope)
 }
 
+/** Places `doc` at `path` in `record` and persists it: refusing a taken path unless told to overwrite, and a path another document holds. */
+async function saveIntoRecord(
+  record: RecordSession,
+  input: {
+    workspaceId: string
+    path: string
+    doc: LoroDoc
+    options: { overwrite?: boolean; kind?: DocumentKind }
+    scope: StoreScope
+  },
+): Promise<void> {
+  const { workspaceId, path, doc, options, scope } = input
+  const existingEntry = await entryAtPathIn(record, path)
+  const existingDocumentId = existingEntry?.documentId ?? null
+  if (existingDocumentId !== null && options.overwrite !== true) {
+    throw new ConflictError(
+      `Document "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
+    )
+  }
+  // A ULID, not a nanoid: the document index creates documents in this
+  // same tree and the port's DocumentEntry accepts only a canonical ULID,
+  // so a second minting policy here would keep producing documents the
+  // agent surface has to skip. One tree, one id space.
+  const documentId = existingDocumentId ?? generateDocumentId()
+  const placed = await placeDocumentInTree({
+    record,
+    workspaceId,
+    documentId,
+    path,
+    existingEntry,
+    requestedKind: options.kind,
+    statedKind: readDocumentKind(doc) ?? null,
+    snapshot: new Uint8Array(doc.export({ mode: 'snapshot' })),
+    scope,
+  })
+  if (!placed) {
+    throw new ConflictError(
+      `Path "${workspaceId}/${path}" is held by a different document in the workspace tree.`,
+    )
+  }
+  await record.save()
+}
+
 export async function saveDocument(
   workspaceId: string,
   path: string,
@@ -360,31 +339,9 @@ export async function saveDocument(
     // it); the documents rows are not written here — the tree is the
     // whole record of what exists.
     await upsertWorkspaceRow(db, workspaceId)
-    await withWorkspaceDocument(workspaceId, scope, async (workspaceDoc) => {
-      const existingEntry = resolveWorkspaceDocument(workspaceDoc, path)
-      const existingDocumentId = existingEntry?.documentId ?? null
-      if (existingDocumentId !== null && options.overwrite !== true) {
-        throw new ConflictError(
-          `Document "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
-        )
-      }
-      // A ULID, not a nanoid: the document index creates documents in this
-      // same tree and the port's DocumentEntry accepts only a canonical ULID,
-      // so a second minting policy here would keep producing documents the
-      // agent surface has to skip. One tree, one id space.
-      const documentId = existingDocumentId ?? generateDocumentId()
-      placeDocumentInTree({
-        workspaceDoc,
-        workspaceId,
-        path,
-        documentId,
-        existingEntry,
-        requestedKind: options.kind,
-        doc,
-        scope,
-      })
-      await saveWorkspaceDoc(workspaceId, workspaceDoc, scope)
-    })
+    await withWorkspaceRecord(workspaceId, scope, (record) =>
+      saveIntoRecord(record, { workspaceId, path, doc, options, scope }),
+    )
     notifyDocumentSaved(workspaceId, path)
   })
 }
@@ -636,10 +593,13 @@ export async function compactWorkspace(
     // The live cached workspace document IS the current state — every write
     // path mutates it under the lock held here — so the fold exports from
     // it instead of re-reading stored bytes.
-    return withWorkspaceDocument(workspaceId, scope, async (doc) => {
+    return withWorkspaceRecord(workspaceId, scope, async (record) => {
       // Causal, never by date: a carried row may date itself before its point.
-      const cut = compactionCutOfDoc(doc, points)
-      const shallow = cut === null ? null : doc.export({ mode: 'shallow-snapshot', frontiers: cut })
+      const cut = compactionCutOfRecord(
+        record,
+        points.map((point) => encodeFrontiers(point)),
+      )
+      const shallow = cut === null ? null : record.exportShallowSnapshotAt(cut)
       if (shallow === null || shallow.byteLength >= beforeBytes) {
         return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
       }
@@ -651,7 +611,7 @@ export async function compactWorkspace(
         docRef,
         manifest: fresh,
         chunks,
-        frontier: new Uint8Array(doc.oplogVersion().encode()),
+        frontier: new Uint8Array(record.version().encoded),
         // Exactly the log this fold consumed. Anything appended since the read
         // above is neither in `shallow` nor superseded by it, and dropping it
         // would lose an edit that arrived while compaction ran.
@@ -673,8 +633,8 @@ export async function compactWorkspace(
       // Compaction folds the WORKSPACE record's oplog, so the timestamp the
       // storage report shows describes the workspace, on the workspace meta.
       // Written after the compacted snapshot, as a small delta on top of it.
-      setWorkspaceLastCompactedAt(doc, Date.now())
-      await saveWorkspaceDoc(workspaceId, doc, scope)
+      record.write([{ op: 'setWorkspaceLastCompactedAt', args: { at: Date.now() } }])
+      await record.save()
       // No eviction: the live workspace document keeps its full in-memory
       // history and the frontier just written is its own current one, so both
       // it and the projections served from it stay coherent with the store.

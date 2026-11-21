@@ -119,8 +119,12 @@ describe('a workspace-tail pass', () => {
     let emitted = 0
     const tail = createWorkspaceTail({
       subscribedWorkspaces: () => subscribed,
-      docs,
-      withLiveDoc: async (workspaceId, fn) => fn(live.get(workspaceId) as LoroDoc),
+      follow: (workspaceId, cursor) =>
+        docs.catchUp(
+          workspaceId,
+          live.get(workspaceId) as LoroDoc,
+          cursor ?? { generation: null, afterSeq: null },
+        ),
       emit: () => {
         emitted += 1
       },

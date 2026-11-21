@@ -9,11 +9,7 @@ import {
 } from './store/auto-compact.js'
 import { type AutoVersionTrigger, createAutoVersionTrigger } from './store/auto-version.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
-import {
-  cacheBackedWorkspaceDocs,
-  emitWorkspaceDocUpdated,
-  withWorkspaceDocument,
-} from './store/document-store.js'
+import { emitWorkspaceDocUpdated, followWorkspaceRecord } from './store/document-store.js'
 import { createFileGcSweeper } from './store/file-gc-sweeper.js'
 import {
   DEFAULT_BACKUP_CRON,
@@ -216,11 +212,10 @@ function createTail(
   if (intervalMs === null) return null
   return (factories.workspaceTailFactory ?? createWorkspaceTail)({
     subscribedWorkspaces: subscribedWorkspaceIds,
-    docs: cacheBackedWorkspaceDocs(scope),
     // The CACHED document, which is what every reader on this instance is
     // served from — catching up a fresh copy would leave the one people
     // actually read untouched.
-    withLiveDoc: (workspaceId, fn) => withWorkspaceDocument(workspaceId, scope, fn),
+    follow: (workspaceId, cursor) => followWorkspaceRecord(workspaceId, scope, cursor),
     emit: emitWorkspaceDocUpdated,
     intervalMs,
   })

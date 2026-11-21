@@ -30,7 +30,8 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getWorkspaceDoc, saveWorkspaceDoc } from '../../store/document-store.js'
+import { getWorkspaceDoc } from '../../store/document-store.js'
+import { saveWorkspaceDoc } from '../../store/workspace-doc-cache.js'
 import {
   createTestDocument,
   resolveTestServerDeps,

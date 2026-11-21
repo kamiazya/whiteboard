@@ -33,7 +33,8 @@ import {
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { storeMemoryModule } from '../../../shared/test-utils/store-memory.module.js'
-import { getWorkspaceDoc, saveWorkspaceDoc } from '../../store/document-store.js'
+import { getWorkspaceDoc } from '../../store/document-store.js'
+import { saveWorkspaceDoc } from '../../store/workspace-doc-cache.js'
 import { testDocumentRouterOptions, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-trash-test-')

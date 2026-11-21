@@ -33,9 +33,9 @@ const {
   deleteDocument,
   readLatestCompactedAt,
   getWorkspaceDoc,
-  saveWorkspaceDoc,
   _clearWorkspaceDocCacheForTests,
 } = await import('./document-store.js')
+const { saveWorkspaceDoc } = await import('./workspace-doc-cache.js')
 const { loadWorkspaceNames, setDocumentDisplayName, setDocumentPinned } = await import(
   './names-store.js'
 )

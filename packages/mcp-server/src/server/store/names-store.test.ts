@@ -229,7 +229,8 @@ describe('names-store', () => {
     // The path was checked before the lock, so a writer that waited for it can find
     // the document gone; the name of a document that no longer exists is not an error.
     it('writes nothing, and does not fail, for a document removed while it waited for the lock', async () => {
-      const { saveWorkspaceDoc, resolveDocumentIdAtPath } = await import('./document-store.js')
+      const { resolveDocumentIdAtPath } = await import('./document-store.js')
+      const { saveWorkspaceDoc } = await import('./workspace-doc-cache.js')
       const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
       const { deleteWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')
       const { withWorkspaceWriteLock } = await import('./workspace-lock.js')
@@ -273,7 +274,8 @@ describe('names-store', () => {
   // The pinned list holds document ids and the tree is edited by replicas that know
   // nothing of it, so an id can outlive its document; it names no path to report.
   it('omits a pinned document that has left the tree, keeping the others in order', async () => {
-    const { saveWorkspaceDoc, resolveDocumentIdAtPath } = await import('./document-store.js')
+    const { resolveDocumentIdAtPath } = await import('./document-store.js')
+    const { saveWorkspaceDoc } = await import('./workspace-doc-cache.js')
     const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
     const { deleteWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')
     await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'a', true)

@@ -28,14 +28,11 @@ const HOME = 'packages/mcp-server/src/server/store/workspace-doc-cache.ts'
 const CALLERS: Readonly<Record<string, number>> = {}
 
 /**
- * Shipped files that hold the record as a `LoroDoc` inside a loan, with how
- * many brackets each opens. These are what a lease cannot serve until each reads
- * the record through a session; shrink-only.
+ * Shipped files that hold the record as a `LoroDoc` inside a loan, with how many
+ * brackets each opens. Empty: every holder reads the record through a session, so
+ * a lease can serve it.
  */
-const HOLDERS: Readonly<Record<string, number>> = {
-  'packages/mcp-server/src/server/shared-background-work.ts': 1,
-  'packages/mcp-server/src/server/store/document-store.ts': 2,
-}
+const HOLDERS: Readonly<Record<string, number>> = {}
 
 /** How many calls to one of `names` the file makes, by name: a re-export or an import is not one. */
 function callsOf(path: string, text: string, names: ReadonlySet<string> = ACCESSORS): number {
