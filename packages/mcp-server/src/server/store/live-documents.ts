@@ -6,7 +6,6 @@ import {
   deleteDocument,
   documentExists,
   evictWorkspaceDocCache,
-  getDoc,
   getDocumentKind,
   getWorkspaceDoc,
   listDocuments,
@@ -31,7 +30,6 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
  */
 export function liveDocuments(scope: StoreScope = globalStoreScope): LiveDocuments {
   return {
-    get: (workspaceId, path) => getDoc(workspaceId, path, scope),
     async save(workspaceId, path, doc, options) {
       try {
         await saveDocument(workspaceId, path, doc, options, scope)

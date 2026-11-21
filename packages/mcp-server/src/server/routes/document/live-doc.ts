@@ -2,6 +2,13 @@ import type { ApiErrorBody, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { onDocumentAction } from './path-route.js'
 
+const documentMissing = (path: string) =>
+  ({ error: 'not_found', message: `Document "${path}" not found` }) satisfies ApiErrorBody
+
+// The engine answers in the shapes the loro-adapter readers return; this
+// adapter asserts the type and holds no schema of its own for it.
+const asserted = <T>() => ({ parse: (value: unknown) => value as T })
+
 export interface LiveDocRouterOptions {
   // The live-document seam the route reads through, handed down from
   // document.ts.
@@ -29,14 +36,18 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
     // answer "absent" in two body families; every reader goes through
     // `apiErrorReason`, which takes either.
     if (!(await deps.liveDocuments.exists(workspaceId, path))) {
-      return c.json(
-        { error: 'not_found', message: `Document "${path}" not found` } satisfies ApiErrorBody,
-        404,
-      )
+      return c.json(documentMissing(path), 404)
     }
-    const doc = await deps.liveDocuments.get(workspaceId, path)
-    const snapshot = doc.export({ mode: 'snapshot' }) as Uint8Array<ArrayBuffer>
-    return c.body(snapshot, 200, {
+    const snapshot = await deps.workspaceDocuments.withRecord(workspaceId, async (record) => {
+      const entry = await record.read(
+        { query: 'workspaceDocumentEntry', args: { path } },
+        asserted<{ documentId: string } | null>(),
+      )
+      return entry === null ? null : record.exportProjection(entry.documentId)
+    })
+    // Gone between the existence check and the read: absent, as above.
+    if (snapshot === null) return c.json(documentMissing(path), 404)
+    return c.body(snapshot as Uint8Array<ArrayBuffer>, 200, {
       'Content-Type': 'application/octet-stream',
     })
   })

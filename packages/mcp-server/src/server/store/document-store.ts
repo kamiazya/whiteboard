@@ -4,7 +4,6 @@ import type {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   createWorkspaceDocumentAtPath,
-  projectWorkspaceDocument,
   readDocumentKind,
   readTrashEntries,
   readWorkspaceDocuments,
@@ -38,14 +37,14 @@ import type {
   LoroWorkspaceDocumentIndex,
   WorkspaceRegistry,
 } from '@kamiazya/whiteboard-workspace-index'
-import { LoroDoc } from 'loro-crdt'
+import type { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../log.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { daemonBlobStore } from './backup-guarded-blob-store.js'
 import { CacheCoherentDocumentIndex } from './cache-coherent-document-index.js'
 import { CorruptStoredDataError } from './corrupt-stored-data.js'
 import { renameWorkspaceRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
-import { evictDoc, getOrLoad, settleSavedDoc } from './doc-cache.js'
+import { evictDoc, settleSavedDoc } from './doc-cache.js'
 import { moveEvictingCache } from './moved-paths.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
@@ -58,6 +57,7 @@ import {
   getWorkspaceDoc,
   openWorkspaceDocIfStored,
   saveWorkspaceDoc,
+  withStoredWorkspaceRecord,
 } from './workspace-doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -70,7 +70,9 @@ export {
   catchUpWorkspaceDoc,
   emitWorkspaceDocUpdated,
   evictWorkspaceDocCache,
+  getDoc,
   getWorkspaceDoc,
+  loadDocument,
   onWorkspaceDocUpdated,
   openWorkspaceDocIfStored,
   saveWorkspaceDoc,
@@ -369,58 +371,28 @@ export async function saveDocument(
   })
 }
 
-// ── load LoroDoc, returning an empty document when no snapshot exists ──
-export async function loadDocument(
-  workspaceId: string,
-  path: string,
-  scope: StoreScope = globalStoreScope,
-): Promise<LoroDoc> {
-  return (await loadPlacedDocument(workspaceId, path, scope)) ?? new LoroDoc()
-}
-
-/** The document the tree places at `path`, or `null` when it places none there. */
-async function loadPlacedDocument(
-  workspaceId: string,
-  path: string,
-  scope: StoreScope,
-): Promise<LoroDoc | null> {
-  validateWorkspaceId(workspaceId)
-  validateDocumentPath(path)
-  // The workspace tree answers first, and resolves the PATH itself:
-  // the tree is the address book now, so a document lists and serves even
-  // if its mirror row is skewed or gone. The projection is a VALUE copy
-  // with its own oplog.
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
-  if (workspaceDoc === null) return null
-  const entry = resolveWorkspaceDocument(workspaceDoc, path)
-  if (entry === null) return null
-  return projectWorkspaceDocument(workspaceDoc, entry.documentId) ?? new LoroDoc()
-}
-
 /**
- * `loadDocument` through the resident LRU (doc-cache.ts), which is what most
- * callers want: a sync update, an export, and a version read of the same
- * document within a session should share one LoroDoc rather than each
- * rebuilding several MiB of CRDT history. Reach for `loadDocument` directly
- * only when a *fresh* instance is the point.
+ * How many canvas nodes the document at `path` holds, read off the record
+ * without cutting a copy of the document; 0 for a path the record does not hold.
  */
-export async function getDoc(
+export async function countDocumentNodes(
   workspaceId: string,
   path: string,
   scope: StoreScope = globalStoreScope,
-): Promise<LoroDoc> {
-  // A cached projection is current while the workspace record it was cut
-  // from is: every write THIS process makes mutates it in place (saveDocument
-  // diffs against the live workspace doc), and what another process writes
-  // reaches it only through the record. So the record is asked first —
-  // reading it through is what evicts the projections a foreign write
-  // outdated — and the cache then serves what is left. No per-document
-  // delta replay runs here: the workspace record is the document's whole
-  // history, and a per-document oplog replayed over it would only lay older
-  // state over current content.
-  validateWorkspaceId(workspaceId)
-  await openWorkspaceDocIfStored(workspaceId, scope)
-  return getOrLoad(workspaceId, path, () => loadPlacedDocument(workspaceId, path, scope), scope)
+): Promise<number> {
+  return withStoredWorkspaceRecord(workspaceId, scope, async (record) => {
+    if (record === null) return 0
+    const asserted = <T>() => ({ parse: (value: unknown) => value as T })
+    const entry = await record.read(
+      { query: 'workspaceDocumentEntry', args: { path } },
+      asserted<{ documentId: string } | null>(),
+    )
+    if (entry === null) return 0
+    return record.read(
+      { query: 'spatialNodeCount', args: { documentId: entry.documentId } },
+      asserted<number>(),
+    )
+  })
 }
 
 /**

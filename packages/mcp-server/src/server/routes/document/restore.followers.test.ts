@@ -11,6 +11,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   documentIdAt,
+  documentOf,
   resolveTestServerDeps,
   testDocumentRouterOptions,
   withTempDataDir,
@@ -135,7 +136,7 @@ describe('a restore with a second client attached', () => {
     const record = await replicaOf(app)
     expect(nodeIdsIn(record, 'canvas-a')).toEqual(['client-added', 'v1-node'])
     // The live document the next reader gets is the record's, not a copy cut before the restore.
-    const live = await serverDeps.liveDocuments.get(WS, 'canvas-a')
+    const live = await documentOf(serverDeps, WS, 'canvas-a')
     expect(
       readSpatialCanvas(live)
         .nodes.map((node) => node.id)

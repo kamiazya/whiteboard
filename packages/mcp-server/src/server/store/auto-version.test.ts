@@ -12,6 +12,7 @@ import {
   testStoreScope,
   withTempDataDir,
 } from '../routes/_test-helpers.js'
+import { subjectOf } from './_test-checkpoint-subject.js'
 import { versionStoreMock } from './test-utils/version-store-mock.js'
 
 const tmp = withTempDataDir('whiteboard-auto-version-test-')
@@ -74,11 +75,11 @@ describe('createAutoVersionTrigger', () => {
     // A failed checkpoint must leave the key looking uncovered, or the next
     // edit would be skipped by the diff check and the failure would be
     // permanent for as long as nothing else changed.
-    trigger('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc)
+    trigger('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', subjectOf(doc))
     await trigger.flush()
     doc.getMap('m').set('k', 1)
     doc.commit()
-    trigger('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc)
+    trigger('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', subjectOf(doc))
     await trigger.flush()
     expect(save).toHaveBeenCalledTimes(2)
     expect(save).toHaveBeenNthCalledWith(
@@ -108,11 +109,11 @@ describe('createAutoVersionTrigger', () => {
     // A failed checkpoint must leave the key looking uncovered, or the next
     // edit would be skipped by the diff check and the failure would be
     // permanent for as long as nothing else changed.
-    trigger('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc)
+    trigger('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', subjectOf(doc))
     await trigger.flush()
     doc.getMap('m').set('k', 1)
     doc.commit()
-    trigger('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc)
+    trigger('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', subjectOf(doc))
     await trigger.flush()
     expect(save).toHaveBeenCalledTimes(2)
     expect(save).toHaveBeenNthCalledWith(
@@ -236,7 +237,9 @@ describe('an unchanged document', () => {
     // what a daemon restart leaves behind — signalled for the state the
     // newest version already holds.
     const askedBefore = asked
-    let restarted: ((workspaceId: string, path: string, doc: LoroDoc) => void) | undefined
+    let restarted:
+      | ((workspaceId: string, path: string, frontier: () => Promise<Uint8Array>) => void)
+      | undefined
     createDocumentRouter({
       scope: testStoreScope(),
       serverDeps,
@@ -250,7 +253,12 @@ describe('an unchanged document', () => {
     restarted?.(
       '01M8BBN7JS60N0ZAR13NP8SXBF',
       'canvas-a',
-      await serverDeps.liveDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a'),
+      async () =>
+        (
+          await serverDeps.documentStore.readFrontier({
+            docRef: { kind: 'workspace-tree', workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF' },
+          })
+        )?.frontier ?? new Uint8Array(),
     )
     await vi.waitFor(() => {
       expect(asked).toBeGreaterThan(askedBefore)

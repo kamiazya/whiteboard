@@ -20,7 +20,7 @@ import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { createSelfHostStoreLocalModule } from '../../di/store-local.module.js'
 import { createWorkspaceReplicaKeyStore } from '../security/workspace-replica-key-store.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
-import { createTestDocument, testDataLayout } from './_test-helpers.js'
+import { createTestDocument, documentOf, testDataLayout } from './_test-helpers.js'
 
 let dataDir = ''
 vi.mock('../config.js', () => ({
@@ -90,7 +90,7 @@ describe('a route the daemon retired', () => {
     expect(res.status).toBe(404)
     const body: unknown = await res.json()
     expect(apiErrorBodySchema.parse(body)).toMatchObject({ error: 'not_found' })
-    const stored = await serverDeps.liveDocuments.get(WS, 'board')
+    const stored = await documentOf(serverDeps, WS, 'board')
     expect(stored.getMap('retired').get('written')).toBeUndefined()
   })
 })

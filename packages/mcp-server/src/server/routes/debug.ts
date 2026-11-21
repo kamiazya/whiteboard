@@ -1,7 +1,6 @@
-import { countSpatialNodes } from '@kamiazya/whiteboard-loro-adapter'
 import { Hono } from 'hono'
 import { getCacheKeys, peekDoc } from '../store/doc-cache.js'
-import { listDocuments, listWorkspaces, loadDocument } from '../store/document-store.js'
+import { countDocumentNodes, listDocuments, listWorkspaces } from '../store/document-store.js'
 import type { StoreScope } from '../store/store-scope.js'
 
 type DocumentInfo = {
@@ -21,12 +20,8 @@ async function summarizeDocument(
   scope: StoreScope,
 ): Promise<DocumentInfo> {
   const cached = peekDoc(workspaceId, path, scope)
-  const doc = cached ?? (await loadDocument(workspaceId, path, scope))
-  return {
-    path,
-    nodeCount: countSpatialNodes(doc),
-    cached: cached !== undefined,
-  }
+  const nodeCount = await countDocumentNodes(workspaceId, path, scope)
+  return { path, nodeCount, cached: cached !== undefined }
 }
 
 // Who may read the dump is the route-scope registry's `daemon-token-only`

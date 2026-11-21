@@ -15,11 +15,13 @@
  * blob there is the leak, and an empty directory is the one thing a leak
  * cannot satisfy.
  */
+
 import { mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { wbDocumentCreate, wbDocumentDelete } from '@kamiazya/whiteboard-server-core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { documentOf } from '../server/routes/_test-helpers.js'
 import { disposeAutoCompact, uninstallAutoCompact } from '../server/store/auto-compact.js'
 import { clearDbCacheForTests, closeDb, getDb } from '../server/store/db/index.js'
 import { clearDocCacheForTests } from '../server/store/doc-cache.js'
@@ -66,7 +68,7 @@ describe('bootSelfHostDeps over a dir the process global does not name', () => {
       kind: 'spatial',
     })
 
-    const doc = await deps.liveDocuments.get('01ZVM89A4A1V9FS03Z9J64KEK1', 'note')
+    const doc = await documentOf(deps, '01ZVM89A4A1V9FS03Z9J64KEK1', 'note')
     await deps.liveDocuments.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'note', doc, { overwrite: true })
     const version = await deps.versions.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'note', {
       auto: false,

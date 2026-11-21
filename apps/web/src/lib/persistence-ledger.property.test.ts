@@ -443,8 +443,13 @@ const steps = fc.commands(
     ...Array<fc.Arbitrary<Step>>(4).fill(fc.nat(3).map((pick) => new ResolvePush(pick))),
     fc.nat(3).map((pick) => new RejectPush(pick)),
     fc.nat(3).map((pick) => new DropPush(pick)),
-    fc.constant(new StorageFailed()),
-    ...Array<fc.Arbitrary<Step>>(2).fill(fc.constant(new Landed())),
+    // Three storage failures and four landings, not one and two: since a push
+    // with no edit before it reads pending, the only failure that lands on a
+    // settled save is a storage failure, and a landing is what answers it and
+    // settles again. At one and two the "re-saved after a settled failure"
+    // floor was 2 to 11 a run and 0 on a CI seed; at three and four, 9 to 19.
+    ...Array<fc.Arbitrary<Step>>(3).fill(fc.constant(new StorageFailed())),
+    ...Array<fc.Arbitrary<Step>>(4).fill(fc.constant(new Landed())),
     ...Array<fc.Arbitrary<Step>>(2).fill(fc.constant(new Settle())),
     fc.constant(new ToggleBusy()),
     fc.constant(new Refused()),

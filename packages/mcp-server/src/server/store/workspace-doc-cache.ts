@@ -2,7 +2,9 @@ import { compactionCut } from '@kamiazya/whiteboard-history'
 import {
   bindRecordOps,
   legacyRecordOps,
+  projectWorkspaceDocument,
   type RecordSession,
+  resolveWorkspaceDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { isDatabaseBusy } from '@kamiazya/whiteboard-ports'
@@ -12,11 +14,12 @@ import {
   type WorkspaceDocCursor,
   type WorkspaceDocs,
 } from '@kamiazya/whiteboard-workspace-index'
-import { type Frontiers, type LoroDoc, type PeerID, VersionVector } from 'loro-crdt'
+import { type Frontiers, LoroDoc, type PeerID, VersionVector } from 'loro-crdt'
 import { getLogger } from '../log.js'
+import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { corruptStoredData, isCorruptStoredDataError } from './corrupt-stored-data.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
-import { evictWorkspaceDocs } from './doc-cache.js'
+import { evictWorkspaceDocs, getOrLoad } from './doc-cache.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
@@ -581,4 +584,58 @@ function sessionOver(workspaceId: string, doc: LoroDoc, scope: StoreScope): Reco
   return bindRecordOps(legacyRecordOps, doc, async (held) => {
     await saveWorkspaceDoc(workspaceId, held, scope)
   })
+}
+
+// ── load LoroDoc, returning an empty document when no snapshot exists ──
+export async function loadDocument(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope = globalStoreScope,
+): Promise<LoroDoc> {
+  return (await loadPlacedDocument(workspaceId, path, scope)) ?? new LoroDoc()
+}
+
+/** The document the tree places at `path`, or `null` when it places none there. */
+async function loadPlacedDocument(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope,
+): Promise<LoroDoc | null> {
+  validateWorkspaceId(workspaceId)
+  validateDocumentPath(path)
+  // The workspace tree answers first, and resolves the PATH itself:
+  // the tree is the address book now, so a document lists and serves even
+  // if its mirror row is skewed or gone. The projection is a VALUE copy
+  // with its own oplog.
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
+  if (workspaceDoc === null) return null
+  const entry = resolveWorkspaceDocument(workspaceDoc, path)
+  if (entry === null) return null
+  return projectWorkspaceDocument(workspaceDoc, entry.documentId) ?? new LoroDoc()
+}
+
+/**
+ * `loadDocument` through the resident LRU (doc-cache.ts), which is what most
+ * callers want: a sync update, an export, and a version read of the same
+ * document within a session should share one LoroDoc rather than each
+ * rebuilding several MiB of CRDT history. Reach for `loadDocument` directly
+ * only when a *fresh* instance is the point.
+ */
+export async function getDoc(
+  workspaceId: string,
+  path: string,
+  scope: StoreScope = globalStoreScope,
+): Promise<LoroDoc> {
+  // A cached projection is current while the workspace record it was cut
+  // from is: every write THIS process makes mutates it in place (saveDocument
+  // diffs against the live workspace doc), and what another process writes
+  // reaches it only through the record. So the record is asked first —
+  // reading it through is what evicts the projections a foreign write
+  // outdated — and the cache then serves what is left. No per-document
+  // delta replay runs here: the workspace record is the document's whole
+  // history, and a per-document oplog replayed over it would only lay older
+  // state over current content.
+  validateWorkspaceId(workspaceId)
+  await openWorkspaceDocIfStored(workspaceId, scope)
+  return getOrLoad(workspaceId, path, () => loadPlacedDocument(workspaceId, path, scope), scope)
 }

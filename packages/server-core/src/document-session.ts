@@ -61,7 +61,8 @@ function sessionOver(
   return {
     workspaceId,
     documentId,
-    read: (query, shape) => readRestoringRefusal(held, query, shape),
+    read: (query, shape) =>
+      readRestoringRefusal({ read: (q, s) => lease.read(held, q, s) }, query, shape),
     write(batch) {
       if (batch.length > 0) lease.write(held, batch, { judge: 'none' })
     },
@@ -80,6 +81,11 @@ function sessionOver(
   }
 }
 
+/** What answers a named read: a document session's lease, or a record session. */
+export interface NamedReader {
+  read<T>(query: wire.Query, shape: Shape<T>): Promise<T>
+}
+
 /**
  * The engine answers a reader's refusal as its class NAME, so the class a
  * caller maps to a status is gone by the time it reaches the tool. The two
@@ -87,29 +93,21 @@ function sessionOver(
  * still be asked: the retired shape it found, and the rows the retired
  * comment plane holds.
  */
-async function readRestoringRefusal<T>(
-  held: RecordLease,
+export async function readRestoringRefusal<T>(
+  reader: NamedReader,
   query: wire.Query,
   shape: Shape<T>,
 ): Promise<T> {
   try {
-    return await lease.read(held, query, shape)
+    return await reader.read(query, shape)
   } catch (err) {
     if (!(err instanceof Error)) throw err
     if (err.name === 'RetiredStoredShapeError') {
-      const found = await lease.read(
-        held,
-        { query: 'retiredStoredShape', args: query.args },
-        foundShape,
-      )
+      const found = await reader.read({ query: 'retiredStoredShape', args: query.args }, foundShape)
       throw new RetiredStoredShapeError(found ?? UNNAMED_RETIRED_SHAPE)
     }
     if (err.name === 'RetiredCommentPlaneError') {
-      const rows = await lease.read(
-        held,
-        { query: 'retiredCommentRows', args: query.args },
-        rowsShape,
-      )
+      const rows = await reader.read({ query: 'retiredCommentRows', args: query.args }, rowsShape)
       if (rows > 0) throw new RetiredCommentPlaneError(rows)
     }
     throw err

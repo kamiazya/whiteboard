@@ -176,11 +176,34 @@ export async function writeDocumentUpdate(
   update: Uint8Array,
 ): Promise<void> {
   const live = deps.liveDocuments
+  // The per-document projection cache, imported late so a test's data-dir mock is in place.
+  const { getDoc } = await import('../store/document-store.js')
   await live.withWriteLock(workspaceId, async () => {
-    const doc = await live.get(workspaceId, path)
+    const doc = await getDoc(workspaceId, path)
     doc.import(update)
     await live.save(workspaceId, path, doc, { overwrite: true })
   })
+}
+
+/**
+ * The document at `path` as a document of its own, cut from the workspace
+ * record, or an empty one when the record holds none. A copy: what a test
+ * does to it reaches the record only when it saves it.
+ */
+export async function documentOf(
+  deps: Pick<ServerDeps, 'workspaceDocuments'>,
+  workspaceId: string,
+  path: string,
+): Promise<LoroDoc> {
+  const asserted = <T>() => ({ parse: (value: unknown) => value as T })
+  const bytes = await deps.workspaceDocuments.withRecord(workspaceId, async (record) => {
+    const entry = await record.read(
+      { query: 'workspaceDocumentEntry', args: { path } },
+      asserted<{ documentId: string } | null>(),
+    )
+    return entry === null ? null : record.exportProjection(entry.documentId)
+  })
+  return bytes === null ? new LoroDoc() : LoroDoc.fromSnapshot(bytes)
 }
 
 /**
