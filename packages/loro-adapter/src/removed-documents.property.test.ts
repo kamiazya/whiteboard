@@ -38,7 +38,7 @@ const nodeArbitrary = fc.record({
  */
 const editsArbitrary = fc.record({
   movesToRoot: fc.array(fc.nat({ max: 63 }), { minLength: 1, maxLength: 3 }),
-  deletes: fc.array(fc.nat({ max: 63 }), { minLength: 1, maxLength: 3 }),
+  deletes: fc.array(fc.nat({ max: 63 }), { minLength: 1, maxLength: 5 }),
 })
 
 type DrawnNode = typeof nodeArbitrary extends fc.Arbitrary<infer T> ? T : never
@@ -78,10 +78,12 @@ function restoredIds(bytes: Uint8Array): string[] {
 }
 
 /**
- * Measured over 100 runs, thirty times: removal 80-94, a survivor under a
- * removed document 5-22 (mean 14), a path ancestor on another branch 4-15
- * (mean 10). With no move drawn the survivor arrangement fell to 2 once in CI,
- * which is why every draw makes at least one.
+ * Measured over 100 runs, twenty-five times: removal 84-93, a survivor under a
+ * removed document 7-23 (mean 14), a path ancestor on another branch 11-23
+ * (mean 17). Up to three deletes reached that last arrangement only 4-16 times,
+ * one draw from the floor, so a draw makes up to five. With no move drawn the
+ * survivor arrangement fell to 2 once in CI, which is why every draw makes at
+ * least one.
  */
 const REMOVAL_FLOOR = 50
 const ARRANGEMENT_FLOOR = 3
