@@ -188,8 +188,11 @@ mod tests {
         text.to_owned()
     }
 
-    /// One of each variant, with what the TypeScript class says for it.
-    fn taxonomy() -> Vec<(PortError, PortErrorKind, &'static str, String)> {
+    type Row = (PortError, PortErrorKind, &'static str, String);
+
+    /// Each variant a record or a lookup can fail with, and what the
+    /// TypeScript class says for it.
+    fn lookups() -> Vec<Row> {
         vec![
             (
                 PortError::WorkspaceNotFound { workspace_id: s("w") },
@@ -227,6 +230,12 @@ mod tests {
                 "MISSING_CHUNK",
                 s("chunk 2 of 3 is missing"),
             ),
+        ]
+    }
+
+    /// Each variant a write can be refused with.
+    fn refusals() -> Vec<Row> {
+        vec![
             (
                 PortError::TooManyWorkspaces { namespace: s("ns"), limit: 1000 },
                 PortErrorKind::Ceiling,
@@ -262,7 +271,7 @@ mod tests {
 
     #[test]
     fn every_variant_has_its_kind_code_and_message() {
-        let all = taxonomy();
+        let all: Vec<Row> = lookups().into_iter().chain(refusals()).collect();
         assert_eq!(all.len(), 9);
         for (error, kind, code, message) in all {
             assert_eq!(error.kind(), kind, "{error:?}");
