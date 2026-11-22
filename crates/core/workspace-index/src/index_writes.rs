@@ -11,7 +11,7 @@ use crate::ceiling::{
 };
 use crate::display_name::{Named, NamedKind, js_trim, sibling_display_name_taken};
 use crate::document_path::is_self_or_descendant;
-use crate::entry::{DocumentEntry, entry_of};
+use crate::entry::{DocumentEntry, entry_of, require_time};
 use crate::index_error::IndexError;
 use crate::index_rules::{
     BlobRef, DisplayNameTaken, TrashEntry, distinct_unnamed_path, is_named_by_another_row,
@@ -80,6 +80,7 @@ pub fn create_document(
     } else {
         input.path.to_owned()
     };
+    require_time(now_ms)?;
     let document_id = mint();
     let document =
         NewDocument { document_id: &document_id, kind: input.kind, name: input.name, now_ms };

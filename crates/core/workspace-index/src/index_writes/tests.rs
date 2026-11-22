@@ -503,8 +503,19 @@ fn every_schema_checked_write_refuses_a_workspace_id_that_is_not_one() {
 }
 
 #[test]
-fn a_create_stamped_with_a_time_no_date_holds_is_written_and_then_refused_as_an_entry() {
-    let record = writable(&LoroDoc::new());
-    let refused = create_document(&record, &create("a", None), &mut minting(&id_of(1)), 9.0e15);
-    assert_eq!(refused, Err(IndexError::InvalidTime(crate::entry::EntryError::InvalidTime)));
+fn a_write_stamped_with_a_time_no_date_holds_is_refused_before_it_writes_or_mints() {
+    let doc = LoroDoc::new();
+    add_node(&doc, None, &document_meta(ID_A, "a"));
+    let record = writable(&doc);
+    let mut mint = || -> String { panic!("nothing is minted for a stamp no Date holds") };
+    let invalid = Err(IndexError::InvalidTime(crate::entry::EntryError::InvalidTime));
+    for stamp in [9.0e15, f64::NAN, -9.0e15] {
+        assert_eq!(create_document(&record, &create("b", None), &mut mint, stamp), invalid);
+        let input =
+            DuplicateDocument { workspace_id: WORKSPACE, path: "a", without_annotations: false };
+        assert_eq!(duplicate_document(&record, &input, &mut mint, stamp), invalid);
+    }
+    assert_eq!(record.documents().len(), 1, "nothing was written");
+    let last = create_document(&record, &create("c", None), &mut minting(&id_of(2)), 8.64e15);
+    assert!(last.is_ok(), "the last time a Date holds is stamped");
 }

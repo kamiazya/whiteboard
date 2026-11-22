@@ -4,7 +4,7 @@
 use crate::ceiling::refuse_new_documents;
 use crate::derive_copy::{derive_copy_name, derive_copy_path};
 use crate::display_name::{Named, NamedKind, shown_name};
-use crate::entry::DocumentEntry;
+use crate::entry::{DocumentEntry, require_time};
 use crate::index_error::IndexError;
 use crate::index_writes::{Outcome, created_entry};
 use crate::node_meta::{DocumentMeta, NodeRead};
@@ -62,6 +62,7 @@ pub fn duplicate_document(
     let paths: Vec<String> = walked.iter().map(|node| node.path.clone()).collect();
     let path = derive_copy_path(&source.path, &paths)
         .ok_or_else(|| IndexError::NoRoomForCopy { path: source.path.clone() })?;
+    require_time(now_ms)?;
     let document_id = mint();
     let names: Vec<String> = documents.iter().map(|(node, meta)| shown(&node.path, meta)).collect();
     let name = derive_copy_name(&shown(&source.path, meta), &names);
