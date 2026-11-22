@@ -1786,6 +1786,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "whiteboard-history"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "wasm-bindgen-test",
+ "whiteboard-model",
+]
+
+[[package]]
 name = "whiteboard-log"
 version = "0.0.0"
 dependencies = [
@@ -1835,6 +1844,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "whiteboard-reference-graph"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "wasm-bindgen-test",
+ "whiteboard-codec",
+ "whiteboard-det",
+ "whiteboard-model",
+ "whiteboard-search",
+]
+
+[[package]]
 name = "whiteboard-scene"
 version = "0.0.0"
 dependencies = [
@@ -1876,6 +1897,16 @@ dependencies = [
  "whiteboard-proptest",
  "whiteboard-scene",
  "whiteboard-search",
+]
+
+[[package]]
+name = "whiteboard-workspace-index"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "unicode-normalization",
+ "wasm-bindgen-test",
+ "whiteboard-det",
 ]
 
 [[package]]

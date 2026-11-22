@@ -391,10 +391,6 @@ impl ComposeHost for Host<'_> {
         self.context.canvases.get(document_id).map(|(_, canvas)| canvas.clone())
     }
 
-    fn parse_markdown(&self, _: &str) -> Result<Root, ParseFailed> {
-        Err(ParseFailed)
-    }
-
     fn degrade(&self, event: Degradation) {
         let (kind, node_id, detail) = degrade_support::event_of(event);
         self.events.borrow_mut().push(Event { kind: kind.to_owned(), node_id, detail });

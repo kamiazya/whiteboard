@@ -38,7 +38,8 @@ export interface MarkdownNoteRequest {
 /**
  * A comment's PROSE asked of the Rust core (S18b's `kind: 'comment'`): the
  * body laid out exactly as `layoutCommentBody` lays it out, at the markdown
- * theme its `density` picks, in the bundled family, with nothing resolved.
+ * theme its `density` picks, in the bundled family; its `[[references]]` resolve
+ * through `references` as a note's do, and none does without it.
  * Built only by `commentLayoutRequest`.
  */
 export interface MarkdownCommentRequest {
@@ -47,6 +48,7 @@ export interface MarkdownCommentRequest {
   readonly maxWidth: number
   readonly measure: MeasureSpec
   readonly density: 'comfortable' | 'compact'
+  readonly references?: ReferenceWire
   /** Present, the answer carries the comment's SVG. */
   readonly svg?: CoreSvgAsk
 }

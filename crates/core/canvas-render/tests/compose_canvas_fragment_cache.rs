@@ -75,10 +75,6 @@ impl ComposeHost for Mathy {
     }
 
     fn degrade(&self, _: Degradation) {}
-
-    fn parse_markdown(&self, _: &str) -> Result<Root, ParseFailed> {
-        Err(ParseFailed)
-    }
 }
 
 impl InlineSeams for Mathy {

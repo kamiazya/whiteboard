@@ -1,0 +1,22 @@
+[package]
+name = "whiteboard-history"
+description = "A document's history as pure mechanics: version vectors and the compaction cut, which automatic checkpoints a keeper may let go, and frontiers as base64 text."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+whiteboard-model = { path = "../model" }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+# QR-21 layer 3: the same tests run natively and on wasm32 under Node.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[lints]
+workspace = true

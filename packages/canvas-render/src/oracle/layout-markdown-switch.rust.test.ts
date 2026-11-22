@@ -3,6 +3,7 @@ import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wa
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { layoutCommentDocument, layoutMarkdownDocument } from '../layout/markdown-switch.js'
+import { referenceSeamsFromWire } from '../references/wire.js'
 import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import {
@@ -95,4 +96,20 @@ describe.runIf(built)('the recorded notes through the core', () => {
       expect(records.length).toBeGreaterThan(20)
     })
   }
+
+  it("draws a comment's reference as the title it resolves to when handed the bundle", () => {
+    const core = fakeLayoutCore({ markdown: real })
+    const options = { measure: createFakeMeasure(), maxWidth: 400, core } as const
+    const references = referenceSeamsFromWire({
+      entries: [['notes', { documentId: 'D-NOTES', name: 'Design notes' }]],
+      aliases: [],
+      titles: [['D-NOTES', 'Design notes']],
+      extras: [],
+    })
+    const text = (scene: Scene) => JSON.stringify(scene)
+    expect(text(layoutCommentDocument('see [[notes]]', { ...options, references }))).toContain(
+      'Design notes',
+    )
+    expect(text(layoutCommentDocument('see [[notes]]', options))).not.toContain('Design notes')
+  })
 })

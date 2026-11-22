@@ -2,8 +2,9 @@
 //! composer recordings already hold as parsed: every text node's body in
 //! `compose-node.jsonl`, `compose-canvas.jsonl` and `compose-comments.jsonl`
 //! (resolved, as the composer's `parse_body` seam answers it) and every comment
-//! message in `compose-comments.jsonl` (parsed alone, as its `parse_markdown`
-//! seam answers it). Those recordings' trees are the composer's input, so this is
+//! message in `compose-comments.jsonl` (recorded parsed alone, before a comment's
+//! body took the composer's `parse_body`; the same tree wherever it holds no
+//! reference). Those recordings' trees are the composer's input, so this is
 //! the parse the composer will make once the seam defaults to Rust.
 
 mod mdast_support;

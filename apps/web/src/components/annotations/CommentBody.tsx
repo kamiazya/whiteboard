@@ -26,6 +26,7 @@
 import {
   layoutCommentDocumentKeyedPicture,
   type MeasureText,
+  type ReferenceSeams,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -35,6 +36,7 @@ import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
 import { undrawnRefusal } from '../../lib/undrawn-refusal.js'
 import { cn } from '../../lib/utils.js'
 import { RefusalWords } from '../ui/refusal-words.js'
+import { useCommentReferences } from './comment-references.js'
 
 /**
  * Until the container has been measured. A comment is read in a rail whose
@@ -52,7 +54,13 @@ const UNMEASURED_WIDTH_PX = 200
 const BODY_PADDING_PX = 1
 
 /** The body laid out at `width` and drawn by the core as its keyed projection, in one call. */
-function drawBody(body: string, measure: MeasureText, width: number, compact: boolean) {
+function drawBody(
+  body: string,
+  measure: MeasureText,
+  width: number,
+  compact: boolean,
+  references: ReferenceSeams | undefined,
+) {
   return layoutCommentDocumentKeyedPicture(
     body,
     {
@@ -65,6 +73,7 @@ function drawBody(body: string, measure: MeasureText, width: number, compact: bo
       // text on the surface, and a third bigger than the row summarising
       // the same sentence above it.
       density: compact ? 'compact' : 'comfortable',
+      ...(references === undefined ? {} : { references }),
     },
     { padding: BODY_PADDING_PX },
   )
@@ -100,9 +109,13 @@ export function CommentBody({ body, compact, className, measure }: CommentBodyPr
 
   // Draws again when the page's core loads on a retry after a failed boot load.
   const coreGeneration = useLayoutCoreGeneration()
+  // The same bundle a node's body resolves through, so `[[notes]]` draws the
+  // document's title here as it does on the canvas.
+  const references = useCommentReferences()
   const { scene, keyed } = useMemo(
-    () => drawBody(body, resolvedMeasure, width ?? UNMEASURED_WIDTH_PX, compact === true),
-    [body, compact, resolvedMeasure, width, coreGeneration],
+    () =>
+      drawBody(body, resolvedMeasure, width ?? UNMEASURED_WIDTH_PX, compact === true, references),
+    [body, compact, resolvedMeasure, width, references, coreGeneration],
   )
   const undrawn = undrawnRefusal(scene)
 

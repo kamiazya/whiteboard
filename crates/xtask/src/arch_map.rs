@@ -565,8 +565,10 @@ mod tests {
         let m: ArchMap = crate::metadata::read_json(&path).unwrap();
         assert_eq!(check_map(&m), Vec::<String>::new());
         // The subject is present: the whole target graph, not just today's crates.
-        let planned = m.crates.values().filter(|c| c.status == Status::Planned).count();
-        assert!(planned >= 13, "only {planned} planned crates declared");
+        // Counted across both statuses, so a crate moving from planned to present
+        // leaves the count alone and only a crate dropped from the map lowers it.
+        let declared = m.crates.len();
+        assert!(declared >= 29, "only {declared} crates declared");
         // The fuzz crate is present as a workspace of its own (nightly only),
         // which `run` checks through its own metadata.
         assert_eq!(m.crates.get("whiteboard-fuzz").map(|c| c.status), Some(Status::Present));

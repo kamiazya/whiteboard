@@ -50,10 +50,6 @@ impl ComposeHost for Marking {
         None
     }
 
-    fn parse_markdown(&self, _: &str) -> Result<Root, ParseFailed> {
-        Err(ParseFailed)
-    }
-
     fn degrade(&self, _: Degradation) {
         self.degraded.set(self.degraded.get() + 1);
     }

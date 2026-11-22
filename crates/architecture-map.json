@@ -194,7 +194,7 @@
     "whiteboard-history": {
       "path": "crates/core/history",
       "layer": "core",
-      "status": "planned",
+      "status": "present",
       "description": "checkpoint scheduling, version retention, frontier encoding",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det", "whiteboard-model", "whiteboard-crdt"],
@@ -204,18 +204,20 @@
     "whiteboard-workspace-index": {
       "path": "crates/core/workspace-index",
       "layer": "core",
-      "status": "planned",
-      "description": "the document index over a workspace tree",
+      "status": "present",
+      "description": "the document index's pure rules over a workspace tree (names, paths, moves, entries); the operations over a workspace record wait for the CRDT engine",
       "targets": ["wasm32-unknown-unknown", "native"],
-      "allowedInternalDeps": ["whiteboard-det", "whiteboard-model", "whiteboard-crdt"],
-      "allowedThirdParty": {},
+      "allowedInternalDeps": ["whiteboard-det", "whiteboard-model"],
+      "allowedThirdParty": {
+        "unicode-normalization": "NFC for the display-name key, pure and no_std-capable so it holds on native and wasm32 alike; pinned exactly with default features off, as the search crate's generator pins it"
+      },
       "absorbs": ["packages/workspace-index"]
     },
     "whiteboard-reference-graph": {
       "path": "crates/core/reference-graph",
       "layer": "core",
-      "status": "planned",
-      "description": "per-document reference facts and the backlink aggregate",
+      "status": "present",
+      "description": "per-document reference facts and the backlink aggregate (the pure rules; the cache over a port waits for the ports layer)",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": [
         "whiteboard-det",

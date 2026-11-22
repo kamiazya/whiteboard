@@ -60,6 +60,21 @@ const usesTable = (options: MarkdownDocumentOptions): boolean =>
   options.fragments !== undefined || options.onFragmentsAsked !== undefined
 
 /**
+ * The wire a reference bundle travels as, `undefined` for none. Throws
+ * `CoreUnaskable` for a bundle not rebuilt from a wire or one whose extras
+ * carry content.
+ */
+function wireOfOptions(references: ReferenceSeams | undefined) {
+  if (references === undefined) return undefined
+  const wire = wireOfSeams(references)
+  if (wire === undefined) throw new CoreUnaskable('references')
+  if (!wire.extras.every(([, extra]) => hasData(extra))) {
+    throw new CoreUnaskable('reference-content')
+  }
+  return wire
+}
+
+/**
  * `body` and `options` as the request the core answers. Throws `CoreUnaskable`
  * for a reference bundle not rebuilt from a wire or one whose extras carry
  * content.
@@ -69,13 +84,7 @@ export function markdownLayoutRequest(
   options: MarkdownDocumentOptions,
 ): MarkdownNoteRequest {
   const measure = measureSpecOf(options.measure)
-  const wire = options.references === undefined ? undefined : wireOfSeams(options.references)
-  if (options.references !== undefined && wire === undefined) {
-    throw new CoreUnaskable('references')
-  }
-  if (wire !== undefined && !wire.extras.every(([, extra]) => hasData(extra))) {
-    throw new CoreUnaskable('reference-content')
-  }
+  const wire = wireOfOptions(options.references)
   const { tagLibrary, section } = options
   return {
     kind: 'markdown',
@@ -168,6 +177,8 @@ export interface CommentDocumentOptions {
   /** Defaults to `COMMENT_TEXT_MAX_WIDTH_PX`. */
   readonly maxWidth?: number
   readonly density?: 'comfortable' | 'compact'
+  /** What the comment's `[[references]]` resolve through; absent, none does. */
+  readonly references?: ReferenceSeams
   /** The Rust core, whose markdown entry lays a comment out as a note's. */
   readonly core: LayoutCore
 }
@@ -178,12 +189,14 @@ function commentLayoutRequest(
   options: CommentDocumentOptions,
 ): MarkdownCommentRequest {
   const measure = measureSpecOf(options.measure)
+  const wire = wireOfOptions(options.references)
   return {
     kind: 'comment',
     body,
     maxWidth: options.maxWidth ?? COMMENT_TEXT_MAX_WIDTH_PX,
     measure,
     density: options.density ?? 'comfortable',
+    ...(wire === undefined ? {} : { references: wire }),
   }
 }
 

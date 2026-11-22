@@ -29,6 +29,7 @@ use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::typeset::{
     DiagramRenderer, EmbedResolver, MathRenderer, select_markdown_section,
 };
+use whiteboard_codec::markdown::parse_markdown_body;
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::mdast::Root;
@@ -49,17 +50,23 @@ use super::{
 pub(super) fn layout_markdown(request: &MarkdownRequest, host: Option<&dyn Host>) -> String {
     match &request.prose {
         Prose::Note(note) => layout_note(request, note, host),
-        Prose::Comment(density, svg) => {
-            if request.body.len() > MAX_BODY_BYTES {
-                return refused("input-too-large", "bodies");
+        Prose::Comment(density, references, svg) => {
+            if let Some(what) = past_caps(request, references.as_deref(), 0) {
+                return refused("input-too-large", what);
             }
             let empty = ReferenceWire::default();
             measured(&request.measure, host, None, |measure, _| {
-                // The plain parser and no reference: a comment resolves no link.
-                let seams = WireHost::new(&empty, Expansion::Every(false));
-                let root = seams
-                    .parse_markdown(&request.body)
-                    .unwrap_or_else(|_| literal_root(&request.body));
+                // With a wire, the host parse a note's body takes, so a comment
+                // and a note never disagree about what a reference is. Without
+                // one nothing can resolve, and the plain parser keeps a
+                // `[[alias]]` as the brackets it was written in.
+                let seams =
+                    WireHost::new(references.as_deref().unwrap_or(&empty), Expansion::Every(false));
+                let parsed = match references {
+                    Some(_) => seams.parse_body(&request.body).ok(),
+                    None => parse_markdown_body(&request.body).ok(),
+                };
+                let root = parsed.unwrap_or_else(|| literal_root(&request.body));
                 let scene =
                     layout_comment_text(&root, request.max_width, *density, measure, &seams);
                 laid_out(&LaidOut { scene, anchors: Vec::new() }, None, &[], None, svg.as_ref())
@@ -68,17 +75,27 @@ pub(super) fn layout_markdown(request: &MarkdownRequest, host: Option<&dyn Host>
     }
 }
 
-/// The content a note carries past its caps, if any.
-fn past_note_caps(request: &MarkdownRequest, note: &Note) -> Option<&'static str> {
-    let wire = note.references.as_ref();
+/// The content a body, the references it carries and the fragments a note
+/// carries hold past the caps, if any.
+fn past_caps(
+    request: &MarkdownRequest,
+    wire: Option<&ReferenceWire>,
+    fragments: usize,
+) -> Option<&'static str> {
     if wire.map_or(0, referenced_elements) > MAX_REFERENCED_ELEMENTS {
         return Some("referenced-elements");
     }
-    if note.fragments.as_ref().is_some_and(|table| table.len() > MAX_FRAGMENTS) {
+    if fragments > MAX_FRAGMENTS {
         return Some("fragments");
     }
     let bodies = request.body.len().saturating_add(wire.map_or(0, referenced_bytes));
     (bodies > MAX_BODY_BYTES).then_some("bodies")
+}
+
+/// The content a note carries past its caps, if any.
+fn past_note_caps(request: &MarkdownRequest, note: &Note) -> Option<&'static str> {
+    let fragments = note.fragments.as_ref().map_or(0, Vec::len);
+    past_caps(request, note.references.as_ref(), fragments)
 }
 
 fn layout_note(request: &MarkdownRequest, note: &Note, host: Option<&dyn Host>) -> String {
