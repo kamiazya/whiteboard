@@ -59,7 +59,7 @@
       "crate": "crates/core/crdt",
       "lint": "clippy::cast_precision_loss",
       "count": 1,
-      "reason": "a loro integer within +-2^53 read as the f64 a JavaScript number holds, range-checked on the line before: every such integer is exact"
+      "reason": "a loro integer read as the f64 a JavaScript number holds: npm loro-crdt hands every i64 to JavaScript as a number, so one past +-2^53 rounds the same way there (tests/value_conversion.rs pins 2^53 + 1 and 2^62)"
     },
     {
       "crate": "crates/core/crdt",

@@ -3,9 +3,6 @@
 use loro::{LoroDoc, LoroValue};
 use whiteboard_model::Value;
 
-/// The doubles a JavaScript number holds every integer of.
-const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
-
 /// Why bytes did not import: loro's own refusal, in its words.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImportError(pub String);
@@ -32,25 +29,20 @@ pub fn deep_value(doc: &LoroDoc) -> Value {
     loro_value_to_value(&doc.get_deep_value())
 }
 
-/// A loro value as the model's. An integer past +-2^53 is a `BigInt`, as the
-/// TypeScript reads it; a container id the document does not resolve is its
-/// string form.
+/// A loro value as the model's, as npm loro-crdt's `toJSON` answers it: every
+/// integer is a JavaScript number, so one past +-2^53 rounds to the nearest
+/// double exactly as it does there, and a container id the document does not
+/// resolve is its string form (`cid:root-name:Map`, `cid:4@7:Map`).
 pub fn loro_value_to_value(value: &LoroValue) -> Value {
     match value {
         LoroValue::Null => Value::Null,
         LoroValue::Bool(b) => Value::Bool(*b),
         LoroValue::Double(d) => Value::Number(*d),
-        LoroValue::I64(n) => {
-            if (-MAX_SAFE_INTEGER..=MAX_SAFE_INTEGER).contains(n) {
-                #[expect(
-                    clippy::cast_precision_loss,
-                    reason = "within +-2^53, where an i64 is exact as an f64"
-                )]
-                Value::Number(*n as f64)
-            } else {
-                Value::BigInt(n.to_string())
-            }
-        }
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "npm loro-crdt hands every i64 to JavaScript as a number, rounding past +-2^53 the same way"
+        )]
+        LoroValue::I64(n) => Value::Number(*n as f64),
         LoroValue::Binary(bytes) => {
             Value::Seq(bytes.iter().map(|b| Value::Number(f64::from(*b))).collect())
         }
@@ -62,7 +54,7 @@ pub fn loro_value_to_value(value: &LoroValue) -> Value {
             map.sort_by(|a, b| a.0.cmp(&b.0));
             Value::Map(map)
         }
-        LoroValue::Container(id) => Value::String(format!("{id:?}")),
+        LoroValue::Container(id) => Value::String(id.to_string()),
     }
 }
 
