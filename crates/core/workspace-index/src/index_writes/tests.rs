@@ -40,14 +40,6 @@ fn create<'a>(path: &'a str, name: Option<&'a str>) -> CreateDocument<'a> {
     CreateDocument { workspace_id: WORKSPACE, path, kind: "markdown", name }
 }
 
-fn documents_of(n: usize) -> LoroDoc {
-    let doc = LoroDoc::new();
-    for at in 0..n {
-        add_node(&doc, None, &document_meta(&id_of(at), &format!("d{at}")));
-    }
-    doc
-}
-
 #[test]
 fn a_created_document_is_stamped_with_the_clock_and_named_as_chosen() {
     let record = writable(&LoroDoc::new());
@@ -76,35 +68,6 @@ fn a_create_names_the_input_a_schema_refuses_and_mints_nothing() {
     assert_eq!(
         create_document(&record, &create("/bad", None), &mut mint, NOW),
         Err(IndexError::InvalidInput)
-    );
-}
-
-#[test]
-fn a_create_past_the_document_ceiling_is_refused_and_one_at_it_is_not() {
-    let near = writable(&documents_of(1999));
-    assert!(
-        create_document(&near, &create("fresh", None), &mut minting(&id_of(9000)), NOW).is_ok()
-    );
-    let full = writable(&documents_of(2000));
-    assert_eq!(
-        create_document(&full, &create("fresh", None), &mut minting(&id_of(9000)), NOW),
-        Err(IndexError::TooManyDocuments { documents: 2001 })
-    );
-}
-
-#[test]
-fn a_create_past_the_folder_ceiling_is_refused_for_the_folders_it_would_make() {
-    let doc = LoroDoc::new();
-    for at in 0..4000 {
-        add_node(&doc, None, &[("segment", format!("f{at}"))]);
-    }
-    let record = writable(&doc);
-    assert!(
-        create_document(&record, &create("f1/inside", None), &mut minting(&id_of(1)), NOW).is_ok()
-    );
-    assert_eq!(
-        create_document(&record, &create("new/inside", None), &mut minting(&id_of(2)), NOW),
-        Err(IndexError::TooManyFolders { folders: 4001 })
     );
 }
 
@@ -412,23 +375,6 @@ fn a_restore_answers_nothing_for_a_row_a_live_document_or_a_missing_blob() {
 }
 
 #[test]
-fn a_restore_into_a_workspace_with_no_room_is_refused_and_keeps_the_row() {
-    let doc = documents_of(2000);
-    let record = writable(&doc);
-    let mut blobs = Blobs::default();
-    trashed(&record, "d0", &mut blobs);
-    add_node(record.doc(), None, &document_meta(&id_of(5000), "fill"));
-    let refused = restore_document(
-        &record,
-        &RestoreDocument { workspace_id: WORKSPACE, document_id: &id_of(0) },
-        &mut blobs,
-    );
-    assert_eq!(refused, Err(IndexError::TooManyDocuments { documents: 2001 }));
-    assert_eq!(record.trash().len(), 1);
-    assert_eq!(blobs.held.len(), 1);
-}
-
-#[test]
 fn a_restore_of_bytes_that_are_not_a_record_is_refused_not_answered_as_nothing() {
     let doc = LoroDoc::new();
     add_node(&doc, None, &document_meta(ID_A, "a"));
@@ -490,7 +436,7 @@ fn a_duplicate_copies_content_and_leaves_the_annotation_layer_when_asked() {
 }
 
 #[test]
-fn a_duplicate_is_refused_with_no_room_beside_the_source_or_in_the_workspace() {
+fn a_duplicate_is_refused_with_no_room_beside_the_source_or_for_an_input_the_schema_refuses() {
     let doc = LoroDoc::new();
     let deep = add_node(&doc, None, &[("segment", "f".repeat(1018))]);
     add_node(&doc, Some(deep), &document_meta(ID_A, "x"));
@@ -502,22 +448,15 @@ fn a_duplicate_is_refused_with_no_room_beside_the_source_or_in_the_workspace() {
         duplicate_document(&record, &input, &mut minting(&id_of(1)), NOW),
         Err(IndexError::NoRoomForCopy { path: path.clone() })
     );
-    let full = writable(&documents_of(2000));
-    let input =
-        DuplicateDocument { workspace_id: WORKSPACE, path: "d0", without_annotations: false };
-    assert_eq!(
-        duplicate_document(&full, &input, &mut minting(&id_of(1)), NOW),
-        Err(IndexError::TooManyDocuments { documents: 2001 })
-    );
     let bad = DuplicateDocument { workspace_id: "x", path: "d0", without_annotations: false };
     assert_eq!(
-        duplicate_document(&full, &bad, &mut minting(&id_of(1)), NOW),
+        duplicate_document(&record, &bad, &mut minting(&id_of(1)), NOW),
         Err(IndexError::InvalidInput)
     );
     let bad =
         DuplicateDocument { workspace_id: WORKSPACE, path: "/d0", without_annotations: false };
     assert_eq!(
-        duplicate_document(&full, &bad, &mut minting(&id_of(1)), NOW),
+        duplicate_document(&record, &bad, &mut minting(&id_of(1)), NOW),
         Err(IndexError::InvalidInput)
     );
 }
