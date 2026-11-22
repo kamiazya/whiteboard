@@ -70,7 +70,7 @@ fn number(d: f64) -> Value {
     } else {
         let text = if d.is_nan() {
             "NaN"
-        } else if d > 0.0 {
+        } else if d.is_sign_positive() {
             "Infinity"
         } else {
             "-Infinity"
