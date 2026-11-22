@@ -80,6 +80,8 @@ fn copy_container(target: &LoroMap, key: &str, container: &Container) -> Result<
             let child = target.insert_container(key, LoroMovableList::new()).map_err(refused)?;
             push_all(&child, container)
         }
+        // A kind nothing writes (a tree, a counter) is dropped rather than half-copied,
+        // as the TypeScript's copy drops it: a wrong copy is worse than a visible gap.
         _ => Ok(()),
     }
 }
@@ -129,6 +131,8 @@ fn set_plain(target: &LoroMap, key: &str, value: LoroValue) -> Result<bool, Writ
     Ok(true)
 }
 
+/// A nested text or list is recreated whole, never diffed: there is no cheaper
+/// equality for a container than the rewrite, and the TypeScript rewrites it too.
 fn sync_entry(target: &LoroMap, key: &str, container: &Container) -> Result<bool, WriteError> {
     let Container::Map(source) = container else {
         if target.get(key).is_some() {
@@ -172,6 +176,8 @@ pub fn fill_meta(
     Ok(changed)
 }
 
+/// A container opened for the copy is no change by itself, only what it is filled
+/// with: the TypeScript's sync counts the entries it writes, and `updatedAt` rides that.
 fn fill_container(target: &LoroMap, key: &str, held: &Container) -> Result<bool, WriteError> {
     match (held, target.get(key)) {
         (Container::Map(source), Some(ValueOrContainer::Container(Container::Map(into)))) => {
