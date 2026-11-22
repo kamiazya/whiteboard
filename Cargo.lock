@@ -1906,7 +1906,9 @@ dependencies = [
  "serde_json",
  "unicode-normalization",
  "wasm-bindgen-test",
+ "whiteboard-crdt",
  "whiteboard-det",
+ "whiteboard-model",
 ]
 
 [[package]]
