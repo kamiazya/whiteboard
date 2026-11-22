@@ -220,7 +220,7 @@ fn a_holder_that_panics_releases_the_key() {
     let lock = KeyedLock::new();
     let holder = lock.clone();
     let outcome = std::thread::spawn(move || {
-        let _guard = block_on(holder.acquire("k"));
+        let _guard = granted(&mut holder.acquire("k"));
         // The panic is the point: unwinding must run the guard's drop.
         std::panic::panic_any("holder failed");
     })
