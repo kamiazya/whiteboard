@@ -4,6 +4,7 @@
 //! document holds has no `undefined`, `Set` or `Map`, so only the non-finite
 //! number and the marker-named object remain to be written.
 
+use crate::read::loro_value_to_value;
 use loro::LoroValue;
 use whiteboard_model::Value;
 
@@ -36,11 +37,7 @@ pub(crate) fn plain(value: &LoroValue) -> Option<Value> {
         LoroValue::Null => Value::Null,
         LoroValue::Bool(b) => Value::Bool(*b),
         LoroValue::Double(d) => number(*d),
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "npm loro-crdt hands every i64 to JavaScript as a number, rounding past +-2^53 the same way"
-        )]
-        LoroValue::I64(n) => Value::Number(*n as f64),
+        LoroValue::I64(_) => loro_value_to_value(value),
         LoroValue::String(s) => Value::String(s.to_string()),
         LoroValue::List(items) => {
             Value::Seq(items.iter().map(plain).collect::<Option<Vec<Value>>>()?)

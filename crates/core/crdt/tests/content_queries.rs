@@ -42,17 +42,9 @@ fn set(doc: &LoroDoc, root: &str, key: &str, value: impl Into<LoroValue>) {
 }
 
 #[cfg(test)]
-#[expect(
-    clippy::disallowed_types,
-    reason = "loro's map value is built from a hash map; the order a test writes it in is not read"
-)]
 fn object(entries: &[(&str, LoroValue)]) -> LoroValue {
     LoroValue::Map(
-        entries
-            .iter()
-            .map(|(k, v)| ((*k).to_owned(), v.clone()))
-            .collect::<std::collections::HashMap<_, _>>()
-            .into(),
+        entries.iter().map(|(k, v)| ((*k).to_owned(), v.clone())).collect::<loro::LoroMapValue>(),
     )
 }
 

@@ -293,11 +293,9 @@ pub fn answer_content_query(doc: &LoroDoc, query: &Query) -> Option<ReadResponse
             ok(retired_stored_shape(doc).map_or(Value::Null, Value::String))
         }
         QueryName::RetiredCommentRows => {
-            #[expect(
-                clippy::cast_precision_loss,
-                reason = "a row count is far below 2^53, and JavaScript numbers are doubles"
-            )]
-            let rows = map_of(doc, RETIRED_COMMENTS_KEY).len() as f64;
+            let rows = f64::from(
+                u32::try_from(map_of(doc, RETIRED_COMMENTS_KEY).len()).unwrap_or(u32::MAX),
+            );
             ok(Value::Number(rows))
         }
         _ => return None,
