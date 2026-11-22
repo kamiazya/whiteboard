@@ -55,9 +55,9 @@ fn the_ceilings_are_the_models() {
 
 #[test]
 fn documents_and_folders_are_counted_apart() {
-    let nodes = [document("a"), folder("b"), folder("b/c"), document("b/c/d")];
-    assert_eq!(documents_in(&nodes), 2);
-    assert_eq!(folders_in(&nodes), 2);
+    let nodes = [document("a"), folder("b"), document("b/d"), document("b/e")];
+    assert_eq!(documents_in(&nodes), 3);
+    assert_eq!(folders_in(&nodes), 1);
     assert_eq!((documents_in(&[]), folders_in(&[])), (0, 0));
 }
 
