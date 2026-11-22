@@ -7,7 +7,6 @@
  * where "corrupt" sends an operator looking for damage that is not there.
  */
 
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -24,8 +23,9 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { getWorkspaceDoc, openWorkspaceDocIfStored, _clearWorkspaceDocCacheForTests } = await import(
-  './workspace-doc-cache.js'
+const { _clearWorkspaceDocCacheForTests } = await import('./workspace-doc-cache.js')
+const { workspaceRecordCopy, storedWorkspaceRecordCopy } = await import(
+  './_test-workspace-record.js'
 )
 const { isCorruptStoredDataError } = await import('./corrupt-stored-data.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
@@ -53,8 +53,8 @@ describe('opening the workspace record while the database is busy', () => {
     vi.spyOn(RecordStoreWorkspaceDocs.prototype, 'open').mockRejectedValue(err)
     vi.spyOn(RecordStoreWorkspaceDocs.prototype, 'create').mockRejectedValue(err)
 
-    const read = await openWorkspaceDocIfStored(WS).catch((e: unknown) => e)
-    const write = await getWorkspaceDoc(WS).catch((e: unknown) => e)
+    const read = await storedWorkspaceRecordCopy(WS).catch((e: unknown) => e)
+    const write = await workspaceRecordCopy(WS).catch((e: unknown) => e)
 
     expect(read).toBe(err)
     expect(write).toBe(err)
@@ -67,7 +67,7 @@ describe('opening the workspace record while the database is busy', () => {
       new Error('wasm decode failed'),
     )
 
-    const err = await openWorkspaceDocIfStored(WS).catch((e: unknown) => e)
+    const err = await storedWorkspaceRecordCopy(WS).catch((e: unknown) => e)
 
     expect(isCorruptStoredDataError(err)).toBe(true)
   })

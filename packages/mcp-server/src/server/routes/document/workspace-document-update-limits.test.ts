@@ -10,7 +10,6 @@
  * process that answered.
  */
 
-import '../../store/_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -31,8 +30,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getWorkspaceDoc } from '../../store/document-store.js'
-import { saveWorkspaceDoc } from '../../store/workspace-doc-cache.js'
+import { editWorkspaceRecord, workspaceRecordCopy } from '../../store/_test-workspace-record.js'
 import {
   createTestDocument,
   resolveTestServerDeps,
@@ -182,10 +180,9 @@ describe('a record holding a container under a key past the bound from before it
   /** Plants the key straight into the stored record, as a write before the bound did. */
   async function plantedSetup() {
     const context = await setup()
-    const record = await getWorkspaceDoc(WS)
-    nestUnderLongKey(documentContainers(record, context.documentId).getMap('threads'))
-    record.commit()
-    await saveWorkspaceDoc(WS, record)
+    await editWorkspaceRecord(WS, (record) =>
+      nestUnderLongKey(documentContainers(record, context.documentId).getMap('threads')),
+    )
     expect(await nodesAfterRestart()).toEqual(['n-a'])
     return context
   }
@@ -216,7 +213,7 @@ describe('a record holding a container under a key past the bound from before it
     const restored = await app.request(trashRestoreApiUrl(WS, documentId), { method: 'POST' })
 
     expect(restored.status).toBe(404)
-    expect(readTrashEntries(await getWorkspaceDoc(WS)).map((row) => row.documentId)).toEqual([
+    expect(readTrashEntries(await workspaceRecordCopy(WS)).map((row) => row.documentId)).toEqual([
       documentId,
     ])
     expect(await nodesAfterRestart()).toEqual([])

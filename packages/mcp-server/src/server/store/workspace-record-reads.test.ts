@@ -5,7 +5,6 @@
  * to the record however the cache holds it, and none of them changes it.
  */
 
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -33,10 +32,9 @@ const {
   renameDocumentPath,
   deleteDocument,
   readLatestCompactedAt,
-  getWorkspaceDoc,
   _clearWorkspaceDocCacheForTests,
 } = await import('./document-store.js')
-const { saveWorkspaceDoc } = await import('./workspace-doc-cache.js')
+const { editWorkspaceRecord } = await import('./_test-workspace-record.js')
 const { loadWorkspaceNames, setDocumentDisplayName, setDocumentPinned } = await import(
   './names-store.js'
 )
@@ -128,9 +126,7 @@ describe('the stamp of the last compaction', () => {
       [WS, 1000],
       [OTHER, 3000],
     ] as const) {
-      const record = await getWorkspaceDoc(workspaceId)
-      setWorkspaceLastCompactedAt(record, at)
-      await saveWorkspaceDoc(workspaceId, record)
+      await editWorkspaceRecord(workspaceId, (record) => setWorkspaceLastCompactedAt(record, at))
     }
     expect(await readLatestCompactedAt()).toBe(3000)
   })

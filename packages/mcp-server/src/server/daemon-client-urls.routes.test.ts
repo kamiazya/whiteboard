@@ -1,4 +1,3 @@
-import './store/_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -31,9 +30,8 @@ import type { SignInRoutesDeps } from './routes/sign-in.js'
 import { DENY_ALL_STRATEGY } from './security/_test-helpers.js'
 import { createRelyingParty } from './security/oidc-relying-party.js'
 import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key-store.js'
+import { editWorkspaceRecord } from './store/_test-workspace-record.js'
 import { createIsolatedDb, type IsolatedDbHandle } from './store/db/test-helpers.js'
-import { getWorkspaceDoc } from './store/document-store.js'
-import { saveWorkspaceDoc } from './store/workspace-doc-cache.js'
 
 const tmp = withTempDataDir('whiteboard-client-urls-')
 
@@ -340,7 +338,7 @@ describe('daemon client URLs reach a route', () => {
   async function localDaemonApp() {
     const serverDeps = resolveServerDeps(createContainer(storeMemoryModule))
     await serverDeps.documentIndex.createWorkspace({ workspaceId: WS, segment: 'urls' })
-    await saveWorkspaceDoc(WS, await getWorkspaceDoc(WS))
+    await editWorkspaceRecord(WS, () => {})
     return createApp({
       authMode: 'local-daemon',
       token: TOKEN,

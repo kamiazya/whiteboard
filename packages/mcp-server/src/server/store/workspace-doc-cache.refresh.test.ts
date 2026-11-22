@@ -10,7 +10,6 @@
  * saw.
  */
 
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -37,10 +36,16 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { saveDocument, loadDocument, listDocuments, getWorkspaceDoc, onWorkspaceDocUpdated } =
-  await import('./document-store.js')
-const { cacheBackedWorkspaceDocs, catchUpWorkspaceDoc, _clearWorkspaceDocCacheForTests } =
-  await import('./workspace-doc-cache.js')
+const { saveDocument, loadDocument, listDocuments, onWorkspaceDocUpdated } = await import(
+  './document-store.js'
+)
+const { editWorkspaceRecord, workspaceRecordCopy } = await import('./_test-workspace-record.js')
+const {
+  cacheBackedWorkspaceDocs,
+  catchUpWorkspaceDoc,
+  _clearWorkspaceDocCacheForTests,
+  _heldWorkspaceRecordForTests,
+} = await import('./workspace-doc-cache.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { getDb } = await import('./db/index.js')
 const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
@@ -132,18 +137,18 @@ describe('a cached workspace record next to a second process', () => {
 
   it('hands back the same document instance when nothing moved', async () => {
     await saveDocument(WS, 'mine', canvasDoc('mine'), { kind: 'spatial' })
-    const first = await getWorkspaceDoc(WS)
+    const first = _heldWorkspaceRecordForTests(WS)
+    expect(first).toBeDefined()
 
-    expect(await getWorkspaceDoc(WS)).toBe(first)
+    await workspaceRecordCopy(WS)
+    expect(_heldWorkspaceRecordForTests(WS)).toBe(first)
     await listDocuments(WS)
-    expect(await getWorkspaceDoc(WS)).toBe(first)
+    expect(_heldWorkspaceRecordForTests(WS)).toBe(first)
   })
 
   it('announces what it caught up on, and only that, so a subscriber stays level', async () => {
     await saveDocument(WS, 'mine', canvasDoc('mine'), { kind: 'spatial' })
-    const held = await getWorkspaceDoc(WS)
-    const replica = new LoroDoc()
-    replica.import(held.export({ mode: 'snapshot' }))
+    const replica = await workspaceRecordCopy(WS)
     const heard: Uint8Array[] = []
     const stop = onWorkspaceDocUpdated((_workspaceId, update) => heard.push(update))
     try {
@@ -180,15 +185,15 @@ describe('a cached workspace record next to a second process', () => {
 
   it('takes in what the other process wrote without losing an edit it has not saved yet', async () => {
     await saveDocument(WS, 'mine', canvasDoc('mine'), { kind: 'spatial' })
-    const held = await getWorkspaceDoc(WS)
     // Concurrent with the other process's write, not ahead of or behind it.
-    held.getMap('unsaved').set('key', 'value')
-    held.commit()
+    await editWorkspaceRecord(WS, (held) => held.getMap('unsaved').set('key', 'value'), undefined, {
+      save: false,
+    })
 
     await otherProcessCreates('theirs', 'theirs')
 
     expect((await listDocuments(WS)).map((entry) => entry.path).sort()).toEqual(['mine', 'theirs'])
-    expect(held.getMap('unsaved').get('key')).toBe('value')
+    expect((await workspaceRecordCopy(WS)).getMap('unsaved').get('key')).toBe('value')
   })
 
   it('tells the subscribers what a pass for the file sweeper caught up on, and nothing when level', async () => {
@@ -213,7 +218,8 @@ describe('a cached workspace record next to a second process', () => {
   it('answers a tail pass over a level document without reading the log', async () => {
     await saveDocument(WS, 'mine', canvasDoc('mine'), { kind: 'spatial' })
     const docs = cacheBackedWorkspaceDocs()
-    const held = await getWorkspaceDoc(WS)
+    const held = _heldWorkspaceRecordForTests(WS)
+    if (held === undefined) throw new Error('the record is not held')
     const cursor = await docs.readCursor(WS)
     const readLog = vi.spyOn(LibsqlDocumentStore.prototype, 'loadDeltas')
     try {
@@ -230,13 +236,14 @@ describe('a cached workspace record next to a second process', () => {
   it('still reads the log for a tail pass when the other process wrote', async () => {
     await saveDocument(WS, 'mine', canvasDoc('mine'), { kind: 'spatial' })
     const docs = cacheBackedWorkspaceDocs()
-    const held = await getWorkspaceDoc(WS)
+    const held = _heldWorkspaceRecordForTests(WS)
+    if (held === undefined) throw new Error('the record is not held')
     const cursor = await docs.readCursor(WS)
     await otherProcessCreates('theirs', 'theirs')
 
     const caughtUp = await docs.catchUp(WS, held, cursor)
 
     expect(caughtUp.updates.length).toBeGreaterThan(0)
-    expect(resolveWorkspaceDocument(held, 'theirs')).not.toBeNull()
+    expect(resolveWorkspaceDocument(await workspaceRecordCopy(WS), 'theirs')).not.toBeNull()
   })
 })

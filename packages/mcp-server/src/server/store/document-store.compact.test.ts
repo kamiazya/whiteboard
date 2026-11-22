@@ -1,4 +1,3 @@
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -25,7 +24,7 @@ vi.mock('../config.js', () => ({
 const { saveDocument, loadDocument, compactWorkspace, setDocumentSavedListener } = await import(
   './document-store.js'
 )
-const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
+const { storedWorkspaceRecordCopy } = await import('./_test-workspace-record.js')
 const {
   scheduleAutoCompact,
   installAutoCompact,
@@ -67,7 +66,7 @@ function declinedFor(records: { scope: string; msg: string; data?: unknown }[]):
  * so there is one stamp per workspace and not one per document.
  */
 async function readLastCompactedAt(): Promise<number | null> {
-  const workspaceDoc = await openWorkspaceDocIfStored(SESSION1)
+  const workspaceDoc = await storedWorkspaceRecordCopy(SESSION1)
   if (workspaceDoc === null) return null
   return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
 }
@@ -215,13 +214,13 @@ describe('compactWorkspace', () => {
     // current oplog version — later saves keep appending from it.
     const { getDb } = await import('./db/index.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
-    const { getWorkspaceDoc } = await import('./document-store.js')
+    const { workspaceRecordCopy } = await import('./_test-workspace-record.js')
     const db = await getDb(tempDir)
     const libsqlStore = new LibsqlDocumentStore(db)
     const frontierResult = await libsqlStore.readFrontier({
       docRef: { kind: 'workspace-tree', workspaceId: SESSION1 },
     })
-    const workspaceDoc = await getWorkspaceDoc(SESSION1)
+    const workspaceDoc = await workspaceRecordCopy(SESSION1)
     expect(frontierResult?.frontier).toEqual(workspaceDoc.oplogVersion().encode())
   })
 
@@ -252,9 +251,9 @@ describe('compactWorkspace', () => {
     // on the workspace record's oplog, so the shared timestamp lives on the
     // workspace meta — and only successful compaction writes it, same as the
     // row stamp ('untouched' compacted nothing above).
-    const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
+    const { storedWorkspaceRecordCopy } = await import('./_test-workspace-record.js')
     const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
-    const workspaceDoc = await openWorkspaceDocIfStored(SESSION1)
+    const workspaceDoc = await storedWorkspaceRecordCopy(SESSION1)
     expect(workspaceDoc).not.toBeNull()
     if (workspaceDoc === null) throw new Error('unreachable')
     const wsStamp = readWorkspaceMeta(workspaceDoc).lastCompactedAt
@@ -476,9 +475,9 @@ describe('auto-compact', () => {
     scheduleAutoCompact(SESSION1, store, { debounceMs: 50 })
     await _awaitAutoCompactIdleForTests()
     {
-      const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
+      const { storedWorkspaceRecordCopy } = await import('./_test-workspace-record.js')
       const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
-      const workspaceDoc = await openWorkspaceDocIfStored(SESSION1)
+      const workspaceDoc = await storedWorkspaceRecordCopy(SESSION1)
       expect(
         workspaceDoc && (readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null),
       ).not.toBeNull()

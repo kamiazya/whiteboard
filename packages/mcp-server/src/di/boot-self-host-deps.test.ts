@@ -16,25 +16,21 @@
  * cannot satisfy.
  */
 
-import '../server/store/_test-loro-records.js'
 import { mkdir, mkdtemp, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { wbDocumentCreate, wbDocumentDelete } from '@kamiazya/whiteboard-server-core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { documentOf } from '../server/routes/_test-helpers.js'
+import { editWorkspaceRecord } from '../server/store/_test-workspace-record.js'
 import { disposeAutoCompact, uninstallAutoCompact } from '../server/store/auto-compact.js'
 import { clearDbCacheForTests, closeDb, getDb } from '../server/store/db/index.js'
-import { getWorkspaceDoc } from '../server/store/document-store.js'
 import { purgeDanglingFiles } from '../server/store/file-gc.js'
 import { createFileGcSweeper } from '../server/store/file-gc-sweeper.js'
 import { loadWorkspaceNames, setWorkspaceName } from '../server/store/names-store.js'
 import { storeScope } from '../server/store/store-scope.js'
 import { FileVersionStore } from '../server/store/version-store.js'
-import {
-  _clearWorkspaceDocCacheForTests,
-  saveWorkspaceDoc,
-} from '../server/store/workspace-doc-cache.js'
+import { _clearWorkspaceDocCacheForTests } from '../server/store/workspace-doc-cache.js'
 import { SELF_HOST_TENANT_ID } from '../server/tenant/id.js'
 import { resetDataDirForTests, setDataDirForTests } from '../shared/data-dir-secure.js'
 import { bootSelfHostDeps } from './boot-self-host-deps.js'
@@ -91,11 +87,7 @@ describe('bootSelfHostDeps over a dir the process global does not name', () => {
       displayName: 'Served',
     })
     expect(await deps.workspaceDocuments.exists('01ZVM89A4A1V9FS03Z9J64KEK1')).toBe(true)
-    await saveWorkspaceDoc(
-      '01ZVM89A4A1V9FS03Z9J64KEK1',
-      await getWorkspaceDoc('01ZVM89A4A1V9FS03Z9J64KEK1', storeScope(served)),
-      storeScope(served),
-    )
+    await editWorkspaceRecord('01ZVM89A4A1V9FS03Z9J64KEK1', () => {}, storeScope(served))
     expect(
       (await deps.liveDocuments.list('01ZVM89A4A1V9FS03Z9J64KEK1')).map((entry) => entry.path),
     ).toEqual(['note'])

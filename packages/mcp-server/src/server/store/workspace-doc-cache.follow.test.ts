@@ -7,7 +7,6 @@
  * catch-up, and nothing is out afterwards.
  */
 
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -32,8 +31,6 @@ vi.mock('../config.js', () => ({
 const {
   followWorkspaceRecord,
   onWorkspaceDocUpdated,
-  getWorkspaceDoc,
-  saveWorkspaceDoc,
   _clearWorkspaceDocCacheForTests,
   _workspaceRecordLoansForTests,
 } = await import('./workspace-doc-cache.js')
@@ -41,6 +38,7 @@ const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { getDb } = await import('./db/index.js')
 const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
 const { globalStoreScope } = await import('./store-scope.js')
+const { editWorkspaceRecord, workspaceRecordCopy } = await import('./_test-workspace-record.js')
 
 const WS = workspaceIdFor('follow')
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -85,10 +83,7 @@ async function heardDuring<T extends { updates: readonly Uint8Array[] }>(
 
 describe('following the live workspace record', () => {
   it('sends nothing on first sight when the live record is level with the store', async () => {
-    const live = await getWorkspaceDoc(WS)
-    live.getMap('meta').set('own', '1')
-    live.commit()
-    await saveWorkspaceDoc(WS, live)
+    await editWorkspaceRecord(WS, (live) => live.getMap('meta').set('own', '1'))
 
     const first = await followWorkspaceRecord(WS, globalStoreScope, undefined)
 
@@ -98,12 +93,8 @@ describe('following the live workspace record', () => {
   })
 
   it('sends on first sight what the live record gained from the store, which the audience lacks', async () => {
-    const live = await getWorkspaceDoc(WS)
-    live.getMap('meta').set('own', '1')
-    live.commit()
-    await saveWorkspaceDoc(WS, live)
-    const replica = new LoroDoc()
-    replica.import(live.export({ mode: 'snapshot' }))
+    await editWorkspaceRecord(WS, (live) => live.getMap('meta').set('own', '1'))
+    const replica = await workspaceRecordCopy(WS)
     await foreignWrite('remote', '1')
 
     const { heard } = await heardDuring(() =>
@@ -111,18 +102,15 @@ describe('following the live workspace record', () => {
     )
     expect(heard.length).toBeGreaterThan(0)
     for (const update of heard) replica.import(update)
+    const live = await workspaceRecordCopy(WS)
     expect(replica.getMap('meta').toJSON()).toEqual(live.getMap('meta').toJSON())
     expect(live.getMap('meta').get('remote')).toBe('1')
     expect(_workspaceRecordLoansForTests()).toBe(0)
   })
 
   it('sends on first sight what a write landing after the lend added, which nothing else announces', async () => {
-    const live = await getWorkspaceDoc(WS)
-    live.getMap('meta').set('own', '1')
-    live.commit()
-    await saveWorkspaceDoc(WS, live)
-    const replica = new LoroDoc()
-    replica.import(live.export({ mode: 'snapshot' }))
+    await editWorkspaceRecord(WS, (live) => live.getMap('meta').set('own', '1'))
+    const replica = await workspaceRecordCopy(WS)
     // The lend has caught the record up by the time the reconcile reads the log,
     // so a write has to land between the two to leave anything to send.
     const read = LibsqlDocumentStore.prototype.loadDeltas
@@ -147,12 +135,8 @@ describe('following the live workspace record', () => {
   })
 
   it('sends what the store gained since the cursor, and nothing when it gained nothing', async () => {
-    const live = await getWorkspaceDoc(WS)
-    live.getMap('meta').set('own', '1')
-    live.commit()
-    await saveWorkspaceDoc(WS, live)
-    const replica = new LoroDoc()
-    replica.import(live.export({ mode: 'snapshot' }))
+    await editWorkspaceRecord(WS, (live) => live.getMap('meta').set('own', '1'))
+    const replica = await workspaceRecordCopy(WS)
     const first = await followWorkspaceRecord(WS, globalStoreScope, undefined)
 
     const quiet = await followWorkspaceRecord(WS, globalStoreScope, first.cursor)
@@ -169,7 +153,7 @@ describe('following the live workspace record', () => {
   })
 
   it('gives its loan back when the catch-up fails', async () => {
-    await getWorkspaceDoc(WS)
+    await workspaceRecordCopy(WS)
     const failing = vi
       .spyOn(RecordStoreWorkspaceDocs.prototype, 'catchUp')
       .mockRejectedValueOnce(new Error('store gone'))

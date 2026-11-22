@@ -1,4 +1,3 @@
-import './_test-loro-records.js'
 import { mkdir, mkdtemp, readdir, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -564,14 +563,14 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
   // had no backup been running: the bytes are gone.
   it('reads a trash entry whose delete a backup deferred as already gone', async () => {
     const { deleteDocument } = await import('./document-store.js')
-    const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
+    const { storedWorkspaceRecordCopy } = await import('./_test-workspace-record.js')
     const { globalStoreScope } = await import('./store-scope.js')
     const { readTrashEntries } = await import('@kamiazya/whiteboard-loro-adapter')
     const { daemonBlobStore } = await import('./backup-guarded-blob-store.js')
     await saveDocument(WS_DEFERRED, 'page', makeSpatialDocWithImage('asset-d'))
     await seedFile(WS_DEFERRED, 'asset-d', '.png', 500)
     await deleteDocument(WS_DEFERRED, 'page')
-    const record = await openWorkspaceDocIfStored(WS_DEFERRED, globalStoreScope)
+    const record = await storedWorkspaceRecordCopy(WS_DEFERRED, globalStoreScope)
     const [entry] = readTrashEntries(record ?? new LoroDoc())
     if (entry === undefined) throw new Error('the delete left no trash entry')
     const blobs = daemonBlobStore(tempDir, SELF_HOST_TENANT_ID)
@@ -649,8 +648,7 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
 })
 
 /**
- * ADR-0020. GC judges "referenced" from `openWorkspaceDocIfStored`, which
- * answers the cached workspace document, and a cache that trusted itself was
+ * ADR-0020. GC judges "referenced" from the cached workspace record, and a cache that trusted itself was
  * authoritative only while one
  * process wrote: a pass on instance A could not see a document instance B
  * created, and unlinked B's blobs as dangling, for as long as nothing caught

@@ -9,15 +9,13 @@
  * workspace holding versions under the SAME documentId, and a sweep keyed
  * on documentId alone would take them.
  */
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { deleteWorkspaceNodeAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import { hasDocumentTrash } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getWorkspaceDoc } from './document-store.js'
-import { saveWorkspaceDoc } from './workspace-doc-cache.js'
+import { editWorkspaceRecord } from './_test-workspace-record.js'
 
 let tempDir: string
 
@@ -104,9 +102,9 @@ describe('sweeping a deleted document’s versions', () => {
     await deps.documentTeardown.around(
       { workspaceId: '01PAW75F73PVC402Y3V151KT6R', documentId, path: 'doomed' },
       async () => {
-        const record = await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')
-        expect(deleteWorkspaceNodeAtPath(record, 'doomed')).toBe(true)
-        await saveWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R', record)
+        await editWorkspaceRecord('01PAW75F73PVC402Y3V151KT6R', (record) => {
+          expect(deleteWorkspaceNodeAtPath(record, 'doomed')).toBe(true)
+        })
       },
     )
     expect(await rowsOf('01PAW75F73PVC402Y3V151KT6R')).toEqual([])

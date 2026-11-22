@@ -9,7 +9,6 @@
  * suite lives beside the port (ports/test-utils) precisely so this file is
  * one wiring, not a second copy of 38 cases.
  */
-import './_test-loro-records.js'
 import { mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -52,7 +51,7 @@ const {
   workspaceRegistry,
 } = await import('./document-store.js')
 const { FsBlobStore } = await import('./fs/fs-blob-store.js')
-const { releaseWorkspaceDocLoan } = await import('./workspace-doc-cache.js')
+const { editWorkspaceRecord } = await import('./_test-workspace-record.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 async function makeProductionIndex() {
@@ -135,14 +134,9 @@ async function placeInRecord(input: {
   documentId: string
   path: string
 }): Promise<void> {
-  const docs = cacheBackedWorkspaceDocs()
-  const doc = (await docs.create(input.workspaceId)) as LoroDoc
-  try {
+  await editWorkspaceRecord(input.workspaceId, (doc) => {
     createWorkspaceDocumentAtPath(doc, { ...input, kind: 'markdown' })
-    await docs.save(input.workspaceId, doc)
-  } finally {
-    releaseWorkspaceDocLoan(doc)
-  }
+  })
 }
 
 /** Every file under the tenant's blob root: the trash suite trashes documents only, so each is an evacuation. */

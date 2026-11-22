@@ -12,8 +12,7 @@ import { resolveWorkspaceDocument, writeSpatialCanvas } from '@kamiazya/whiteboa
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { describeUnderBothRecordKinds } from './_test-record-kinds.js'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
 vi.mock('../config.js', () => ({
@@ -58,7 +57,7 @@ function unreadableSource(): LoroDoc {
   return doc
 }
 
-describeUnderBothRecordKinds('a failed save', () => {
+describe('a failed save', () => {
   it('a save that throws after placing its node leaves nothing for the next save to persist', async () => {
     await saveDocument('0104Y7DY19FTA30KQYKDRRMNBN', 'kept', canvasDoc('first'), {
       kind: 'spatial',

@@ -3,14 +3,13 @@
  * WHOLE workspace document, instead of one per document path.
  *
  * Two properties carry the design:
- * - every mutation path funnels through `saveWorkspaceDoc`, so a single
+ * - every mutation path funnels through `saveRecord`, so a single
  *   subscription sees per-document edits too, and
  * - a workspace-granularity import invalidates every cached per-document
  *   projection — without that, the next per-document save would diff STALE
  *   content back over the imported edit and silently revert it.
  */
 
-import '../../store/_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

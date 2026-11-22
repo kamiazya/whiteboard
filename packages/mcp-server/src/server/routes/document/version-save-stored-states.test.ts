@@ -1,4 +1,3 @@
-import '../../store/_test-loro-records.js'
 // What saving a version does for a document in each stored state, through the tool and the route.
 // The outcomes were recorded on the code that loaded the document first, so a save that reads the
 // stored record instead stays the same answer: a retired shape saves, a record that cannot be
@@ -30,7 +29,9 @@ vi.mock('../../config.js', () => ({
 const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
   '../../store/document-store.js'
 )
-const { getWorkspaceDoc, saveWorkspaceDoc } = await import('../../store/workspace-doc-cache.js')
+const { editWorkspaceRecord, workspaceRecordCopy } = await import(
+  '../../store/_test-workspace-record.js'
+)
 const { createDocumentRouter } = await import('../document.js')
 const { FileVersionStore } = await import('../../store/version-store.js')
 const { documentStoreReady } = await import('../../store/store-handles.js')
@@ -111,9 +112,7 @@ async function plant(deps: ServerDeps, state: State): Promise<{ id: string; path
   await seedContent(state, path)
   const id = await documentIdAt(deps, WS, path)
   if (/^[cd]/.test(state)) {
-    const rec = await getWorkspaceDoc(WS)
-    plantRetired(rec, id, state)
-    await saveWorkspaceDoc(WS, rec)
+    await editWorkspaceRecord(WS, (rec) => plantRetired(rec, id, state))
   }
   if (state === 'e-corrupt') await corruptRecord()
   _clearWorkspaceDocCacheForTests()
@@ -231,16 +230,16 @@ describe('saving a version moves nothing in the record it reads', () => {
     ['a note whose node lacks its content containers', 'b-note', true],
   ] as const)('%s', async (_name, state, bare) => {
     const { id } = await plant(deps, state)
-    const cached = await getWorkspaceDoc(WS)
     if (bare) {
-      const node = cached
-        .getTree('tree')
-        .getNodes()
-        .find((n) => n.data.get('documentId') === id)
-      for (const key of CONTENT_CONTAINERS) node?.data.delete(key)
-      cached.commit()
-      await saveWorkspaceDoc(WS, cached)
+      await editWorkspaceRecord(WS, (record) => {
+        const node = record
+          .getTree('tree')
+          .getNodes()
+          .find((n) => n.data.get('documentId') === id)
+        for (const key of CONTENT_CONTAINERS) node?.data.delete(key)
+      })
     }
+    const cached = await workspaceRecordCopy(WS)
     const versionBefore = JSON.stringify([...cached.version().toJSON()])
     const frontiersBefore = frontiersToBase64(encodeFrontiers(cached.frontiers()))
     const store = await documentStoreReady(testStoreScope(tmp.dir))
