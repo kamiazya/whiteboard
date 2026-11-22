@@ -79,6 +79,14 @@ pub fn serialize(canvas: &SpatialCanvas, mode: Mode) -> Result<String, WriteFail
     })
 }
 
+/// Whether `URL.canParse` accepts `text`: the check a node resource's
+/// `text/uri-list` location is held to, with the deviation [`url`] states for
+/// a host UTS 46 would refuse.
+#[must_use]
+pub fn url_can_parse(text: &str) -> bool {
+    url::can_parse(text)
+}
+
 /// Whether a file still holds the annotation layer an older export wrote into
 /// the canvas-level extension: a non-empty `x-whiteboard.comments` list.
 fn carries_conversation(value: &Value) -> bool {
