@@ -96,7 +96,6 @@ fn a_node_the_schema_refuses_is_skipped_and_counted() {
         ("a negative width", json!({ "width": -1 })),
         ("a short hex colour", json!({ "color": "#abc" })),
         ("a preset past six", json!({ "color": "7" })),
-        ("a non-finite x", json!({ "x": f64::NAN })),
         ("a bad embed id", json!({ "embed": { "documentId": "x" } })),
         ("an empty version ref", json!({ "embed": { "documentId": ULID, "versionRef": "" } })),
         (
@@ -124,6 +123,24 @@ fn a_node_the_schema_refuses_is_skipped_and_counted() {
         let doc = doc_of(&[("nodes", "n", node(&extra))]);
         check(label, &doc, QueryName::SpatialCanvas, &canvas_of(&[], 1));
         check(label, &doc, QueryName::SpatialNodeCount, &json!({ "ok": 0 }));
+    }
+}
+
+#[test]
+fn a_node_holding_a_double_the_schema_refuses_is_skipped() {
+    let fields =
+        [("x", f64::NAN), ("y", f64::NEG_INFINITY), ("width", f64::INFINITY), ("height", -0.5)];
+    for (key, held) in fields {
+        let LoroValue::Map(stored) = lv(&node(&json!({}))) else { unreachable!() };
+        let record: LoroMapValue = stored
+            .iter()
+            .filter(|(k, _)| k.as_str() != key)
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .chain([(key.to_owned(), LoroValue::Double(held))])
+            .collect();
+        let doc = LoroDoc::new();
+        doc.get_map("nodes").insert("n", LoroValue::Map(record)).expect("set");
+        check(key, &doc, QueryName::SpatialCanvas, &canvas_of(&[], 1));
     }
 }
 
@@ -395,6 +412,17 @@ fn a_kind_asked_for_decides_only_a_document_that_states_none() {
         ])),
     };
     assert!(answer_content_query(&unstated, &extra).is_none());
+    let named_otherwise = Query {
+        query: QueryName::DocumentContent,
+        args: Some(Value::Map(vec![("other".to_owned(), Value::String("markdown".to_owned()))])),
+    };
+    assert!(answer_content_query(&unstated, &named_otherwise).is_none());
+    let empty = Query { query: QueryName::DocumentContent, args: Some(Value::Map(Vec::new())) };
+    assert_same(
+        "empty arguments",
+        &answer_content_query(&unstated, &empty).expect("answered").value,
+        &model_of(&json!({ "ok": { "kind": "spatial", "canvas": { "nodes": [], "edges": [] } } })),
+    );
 }
 
 #[test]
