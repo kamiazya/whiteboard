@@ -1838,6 +1838,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "whiteboard-port-fakes"
+version = "0.0.0"
+dependencies = [
+ "whiteboard-ports",
+ "whiteboard-proptest",
+]
+
+[[package]]
+name = "whiteboard-ports"
+version = "0.0.0"
+dependencies = [
+ "wasm-bindgen-test",
+ "whiteboard-det",
+]
+
+[[package]]
 name = "whiteboard-proptest"
 version = "0.0.0"
 dependencies = [

@@ -1,6 +1,8 @@
-//! `cargo xtask wasm-imports`: a core crate compiled to wasm imports nothing.
+//! `cargo xtask wasm-imports`: a core or ports crate compiled to wasm imports
+//! nothing.
 //!
-//! A core crate is pure, so its wasm needs nothing from the host. This is the
+//! A crate of the core, ports, ops or adapters layer that targets wasm32 is
+//! scanned; a core crate is pure, so its wasm needs nothing from the host. This is the
 //! strongest form of that ban: any reach outside — a C dependency, a
 //! JS-backed `getrandom`, a hand-written import — lands in the import section
 //! however it was spelled in source. It does NOT see `std::fs` and the other
@@ -173,12 +175,21 @@ fn build(args: &[&str]) -> Result<(), Vec<String>> {
     if status.success() { Ok(()) } else { Err(vec![format!("cargo {} failed", args.join(" "))]) }
 }
 
-/// The present core crates that target wasm32, in map order.
-pub(crate) fn wasm_core_crates(map: &arch_map::ArchMap) -> Vec<&String> {
+/// The layers whose crates must run unchanged on wasm32 and so are proven
+/// there. Mechanics and bindings are composition: they reach a concrete host
+/// on purpose, and tooling is never shipped.
+const WASM_PROVEN_LAYERS: &[&str] = &["core", "ports", "ops", "adapters"];
+
+/// The present crates of [`WASM_PROVEN_LAYERS`] that declare a wasm32 target,
+/// in map order. A ports or ops crate that declares only `native` is outside
+/// it, since the declaration is what says it is meant to run in a browser.
+pub(crate) fn wasm_proven_crates(map: &arch_map::ArchMap) -> Vec<&String> {
     map.crates
         .iter()
         .filter(|(_, c)| {
-            c.layer == "core" && c.status == Status::Present && c.targets.contains(&Target::Wasm32)
+            WASM_PROVEN_LAYERS.contains(&c.layer.as_str())
+                && c.status == Status::Present
+                && c.targets.contains(&Target::Wasm32)
         })
         .map(|(name, _)| name)
         .collect()
@@ -209,7 +220,7 @@ fn judge(name: &str, scan: &Scan, allowed: &[&str], host: &[&str]) -> Vec<String
 pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
     let metadata = metadata::load()?;
     let map = arch_map::load_map(&metadata)?;
-    let core = wasm_core_crates(&map);
+    let core = wasm_proven_crates(&map);
     let mut report = Vec::new();
     let mut violations = Vec::new();
     let mut own_total = 0;
@@ -258,11 +269,11 @@ pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
             .push(format!("{orphan}: CORE_IMPORT_ALLOWANCES names a crate that is not scanned"));
     }
     if core.is_empty() {
-        violations.push("no present core crate targets wasm32, so nothing was scanned".to_owned());
+        violations.push("no present crate of the core, ports, ops or adapters layers targets wasm32, so nothing was scanned".to_owned());
     }
     if own_total == 0 {
         violations.push(
-            "no core crate's own function reached its artifact, so the scan saw only std"
+            "no scanned crate's own function reached its artifact, so the scan saw only std"
                 .to_owned(),
         );
     }
@@ -270,13 +281,13 @@ pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
         report.insert(
             0,
             format!(
-                "wasm-imports: {} core crates import nothing beyond CORE_IMPORT_ALLOWANCES",
+                "wasm-imports: {} crates import nothing beyond CORE_IMPORT_ALLOWANCES",
                 core.len()
             ),
         );
         Ok(report)
     } else {
-        violations.insert(0, "wasm-imports: a core artifact reaches the host:".to_owned());
+        violations.insert(0, "wasm-imports: a wasm32 artifact reaches the host:".to_owned());
         Err(violations)
     }
 }
@@ -423,6 +434,39 @@ mod tests {
         assert!(stale[0].contains("no longer makes"), "{stale:?}");
         let other = judge("whiteboard-det", &used, &[], &[]);
         assert_eq!(other.len(), 2, "{other:?}");
+    }
+
+    fn crate_json(name: &str, layer: &str, status: &str, targets: &str) -> String {
+        format!(
+            r#""{name}": {{ "path": "crates/{layer}/{name}", "layer": "{layer}", "status": "{status}",
+               "description": "d", "targets": {targets}, "allowedInternalDeps": [],
+               "allowedThirdParty": {{}}, "absorbs": [] }}"#
+        )
+    }
+
+    #[test]
+    fn the_scanned_crates_are_the_present_wasm_ones_of_the_pure_layers_only() {
+        const BOTH: &str = r#"["wasm32-unknown-unknown", "native"]"#;
+        const NATIVE: &str = r#"["native"]"#;
+        let crates = [
+            crate_json("core-present", "core", "present", BOTH),
+            crate_json("core-planned", "core", "planned", BOTH),
+            crate_json("ports-present", "ports", "present", BOTH),
+            crate_json("ports-native", "ports", "present", NATIVE),
+            crate_json("ops-present", "ops", "present", BOTH),
+            crate_json("adapters-present", "adapters", "present", BOTH),
+            crate_json("adapters-planned", "adapters", "planned", BOTH),
+            crate_json("tooling-present", "tooling", "present", BOTH),
+            crate_json("bindings-present", "bindings", "present", BOTH),
+            crate_json("mechanics-present", "mechanics", "present", BOTH),
+        ]
+        .join(",");
+        let map: arch_map::ArchMap = serde_json::from_str(&format!(
+            r#"{{ "$comment": "t", "layers": {{}}, "crates": {{ {crates} }} }}"#
+        ))
+        .unwrap();
+        let names: Vec<&str> = wasm_proven_crates(&map).into_iter().map(String::as_str).collect();
+        assert_eq!(names, vec!["adapters-present", "core-present", "ops-present", "ports-present"]);
     }
 
     #[test]
