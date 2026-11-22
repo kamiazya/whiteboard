@@ -3,11 +3,14 @@
 
 use crate::content_digest::content_digest_of;
 use crate::entry::Found;
+use crate::index_rules::Node;
 use crate::node_meta::{DocumentMeta, NodeRead, WORKSPACE_TREE_KEY};
 use crate::trash::{TrashRow, read_trash_rows};
 use crate::walk::{Walked, walk};
 use std::collections::BTreeSet;
-use whiteboard_crdt::{ContainerKind, Entry, ImportError, LoroDoc, import_bytes, node_entry, peek};
+use whiteboard_crdt::{
+    ContainerKind, Entry, ImportError, LoroDoc, import_bytes, node_entry, peek, set_peer_id,
+};
 use whiteboard_model::Value;
 
 /// The containers a document's content lives in, which its digest names.
@@ -27,8 +30,8 @@ const CONTENT_KEYS: [&str; 13] = [
     "body",
 ];
 
-const WORKSPACE_META_KEY: &str = "workspaceMeta";
-const PINNED_KEY: &str = "pinned";
+pub(crate) const WORKSPACE_META_KEY: &str = "workspaceMeta";
+pub(crate) const PINNED_KEY: &str = "pinned";
 
 /// A workspace record held for reading.
 pub struct WorkspaceRecord {
@@ -41,10 +44,43 @@ impl WorkspaceRecord {
         Ok(Self { doc: import_bytes(bytes)? })
     }
 
+    /// The record the bytes of a snapshot hold, written as `peer` from here on.
+    pub fn open_as(bytes: &[u8], peer: u64) -> Result<Self, ImportError> {
+        let doc = import_bytes(bytes)?;
+        set_peer_id(&doc, peer).map_err(|refused| ImportError(refused.0))?;
+        Ok(Self { doc })
+    }
+
+    /// The loro document the record is, for a keeper to export and store.
+    #[must_use]
+    pub fn doc(&self) -> &LoroDoc {
+        &self.doc
+    }
+
     /// Every node, folders included, in tree order with its derived path.
     #[must_use]
     pub fn nodes(&self) -> Vec<Walked> {
         walk(&self.doc).0
+    }
+
+    /// The nodes as the index's rules read them, in tree order.
+    #[must_use]
+    pub fn index_nodes(&self) -> Vec<Node> {
+        self.nodes().iter().map(Walked::as_node).collect()
+    }
+
+    /// The first node in tree order at `path`, a folder or a document.
+    #[must_use]
+    pub fn node_at(&self, path: &str) -> Option<Walked> {
+        self.nodes().into_iter().find(|walked| walked.path == path)
+    }
+
+    /// The first document node in tree order that carries `document_id`.
+    #[must_use]
+    pub fn document_node(&self, document_id: &str) -> Option<Walked> {
+        self.nodes().into_iter().find(|walked| {
+            matches!(&walked.read, NodeRead::Document(meta) if meta.document_id == document_id)
+        })
     }
 
     /// The content a document node holds, keyed by container, for its digest.

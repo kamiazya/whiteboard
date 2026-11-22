@@ -6,13 +6,16 @@
 //! over a workspace record's snapshot bytes. The writes over a record are not
 //! ported, so they are counted and skipped by op name, and every op must be in
 //! one of the two ledgers below with its row count, so a recorder change that
-//! drops or adds rows fails here.
+//! drops or adds rows fails here. A write row also holds what the keeper stored
+//! after it: the record's deep value with its container ids, its version vector
+//! (which counts the operations the write appended, so the Rust writers must
+//! append the same ones), the saves and the blobs left.
 
 mod support;
 
 use serde_json::{Value as Json, json};
 use std::collections::BTreeMap;
-use support::{entry_json, ok, record_answer, restore_answer};
+use support::{entry_json, ok, record_answer, restore_answer, write_answer};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_workspace_index::{
@@ -41,19 +44,19 @@ const REPLAYED: &[(&str, usize)] = &[
     ("listDocuments", 9),
     ("listFolderNames", 8),
     ("listPinnedDocuments", 8),
+    ("setDocumentPinned", 24),
+    ("setFolderName", 28),
+    ("setDocumentName", 58),
+    ("createDocument", 76),
+    ("moveDocument", 56),
 ];
 
 /// The ops not replayed, with their rows: the index's writes over a record's
-/// snapshot bytes, which are not ported.
+/// snapshot bytes that are not ported yet.
 const DEFERRED: &[(&str, usize)] = &[
-    ("createDocument", 76),
-    ("setDocumentName", 58),
-    ("moveDocument", 56),
     ("restoreDocument", 52),
     ("deleteDocument", 31),
     ("duplicateDocument", 28),
-    ("setFolderName", 28),
-    ("setDocumentPinned", 24),
     ("purgeTrashEntry", 24),
 ];
 
@@ -198,20 +201,36 @@ fn answer(row: &Json) -> Option<Json> {
     })
 }
 
+/// Replays a write row and holds every part of what the keeper stored to the recording.
+fn check_write(row: &Json) -> bool {
+    let Some(got) = write_answer(row) else { return false };
+    let why = format!("{} ({})", row["id"], row["tag"]);
+    assert_eq!(got.result, row["result"], "{why}: result");
+    assert_eq!(got.minted, row["mint"].as_array().map_or(0, Vec::len), "{why}: ids minted");
+    assert_eq!(Json::from(got.saves), row["saves"], "{why}: saves");
+    assert_eq!(got.vv, row["vv"], "{why}: version vector");
+    if !row["deep"].is_null() {
+        assert_eq!(got.deep.as_ref(), Some(&row["deep"]), "{why}: stored record");
+    }
+    assert_eq!(json!(got.blobs), row["blobsAfter"], "{why}: blobs left");
+    true
+}
+
 #[test]
-fn every_pure_row_is_answered_as_the_typescript_answered_it() {
+fn every_recorded_row_is_answered_as_the_typescript_answered_it() {
     let mut replayed: BTreeMap<String, usize> = BTreeMap::new();
     let mut deferred: BTreeMap<String, usize> = BTreeMap::new();
     for line in RECORDING.lines() {
         let row: Json = serde_json::from_str(line).expect("a recorded line");
         let op = row["op"].as_str().expect("an op").to_owned();
-        match answer(&row) {
+        let held = match answer(&row) {
             Some(got) => {
                 assert_eq!(got, row["result"], "{} ({})", row["id"], row["tag"]);
-                *replayed.entry(op).or_default() += 1;
+                true
             }
-            None => *deferred.entry(op).or_default() += 1,
-        }
+            None => check_write(&row),
+        };
+        *(if held { &mut replayed } else { &mut deferred }).entry(op).or_default() += 1;
     }
     let ledger = |rows: &[(&str, usize)]| -> BTreeMap<String, usize> {
         rows.iter().map(|&(op, n)| (op.to_owned(), n)).collect()

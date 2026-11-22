@@ -1751,6 +1751,7 @@ dependencies = [
  "loro",
  "serde_json",
  "wasm-bindgen-test",
+ "whiteboard-det",
  "whiteboard-model",
 ]
 

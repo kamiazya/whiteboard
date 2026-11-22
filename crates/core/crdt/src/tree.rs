@@ -11,7 +11,7 @@ use whiteboard_model::Value;
 
 /// A node of a tree container, named by the tree's own id for it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NodeId(TreeID);
+pub struct NodeId(pub(crate) TreeID);
 
 /// What kind of container a map's entry is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,7 +78,7 @@ fn tree_of(doc: &LoroDoc, name: &str) -> Option<LoroTree> {
     }
 }
 
-fn kind_of(container: &Container) -> ContainerKind {
+pub(crate) fn kind_of(container: &Container) -> ContainerKind {
     match container {
         Container::Map(_) => ContainerKind::Map,
         Container::List(_) => ContainerKind::List,

@@ -1,6 +1,8 @@
 //! The recorded rows over a workspace record's bytes, answered by the Rust
 //! reads in the recorder's answer shape.
 
+mod writes;
+
 use serde_json::{Value as Json, json};
 use whiteboard_model::encoding::base64_to_bytes;
 use whiteboard_workspace_index::{
@@ -8,6 +10,7 @@ use whiteboard_workspace_index::{
     list_pinned_documents, list_trash, resolve_document, resolve_document_by_id,
     restorable_trash_documents,
 };
+pub(crate) use writes::write_answer;
 
 pub(crate) fn ok(value: impl Into<Json>) -> Json {
     json!({ "ok": value.into() })
@@ -33,7 +36,7 @@ pub(crate) fn entry_json(entry: &DocumentEntry) -> Json {
     out
 }
 
-fn refusal(name: &str, fields: Json) -> Json {
+pub(crate) fn refusal(name: &str, fields: Json) -> Json {
     let mut fields = fields;
     if let Some(map) = fields.as_object_mut() {
         map.insert("name".to_owned(), json!(name));

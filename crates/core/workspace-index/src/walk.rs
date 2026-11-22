@@ -1,5 +1,6 @@
 //! The tree walked into the nodes a listing reads, each with its path.
 
+use crate::index_rules::{Node, NodeKind};
 use crate::node_meta::{NodeRead, WORKSPACE_TREE_KEY, read_node};
 use whiteboard_crdt::{LoroDoc, NodeId, tree_children, tree_roots};
 
@@ -9,6 +10,27 @@ pub struct Walked {
     pub id: NodeId,
     pub read: NodeRead,
     pub path: String,
+}
+
+impl Walked {
+    /// The node as the index's rules read it.
+    #[must_use]
+    pub fn as_node(&self) -> Node {
+        match &self.read {
+            NodeRead::Document(meta) => Node {
+                kind: NodeKind::Document,
+                path: self.path.clone(),
+                name: meta.name.clone(),
+                document_id: Some(meta.document_id.clone()),
+            },
+            NodeRead::Folder { name, .. } => Node {
+                kind: NodeKind::Folder,
+                path: self.path.clone(),
+                name: name.clone(),
+                document_id: None,
+            },
+        }
+    }
 }
 
 /// Every readable live node in tree order (depth-first pre-order), with its
