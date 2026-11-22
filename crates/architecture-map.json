@@ -195,7 +195,7 @@
       "path": "crates/core/history",
       "layer": "core",
       "status": "present",
-      "description": "checkpoint scheduling, version retention, frontier encoding",
+      "description": "version retention, the compaction cut and frontier encoding, over a record's bytes through whiteboard-crdt (checkpoint scheduling is a host timer and is not ported)",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det", "whiteboard-model", "whiteboard-crdt"],
       "allowedThirdParty": {},
