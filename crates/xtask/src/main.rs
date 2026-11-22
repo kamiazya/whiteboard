@@ -22,9 +22,9 @@ const USAGE: &str = "usage: cargo xtask <task>
 tasks:
   codegen [--check] Zod and serde types from contracts/; --check fails on drift
   arch-map          crates follow crates/architecture-map.json
-  cross-target      every core crate's tests pass on wasm32 (Node) as natively, same count
+  cross-target      every core, ports, ops and adapters crate's tests pass on wasm32 (Node) as natively, same count
   inputs            untrusted-input entries declare caps in crates/input-caps.json
-  wasm-imports      core crates built for wasm32 import nothing
+  wasm-imports      core, ports, ops and adapters crates built for wasm32 import nothing
   size [--update]   wasm artifacts fit crates/wasm-size-ledger.json
   coverage [--update]
                     native line and region coverage meets crates/coverage-floor.json

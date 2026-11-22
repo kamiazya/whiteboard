@@ -1,4 +1,4 @@
-//! `cargo xtask cross-target`: every present core crate's tests pass on
+//! `cargo xtask cross-target`: every present core, ports, ops and adapters crate's tests pass on
 //! `wasm32-unknown-unknown` under Node exactly as they do natively, and the
 //! SAME NUMBER of them (ADR-0054, QR-21 layer 3).
 //!
@@ -50,10 +50,26 @@ fn run_tests(name: &str, wasm: bool) -> Result<u64, String> {
     passed(&text).ok_or_else(|| format!("{name} ({target}): no `test result:` line in the output"))
 }
 
+/// A crate whose test count differs between the targets has tests that do not
+/// run on one of them.
+fn parity_error(name: &str, native: u64, wasm: u64) -> Option<String> {
+    (native != wasm).then(|| format!(
+        "{name}: {native} tests pass natively and {wasm} on wasm32; a test module that does not run on wasm needs `#[cfg(target_arch = \"wasm32\")] use wasm_bindgen_test::wasm_bindgen_test as test;`"
+    ))
+}
+
+/// An empty selection proves nothing, so it is a failure, not a pass.
+fn empty_selection_error<T>(selected: &[T]) -> Option<String> {
+    selected.is_empty().then(|| {
+        "no present crate of the core, ports, ops or adapters layers targets wasm32, so nothing ran"
+            .to_owned()
+    })
+}
+
 pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
     let meta = metadata::load()?;
     let map = arch_map::load_map(&meta)?;
-    let core = wasm_imports::wasm_core_crates(&map);
+    let core = wasm_imports::wasm_proven_crates(&map);
     let mut report = Vec::new();
     let mut v = Vec::new();
     for name in &core {
@@ -65,21 +81,15 @@ pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
                 continue;
             }
         };
-        if native != wasm {
-            v.push(format!(
-                "{name}: {native} tests pass natively and {wasm} on wasm32; a test module that does not run on wasm needs `#[cfg(target_arch = \"wasm32\")] use wasm_bindgen_test::wasm_bindgen_test as test;`"
-            ));
-        }
+        v.extend(parity_error(name, native, wasm));
         report.push(format!("  {name}: {native} tests on both targets"));
     }
-    if core.is_empty() {
-        v.push("no present core crate targets wasm32, so nothing ran".to_owned());
-    }
+    v.extend(empty_selection_error(&core));
     if v.is_empty() {
         report.insert(
             0,
             format!(
-                "cross-target: {} core crates pass the same tests on wasm32 and natively",
+                "cross-target: {} crates pass the same tests on wasm32 and natively",
                 core.len()
             ),
         );
@@ -91,7 +101,20 @@ pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::passed;
+    use super::{empty_selection_error, parity_error, passed};
+
+    #[test]
+    fn equal_counts_pass_and_unequal_counts_name_the_crate() {
+        assert_eq!(parity_error("whiteboard-ports", 7, 7), None);
+        let e = parity_error("whiteboard-ports", 7, 6).expect("unequal counts fail");
+        assert!(e.starts_with("whiteboard-ports: 7 tests pass natively and 6 on wasm32"), "{e}");
+    }
+
+    #[test]
+    fn an_empty_selection_fails_and_a_non_empty_one_does_not() {
+        assert!(empty_selection_error::<String>(&[]).is_some());
+        assert_eq!(empty_selection_error(&["whiteboard-ports".to_owned()]), None);
+    }
 
     #[test]
     fn sums_every_result_line_and_refuses_output_without_one() {
