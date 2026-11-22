@@ -15,6 +15,7 @@ members = [
   "crates/core/plugin-visual",
   "crates/core/facet-engine",
   "crates/core/search",
+  "crates/core/crdt",
   "crates/core/workspace-index",
   "crates/core/reference-graph",
   "crates/core/history",
@@ -85,6 +86,10 @@ unicode-case-mapping = "=1.0.0"
 unicode-normalization = { version = "=0.1.26", default-features = false }
 unicode-properties = { version = "=0.1.5", default-features = false, features = ["general-category"] }
 unicode-script = "=0.5.9"
+# Pinned exactly, lock-step with the npm `loro-crdt` in pnpm-workspace.yaml's
+# catalog (ADR-0054 decision 13): a skew makes every differential failure
+# ambiguous. tools/arch-lint's loro-lock-step test compares the two lockfiles.
+loro = "=1.17.1"
 wasm-bindgen = "=0.2.130"
 # The test harness released with that wasm-bindgen; its runner ships in
 # wasm-bindgen-cli at the same version.
@@ -133,6 +138,14 @@ strip = "debuginfo"
 # skeleton: 30522 -> 30753 bytes (+0.8%); re-measure size and speed when a
 # ported crate with real integer arithmetic is linked in.
 overflow-checks = true
+
+# loro-internal asserts `start < end` on a rich-text mark op in debug builds,
+# and loro-crdt (a release build, no debug assertions) writes zero-length marks
+# that the recorded oracle holds (crdt-read.jsonl, `doc-markdown-utf16-74`).
+# Release loro imports them, so the dev and test profiles do too: the
+# assertion is loro's own consistency check, not a statement about the bytes.
+[profile.dev.package.loro-internal]
+debug-assertions = false
 
 # What a shipped NATIVE binary is built with (`cargo xtask dist native`),
 # checked by `cargo xtask harden-check` and `cargo xtask repro-check`.

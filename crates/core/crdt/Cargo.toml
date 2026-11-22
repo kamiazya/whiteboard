@@ -1,0 +1,23 @@
+[package]
+name = "whiteboard-crdt"
+description = "The CRDT document engine's Rust half: reads the bytes loro-crdt writes and writes the bytes it reads, over the loro crate pinned lock-step to the npm version."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+loro.workspace = true
+whiteboard-model = { path = "../model" }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+# QR-21 layer 3: the same tests run natively and on wasm32 under Node.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[lints]
+workspace = true

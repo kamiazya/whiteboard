@@ -56,6 +56,18 @@
       "reason": "the same cell count read as cast_possible_truncation: clamped to zero or above before the one conversion"
     },
     {
+      "crate": "crates/core/crdt",
+      "lint": "clippy::cast_precision_loss",
+      "count": 1,
+      "reason": "a loro integer read as the f64 a JavaScript number holds: npm loro-crdt hands every i64 to JavaScript as a number, so one past +-2^53 rounds the same way there (tests/value_conversion.rs pins 2^53 + 1 and 2^62)"
+    },
+    {
+      "crate": "crates/core/crdt",
+      "lint": "clippy::disallowed_methods",
+      "count": 1,
+      "reason": "tests/rust_to_js.rs regenerates the committed Rust-written corpus when a developer sets WHITEBOARD_RECORD_RUST_CRDT_CORPUS: the one environment read and the one file write, in a test only, since core has no port for either"
+    },
+    {
       "crate": "crates/core/edge-routing",
       "lint": "clippy::arithmetic_side_effects",
       "count": 4,
