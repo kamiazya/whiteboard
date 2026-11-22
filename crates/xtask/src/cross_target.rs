@@ -1,4 +1,4 @@
-//! `cargo xtask cross-target`: every present core crate's tests pass on
+//! `cargo xtask cross-target`: every present core, ports, ops and adapters crate's tests pass on
 //! `wasm32-unknown-unknown` under Node exactly as they do natively, and the
 //! SAME NUMBER of them (ADR-0054, QR-21 layer 3).
 //!
@@ -53,7 +53,7 @@ fn run_tests(name: &str, wasm: bool) -> Result<u64, String> {
 pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
     let meta = metadata::load()?;
     let map = arch_map::load_map(&meta)?;
-    let core = wasm_imports::wasm_core_crates(&map);
+    let core = wasm_imports::wasm_proven_crates(&map);
     let mut report = Vec::new();
     let mut v = Vec::new();
     for name in &core {
@@ -73,13 +73,13 @@ pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
         report.push(format!("  {name}: {native} tests on both targets"));
     }
     if core.is_empty() {
-        v.push("no present core crate targets wasm32, so nothing ran".to_owned());
+        v.push("no present crate of the core, ports, ops or adapters layers targets wasm32, so nothing ran".to_owned());
     }
     if v.is_empty() {
         report.insert(
             0,
             format!(
-                "cross-target: {} core crates pass the same tests on wasm32 and natively",
+                "cross-target: {} crates pass the same tests on wasm32 and natively",
                 core.len()
             ),
         );
