@@ -696,4 +696,16 @@ mod cases {
         assert!(copy_meta(at(&doc, kept), at(&doc, gone), &copy_all).is_err());
         assert!(fill_meta(at(&doc, kept), at(&doc, gone), &|_, _| true).is_err());
     }
+
+    #[test]
+    fn a_node_answers_the_entry_it_holds_at_a_key_and_none_for_another() {
+        let doc = LoroDoc::new();
+        let id = rich_node(&doc);
+        assert_eq!(at(&doc, id).entry("scalar"), Some(Entry::Value(text("s"))));
+        assert!(matches!(
+            at(&doc, id).entry("body"),
+            Some(Entry::Container { kind: ContainerKind::Text, .. })
+        ));
+        assert_eq!(at(&doc, id).entry("absent"), None);
+    }
 }
