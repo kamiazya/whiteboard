@@ -49,8 +49,10 @@ const HOST_IMPORTS: &[&str] = &["measure"];
 /// CRDT artifact; the shipped `whiteboard-wasm` does not link it). It is held
 /// from both sides: a crate whose scan makes no import from its modules, or
 /// that is no longer a scanned core crate, fails as a stale entry.
-pub(crate) const CORE_IMPORT_ALLOWANCES: &[(&str, &[&str])] =
-    &[("whiteboard-crdt", WASM_BINDGEN_MODULES)];
+pub(crate) const CORE_IMPORT_ALLOWANCES: &[(&str, &[&str])] = &[
+    ("whiteboard-crdt", WASM_BINDGEN_MODULES),
+    ("whiteboard-workspace-index", WASM_BINDGEN_MODULES),
+];
 
 /// The modules `name`, a core crate, may import from.
 pub(crate) fn core_allowance(name: &str) -> &'static [&'static str] {
@@ -396,8 +398,13 @@ mod tests {
     fn an_allowance_for_a_crate_that_is_not_scanned_is_an_orphan() {
         let det = "whiteboard-det".to_owned();
         let crdt = "whiteboard-crdt".to_owned();
-        assert_eq!(orphan_allowances(&[&det]), vec!["whiteboard-crdt"]);
-        assert!(orphan_allowances(&[&det, &crdt]).is_empty());
+        let index = "whiteboard-workspace-index".to_owned();
+        assert_eq!(
+            orphan_allowances(&[&det]),
+            vec!["whiteboard-crdt", "whiteboard-workspace-index"]
+        );
+        assert_eq!(orphan_allowances(&[&det, &crdt]), vec!["whiteboard-workspace-index"]);
+        assert!(orphan_allowances(&[&det, &crdt, &index]).is_empty());
     }
 
     #[test]

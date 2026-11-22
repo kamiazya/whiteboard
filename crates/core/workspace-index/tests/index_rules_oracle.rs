@@ -2,14 +2,17 @@
 //!
 //! `packages/workspace-index/src/oracle/index-rules.jsonl` is that recording,
 //! frozen. This replays every row whose input is plain values: the rules over
-//! a node list, a name, a path, trash rows and a found document. The rows whose
-//! input is a workspace record's bytes need the CRDT engine this crate does not
-//! have, so they are counted and skipped by op name, and every op must be in
+//! a node list, a name, a path, trash rows and a found document, and the reads
+//! over a workspace record's snapshot bytes. The writes over a record are not
+//! ported, so they are counted and skipped by op name, and every op must be in
 //! one of the two ledgers below with its row count, so a recorder change that
 //! drops or adds rows fails here.
 
+mod support;
+
 use serde_json::{Value as Json, json};
 use std::collections::BTreeMap;
+use support::{entry_json, ok, record_answer, restore_answer};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_workspace_index::{
@@ -31,12 +34,18 @@ const REPLAYED: &[(&str, usize)] = &[
     ("distinctUnnamedPath", 48),
     ("isNamedByAnotherRow", 6),
     ("entryOf", 104),
+    ("restorableTrashDocuments", 86),
+    ("resolveDocument", 27),
+    ("listTrash", 20),
+    ("resolveDocumentById", 16),
+    ("listDocuments", 9),
+    ("listFolderNames", 8),
+    ("listPinnedDocuments", 8),
 ];
 
-/// The ops not replayed, with their rows. Each runs the index over a record's
-/// snapshot bytes (or judges bytes), which is the CRDT engine's to answer.
+/// The ops not replayed, with their rows: the index's writes over a record's
+/// snapshot bytes, which are not ported.
 const DEFERRED: &[(&str, usize)] = &[
-    ("restorableTrashDocuments", 86),
     ("createDocument", 76),
     ("setDocumentName", 58),
     ("moveDocument", 56),
@@ -44,14 +53,8 @@ const DEFERRED: &[(&str, usize)] = &[
     ("deleteDocument", 31),
     ("duplicateDocument", 28),
     ("setFolderName", 28),
-    ("resolveDocument", 27),
     ("setDocumentPinned", 24),
     ("purgeTrashEntry", 24),
-    ("listTrash", 20),
-    ("resolveDocumentById", 16),
-    ("listDocuments", 9),
-    ("listFolderNames", 8),
-    ("listPinnedDocuments", 8),
 ];
 
 fn str_of(row: &Json, key: &str) -> Option<String> {
@@ -108,10 +111,6 @@ fn kind_name(kind: NamedKind) -> &'static str {
     }
 }
 
-fn ok(value: impl Into<Json>) -> Json {
-    json!({ "ok": value.into() })
-}
-
 fn refusal(taken: &DisplayNameTaken) -> Json {
     json!({
         "err": "DisplayNameTakenError",
@@ -152,27 +151,10 @@ fn found_of(found: &Json) -> Found {
     }
 }
 
-/// `entryOf`'s answer in the recorder's shape; absent fields stay absent.
+/// `entryOf`'s answer in the recorder's shape.
 fn entry_answer(found: &Json) -> Json {
-    let Ok(entry) = entry_of(&found_of(found)) else {
-        return json!({ "err": "RangeError" });
-    };
-    let mut out = json!({
-        "documentId": entry.document_id,
-        "path": entry.path,
-        "contentDigest": entry.content_digest,
-    });
-    for (key, value) in [
-        ("kind", entry.kind.map(Json::from)),
-        ("name", entry.name.map(Json::from)),
-        ("shadowed", entry.shadowed.map(Json::from)),
-        ("updatedAt", entry.updated_at.map(Json::from)),
-    ] {
-        if let (Some(value), Some(fields)) = (value, out.as_object_mut()) {
-            fields.insert(key.to_owned(), value);
-        }
-    }
-    ok(out)
+    entry_of(&found_of(found))
+        .map_or_else(|_| json!({ "err": "RangeError" }), |e| ok(entry_json(&e)))
 }
 
 /// What the Rust port answers for one pure row, in the recorder's answer shape.
@@ -211,7 +193,8 @@ fn answer(row: &Json) -> Option<Json> {
             ok(is_named_by_another_row(&rows, &trash_of(&row["entry"])))
         }
         "entryOf" => entry_answer(&row["found"]),
-        _ => return None,
+        "restorableTrashDocuments" => restore_answer(row),
+        _ => return record_answer(row),
     })
 }
 
@@ -234,5 +217,5 @@ fn every_pure_row_is_answered_as_the_typescript_answered_it() {
         rows.iter().map(|&(op, n)| (op.to_owned(), n)).collect()
     };
     assert_eq!(replayed, ledger(REPLAYED), "the rows replayed, by op");
-    assert_eq!(deferred, ledger(DEFERRED), "the rows deferred to the CRDT engine, by op");
+    assert_eq!(deferred, ledger(DEFERRED), "the rows not replayed, by op");
 }

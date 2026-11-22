@@ -39,6 +39,21 @@ pub fn leaf_of_path(path: &str) -> &str {
     path.rfind('/').map_or(path, |cut| path.get(cut.saturating_add(1)..).unwrap_or(""))
 }
 
+/// `compareDocumentPaths`, the port's order for a listing: segment against
+/// segment by UTF-16 code unit, and a path sorts before every path it prefixes.
+#[must_use]
+pub fn compare_document_paths(left: &str, right: &str) -> std::cmp::Ordering {
+    let mut a = left.split('/');
+    let mut b = right.split('/');
+    loop {
+        match (a.next(), b.next()) {
+            (Some(x), Some(y)) if x != y => return x.encode_utf16().cmp(y.encode_utf16()),
+            (Some(_), Some(_)) => {}
+            (x, y) => return x.is_some().cmp(&y.is_some()),
+        }
+    }
+}
+
 /// ASCII letters and digits with interior hyphens, which is
 /// `DOCUMENT_PATH_SEGMENT_PATTERN`.
 fn is_path_segment(segment: &str) -> bool {
@@ -99,6 +114,18 @@ pub fn is_generated_document_path(path: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn listings_order_segment_by_segment_by_code_unit() {
+        use std::cmp::Ordering::{Equal, Greater, Less};
+        assert_eq!(compare_document_paths("a", "a"), Equal);
+        assert_eq!(compare_document_paths("a", "a/b"), Less);
+        assert_eq!(compare_document_paths("a/b", "a"), Greater);
+        assert_eq!(compare_document_paths("a-x", "a/b"), Greater);
+        assert_eq!(compare_document_paths("a/z", "b/a"), Less);
+        assert_eq!(compare_document_paths("B", "a"), Less);
+        assert_eq!(compare_document_paths("\u{e000}", "\u{1f600}"), Greater);
+    }
+
     use super::*;
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;

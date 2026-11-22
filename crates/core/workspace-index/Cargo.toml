@@ -10,7 +10,9 @@ publish.workspace = true
 
 [dependencies]
 unicode-normalization.workspace = true
+whiteboard-crdt = { path = "../crdt" }
 whiteboard-det = { path = "../det" }
+whiteboard-model = { path = "../model" }
 
 [dev-dependencies]
 serde_json.workspace = true
