@@ -18,13 +18,19 @@
 
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
+mod content;
 mod copy;
 mod frontiers;
+mod plain;
 mod read;
 mod subtree;
 mod tree;
 mod write;
 
+pub use content::{
+    CONTENT_QUERIES, DocumentKind, Refusal, answer_content_query, document_kind, markdown_body,
+    retired_stored_shape,
+};
 pub use copy::{NodeAt, copy_meta, fill_meta};
 pub use frontiers::{
     FrontiersError, decode_frontiers, encode_frontiers, frontiers_version, shallow_root_version,
