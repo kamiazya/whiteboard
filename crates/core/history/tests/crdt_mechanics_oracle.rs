@@ -1,12 +1,10 @@
 //! The history mechanics against the recorded answers of the TypeScript.
 //!
 //! `packages/history/src/oracle/crdt-mechanics.jsonl` is that recording,
-//! frozen. This replays what is plain values: the retention passes, the
-//! restore options, the constants, and the base64 half of the frontier rows.
-//! A frontier is a point in the op log and its bytes are the CRDT engine's
-//! encoding, so the rows that turn one into a version vector (`compactionCut`)
-//! or into bytes, and the refusals the engine makes of well-formed base64, are
-//! counted and skipped by op. Both ledgers pin the rows by op, so a recorder
+//! frozen. This replays every row: the retention passes, the restore options,
+//! the constants, and the rows that need the CRDT engine, which read the
+//! document's bytes through `whiteboard-crdt` (the compaction cut) or encode
+//! and decode frontiers with it. The ledgers pin the rows by op, so a recorder
 //! change that drops or adds rows fails here.
 
 #![cfg(test)]
@@ -15,18 +13,19 @@ use serde_json::{Value as Json, json};
 use std::collections::{BTreeMap, BTreeSet};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
+use whiteboard_crdt::{decode_frontiers, encode_frontiers, import_bytes};
 use whiteboard_history::{
     CHECKPOINT_QUIET_MS, LineageCandidate, MAX_AUTO_PER_DOCUMENT, MAX_MANUAL_PER_DOCUMENT,
     MAX_RESTORE_POINTS_PER_DOCUMENT, SandwichCandidate, auto_versions_over_cap,
-    carried_auto_versions_over_cap, frontiers_from_base64, frontiers_to_base64,
-    restore_point_options, sandwiched_auto_version_ids,
+    carried_auto_versions_over_cap, compaction_cut_over_doc, frontiers_from_base64,
+    frontiers_to_base64, restore_point_options, sandwiched_auto_version_ids,
 };
+use whiteboard_model::encoding::base64_to_bytes;
 
 const RECORDING: &str =
     include_str!("../../../../packages/history/src/oracle/crdt-mechanics.jsonl");
 
-/// The ops replayed here, with the rows replayed of each. The two frontier ops
-/// replay the base64 half only: the recorded text against the bytes it spells.
+/// The ops replayed here, with the rows replayed of each.
 const REPLAYED: &[(&str, usize)] = &[
     ("autoVersionsOverCap", 41),
     ("carriedAutoVersionsOverCap", 40),
@@ -34,14 +33,12 @@ const REPLAYED: &[(&str, usize)] = &[
     ("restorePointOptions", 3),
     ("constants", 1),
     ("frontiersToBase64", 20),
-    ("frontiersFromBase64", 29),
+    ("frontiersFromBase64", 32),
+    ("compactionCut", 220),
 ];
 
-/// The ops with rows the port does not answer, with those rows. Each needs the
-/// engine: `compactionCut` reads a snapshot's op log to turn frontiers into
-/// version vectors, and a refused `frontiersFromBase64` row is base64 the
-/// engine does not read as frontiers.
-const DEFERRED: &[(&str, usize)] = &[("compactionCut", 220), ("frontiersFromBase64", 3)];
+/// The ops with rows the port does not answer, with those rows.
+const DEFERRED: &[(&str, usize)] = &[];
 
 fn candidates(row: &Json) -> Vec<LineageCandidate> {
     row["autos"].as_array().map(|autos| autos.iter().map(lineage).collect()).unwrap_or_default()
@@ -71,22 +68,40 @@ fn ok(value: impl Into<Json>) -> Json {
     json!({ "ok": value.into() })
 }
 
+fn pairs_of(json: &Json) -> Option<Vec<(String, i64)>> {
+    json.as_array()?
+        .iter()
+        .map(|pair| Some((pair[0].as_str()?.to_owned(), pair[1].as_i64()?)))
+        .collect()
+}
+
+fn pairs_json(pairs: &[(String, i64)]) -> Json {
+    Json::Array(pairs.iter().map(|(peer, counter)| json!([peer, counter])).collect())
+}
+
 fn text_answer(row: &Json) -> Option<Json> {
-    let text = row["result"]["ok"].as_str()?;
-    let bytes = frontiers_from_base64(text).ok()?;
+    let bytes = encode_frontiers(&pairs_of(&row["frontiers"])?).ok()?;
     Some(ok(frontiers_to_base64(&bytes)))
 }
 
 fn bytes_answer(row: &Json) -> Option<Json> {
-    let recorded_ok = row["result"].get("ok").is_some();
     match frontiers_from_base64(row["text"].as_str()?) {
-        Ok(_) if recorded_ok => Some(row["result"].clone()),
-        Ok(_) => None,
+        Ok(bytes) => Some(
+            decode_frontiers(&bytes)
+                .map_or_else(|_| json!({ "err": "Error" }), |pairs| ok(pairs_json(&pairs))),
+        ),
         Err(refusal) => {
             assert_eq!(refusal.to_string(), "frontiers are not base64");
             Some(json!({ "err": "Error" }))
         }
     }
+}
+
+fn cut_answer(row: &Json) -> Option<Json> {
+    let doc = import_bytes(&base64_to_bytes(row["doc"].as_str()?)?).ok()?;
+    let points: Vec<Vec<(String, i64)>> =
+        row["points"].as_array()?.iter().map(pairs_of).collect::<Option<_>>()?;
+    Some(ok(compaction_cut_over_doc(&doc, &points).map_or(Json::Null, |cut| pairs_json(&cut))))
 }
 
 fn answer(row: &Json) -> Option<Json> {
@@ -123,6 +138,7 @@ fn answer(row: &Json) -> Option<Json> {
         })),
         "frontiersToBase64" => return text_answer(row),
         "frontiersFromBase64" => return bytes_answer(row),
+        "compactionCut" => return cut_answer(row),
         _ => return None,
     })
 }
@@ -146,5 +162,5 @@ fn every_pure_row_is_answered_as_the_typescript_answered_it() {
         rows.iter().map(|&(op, n)| (op.to_owned(), n)).collect()
     };
     assert_eq!(replayed, ledger(REPLAYED), "the rows replayed, by op");
-    assert_eq!(deferred, ledger(DEFERRED), "the rows deferred to the CRDT engine, by op");
+    assert_eq!(deferred, ledger(DEFERRED), "the rows deferred, by op");
 }

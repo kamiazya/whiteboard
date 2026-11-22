@@ -52,6 +52,7 @@ const HOST_IMPORTS: &[&str] = &["measure"];
 pub(crate) const CORE_IMPORT_ALLOWANCES: &[(&str, &[&str])] = &[
     ("whiteboard-crdt", WASM_BINDGEN_MODULES),
     ("whiteboard-workspace-index", WASM_BINDGEN_MODULES),
+    ("whiteboard-history", WASM_BINDGEN_MODULES),
 ];
 
 /// The modules `name`, a core crate, may import from.
@@ -376,6 +377,7 @@ mod tests {
     #[test]
     fn only_the_crate_with_an_allowance_may_import_and_only_from_its_modules() {
         assert_eq!(core_allowance("whiteboard-crdt"), WASM_BINDGEN_MODULES);
+        assert_eq!(core_allowance("whiteboard-history"), WASM_BINDGEN_MODULES);
         assert!(core_allowance("whiteboard-det").is_empty());
         let s = importing(&["__wbindgen_placeholder__::__wbindgen_throw", "env::now"]);
         assert_eq!(
@@ -399,12 +401,17 @@ mod tests {
         let det = "whiteboard-det".to_owned();
         let crdt = "whiteboard-crdt".to_owned();
         let index = "whiteboard-workspace-index".to_owned();
+        let history = "whiteboard-history".to_owned();
         assert_eq!(
             orphan_allowances(&[&det]),
-            vec!["whiteboard-crdt", "whiteboard-workspace-index"]
+            vec!["whiteboard-crdt", "whiteboard-workspace-index", "whiteboard-history"]
         );
-        assert_eq!(orphan_allowances(&[&det, &crdt]), vec!["whiteboard-workspace-index"]);
-        assert!(orphan_allowances(&[&det, &crdt, &index]).is_empty());
+        assert_eq!(
+            orphan_allowances(&[&det, &crdt]),
+            vec!["whiteboard-workspace-index", "whiteboard-history"]
+        );
+        assert_eq!(orphan_allowances(&[&det, &crdt, &index]), vec!["whiteboard-history"]);
+        assert!(orphan_allowances(&[&det, &crdt, &index, &history]).is_empty());
     }
 
     #[test]

@@ -19,12 +19,17 @@
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
 mod copy;
+mod frontiers;
 mod read;
 mod subtree;
 mod tree;
 mod write;
 
 pub use copy::{NodeAt, copy_meta, fill_meta};
+pub use frontiers::{
+    FrontiersError, decode_frontiers, encode_frontiers, frontiers_version, shallow_root_version,
+    version_frontiers,
+};
 pub use loro::{
     ExportMode, LoroDoc, LoroList, LoroMap, LoroMovableList, LoroText, LoroValue, TreeID,
     loro_value,
