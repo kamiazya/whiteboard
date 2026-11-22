@@ -10,7 +10,7 @@ use whiteboard_crdt::{deep_value_with_id, version_pairs};
 use whiteboard_model::Value;
 use whiteboard_model::encoding::base64_to_bytes;
 use whiteboard_workspace_index::{
-    BlobRef, CreateDocument, DeleteDocument, DuplicateDocument, IndexError, MoveDocument,
+    BlobRef, CreateDocument, DeleteDocument, DuplicateDocument, IndexError, MoveDocument, Outcome,
     PlacedDocument, PurgeTrashEntry, RestoreDocument, SetDocumentName, SetDocumentPinned,
     SetFolderName, TrashBlobs, WorkspaceRecord, create_document, delete_document,
     duplicate_document, move_document, purge_trash_entry, restore_document, set_document_name_of,
@@ -167,20 +167,25 @@ fn text(args: &Json, key: &str) -> String {
     args[key].as_str().unwrap_or_default().to_owned()
 }
 
-/// The write the row's op names, over the record, or `None` for an op not ported.
-fn run(
-    op: &str,
-    record: &WorkspaceRecord,
-    args: &Json,
-    mint: &mut dyn FnMut() -> String,
-    blobs: &mut Blobs,
-) -> Option<Done> {
-    let workspace_id = text(args, "workspaceId");
+/// A recorded call: the record it runs over and the arguments it was made with.
+struct Call<'a> {
+    record: &'a WorkspaceRecord,
+    args: &'a Json,
+    workspace_id: String,
+}
+
+fn unit(done: Result<Outcome<()>, IndexError>) -> Done {
+    done.map(|done| (Json::Null, done.saved))
+}
+
+/// The writes that place, name and pin documents and folders.
+fn run_placement(op: &str, call: &Call<'_>, mint: &mut dyn FnMut() -> String) -> Option<Done> {
+    let (record, args, workspace_id) = (call.record, call.args, call.workspace_id.as_str());
     let name = args["name"].as_str();
     Some(match op {
         "createDocument" => {
             let input = CreateDocument {
-                workspace_id: &workspace_id,
+                workspace_id,
                 path: &text(args, "path"),
                 kind: &text(args, "kind"),
                 name,
@@ -190,7 +195,7 @@ fn run(
         }
         "duplicateDocument" => {
             let input = DuplicateDocument {
-                workspace_id: &workspace_id,
+                workspace_id,
                 path: &text(args, "path"),
                 without_annotations: args["withoutAnnotations"].as_bool().unwrap_or_default(),
             };
@@ -198,57 +203,61 @@ fn run(
                 .map(|done| (entry_json(&done.value), done.saved))
         }
         "moveDocument" => {
-            let input = MoveDocument {
-                workspace_id: &workspace_id,
-                from: &text(args, "from"),
-                to: &text(args, "to"),
-            };
-            move_document(record, &input).map(|done| (Json::Null, done.saved))
+            let input =
+                MoveDocument { workspace_id, from: &text(args, "from"), to: &text(args, "to") };
+            unit(move_document(record, &input))
         }
         "setDocumentName" => {
-            let input = SetDocumentName {
-                workspace_id: &workspace_id,
-                document_id: &text(args, "documentId"),
-                name,
-            };
-            set_document_name_of(record, &input).map(|done| (Json::Null, done.saved))
+            let input =
+                SetDocumentName { workspace_id, document_id: &text(args, "documentId"), name };
+            unit(set_document_name_of(record, &input))
         }
         "setDocumentPinned" => {
             let input = SetDocumentPinned {
-                workspace_id: &workspace_id,
+                workspace_id,
                 document_id: &text(args, "documentId"),
                 pinned: args["pinned"].as_bool().unwrap_or_default(),
             };
-            set_document_pinned(record, &input).map(|done| (Json::Null, done.saved))
+            unit(set_document_pinned(record, &input))
         }
         "setFolderName" => {
-            let input =
-                SetFolderName { workspace_id: &workspace_id, path: &text(args, "path"), name };
-            set_folder_name_of(record, &input).map(|done| (Json::Null, done.saved))
+            let input = SetFolderName { workspace_id, path: &text(args, "path"), name };
+            unit(set_folder_name_of(record, &input))
         }
+        _ => return None,
+    })
+}
+
+/// The writes that move a document into the trash, out of it and away for good.
+fn run_trash(op: &str, call: &Call<'_>, blobs: &mut Blobs) -> Option<Done> {
+    let (record, args, workspace_id) = (call.record, call.args, call.workspace_id.as_str());
+    Some(match op {
         "deleteDocument" => {
-            let input = DeleteDocument { workspace_id: &workspace_id, path: &text(args, "path") };
-            delete_document(record, &input, blobs, RECORDED_NOW)
-                .map(|done| (Json::Null, done.saved))
+            let input = DeleteDocument { workspace_id, path: &text(args, "path") };
+            unit(delete_document(record, &input, blobs, RECORDED_NOW))
         }
         "purgeTrashEntry" => {
-            let input = PurgeTrashEntry {
-                workspace_id: &workspace_id,
-                document_id: &text(args, "documentId"),
-            };
+            let input = PurgeTrashEntry { workspace_id, document_id: &text(args, "documentId") };
             purge_trash_entry(record, &input, blobs)
                 .map(|done| (Json::from(done.value), done.saved))
         }
         "restoreDocument" => {
-            let input = RestoreDocument {
-                workspace_id: &workspace_id,
-                document_id: &text(args, "documentId"),
-            };
+            let input = RestoreDocument { workspace_id, document_id: &text(args, "documentId") };
             restore_document(record, &input, blobs)
                 .map(|done| (done.value.as_ref().map_or(Json::Null, placed_json), done.saved))
         }
         _ => return None,
     })
+}
+
+/// The write the row's op names, over the record, or `None` for an op not ported.
+fn run(
+    op: &str,
+    call: &Call<'_>,
+    mint: &mut dyn FnMut() -> String,
+    blobs: &mut Blobs,
+) -> Option<Done> {
+    run_placement(op, call, mint).or_else(|| run_trash(op, call, blobs))
 }
 
 /// The row replayed, or `None` for an op the Rust index does not write yet.
@@ -280,7 +289,8 @@ pub(crate) fn write_answer(row: &Json) -> Option<Replayed> {
         minted += 1;
         queue.pop().unwrap_or_default()
     };
-    let done = run(op, &record, args, &mut mint, &mut blobs)?;
+    let call = Call { record: &record, args, workspace_id: text(args, "workspaceId") };
+    let done = run(op, &call, &mut mint, &mut blobs)?;
     let saves = usize::from(done.as_ref().is_ok_and(|(_, saved)| *saved));
     let result = done.map_or_else(|error| refused(&error), |(value, _)| ok(value));
     let vv = version_pairs(record.doc());

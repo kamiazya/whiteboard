@@ -5,7 +5,7 @@ use crate::test_record::{ID_A, ID_B, add_node, document_meta, id_of, meta_of, wr
 use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_crdt::{LoroDoc, LoroText};
 
-const WS: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+const WORKSPACE: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const NOW: f64 = 1_700_000_000_000.0;
 
 #[derive(Default)]
@@ -37,7 +37,7 @@ fn minting(id: &str) -> impl FnMut() -> String {
 }
 
 fn create<'a>(path: &'a str, name: Option<&'a str>) -> CreateDocument<'a> {
-    CreateDocument { workspace_id: WS, path, kind: "markdown", name }
+    CreateDocument { workspace_id: WORKSPACE, path, kind: "markdown", name }
 }
 
 fn documents_of(n: usize) -> LoroDoc {
@@ -120,7 +120,7 @@ fn a_named_create_at_a_path_a_document_owns_is_refused_with_the_id_minted() {
     };
     assert_eq!(
         create_document(&record, &create("a", Some("Other")), &mut mint, NOW),
-        Err(IndexError::PathTaken { workspace_id: WS.to_owned(), path: "a".to_owned() })
+        Err(IndexError::PathTaken { workspace_id: WORKSPACE.to_owned(), path: "a".to_owned() })
     );
     assert_eq!(minted, 1);
     assert_eq!(record.documents().len(), 1);
@@ -132,8 +132,9 @@ fn a_move_that_leaves_a_folder_empty_prunes_it() {
     let folder = add_node(&doc, None, &[("segment", "f".to_owned())]);
     add_node(&doc, Some(folder), &document_meta(ID_A, "d"));
     let record = writable(&doc);
-    let done = move_document(&record, &MoveDocument { workspace_id: WS, from: "f/d", to: "d" })
-        .expect("moved");
+    let done =
+        move_document(&record, &MoveDocument { workspace_id: WORKSPACE, from: "f/d", to: "d" })
+            .expect("moved");
     assert!(done.saved);
     let paths: Vec<_> = record.index_nodes().into_iter().map(|n| n.path).collect();
     assert_eq!(paths, vec!["d".to_owned()]);
@@ -145,13 +146,14 @@ fn a_move_names_what_refuses_it() {
     add_node(&doc, None, &document_meta(ID_A, "a"));
     add_node(&doc, None, &document_meta(ID_B, "b"));
     let record = writable(&doc);
-    let moved = |from, to| move_document(&record, &MoveDocument { workspace_id: WS, from, to });
+    let moved =
+        |from, to| move_document(&record, &MoveDocument { workspace_id: WORKSPACE, from, to });
     assert_eq!(moved("", "c"), Err(IndexError::InvalidInput));
     assert_eq!(moved("a", "c d"), Err(IndexError::InvalidInput));
     assert_eq!(
         moved("nothing", "c"),
         Err(IndexError::DocumentNotFound {
-            workspace_id: WS.to_owned(),
+            workspace_id: WORKSPACE.to_owned(),
             target: "nothing".to_owned()
         })
     );
@@ -161,7 +163,7 @@ fn a_move_names_what_refuses_it() {
     );
     assert_eq!(
         moved("a", "b"),
-        Err(IndexError::PathTaken { workspace_id: WS.to_owned(), path: "b".to_owned() })
+        Err(IndexError::PathTaken { workspace_id: WORKSPACE.to_owned(), path: "b".to_owned() })
     );
 }
 
@@ -174,7 +176,10 @@ fn a_rename_to_a_name_a_sibling_shows_is_refused_unless_the_name_is_unchanged() 
     meta_of(&doc, second).insert("name", "Plan").expect("set");
     let record = writable(&doc);
     let rename = |document_id, name| {
-        set_document_name_of(&record, &SetDocumentName { workspace_id: WS, document_id, name })
+        set_document_name_of(
+            &record,
+            &SetDocumentName { workspace_id: WORKSPACE, document_id, name },
+        )
     };
     assert!(rename(ID_B, Some("Plan")).is_ok(), "a name the target already shows is no duplicate");
     assert!(matches!(rename(ID_B, Some(" plan ")), Ok(Outcome { saved: true, .. })));
@@ -196,7 +201,10 @@ fn a_pin_checks_the_document_before_the_id() {
     add_node(&doc, None, &document_meta(ID_A, "a"));
     let record = writable(&doc);
     let pin = |document_id, pinned| {
-        set_document_pinned(&record, &SetDocumentPinned { workspace_id: WS, document_id, pinned })
+        set_document_pinned(
+            &record,
+            &SetDocumentPinned { workspace_id: WORKSPACE, document_id, pinned },
+        )
     };
     assert!(matches!(pin("not-an-id", true), Err(IndexError::DocumentNotFound { .. })));
     assert!(pin(ID_A, true).is_ok());
@@ -212,8 +220,9 @@ fn a_folder_is_named_trimmed_and_a_sibling_folder_may_not_show_the_name() {
     add_node(&doc, None, &[("segment", "b".to_owned())]);
     add_node(&doc, None, &document_meta(ID_A, "d"));
     let record = writable(&doc);
-    let name =
-        |path, name| set_folder_name_of(&record, &SetFolderName { workspace_id: WS, path, name });
+    let name = |path, name| {
+        set_folder_name_of(&record, &SetFolderName { workspace_id: WORKSPACE, path, name })
+    };
     assert!(matches!(name("b", Some(" TAKEN ")), Err(IndexError::DisplayNameTaken(_))));
     assert_eq!(name("b", Some("a/b")), Err(IndexError::InvalidInput));
     assert_eq!(name("c d", Some("x")), Err(IndexError::InvalidInput));
@@ -229,8 +238,9 @@ fn a_folder_is_named_trimmed_and_a_sibling_folder_may_not_show_the_name() {
 }
 
 fn trashed(record: &WorkspaceRecord, path: &str, blobs: &mut Blobs) {
-    let done = delete_document(record, &DeleteDocument { workspace_id: WS, path }, blobs, NOW)
-        .expect("deleted");
+    let done =
+        delete_document(record, &DeleteDocument { workspace_id: WORKSPACE, path }, blobs, NOW)
+            .expect("deleted");
     assert!(done.saved);
 }
 
@@ -257,7 +267,7 @@ fn a_delete_evacuates_a_document_and_records_the_names_of_the_folders_above_it()
     assert_eq!(nodes, vec!["keep".to_owned()], "the folders it emptied went with it");
     let restored = restore_document(
         &record,
-        &RestoreDocument { workspace_id: WS, document_id: ID_A },
+        &RestoreDocument { workspace_id: WORKSPACE, document_id: ID_A },
         &mut blobs,
     )
     .expect("restored");
@@ -276,7 +286,7 @@ fn a_delete_of_a_folder_or_of_nothing_evacuates_nothing() {
     let mut blobs = Blobs::default();
     let gone = delete_document(
         &record,
-        &DeleteDocument { workspace_id: WS, path: "nothing" },
+        &DeleteDocument { workspace_id: WORKSPACE, path: "nothing" },
         &mut blobs,
         NOW,
     )
@@ -284,7 +294,7 @@ fn a_delete_of_a_folder_or_of_nothing_evacuates_nothing() {
     assert!(!gone.saved);
     let folder = delete_document(
         &record,
-        &DeleteDocument { workspace_id: WS, path: "empty" },
+        &DeleteDocument { workspace_id: WORKSPACE, path: "empty" },
         &mut blobs,
         NOW,
     )
@@ -301,7 +311,7 @@ fn a_delete_names_a_descendant_it_would_destroy() {
     let record = writable(&doc);
     let refused = delete_document(
         &record,
-        &DeleteDocument { workspace_id: WS, path: "a" },
+        &DeleteDocument { workspace_id: WORKSPACE, path: "a" },
         &mut Blobs::default(),
         NOW,
     );
@@ -359,7 +369,11 @@ fn a_purge_keeps_the_bytes_another_row_names_and_a_restore_needs_a_row_and_its_b
         crate::tree_write::record_trash_entry(record.doc(), id, &value).expect("recorded");
     }
     let purge = |id: &str, blobs: &mut Blobs| {
-        purge_trash_entry(&record, &PurgeTrashEntry { workspace_id: WS, document_id: id }, blobs)
+        purge_trash_entry(
+            &record,
+            &PurgeTrashEntry { workspace_id: WORKSPACE, document_id: id },
+            blobs,
+        )
     };
     assert!(purge(ID_A, &mut blobs).expect("purged").value);
     assert!(blobs.held.contains_key(&one), "the other row still names it");
@@ -376,8 +390,12 @@ fn a_restore_answers_nothing_for_a_row_a_live_document_or_a_missing_blob() {
     let record = writable(&doc);
     let mut blobs = Blobs::default();
     let restore = |blobs: &mut Blobs| {
-        restore_document(&record, &RestoreDocument { workspace_id: WS, document_id: ID_A }, blobs)
-            .expect("answered")
+        restore_document(
+            &record,
+            &RestoreDocument { workspace_id: WORKSPACE, document_id: ID_A },
+            blobs,
+        )
+        .expect("answered")
     };
     let none = restore(&mut blobs);
     assert_eq!((none.value, none.saved), (None, false));
@@ -402,7 +420,7 @@ fn a_restore_into_a_workspace_with_no_room_is_refused_and_keeps_the_row() {
     add_node(record.doc(), None, &document_meta(&id_of(5000), "fill"));
     let refused = restore_document(
         &record,
-        &RestoreDocument { workspace_id: WS, document_id: &id_of(0) },
+        &RestoreDocument { workspace_id: WORKSPACE, document_id: &id_of(0) },
         &mut blobs,
     );
     assert_eq!(refused, Err(IndexError::TooManyDocuments { documents: 2001 }));
@@ -422,7 +440,7 @@ fn a_restore_of_bytes_that_are_not_a_record_is_refused_not_answered_as_nothing()
     }
     let refused = restore_document(
         &record,
-        &RestoreDocument { workspace_id: WS, document_id: ID_A },
+        &RestoreDocument { workspace_id: WORKSPACE, document_id: ID_A },
         &mut blobs,
     );
     assert!(matches!(refused, Err(IndexError::UnreadableTrashBytes(_))));
@@ -439,7 +457,7 @@ fn a_duplicate_copies_content_and_leaves_the_annotation_layer_when_asked() {
     threads.insert("t1", "a thread").expect("set");
     let record = writable(&doc);
     let duplicate = |id: &str, path, without_annotations| {
-        let input = DuplicateDocument { workspace_id: WS, path, without_annotations };
+        let input = DuplicateDocument { workspace_id: WORKSPACE, path, without_annotations };
         duplicate_document(&record, &input, &mut minting(id), NOW).expect("duplicated")
     };
     let whole = duplicate(&id_of(1), "a", false);
@@ -478,13 +496,15 @@ fn a_duplicate_is_refused_with_no_room_beside_the_source_or_in_the_workspace() {
     add_node(&doc, Some(deep), &document_meta(ID_A, "x"));
     let record = writable(&doc);
     let path = format!("{}/x", "f".repeat(1018));
-    let input = DuplicateDocument { workspace_id: WS, path: &path, without_annotations: false };
+    let input =
+        DuplicateDocument { workspace_id: WORKSPACE, path: &path, without_annotations: false };
     assert_eq!(
         duplicate_document(&record, &input, &mut minting(&id_of(1)), NOW),
         Err(IndexError::NoRoomForCopy { path: path.clone() })
     );
     let full = writable(&documents_of(2000));
-    let input = DuplicateDocument { workspace_id: WS, path: "d0", without_annotations: false };
+    let input =
+        DuplicateDocument { workspace_id: WORKSPACE, path: "d0", without_annotations: false };
     assert_eq!(
         duplicate_document(&full, &input, &mut minting(&id_of(1)), NOW),
         Err(IndexError::TooManyDocuments { documents: 2001 })
@@ -494,7 +514,8 @@ fn a_duplicate_is_refused_with_no_room_beside_the_source_or_in_the_workspace() {
         duplicate_document(&full, &bad, &mut minting(&id_of(1)), NOW),
         Err(IndexError::InvalidInput)
     );
-    let bad = DuplicateDocument { workspace_id: WS, path: "/d0", without_annotations: false };
+    let bad =
+        DuplicateDocument { workspace_id: WORKSPACE, path: "/d0", without_annotations: false };
     assert_eq!(
         duplicate_document(&full, &bad, &mut minting(&id_of(1)), NOW),
         Err(IndexError::InvalidInput)
