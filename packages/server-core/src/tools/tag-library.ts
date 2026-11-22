@@ -12,7 +12,7 @@
  * intent — takes it as a value.
  */
 import type { ReferenceGraph } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { refusalMessage, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   readTagLibrary,
   TAG_LIBRARY_PATH,
@@ -53,8 +53,6 @@ export class TagLibraryError extends Error {
   }
 }
 
-const WHERE = `the workspace's tag library (the document at "${TAG_LIBRARY_PATH}")`
-
 /**
  * Refuses `tags` — the WHOLE set a thing would carry after a write — where
  * the library forbids it: a value a key does not admit, or two values
@@ -75,11 +73,22 @@ export function refuseAgainstLibrary(
   if (objection === undefined) return
   if (objection.kind === 'undeclared') {
     throw new TagLibraryError(
-      `tag "${objection.tag}" on ${what} is not admitted: ${WHERE} declares ${objection.key} as one of ${objection.admitted.join(', ')}`,
+      refusalMessage('TagNotAdmitted', {
+        tag: objection.tag,
+        what,
+        libraryPath: TAG_LIBRARY_PATH,
+        key: objection.key,
+        admitted: objection.admitted,
+      }),
     )
   }
   throw new TagLibraryError(
-    `${objection.key} is one value at a time in ${WHERE}, and this write leaves ${what} with ${objection.carried.join(' and ')}`,
+    refusalMessage('TagExclusive', {
+      key: objection.key,
+      libraryPath: TAG_LIBRARY_PATH,
+      what,
+      carried: objection.carried,
+    }),
   )
 }
 

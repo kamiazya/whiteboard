@@ -1,4 +1,4 @@
-import { type DocumentKind, describeThrown } from '@kamiazya/whiteboard-model'
+import { type DocumentKind, describeThrown, refusalMessage } from '@kamiazya/whiteboard-model'
 import type { ServerDeps } from '../server-deps.js'
 
 /**
@@ -16,7 +16,7 @@ export class DocumentKindMismatchError extends Error {
     public readonly kind: DocumentKind,
     detail: string,
   ) {
-    super(`Document ${documentId} is a ${kind} document. ${detail}`)
+    super(refusalMessage('DocumentKindMismatch', { documentId, kind, detail }))
     this.name = 'DocumentKindMismatchError'
   }
 }
@@ -50,8 +50,11 @@ export class DocumentSerializeError extends Error {
     cause: unknown,
   ) {
     super(
-      `Document ${documentId} cannot be read as ${format}: ${describeThrown(cause)}. ` +
-        "Rewrite it with `wb_workspace_edit`'s `document.set` op to repair it.",
+      refusalMessage('DocumentSerializeFailed', {
+        documentId,
+        format,
+        cause: describeThrown(cause),
+      }),
       { cause },
     )
     this.name = 'DocumentSerializeError'
@@ -91,7 +94,7 @@ export class FacetWriteRejectedError extends Error {
     public readonly facetKey: string,
     reason: string,
   ) {
-    super(`facet "${facetKey}" rejected: ${reason}`)
+    super(refusalMessage('FacetWriteRejected', { facetKey, reason }))
     this.name = 'FacetWriteRejectedError'
   }
 }

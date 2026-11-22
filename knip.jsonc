@@ -77,7 +77,10 @@
       "ignoreIssues": {
         // A generated module exports its whole contract, a schema and its
         // inferred type per definition, whether or not a consumer reads each.
-        "src/generated/spatial.zod.ts": ["exports", "types"]
+        "src/generated/spatial.zod.ts": ["exports", "types"],
+        // The refusals contract exports its whole table, params and code
+        // lists, whether or not a consumer reads each.
+        "src/generated/refusals.ts": ["exports", "types"]
       }
     },
     "packages/codec": {

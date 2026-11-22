@@ -336,3 +336,22 @@ paths:
   a text into the model's `Value`, keys in written order (`serde_json` sorts them), and is what the
   JSON Canvas codec and the facet engine's plugin loader both read with. It lives here because
   both depend on this crate and neither on the other.
+
+## The refusal codes and sentences are generated
+
+`contracts/api/refusals.json` lists every refusal the document operations answer: a code, an HTTP
+status, a message template (`{name}`, `{name|filter}`, `{{`/`}}`) and one `example` with its
+`exampleText`. `cargo xtask codegen` writes `src/generated/refusals.ts` from it (`REFUSALS`,
+`RefusalParams`, `REFUSAL_CODES`, `SYNC_WRITE_REFUSAL_CODES`, `VERSION_REFUSAL_CODES`) and the Rust
+`Refusal` enum of `whiteboard-api-contracts` from the same file, so both say the same words.
+`refusalMessage(name, params)` (`src/refusal-message.ts`) is the interpreter every TypeScript class
+that raises one calls; a sentence is edited in the JSON, never in the class.
+
+- A param the class takes from the model (a `*_LIMIT_PHRASE`, `MARKDOWN_MAX_CHARS`) is pinned by the
+  example's real value, so a changed limit fails `refusals.contract.test.ts` in server-core until the
+  contract is edited with it. That test builds every entry from its real class and holds the text
+  to `exampleText`; adding an entry without a class fails its type, and a class without an entry
+  fails its list.
+- `syncWriteRefusalCodeSchema` is `z.enum` over the generated list. Do not add a code there.
+- The shared layers hold no code literal: `tools/arch-lint`'s `refusal-codes-one-place.test.ts`.
+

@@ -1,3 +1,5 @@
+import { refusalMessage } from '@kamiazya/whiteboard-model'
+
 /**
  * Typed error contract for canvas-CRUD handlers. `create-server.ts` maps
  * these classes — never a message string — to HTTP status codes, so
@@ -15,7 +17,7 @@ export class WorkspaceDocumentNotFoundError extends Error {
     readonly workspaceId: string,
     readonly documentId: string,
   ) {
-    super(`Document not found: ${documentId} in workspace ${workspaceId}`)
+    super(refusalMessage('DocumentNotFound', { documentId, workspaceId }))
     this.name = 'WorkspaceDocumentNotFoundError'
   }
 }
@@ -28,7 +30,20 @@ export class WorkspaceDocumentNotFoundError extends Error {
  */
 export type WorkspaceNotFoundIntent = 'create' | 'read'
 
-const quoted = (handles: readonly string[]) => handles.map((h) => `"${h}"`).join(', ')
+function workspaceNotFoundMessage(
+  workspaceId: string,
+  intent: WorkspaceNotFoundIntent,
+  known: readonly string[],
+): string {
+  if (intent === 'create') {
+    return known.length === 0
+      ? refusalMessage('WorkspaceNotFoundForCallerCreate', { workspaceId })
+      : refusalMessage('WorkspaceNotFoundForCallerCreateKnown', { workspaceId, known })
+  }
+  return known.length === 0
+    ? refusalMessage('WorkspaceNotFoundForCallerRead', { workspaceId })
+    : refusalMessage('WorkspaceNotFoundForCallerReadKnown', { workspaceId, known })
+}
 
 export class WorkspaceNotFoundForCallerError extends Error {
   constructor(
@@ -36,13 +51,7 @@ export class WorkspaceNotFoundForCallerError extends Error {
     intent: WorkspaceNotFoundIntent = 'read',
     known: readonly string[] = [],
   ) {
-    super(
-      `Workspace not found: "${workspaceId}". ` +
-        (known.length === 0 ? '' : `Workspaces here: ${quoted(known)}. `) +
-        (intent === 'create'
-          ? 'Pass createWorkspace: true on this wb_workspace_edit call to create it along with the document.'
-          : 'Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).'),
-    )
+    super(workspaceNotFoundMessage(workspaceId, intent, known))
     this.name = 'WorkspaceNotFoundForCallerError'
   }
 }
@@ -58,12 +67,7 @@ export class WorkspaceNotFoundForCallerError extends Error {
  */
 export class WorkspaceSegmentUnusableError extends Error {
   constructor(readonly handle: string) {
-    super(
-      `Cannot create workspace "${handle}": a new workspace is addressed by its segment, ` +
-        'which must be ASCII letters, digits and interior hyphens, and must not itself be ' +
-        'shaped like a canonical id. Choose a name that fits, or address an existing ' +
-        'workspace by its id.',
-    )
+    super(refusalMessage('WorkspaceSegmentUnusable', { handle }))
     this.name = 'WorkspaceSegmentUnusableError'
   }
 }
@@ -80,10 +84,7 @@ export class DocumentNameConflictError extends Error {
     readonly given: string,
     readonly title: string,
   ) {
-    super(
-      `name "${given}" and the frontmatter title "${title}" are two display names for one document. ` +
-        'Give one of them, or make them the same.',
-    )
+    super(refusalMessage('DocumentNameConflict', { given, title }))
     this.name = 'DocumentNameConflictError'
   }
 }

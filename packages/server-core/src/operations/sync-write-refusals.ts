@@ -23,6 +23,9 @@ import {
   NODE_TEXT_LIMIT_PHRASE,
   OPEN_CHANGES_LIMIT_PHRASE,
   OPEN_THREADS_LIMIT_PHRASE,
+  type RefusalName,
+  type RefusalParams,
+  refusalMessage,
   type SyncWriteRefusalCode,
   TAG_COUNT_LIMIT_PHRASE,
   TAG_LENGTH_LIMIT_PHRASE,
@@ -50,45 +53,56 @@ export interface RefusedIn {
 
 type BreachOf<S extends SyncTextBreach['shape']> = Extract<SyncTextBreach, { shape: S }>
 
+type UpdateBase = RefusalName extends infer N
+  ? N extends `${infer Base}Update`
+    ? Base
+    : never
+  : never
+
 /**
  * A text refusal in the words that fit who is told: what an update would do,
  * or — once the caller resolved the document — what that document holds,
- * which is what a person fixing a promoted record looks for.
+ * which is what a person fixing a promoted record looks for. Each bound has an
+ * `…Update` and a `…Document` sentence in the contract; the document form
+ * carries the same params and the path.
  */
-function valueRefusalMessage(
+function textRefusalMessage<Base extends UpdateBase>(
+  base: Base,
   at: RefusedIn | undefined,
-  would: string,
-  holds: string,
-  limit: string,
+  params: RefusalParams[`${Base}Update`],
 ): string {
-  const what =
-    at === undefined
-      ? `This update would ${would}`
-      : `The document at ${JSON.stringify(at.path)} ${holds}`
-  return `${what}, past ${limit}`
+  // The two names share their params but for the path; the name decides which
+  // sentence says them, and no type relates a computed name to its params.
+  const say = refusalMessage as (name: RefusalName, params: unknown) => string
+  return at === undefined
+    ? say(`${base}Update`, params)
+    : say(`${base}Document`, { path: at.path, ...params })
 }
 
 function bodyRefusalMessage(breach: BreachOf<'run' | 'runs' | 'body'>, at?: RefusedIn): string {
-  if (breach.shape === 'runs') return runsRefusalMessage(breach, at)
-  const { shape, chars } = breach
-  if (at === undefined) {
-    return shape === 'run'
-      ? `This update inserts ${chars} characters in one piece, past ${MARKDOWN_LIMIT_PHRASE}`
-      : `This update would make a document body ${chars} characters long, past ${MARKDOWN_LIMIT_PHRASE}`
+  const { chars } = breach
+  if (breach.shape === 'runs') {
+    const { runs } = breach
+    return at === undefined
+      ? refusalMessage('MarkdownRunsUpdate', { runs, chars, maxChars: MARKDOWN_MAX_CHARS })
+      : refusalMessage('MarkdownRunsDocument', {
+          path: at.path,
+          runs,
+          chars,
+          maxChars: MARKDOWN_MAX_CHARS,
+        })
   }
-  const where = JSON.stringify(at.path)
-  const now =
-    at.bodyChars === undefined ? '' : `, though its body is ${at.bodyChars} characters now`
-  return shape === 'run'
-    ? `The document at ${where} holds in its history one insert of ${chars} characters, past the ${MARKDOWN_MAX_CHARS}-character limit for one write${now}. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole`
-    : `The document at ${where} has a body of ${chars} characters, past ${MARKDOWN_LIMIT_PHRASE}`
-}
-
-function runsRefusalMessage({ chars, runs }: BreachOf<'runs'>, at?: RefusedIn): string {
-  const pieces = `${runs} separate inserts of ${chars} characters in all`
-  const cost = `which together cost more to apply than one insert at the ${MARKDOWN_MAX_CHARS}-character limit for one write`
-  if (at === undefined) return `This update makes ${pieces}, ${cost}`
-  return `The document at ${JSON.stringify(at.path)} holds in its history ${pieces}, ${cost}. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole`
+  const limit = MARKDOWN_LIMIT_PHRASE
+  if (breach.shape === 'body') {
+    return at === undefined
+      ? refusalMessage('MarkdownBodyUpdate', { chars, limit })
+      : refusalMessage('MarkdownBodyDocument', { path: at.path, chars, limit })
+  }
+  if (at === undefined) return refusalMessage('MarkdownRunUpdate', { chars, limit })
+  const found = { path: at.path, chars, maxChars: MARKDOWN_MAX_CHARS }
+  return at.bodyChars === undefined
+    ? refusalMessage('MarkdownRunDocument', found)
+    : refusalMessage('MarkdownRunDocumentWithBody', { ...found, bodyChars: at.bodyChars })
 }
 
 /**
@@ -138,14 +152,12 @@ class NodeTextTooLargeError extends TextBreachRefusalError {
     readonly breach: BreachOf<'node-text'>,
     readonly at?: RefusedIn,
   ) {
-    const node = `node ${JSON.stringify(breach.nodeId)}`
     super(
-      valueRefusalMessage(
-        at,
-        `give ${node} ${breach.chars} characters of text`,
-        `has ${node} with ${breach.chars} characters of text`,
-        NODE_TEXT_LIMIT_PHRASE,
-      ),
+      textRefusalMessage('NodeTextTooLarge', at, {
+        nodeId: breach.nodeId,
+        chars: breach.chars,
+        limit: NODE_TEXT_LIMIT_PHRASE,
+      }),
     )
     this.name = 'NodeTextTooLargeError'
   }
@@ -164,9 +176,12 @@ class NodeLocationTooLargeError extends TextBreachRefusalError {
     readonly breach: BreachOf<'node-location'>,
     readonly at?: RefusedIn,
   ) {
-    const location = `node ${JSON.stringify(breach.nodeId)} a location of ${breach.chars} characters`
     super(
-      valueRefusalMessage(at, `give ${location}`, `gives ${location}`, NODE_LOCATION_LIMIT_PHRASE),
+      textRefusalMessage('NodeLocationTooLarge', at, {
+        nodeId: breach.nodeId,
+        chars: breach.chars,
+        limit: NODE_LOCATION_LIMIT_PHRASE,
+      }),
     )
     this.name = 'NodeLocationTooLargeError'
   }
@@ -184,8 +199,13 @@ class LabelTooLargeError extends TextBreachRefusalError {
     readonly breach: BreachOf<'label'>,
     readonly at?: RefusedIn,
   ) {
-    const label = `${JSON.stringify(breach.elementId)} a label of ${breach.chars} characters`
-    super(valueRefusalMessage(at, `give ${label}`, `gives ${label}`, LABEL_LIMIT_PHRASE))
+    super(
+      textRefusalMessage('LabelTooLarge', at, {
+        elementId: breach.elementId,
+        chars: breach.chars,
+        limit: LABEL_LIMIT_PHRASE,
+      }),
+    )
     this.name = 'LabelTooLargeError'
   }
 }
@@ -202,12 +222,29 @@ class CommentMessageTooLargeError extends TextBreachRefusalError {
     readonly breach: BreachOf<'comment-message'>,
     readonly at?: RefusedIn,
   ) {
-    const message = `comment message ${JSON.stringify(breach.messageId)} ${breach.chars} characters long`
     super(
-      valueRefusalMessage(at, `make ${message}`, `has ${message}`, COMMENT_MESSAGE_LIMIT_PHRASE),
+      textRefusalMessage('CommentMessageTooLarge', at, {
+        messageId: breach.messageId,
+        chars: breach.chars,
+        limit: COMMENT_MESSAGE_LIMIT_PHRASE,
+      }),
     )
     this.name = 'CommentMessageTooLargeError'
   }
+}
+
+function tagsRefusalMessage(breach: BreachOf<'tags'>, at: RefusedIn | undefined): string {
+  const amount = breach.amount
+  if (breach.measure === 'count') {
+    const limit = TAG_COUNT_LIMIT_PHRASE
+    return breach.elementId === null
+      ? textRefusalMessage('TagsCountBoard', at, { amount, limit })
+      : textRefusalMessage('TagsCountElement', at, { elementId: breach.elementId, amount, limit })
+  }
+  const limit = TAG_LENGTH_LIMIT_PHRASE
+  return breach.elementId === null
+    ? textRefusalMessage('TagsLengthBoard', at, { amount, limit })
+    : textRefusalMessage('TagsLengthElement', at, { elementId: breach.elementId, amount, limit })
 }
 
 /**
@@ -222,14 +259,7 @@ class TagsTooLargeError extends TextBreachRefusalError {
     readonly breach: BreachOf<'tags'>,
     readonly at?: RefusedIn,
   ) {
-    const carrier =
-      breach.elementId === null ? 'the board' : `element ${JSON.stringify(breach.elementId)}`
-    const what =
-      breach.measure === 'count'
-        ? `${carrier} ${breach.amount} tags`
-        : `${carrier} a tag of ${breach.amount} characters`
-    const limit = breach.measure === 'count' ? TAG_COUNT_LIMIT_PHRASE : TAG_LENGTH_LIMIT_PHRASE
-    super(valueRefusalMessage(at, `give ${what}`, `gives ${what}`, limit))
+    super(tagsRefusalMessage(breach, at))
     this.name = 'TagsTooLargeError'
   }
 }
@@ -249,9 +279,11 @@ class ContainerNameTooLongError extends TextBreachRefusalError {
     readonly breach: BreachOf<'container-name'>,
     readonly at?: RefusedIn,
   ) {
-    const named = `a container named with ${breach.chars} characters`
     super(
-      valueRefusalMessage(at, `bring in ${named}`, `holds ${named}`, CONTAINER_NAME_LIMIT_PHRASE),
+      textRefusalMessage('ContainerNameTooLong', at, {
+        chars: breach.chars,
+        limit: CONTAINER_NAME_LIMIT_PHRASE,
+      }),
     )
     this.name = 'ContainerNameTooLongError'
   }
@@ -271,16 +303,16 @@ class CanvasTooLargeError extends TextBreachRefusalError {
     readonly breach: BreachOf<'canvas-size'>,
     readonly at?: RefusedIn,
   ) {
-    const board = `a canvas of ${breach.count} ${breach.measure === 'nodes' ? 'nodes' : 'edges and lines'}`
     super(
-      valueRefusalMessage(
-        at,
-        `leave ${board}`,
-        `is ${board}`,
-        breach.measure === 'nodes'
-          ? CANVAS_NODES_LIMIT_PHRASE
-          : CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
-      ),
+      breach.measure === 'nodes'
+        ? textRefusalMessage('CanvasTooLargeNodes', at, {
+            count: breach.count,
+            limit: CANVAS_NODES_LIMIT_PHRASE,
+          })
+        : textRefusalMessage('CanvasTooLargeEdgesAndLines', at, {
+            count: breach.count,
+            limit: CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
+          }),
     )
     this.name = 'CanvasTooLargeError'
   }
@@ -298,8 +330,13 @@ class CommentAnchorTooLargeError extends TextBreachRefusalError {
     readonly breach: BreachOf<'thread-anchor'>,
     readonly at?: RefusedIn,
   ) {
-    const thread = `comment thread ${JSON.stringify(breach.threadId)} anchored to ${breach.count} nodes`
-    super(valueRefusalMessage(at, `leave ${thread}`, `holds ${thread}`, ANCHOR_NODES_LIMIT_PHRASE))
+    super(
+      textRefusalMessage('CommentAnchorTooLarge', at, {
+        threadId: breach.threadId,
+        count: breach.count,
+        limit: ANCHOR_NODES_LIMIT_PHRASE,
+      }),
+    )
     this.name = 'CommentAnchorTooLargeError'
   }
 }
@@ -317,16 +354,15 @@ class AnchorQuoteTooLongError extends TextBreachRefusalError {
     readonly breach: BreachOf<'anchor-quote'>,
     readonly at?: RefusedIn,
   ) {
-    const anchor = `${JSON.stringify(breach.elementId)} an anchor quoting ${breach.chars} characters`
     super(
-      valueRefusalMessage(at, `give ${anchor}`, `gives ${anchor}`, TEXT_ANCHOR_QUOTE_LIMIT_PHRASE),
+      textRefusalMessage('AnchorQuoteTooLong', at, {
+        elementId: breach.elementId,
+        chars: breach.chars,
+        limit: TEXT_ANCHOR_QUOTE_LIMIT_PHRASE,
+      }),
     )
     this.name = 'AnchorQuoteTooLongError'
   }
-}
-
-function openAnnotationsMessage(at: RefusedIn | undefined, what: string, limit: string): string {
-  return valueRefusalMessage(at, `leave ${what} on a document`, `holds ${what}`, limit)
 }
 
 /**
@@ -342,7 +378,10 @@ class TooManyOpenThreadsError extends TextBreachRefusalError {
     readonly at?: RefusedIn,
   ) {
     super(
-      openAnnotationsMessage(at, `${breach.count} open comment threads`, OPEN_THREADS_LIMIT_PHRASE),
+      textRefusalMessage('TooManyOpenThreads', at, {
+        count: breach.count,
+        limit: OPEN_THREADS_LIMIT_PHRASE,
+      }),
     )
     this.name = 'TooManyOpenThreadsError'
   }
@@ -357,11 +396,10 @@ class TooManyOpenChangesError extends TextBreachRefusalError {
     readonly at?: RefusedIn,
   ) {
     super(
-      openAnnotationsMessage(
-        at,
-        `${breach.count} open proposed changes`,
-        OPEN_CHANGES_LIMIT_PHRASE,
-      ),
+      textRefusalMessage('TooManyOpenChanges', at, {
+        count: breach.count,
+        limit: OPEN_CHANGES_LIMIT_PHRASE,
+      }),
     )
     this.name = 'TooManyOpenChangesError'
   }
@@ -379,9 +417,11 @@ class TooManyThreadMessagesError extends TextBreachRefusalError {
     readonly breach: BreachOf<'thread-messages'>,
     readonly at?: RefusedIn,
   ) {
-    const thread = `a comment thread of ${breach.count} messages`
     super(
-      valueRefusalMessage(at, `leave ${thread}`, `holds ${thread}`, THREAD_MESSAGES_LIMIT_PHRASE),
+      textRefusalMessage('TooManyThreadMessages', at, {
+        count: breach.count,
+        limit: THREAD_MESSAGES_LIMIT_PHRASE,
+      }),
     )
     this.name = 'TooManyThreadMessagesError'
   }
@@ -400,12 +440,10 @@ class ContentRootKindError extends TextBreachRefusalError {
     readonly breach: BreachOf<'content-root'>,
     readonly at?: RefusedIn,
   ) {
-    const what =
-      at === undefined
-        ? 'This update would leave a document'
-        : `The document at ${JSON.stringify(at.path)} is`
     super(
-      `${what} holding something other than its own content container at ${JSON.stringify(breach.key)}, which leaves that document unreadable`,
+      at === undefined
+        ? refusalMessage('ContentRootKindUpdate', { key: breach.key })
+        : refusalMessage('ContentRootKindDocument', { path: at.path, key: breach.key }),
     )
     this.name = 'ContentRootKindError'
   }
@@ -425,12 +463,13 @@ class UnattachedContainerError extends TextBreachRefusalError {
     readonly breach: BreachOf<'unattached-container'>,
     readonly at?: RefusedIn,
   ) {
-    const what =
-      at === undefined
-        ? 'This update writes'
-        : `The document at ${JSON.stringify(at.path)} holds in its history writes`
     super(
-      `${what} into a container (${breach.container}) created by a change they do not build on, so nothing of it was kept. Send them built on the change that creates the container`,
+      at === undefined
+        ? refusalMessage('UnattachedContainerUpdate', { container: breach.container })
+        : refusalMessage('UnattachedContainerDocument', {
+            path: at.path,
+            container: breach.container,
+          }),
     )
     this.name = 'UnattachedContainerError'
   }
@@ -449,12 +488,10 @@ class ReservedMapKeyError extends TextBreachRefusalError {
     readonly breach: BreachOf<'reserved-map-key'>,
     readonly at?: RefusedIn,
   ) {
-    const what =
-      at === undefined
-        ? 'This update writes'
-        : `The document at ${JSON.stringify(at.path)} holds in its history a write of`
     super(
-      `${what} a key named "__proto__" (in ${breach.container}), which no document may hold, so nothing of it was kept`,
+      at === undefined
+        ? refusalMessage('ReservedMapKeyUpdate', { container: breach.container })
+        : refusalMessage('ReservedMapKeyDocument', { path: at.path, container: breach.container }),
     )
     this.name = 'ReservedMapKeyError'
   }
@@ -473,12 +510,10 @@ class RetiredShapeWrittenError extends TextBreachRefusalError {
     readonly breach: BreachOf<'retired-shape'>,
     readonly at?: RefusedIn,
   ) {
-    const what =
-      at === undefined
-        ? 'This update would write'
-        : `The document at ${JSON.stringify(at.path)} holds in its history`
     super(
-      `${what} ${breach.found}, a form an older version stored and this one no longer reads, so nothing of it was kept`,
+      at === undefined
+        ? refusalMessage('RetiredShapeWrittenUpdate', { found: breach.found })
+        : refusalMessage('RetiredShapeWrittenDocument', { path: at.path, found: breach.found }),
     )
     this.name = 'RetiredShapeWrittenError'
   }
@@ -493,12 +528,13 @@ class RetiredCommentPlaneWrittenError extends TextBreachRefusalError {
     readonly breach: BreachOf<'retired-comment-plane'>,
     readonly at?: RefusedIn,
   ) {
-    const what =
-      at === undefined
-        ? 'This update would write'
-        : `The document at ${JSON.stringify(at.path)} holds in its history`
     super(
-      `${what} a comment in the flat comments plane an older version kept comments in (${breach.rows} there now), which this one no longer reads, so nothing of it was kept`,
+      at === undefined
+        ? refusalMessage('RetiredCommentPlaneWrittenUpdate', { rows: breach.rows })
+        : refusalMessage('RetiredCommentPlaneWrittenDocument', {
+            path: at.path,
+            rows: breach.rows,
+          }),
     )
     this.name = 'RetiredCommentPlaneWrittenError'
   }
@@ -573,11 +609,13 @@ export class OffGrammarPathError extends SyncWriteRefusalError {
   constructor(public readonly paths: readonly string[]) {
     // A chain of folders past the bound refuses every path below the bound,
     // each longer than the last, so only the first few are named, and short.
-    const named = paths.slice(0, REFUSED_PATHS_NAMED).map((path) => JSON.stringify(shortened(path)))
+    const named = paths.slice(0, REFUSED_PATHS_NAMED).map(shortened)
     const more = paths.length - named.length
-    const quoted = more > 0 ? `${named.join(', ')} and ${more} more` : named.join(', ')
+    const maxLength = DOCUMENT_PATH_MAX_LENGTH
     super(
-      `This update would put documents or folders at paths this keeper cannot store: ${quoted}. A path may be at most ${DOCUMENT_PATH_MAX_LENGTH} characters, and each segment may hold only ASCII letters, digits and interior hyphens`,
+      more > 0
+        ? refusalMessage('OffGrammarPathMore', { paths: named, more, maxLength })
+        : refusalMessage('OffGrammarPath', { paths: named, maxLength }),
     )
     this.name = 'OffGrammarPathError'
   }
@@ -596,11 +634,24 @@ export class UnreadableDocumentMetaError extends SyncWriteRefusalError {
   readonly status = 400
 
   constructor(public readonly nodes: readonly string[]) {
-    super(
-      `This update would leave workspace nodes this keeper cannot read (${nodes.join(', ')}), which hides the documents they hold and everything below them; a document needs a known kind, a segment, its id and whole-number timestamps, and a folder carries only its segment`,
-    )
+    super(refusalMessage('UnreadableDocumentMeta', { nodes }))
     this.name = 'UnreadableDocumentMetaError'
   }
+}
+
+function kindChangedMessage(
+  recorded: DocumentKind,
+  kind: DocumentKind | undefined,
+  documentId: string | undefined,
+): string {
+  if (documentId === undefined) {
+    return kind === undefined
+      ? refusalMessage('DocumentKindChangedUnnamedNoKind', { recorded })
+      : refusalMessage('DocumentKindChangedUnnamedKind', { recorded, kind })
+  }
+  return kind === undefined
+    ? refusalMessage('DocumentKindChangedNamedNoKind', { recorded, documentId })
+    : refusalMessage('DocumentKindChangedNamedKind', { recorded, kind, documentId })
 }
 
 /**
@@ -620,11 +671,7 @@ export class DocumentKindChangedError extends SyncWriteRefusalError {
     public readonly kind: DocumentKind | undefined,
     public readonly documentId?: string,
   ) {
-    const which = documentId === undefined ? 'a document' : `document ${documentId}`
-    const says = kind === undefined ? 'no kind' : `"${kind}"`
-    super(
-      `This update would leave the envelope of ${which} saying ${says} while the document is recorded as "${recorded}"; a document keeps the kind it was created as`,
-    )
+    super(kindChangedMessage(recorded, kind, documentId))
     this.name = 'DocumentKindChangedError'
   }
 }
@@ -639,9 +686,7 @@ export class DocumentNameTooLongError extends SyncWriteRefusalError {
   readonly status = 400
 
   constructor(public readonly paths: readonly string[]) {
-    super(
-      `This update would give ${paths.map((path) => JSON.stringify(path)).join(', ')} a display name past ${DOCUMENT_NAME_MAX_LENGTH} characters, the most a name may have`,
-    )
+    super(refusalMessage('DocumentNameTooLong', { paths, maxLength: DOCUMENT_NAME_MAX_LENGTH }))
     this.name = 'DocumentNameTooLongError'
   }
 }
@@ -660,9 +705,7 @@ export class FolderNameRefusedError extends SyncWriteRefusalError {
     public readonly paths: readonly string[],
     reason: string,
   ) {
-    super(
-      `This update would give the folder ${paths.map((path) => JSON.stringify(path)).join(', ')} a name no folder may have. ${reason}`,
-    )
+    super(refusalMessage('FolderNameRefused', { paths, reason }))
     this.name = 'FolderNameRefusedError'
   }
 }
@@ -681,9 +724,7 @@ export class CausalGapError extends SyncWriteRefusalError {
   readonly status = 409
 
   constructor() {
-    super(
-      'This update builds on changes this keeper has not received yet, so nothing of it was kept. Send the changes it builds on first',
-    )
+    super(refusalMessage('CausalGap'))
     this.name = 'CausalGapError'
   }
 }

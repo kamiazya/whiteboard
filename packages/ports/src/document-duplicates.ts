@@ -1,4 +1,8 @@
-import { documentPathSchema, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
+import {
+  documentPathSchema,
+  refusalMessage,
+  workspaceCanonicalIdSchema,
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { DocumentEntry, DocumentIndex } from './document-index.js'
 
@@ -54,7 +58,7 @@ export function hasDocumentDuplicates(
  */
 export class NoRoomForCopyError extends Error {
   constructor(readonly path: string) {
-    super(`There is no room beside "${path}" for a copy: its folder's path is too long.`)
+    super(refusalMessage('CannotPlaceCopyNoRoom', { path }))
     this.name = 'NoRoomForCopyError'
   }
 }
