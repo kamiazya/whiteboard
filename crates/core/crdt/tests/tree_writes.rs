@@ -327,13 +327,12 @@ mod cases {
         set_meta(&source, T, grandkid, "name", &text("grandkid")).expect("set");
         let seen = std::cell::RefCell::new(Vec::new());
         let note = |from: NodeAt<'_>, _: NodeAt<'_>| {
-            seen.borrow_mut()
-                .push(tree(from.doc, from.tree).expect("a tree").keys(from.node).len());
+            seen.borrow_mut().push(from.node);
             Ok(())
         };
         let how = SubtreeCopy { wanted: &copy_all, finish: &note };
         let bytes = export_subtree(at(&source, root), &how).expect("exported");
-        assert_eq!(seen.borrow().as_slice(), [5, 1, 1, 1].as_slice());
+        assert_eq!(seen.borrow().as_slice(), [root, kid, grandkid, other].as_slice());
         let copy = whiteboard_crdt::import_bytes(&bytes).expect("a document");
         let top = tree(&copy, T).expect("a tree").roots();
         assert_eq!(top.len(), 1);
@@ -713,5 +712,20 @@ mod cases {
             Some(Entry::Container { kind: ContainerKind::Text, .. })
         ));
         assert_eq!(at(&doc, id).entry("absent"), None);
+    }
+
+    #[test]
+    fn a_subtree_copied_under_its_own_root_copies_what_was_there_and_ends() {
+        let doc = LoroDoc::new();
+        let root = rich_node(&doc);
+        let kid = node(&doc, Some(root));
+        set_meta(&doc, T, kid, "name", &text("kid")).expect("set");
+        let copied = copy_subtree(at(&doc, root), (&doc, T), Some(root), &PLAIN).expect("copied");
+        let held = tree(&doc, T).expect("a tree");
+        assert_eq!(held.children(root), vec![kid, copied]);
+        let grown = held.children(copied);
+        assert_eq!(grown.len(), 1, "the copy holds the one kid the source held");
+        assert_eq!(held.entry(grown[0], "name"), Some(Entry::Value(text("kid"))));
+        assert_eq!(held.children(kid), Vec::<NodeId>::new());
     }
 }
