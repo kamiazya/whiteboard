@@ -1,6 +1,6 @@
 //! What a tree node records about itself, read without its content.
 
-use whiteboard_crdt::{Entry, LoroDoc, NodeId, node_entry, node_keys};
+use whiteboard_crdt::{Entry, NodeId, Tree};
 use whiteboard_model::Value;
 use whiteboard_model::checks::canonical_ulid;
 
@@ -8,7 +8,7 @@ use whiteboard_model::checks::canonical_ulid;
 pub const WORKSPACE_TREE_KEY: &str = "tree";
 
 /// The keys a node keeps for itself; every other key is content.
-const META_KEYS: [&str; 7] =
+pub(crate) const META_KEYS: [&str; 7] =
     ["documentId", "segment", "kind", "name", "nameChosen", "createdAt", "updatedAt"];
 
 /// What a document node records about the document it is.
@@ -18,6 +18,8 @@ pub struct DocumentMeta {
     pub segment: String,
     pub kind: String,
     pub name: Option<String>,
+    /// Set beside a name somebody chose, and cleared with it.
+    pub name_chosen: bool,
     pub created_at: Option<f64>,
     pub updated_at: Option<f64>,
 }
@@ -43,14 +45,14 @@ impl NodeRead {
 /// Every key the node holds; a meta key's value is read and any other is
 /// present as nothing, because neither shape reads one. `None` when a meta key
 /// holds a container, which leaves the node unreadable.
-fn raw_meta(doc: &LoroDoc, node: NodeId) -> Option<Vec<(String, Value)>> {
+fn raw_meta(tree: &Tree, node: NodeId) -> Option<Vec<(String, Value)>> {
     let mut raw = Vec::new();
-    for key in node_keys(doc, WORKSPACE_TREE_KEY, node) {
+    for key in tree.keys(node) {
         if !META_KEYS.contains(&key.as_str()) {
             raw.push((key, Value::Null));
             continue;
         }
-        match node_entry(doc, WORKSPACE_TREE_KEY, node, &key) {
+        match tree.entry(node, &key) {
             Some(Entry::Container { .. }) => return None,
             Some(Entry::Value(value)) => raw.push((key, value)),
             None => {}
@@ -99,6 +101,7 @@ fn as_document(raw: &[(String, Value)]) -> Option<DocumentMeta> {
         segment: optional_text(raw, "segment").ok().flatten()?,
         kind: kind.clone(),
         name: optional_text(raw, "name").ok()?,
+        name_chosen: field(raw, "nameChosen").is_some(),
         created_at: optional_integer(raw, "createdAt").ok()?,
         updated_at: optional_integer(raw, "updatedAt").ok()?,
     })
@@ -117,8 +120,8 @@ fn as_folder(raw: &[(String, Value)]) -> Option<NodeRead> {
 
 /// What `node` records about itself, or `None` for a node this build cannot read.
 #[must_use]
-pub fn read_node(doc: &LoroDoc, node: NodeId) -> Option<NodeRead> {
-    let raw = raw_meta(doc, node)?;
+pub fn read_node(tree: &Tree, node: NodeId) -> Option<NodeRead> {
+    let raw = raw_meta(tree, node)?;
     as_document(&raw).map(NodeRead::Document).or_else(|| as_folder(&raw))
 }
 

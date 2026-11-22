@@ -3,9 +3,7 @@
 use loro::{LoroDoc, LoroMap, LoroMovableList, LoroText, TreeID};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
-use whiteboard_crdt::{
-    ContainerKind, Entry, deep_value, node_entry, node_keys, peek, tree_children, tree_roots,
-};
+use whiteboard_crdt::{ContainerKind, Entry, deep_value, peek, tree};
 use whiteboard_model::Value;
 
 fn node_result(doc: &LoroDoc, parent: Option<TreeID>) -> loro::LoroResult<TreeID> {
@@ -29,11 +27,11 @@ fn roots_and_children_come_in_tree_order() {
     node!(&doc, None);
     let child_a = node!(&doc, Some(first));
     let child_b = node!(&doc, Some(first));
-    let roots = tree_roots(&doc, "t");
+    let roots = tree(&doc, "t").expect("a tree").roots();
     assert_eq!(roots.len(), 2);
-    let under = tree_children(&doc, "t", roots[0]);
+    let under = tree(&doc, "t").expect("a tree").children(roots[0]);
     assert_eq!(under.len(), 2);
-    assert_eq!(tree_children(&doc, "t", roots[1]).len(), 0);
+    assert_eq!(tree(&doc, "t").expect("a tree").children(roots[1]).len(), 0);
     let expected = doc.get_tree("t").children(first).expect("children");
     assert_eq!(expected, vec![child_a, child_b]);
 }
@@ -44,7 +42,7 @@ fn a_deleted_node_is_not_listed() {
     node!(&doc, None);
     let gone = node!(&doc, None);
     doc.get_tree("t").delete(gone).expect("deleted");
-    assert_eq!(tree_roots(&doc, "t").len(), 1);
+    assert_eq!(tree(&doc, "t").expect("a tree").roots().len(), 1);
 }
 
 #[test]
@@ -60,28 +58,34 @@ fn a_node_names_its_keys_ascending_and_answers_values_and_containers() {
     list.push("a").expect("push");
     let nested = meta.insert_container("map", LoroMap::new()).expect("map");
     nested.insert("k", true).expect("set");
-    let root = tree_roots(&doc, "t")[0];
-    assert_eq!(node_keys(&doc, "t", root), vec!["alpha", "body", "map", "pins", "zeta"]);
-    assert_eq!(node_entry(&doc, "t", root, "zeta"), Some(Entry::Value(Value::Number(1.0))));
+    let root = tree(&doc, "t").expect("a tree").roots()[0];
     assert_eq!(
-        node_entry(&doc, "t", root, "body"),
+        tree(&doc, "t").expect("a tree").keys(root),
+        vec!["alpha", "body", "map", "pins", "zeta"]
+    );
+    assert_eq!(
+        tree(&doc, "t").expect("a tree").entry(root, "zeta"),
+        Some(Entry::Value(Value::Number(1.0)))
+    );
+    assert_eq!(
+        tree(&doc, "t").expect("a tree").entry(root, "body"),
         Some(Entry::Container { kind: ContainerKind::Text, value: Value::String("hi".into()) })
     );
     assert_eq!(
-        node_entry(&doc, "t", root, "pins"),
+        tree(&doc, "t").expect("a tree").entry(root, "pins"),
         Some(Entry::Container {
             kind: ContainerKind::MovableList,
             value: Value::Seq(vec![Value::String("a".into())])
         })
     );
     assert_eq!(
-        node_entry(&doc, "t", root, "map"),
+        tree(&doc, "t").expect("a tree").entry(root, "map"),
         Some(Entry::Container {
             kind: ContainerKind::Map,
             value: Value::Map(vec![("k".into(), Value::Bool(true))])
         })
     );
-    assert_eq!(node_entry(&doc, "t", root, "absent"), None);
+    assert_eq!(tree(&doc, "t").expect("a tree").entry(root, "absent"), None);
 }
 
 #[test]
@@ -91,13 +95,13 @@ fn a_plain_list_and_a_tree_are_their_own_kinds() {
     let meta = doc.get_tree("t").get_meta(id).expect("meta");
     meta.insert_container("list", loro::LoroList::new()).expect("list");
     meta.insert_container("tree", loro::LoroTree::new()).expect("tree");
-    let root = tree_roots(&doc, "t")[0];
+    let root = tree(&doc, "t").expect("a tree").roots()[0];
     assert!(matches!(
-        node_entry(&doc, "t", root, "list"),
+        tree(&doc, "t").expect("a tree").entry(root, "list"),
         Some(Entry::Container { kind: ContainerKind::List, .. })
     ));
     assert!(matches!(
-        node_entry(&doc, "t", root, "tree"),
+        tree(&doc, "t").expect("a tree").entry(root, "tree"),
         Some(Entry::Container { kind: ContainerKind::Tree, .. })
     ));
 }
@@ -118,24 +122,17 @@ fn a_path_into_the_record_is_peeked_without_registering_what_is_absent() {
 #[test]
 fn reading_a_tree_the_record_lacks_leaves_its_bytes_and_value_as_they_were() {
     let elsewhere = LoroDoc::new();
-    let node = tree_roots(
-        &{
-            node!(&elsewhere, None);
-            elsewhere
-        },
-        "t",
-    )[0];
+    node!(&elsewhere, None);
+    let node = tree(&elsewhere, "t").expect("a tree").roots()[0];
     let doc = LoroDoc::new();
     doc.get_map("outer").insert("k", 1_i64).expect("set");
     doc.get_map("t").insert("k", 2_i64).expect("a map named as the tree is");
     doc.commit();
     let bytes = doc.export(loro::ExportMode::Snapshot).expect("a snapshot");
     let value = deep_value(&doc);
+    let _ = node;
     for name in ["absent", "t"] {
-        assert!(tree_roots(&doc, name).is_empty());
-        assert!(tree_children(&doc, name, node).is_empty());
-        assert!(node_keys(&doc, name, node).is_empty());
-        assert_eq!(node_entry(&doc, name, node, "k"), None);
+        assert!(tree(&doc, name).is_none(), "{name} is no tree the record holds");
     }
     doc.commit();
     assert_eq!(doc.export(loro::ExportMode::Snapshot).expect("a snapshot"), bytes);

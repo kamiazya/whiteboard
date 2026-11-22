@@ -1,7 +1,8 @@
 //! The CRDT document engine's Rust half, native-only until a wasm export
 //! lands. Today it reads the bytes npm `loro-crdt` writes: a deep value, a
 //! version vector and frontiers, answered as the TypeScript records them, and
-//! a tree container's nodes and the roots beside it, read without writing.
+//! a tree container's nodes and the roots beside it, read without writing,
+//! and writes a tree and its containers one loro call at a time.
 //!
 //! The `loro` crate is pinned `=` to the version of the npm package
 //! (ADR-0054 decision 13). One `LoroDoc` is never split across two engines:
@@ -17,9 +18,13 @@
 
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
+mod copy;
 mod read;
+mod subtree;
 mod tree;
+mod write;
 
+pub use copy::{NodeAt, copy_meta, fill_meta};
 pub use loro::{
     ExportMode, LoroDoc, LoroList, LoroMap, LoroMovableList, LoroText, LoroValue, TreeID,
     loro_value,
@@ -27,6 +32,10 @@ pub use loro::{
 pub use read::{
     ImportError, deep_value, frontier_pairs, import_bytes, loro_value_to_value, version_pairs,
 };
-pub use tree::{
-    ContainerKind, Entry, NodeId, node_entry, node_keys, peek, tree_children, tree_roots,
+pub use subtree::{SubtreeCopy, copy_subtree, export_subtree};
+pub use tree::{ContainerKind, Entry, NodeId, Tree, peek, tree};
+pub use write::{
+    WriteError, commit, create_node, deep_value_with_id, delete_meta, delete_node,
+    delete_root_entry, move_node, open_meta_container, open_root_list, set_meta, set_peer_id,
+    set_root_entry,
 };

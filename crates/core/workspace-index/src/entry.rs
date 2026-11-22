@@ -53,6 +53,13 @@ pub fn entry_of(found: &Found) -> Result<DocumentEntry, EntryError> {
     })
 }
 
+/// Whether a JavaScript `Date` holds `ms`, which a write checks of the clock it
+/// stamps with before it writes, since the entry it answers is read back through
+/// `toISOString`.
+pub fn require_time(ms: f64) -> Result<(), EntryError> {
+    iso_string(ms).map(|_| ())
+}
+
 /// `new Date(ms).toISOString()`: the time value truncated toward zero, years
 /// outside 0..=9999 as a signed six digit year.
 fn iso_string(ms: f64) -> Result<String, EntryError> {

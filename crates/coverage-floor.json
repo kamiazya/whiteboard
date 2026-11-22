@@ -73,9 +73,9 @@
       "reason": "first measured 2026-11-17 at 98.43% lines and 97.85% regions over the folding and tokenizing, with the recorded search.jsonl replayed natively (tests/search_oracle.rs: every fold, find and tokenization, and the three Unicode tables over every code point) beside the examples; what is left is the arms a well-formed text never reaches (a span lookup past the folded text, a slice off a char boundary). Held at 98 and 97 once ranking, excerpts and snippets joined, replayed from the same recording (tests/search_rank_oracle.rs): 98.18% lines and 97.64% regions measured over this crate alone; what is added is the grapheme window's arms for a cluster longer than its window and a run of flags past the lookback. Raised to 99 and 98 with the mutation tests of the grapheme edges (every text of up to five code points over eleven kinds, against the whole-text segmenter), the ranking tie-breaks and the excerpt edges: 99.52% lines and 98.89% regions measured over this crate alone"
     },
     "core/crdt": {
-      "lines": 93,
+      "lines": 97,
       "regions": 93,
-      "reason": "first measured 2026-11-22 at 93.75% lines and 93.93% regions over the reading of npm loro-crdt's bytes (tests/js_to_rust.rs replays the recorded crdt-read.jsonl and crdt-write.jsonl), the Rust-written corpus (tests/rust_to_js.rs) and the value conversion's direct cases (tests/value_conversion.rs: past +-2^53, an unresolved container id); what is left are the arms of a value kind or an import error the recorded documents never build"
+      "reason": "first measured 2026-11-22 at 93.75% lines and 93.93% regions over the reading of npm loro-crdt's bytes (tests/js_to_rust.rs replays the recorded crdt-read.jsonl and crdt-write.jsonl), the Rust-written corpus (tests/rust_to_js.rs) and the value conversion's direct cases (tests/value_conversion.rs: past +-2^53, an unresolved container id); what is left are the arms of a value kind or an import error the recorded documents never build. Lines raised to 97 with the tree and map writers and the node copy (tests/tree_writes.rs, and the document index's recorded writes replayed through them): 97.34% lines and 93.3% regions; the regions left are the arms of a loro refusal a valid record never reaches"
     },
     "core/history": {
       "lines": 100,
@@ -84,8 +84,8 @@
     },
     "core/workspace-index": {
       "lines": 98,
-      "regions": 99,
-      "reason": "first measured 2026-11-21 at 98.94% lines and 99.06% regions, with the recorded index-rules.jsonl replayed natively (tests/index_rules_oracle.rs: every row whose input is plain values) beside the unit tests of the path grammar, the display-name key and the ISO date; what is left are the arms of a node a recorded row never builds (an exhausted unnamed-address series, an entry with no time)"
+      "regions": 97,
+      "reason": "first measured 2026-11-21 at 98.94% lines and 99.06% regions, with the recorded index-rules.jsonl replayed natively (tests/index_rules_oracle.rs: every row whose input is plain values) beside the unit tests of the path grammar, the display-name key and the ISO date; what is left are the arms of a node a recorded row never builds (an exhausted unnamed-address series, an entry with no time). Regions lowered from 99 to 97 when the index's writes joined, every recorded write row replayed (tests/index_rules_oracle.rs) beside the unit tests of the ceilings, copy derivation and refusals, and tests/large_record.rs: 97.46% regions measured, lines unmoved; each `?` after a loro call is a region whose error arm a valid record never reaches, and a test cannot make loro refuse an operation on a record the index just read"
     },
     "testing/proptest": {
       "lines": 98,

@@ -92,11 +92,14 @@ enum Paint {
 }
 
 fn paint() -> impl Strategy<Value = Paint> {
+    // A third each to a hex, a preset and no usable colour: every floor below
+    // is 40 of 200, and at three tenths a preset fell under it about once in
+    // a thousand runs (60 expected, 37 drawn in CI).
     prop_oneof![
-        3 => hex().prop_map(Paint::Hex),
-        3 => (1_u8..=6).prop_map(Paint::Preset),
-        2 => Just(Paint::Absent),
-        2 => "[a-z0-9]{0,5}".prop_map(Paint::Invalid),
+        2 => hex().prop_map(Paint::Hex),
+        2 => (1_u8..=6).prop_map(Paint::Preset),
+        1 => Just(Paint::Absent),
+        1 => "[a-z0-9]{0,5}".prop_map(Paint::Invalid),
     ]
 }
 

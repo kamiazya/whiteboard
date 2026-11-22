@@ -2,11 +2,12 @@ use super::*;
 use crate::test_record::{ID_A, add_node, document_meta, meta_of};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
-use whiteboard_crdt::{LoroText, tree_roots};
+use whiteboard_crdt::{LoroDoc, LoroText, tree};
 
 fn first(doc: &LoroDoc) -> Option<NodeRead> {
-    let root = *tree_roots(doc, WORKSPACE_TREE_KEY).first().expect("a root");
-    read_node(doc, root)
+    let held = tree(doc, WORKSPACE_TREE_KEY).expect("a tree");
+    let root = *held.roots().first().expect("a root");
+    read_node(&held, root)
 }
 
 /// A document node whose meta is the baseline plus `extra`, set after creation.
@@ -38,6 +39,7 @@ fn a_document_reads_as_what_its_meta_records() {
     let node = add_node(&doc, None, &document_meta(ID_A, "a"));
     let meta = meta_of(&doc, node);
     meta.insert("name", "Plan").expect("set");
+    meta.insert("nameChosen", true).expect("set");
     meta.insert("createdAt", 5_i64).expect("set");
     meta.insert("updatedAt", 6.0_f64).expect("set");
     assert_eq!(
@@ -47,6 +49,7 @@ fn a_document_reads_as_what_its_meta_records() {
             segment: "a".to_owned(),
             kind: "markdown".to_owned(),
             name: Some("Plan".to_owned()),
+            name_chosen: true,
             created_at: Some(5.0),
             updated_at: Some(6.0),
         }))

@@ -183,7 +183,7 @@
       "path": "crates/core/crdt",
       "layer": "core",
       "status": "present",
-      "description": "the loro bridge, workspace tree, file references, text-limit judge; today the reading of the bytes npm loro-crdt writes (deep value, version vector, frontiers), native-only until the wasm export lands",
+      "description": "the loro bridge, workspace tree, file references, text-limit judge; today the reading of the bytes npm loro-crdt writes (deep value, version vector, frontiers) and the tree and map writers the document index writes a workspace record with, native-only until the wasm export lands",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det", "whiteboard-model"],
       "allowedThirdParty": {
@@ -205,7 +205,7 @@
       "path": "crates/core/workspace-index",
       "layer": "core",
       "status": "present",
-      "description": "the document index's pure rules over a workspace tree (names, paths, moves, entries) and its reads over a workspace record's bytes (listings, resolves, trash, the restore judgement); the writes wait for the CRDT engine's writers",
+      "description": "the document index's pure rules over a workspace tree (names, paths, moves, entries) and its reads over a workspace record's bytes (listings, resolves, trash, the restore judgement) and its writes over it (create, move, name, pin, folder names, delete, purge, restore, duplicate), each appending the operations the TypeScript index appends",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det", "whiteboard-model", "whiteboard-crdt"],
       "allowedThirdParty": {

@@ -164,3 +164,73 @@ fn nodes_lists_folders_and_documents_alike() {
     add_node(&doc, Some(folder), &document_meta(ID_A, "b"));
     assert_eq!(open(&doc).nodes().len(), 2);
 }
+
+#[test]
+fn a_record_opened_to_write_writes_as_the_peer_it_is_given_and_holds_what_it_was_given() {
+    let doc = LoroDoc::new();
+    add_node(&doc, None, &document_meta(ID_A, "a"));
+    let record = WorkspaceRecord::open_as(&snapshot(&doc), 7).expect("a snapshot opens");
+    assert_eq!(record.doc().peer_id(), 7);
+    assert_eq!(record.documents().len(), 1);
+    assert!(WorkspaceRecord::open_as(b"garbage", 7).is_err());
+    assert!(WorkspaceRecord::open_as(&snapshot(&doc), u64::MAX).is_err());
+}
+
+#[test]
+fn nodes_are_found_by_path_and_documents_by_id_in_tree_order() {
+    let doc = LoroDoc::new();
+    let folder = add_node(&doc, None, &named_folder("f", Some("Folder")));
+    add_node(&doc, Some(folder), &document_meta(ID_A, "d"));
+    add_node(&doc, None, &document_meta(ID_B, "f"));
+    add_node(&doc, None, &document_meta(ID_B, "twin"));
+    let record = open(&doc);
+    assert!(matches!(record.node_at("f").map(|w| w.read), Some(NodeRead::Folder { .. })));
+    assert_eq!(record.node_at("f/d").map(|w| w.path), Some("f/d".to_owned()));
+    assert!(record.node_at("nothing").is_none());
+    assert_eq!(record.document_node(ID_A).map(|w| w.path), Some("f/d".to_owned()));
+    assert_eq!(record.document_node(ID_B).map(|w| w.path), Some("f".to_owned()));
+    assert!(record.document_node(ID_C).is_none());
+}
+
+#[test]
+fn the_nodes_the_rules_read_carry_their_kind_name_and_id() {
+    let doc = LoroDoc::new();
+    let folder = add_node(&doc, None, &named_folder("f", Some("Folder")));
+    let node = add_node(&doc, Some(folder), &document_meta(ID_A, "d"));
+    meta_of(&doc, node).insert("name", "Doc").expect("set");
+    add_node(&doc, None, &named_folder("bare", None));
+    let nodes = open(&doc).index_nodes();
+    let shaped: Vec<_> = nodes
+        .iter()
+        .map(|n| (n.kind, n.path.as_str(), n.name.as_deref(), n.document_id.as_deref()))
+        .collect();
+    assert_eq!(
+        shaped,
+        vec![
+            (crate::NamedKind::Folder, "f", Some("Folder"), None),
+            (crate::NamedKind::Document, "f/d", Some("Doc"), Some(ID_A)),
+            (crate::NamedKind::Folder, "bare", None, None),
+        ]
+    );
+}
+
+#[test]
+fn a_placed_document_is_what_the_record_stores_of_it() {
+    let doc = LoroDoc::new();
+    let folder = add_node(&doc, None, &named_folder("f", None));
+    let node = add_node(&doc, Some(folder), &document_meta(ID_A, "d"));
+    let meta = meta_of(&doc, node);
+    meta.insert("name", "Doc").expect("set");
+    meta.insert("nameChosen", true).expect("set");
+    meta.insert("createdAt", 1_i64).expect("set");
+    let record = open(&doc);
+    let placed = record.placed_document(ID_A).expect("placed");
+    assert_eq!(placed.path, "f/d");
+    assert_eq!(placed.meta.name.as_deref(), Some("Doc"));
+    assert!(placed.meta.name_chosen);
+    assert_eq!((placed.meta.created_at, placed.meta.updated_at), (Some(1.0), None));
+    assert_eq!(placed.content_digest, "f6bbc27f5a56d1e7");
+    assert!(record.placed_document(ID_B).is_none());
+    add_node(&doc, None, &document_meta(ID_C, "plain"));
+    assert!(!open(&doc).placed_document(ID_C).expect("placed").meta.name_chosen);
+}

@@ -7,7 +7,7 @@ use whiteboard_model::Value;
 use whiteboard_model::checks::canonical_ulid;
 
 /// Where a deleted document's evacuated bytes are recorded.
-const WORKSPACE_TRASH_KEY: &str = "trash";
+pub(crate) const WORKSPACE_TRASH_KEY: &str = "trash";
 
 /// The most folder names one trash row keeps.
 const TRASH_FOLDER_NAMES_MAX: usize = 256;
