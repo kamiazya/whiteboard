@@ -242,10 +242,10 @@
     "whiteboard-api-contracts": {
       "path": "crates/ops/api-contracts",
       "layer": "ops",
-      "status": "planned",
-      "description": "generated types for /api, sync frames, MCP tool I/O and the refusal enum",
+      "status": "present",
+      "description": "the refusal enum generated from contracts/api/refusals.json (code, status and the TypeScript's exact sentence per refusal) and the mapping from a port's failure to it; the types for /api, sync frames and MCP tool I/O follow",
       "targets": ["wasm32-unknown-unknown", "native"],
-      "allowedInternalDeps": ["whiteboard-det", "whiteboard-model"],
+      "allowedInternalDeps": ["whiteboard-det", "whiteboard-model", "whiteboard-ports"],
       "allowedThirdParty": {},
       "absorbs": ["packages/daemon-client/src/api-contracts"]
     },

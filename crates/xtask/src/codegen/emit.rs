@@ -439,6 +439,7 @@ pub(super) fn zod(checked: &Checked<'_>, source: &str) -> Result<String, Vec<Str
 fn lone_string(line: &str) -> bool {
     let line = line.trim_start();
     line.strip_prefix('\'').is_some_and(|rest| rest.ends_with("',"))
+        || line.strip_prefix('"').is_some_and(|rest| rest.ends_with("\","))
         || line.strip_prefix('`').is_some_and(|rest| rest.ends_with("`,"))
 }
 

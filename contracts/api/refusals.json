@@ -1,0 +1,2032 @@
+{
+  "$comment": "Every refusal code the document operations answer, with the status and the exact sentence. TypeScript (`packages/model/src/generated/refusals.ts`) and Rust (`crates/ops/api-contracts/src/generated/refusals.rs`) are generated from this file by `cargo xtask codegen`; edit here. A message is a template: `{name}` fills a param, `{name|filter}` a filtered one (json, trim, s, list, and_list, json_list, quoted_list), `{{` and `}}` are braces. `example` and `exampleText` pin one rendering per entry, which both languages and the TypeScript classes are held to.",
+  "surfaces": {
+    "api-v1": "the `/api/v1` routes `createServer` mounts, and the MCP tools over the same operations",
+    "sync-write": "the surfaces a sync write passes through: a document's update, the workspace record's update and promote, and a restore carrying a saved state",
+    "documents-api": "the daemon's `/api/workspaces/:workspaceId/...` document routes, which answer from mcp-server",
+    "mcp-tools": "MCP tools, which raise the refusal as a tool error: the message travels, the code does not"
+  },
+  "refusals": [
+    {
+      "name": "MarkdownRunUpdate",
+      "code": "markdown_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "One insert longer than a markdown body may be, in an update.",
+      "message": "This update inserts {chars} characters in one piece, past {limit}",
+      "params": {
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "chars": 300000,
+        "limit": "the 262144-character limit for one document; split the content across documents"
+      },
+      "exampleText": "This update inserts 300000 characters in one piece, past the 262144-character limit for one document; split the content across documents",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "MarkdownBodyTooLargeError"
+    },
+    {
+      "name": "MarkdownBodyUpdate",
+      "code": "markdown_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A markdown body an update would leave longer than the limit and longer than it was.",
+      "message": "This update would make a document body {chars} characters long, past {limit}",
+      "params": {
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "chars": 300000,
+        "limit": "the 262144-character limit for one document; split the content across documents"
+      },
+      "exampleText": "This update would make a document body 300000 characters long, past the 262144-character limit for one document; split the content across documents",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "MarkdownBodyTooLargeError"
+    },
+    {
+      "name": "MarkdownRunsUpdate",
+      "code": "markdown_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "Separate inserts that together cost more to apply than one at the limit, in an update.",
+      "message": "This update makes {runs} separate inserts of {chars} characters in all, which together cost more to apply than one insert at the {maxChars}-character limit for one write",
+      "params": {
+        "runs": "integer",
+        "chars": "integer",
+        "maxChars": "integer"
+      },
+      "example": {
+        "runs": 3,
+        "chars": 400000,
+        "maxChars": 262144
+      },
+      "exampleText": "This update makes 3 separate inserts of 400000 characters in all, which together cost more to apply than one insert at the 262144-character limit for one write",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "MarkdownBodyTooLargeError"
+    },
+    {
+      "name": "MarkdownBodyDocument",
+      "code": "markdown_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A resolved document whose body is past the limit.",
+      "message": "The document at {path|json} has a body of {chars} characters, past {limit}",
+      "params": {
+        "path": "string",
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "chars": 300000,
+        "limit": "the 262144-character limit for one document; split the content across documents"
+      },
+      "exampleText": "The document at \"notes/a\" has a body of 300000 characters, past the 262144-character limit for one document; split the content across documents",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "MarkdownBodyTooLargeError"
+    },
+    {
+      "name": "MarkdownRunDocument",
+      "code": "markdown_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A resolved document holding in its history one insert past the limit for one write, its current body length unknown.",
+      "message": "The document at {path|json} holds in its history one insert of {chars} characters, past the {maxChars}-character limit for one write. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole",
+      "params": {
+        "path": "string",
+        "chars": "integer",
+        "maxChars": "integer"
+      },
+      "example": {
+        "path": "notes/a",
+        "chars": 300000,
+        "maxChars": 262144
+      },
+      "exampleText": "The document at \"notes/a\" holds in its history one insert of 300000 characters, past the 262144-character limit for one write. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "MarkdownBodyTooLargeError"
+    },
+    {
+      "name": "MarkdownRunDocumentWithBody",
+      "code": "markdown_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "The same, naming the body length the document has today.",
+      "message": "The document at {path|json} holds in its history one insert of {chars} characters, past the {maxChars}-character limit for one write, though its body is {bodyChars} characters now. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole",
+      "params": {
+        "path": "string",
+        "chars": "integer",
+        "maxChars": "integer",
+        "bodyChars": "integer"
+      },
+      "example": {
+        "path": "notes/a",
+        "chars": 300000,
+        "maxChars": 262144,
+        "bodyChars": 120
+      },
+      "exampleText": "The document at \"notes/a\" holds in its history one insert of 300000 characters, past the 262144-character limit for one write, though its body is 120 characters now. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "MarkdownBodyTooLargeError"
+    },
+    {
+      "name": "MarkdownRunsDocument",
+      "code": "markdown_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A resolved document holding in its history separate inserts that together cost more than one at the limit.",
+      "message": "The document at {path|json} holds in its history {runs} separate inserts of {chars} characters in all, which together cost more to apply than one insert at the {maxChars}-character limit for one write. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole",
+      "params": {
+        "path": "string",
+        "runs": "integer",
+        "chars": "integer",
+        "maxChars": "integer"
+      },
+      "example": {
+        "path": "notes/a",
+        "runs": 3,
+        "chars": 400000,
+        "maxChars": 262144
+      },
+      "exampleText": "The document at \"notes/a\" holds in its history 3 separate inserts of 400000 characters in all, which together cost more to apply than one insert at the 262144-character limit for one write. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "MarkdownBodyTooLargeError"
+    },
+    {
+      "name": "NodeTextTooLargeUpdate",
+      "code": "node_text_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A node's text past its limit, said of an update that has not been resolved to a document.",
+      "message": "This update would give node {nodeId|json} {chars} characters of text, past {limit}",
+      "params": {
+        "nodeId": "string",
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "nodeId": "n1",
+        "chars": 70000,
+        "limit": "the 8192-character limit for one node; split it across nodes, or put it in a markdown document and embed that"
+      },
+      "exampleText": "This update would give node \"n1\" 70000 characters of text, past the 8192-character limit for one node; split it across nodes, or put it in a markdown document and embed that",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "NodeTextTooLargeError"
+    },
+    {
+      "name": "NodeTextTooLargeDocument",
+      "code": "node_text_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A node's text past its limit, said of the document the caller resolved the refused text to.",
+      "message": "The document at {path|json} has node {nodeId|json} with {chars} characters of text, past {limit}",
+      "params": {
+        "path": "string",
+        "nodeId": "string",
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "nodeId": "n1",
+        "chars": 70000,
+        "limit": "the 8192-character limit for one node; split it across nodes, or put it in a markdown document and embed that"
+      },
+      "exampleText": "The document at \"notes/a\" has node \"n1\" with 70000 characters of text, past the 8192-character limit for one node; split it across nodes, or put it in a markdown document and embed that",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "NodeTextTooLargeError"
+    },
+    {
+      "name": "NodeLocationTooLargeUpdate",
+      "code": "node_location_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A link's URL, a file's path or a group's background past its limit, said of an update that has not been resolved to a document.",
+      "message": "This update would give node {nodeId|json} a location of {chars} characters, past {limit}",
+      "params": {
+        "nodeId": "string",
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "nodeId": "n1",
+        "chars": 5000,
+        "limit": "the 8192-character limit"
+      },
+      "exampleText": "This update would give node \"n1\" a location of 5000 characters, past the 8192-character limit",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "NodeLocationTooLargeError"
+    },
+    {
+      "name": "NodeLocationTooLargeDocument",
+      "code": "node_location_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A link's URL, a file's path or a group's background past its limit, said of the document the caller resolved the refused text to.",
+      "message": "The document at {path|json} gives node {nodeId|json} a location of {chars} characters, past {limit}",
+      "params": {
+        "path": "string",
+        "nodeId": "string",
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "nodeId": "n1",
+        "chars": 5000,
+        "limit": "the 8192-character limit"
+      },
+      "exampleText": "The document at \"notes/a\" gives node \"n1\" a location of 5000 characters, past the 8192-character limit",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "NodeLocationTooLargeError"
+    },
+    {
+      "name": "LabelTooLargeUpdate",
+      "code": "label_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "An edge's, line's or group's label past its limit, said of an update that has not been resolved to a document.",
+      "message": "This update would give {elementId|json} a label of {chars} characters, past {limit}",
+      "params": {
+        "elementId": "string",
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "elementId": "e1",
+        "chars": 9000,
+        "limit": "the 1024-character limit; a longer text belongs in a text node"
+      },
+      "exampleText": "This update would give \"e1\" a label of 9000 characters, past the 1024-character limit; a longer text belongs in a text node",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "LabelTooLargeError"
+    },
+    {
+      "name": "LabelTooLargeDocument",
+      "code": "label_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "An edge's, line's or group's label past its limit, said of the document the caller resolved the refused text to.",
+      "message": "The document at {path|json} gives {elementId|json} a label of {chars} characters, past {limit}",
+      "params": {
+        "path": "string",
+        "elementId": "string",
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "elementId": "e1",
+        "chars": 9000,
+        "limit": "the 1024-character limit; a longer text belongs in a text node"
+      },
+      "exampleText": "The document at \"notes/a\" gives \"e1\" a label of 9000 characters, past the 1024-character limit; a longer text belongs in a text node",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "LabelTooLargeError"
+    },
+    {
+      "name": "CommentMessageTooLargeUpdate",
+      "code": "comment_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A comment message past its limit, said of an update that has not been resolved to a document.",
+      "message": "This update would make comment message {messageId|json} {chars} characters long, past {limit}",
+      "params": {
+        "messageId": "string",
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "messageId": "m1",
+        "chars": 9000,
+        "limit": "the 4096-character limit; split it across replies"
+      },
+      "exampleText": "This update would make comment message \"m1\" 9000 characters long, past the 4096-character limit; split it across replies",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "CommentMessageTooLargeError"
+    },
+    {
+      "name": "CommentMessageTooLargeDocument",
+      "code": "comment_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A comment message past its limit, said of the document the caller resolved the refused text to.",
+      "message": "The document at {path|json} has comment message {messageId|json} {chars} characters long, past {limit}",
+      "params": {
+        "path": "string",
+        "messageId": "string",
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "messageId": "m1",
+        "chars": 9000,
+        "limit": "the 4096-character limit; split it across replies"
+      },
+      "exampleText": "The document at \"notes/a\" has comment message \"m1\" 9000 characters long, past the 4096-character limit; split it across replies",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "CommentMessageTooLargeError"
+    },
+    {
+      "name": "ContainerNameTooLongUpdate",
+      "code": "container_name_too_long",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A container named past its limit; the name is never repeated, only its length, said of an update that has not been resolved to a document.",
+      "message": "This update would bring in a container named with {chars} characters, past {limit}",
+      "params": {
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "chars": 5000,
+        "limit": "the 1024-character limit for the name of one container; a thread or a proposal is named by its id"
+      },
+      "exampleText": "This update would bring in a container named with 5000 characters, past the 1024-character limit for the name of one container; a thread or a proposal is named by its id",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "ContainerNameTooLongError"
+    },
+    {
+      "name": "ContainerNameTooLongDocument",
+      "code": "container_name_too_long",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A container named past its limit; the name is never repeated, only its length, said of the document the caller resolved the refused text to.",
+      "message": "The document at {path|json} holds a container named with {chars} characters, past {limit}",
+      "params": {
+        "path": "string",
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "chars": 5000,
+        "limit": "the 1024-character limit for the name of one container; a thread or a proposal is named by its id"
+      },
+      "exampleText": "The document at \"notes/a\" holds a container named with 5000 characters, past the 1024-character limit for the name of one container; a thread or a proposal is named by its id",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "ContainerNameTooLongError"
+    },
+    {
+      "name": "CommentAnchorTooLargeUpdate",
+      "code": "comment_anchor_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A comment thread anchored to more nodes than a canvas may hold, said of an update that has not been resolved to a document.",
+      "message": "This update would leave comment thread {threadId|json} anchored to {count} nodes, past {limit}",
+      "params": {
+        "threadId": "string",
+        "count": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "threadId": "t1",
+        "count": 3000,
+        "limit": "the 2000-node limit for one comment anchor, a whole canvas's worth"
+      },
+      "exampleText": "This update would leave comment thread \"t1\" anchored to 3000 nodes, past the 2000-node limit for one comment anchor, a whole canvas's worth",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "CommentAnchorTooLargeError"
+    },
+    {
+      "name": "CommentAnchorTooLargeDocument",
+      "code": "comment_anchor_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A comment thread anchored to more nodes than a canvas may hold, said of the document the caller resolved the refused text to.",
+      "message": "The document at {path|json} holds comment thread {threadId|json} anchored to {count} nodes, past {limit}",
+      "params": {
+        "path": "string",
+        "threadId": "string",
+        "count": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "threadId": "t1",
+        "count": 3000,
+        "limit": "the 2000-node limit for one comment anchor, a whole canvas's worth"
+      },
+      "exampleText": "The document at \"notes/a\" holds comment thread \"t1\" anchored to 3000 nodes, past the 2000-node limit for one comment anchor, a whole canvas's worth",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "CommentAnchorTooLargeError"
+    },
+    {
+      "name": "AnchorQuoteTooLongUpdate",
+      "code": "anchor_quote_too_long",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A thread or a proposed passage anchored by a quote past its limit, said of an update that has not been resolved to a document.",
+      "message": "This update would give {elementId|json} an anchor quoting {chars} characters, past {limit}",
+      "params": {
+        "elementId": "string",
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "elementId": "t1",
+        "chars": 5000,
+        "limit": "the 1024-character limit for the passage one anchor quotes; quote a shorter passage, or split a replacement across changes"
+      },
+      "exampleText": "This update would give \"t1\" an anchor quoting 5000 characters, past the 1024-character limit for the passage one anchor quotes; quote a shorter passage, or split a replacement across changes",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "AnchorQuoteTooLongError"
+    },
+    {
+      "name": "AnchorQuoteTooLongDocument",
+      "code": "anchor_quote_too_long",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A thread or a proposed passage anchored by a quote past its limit, said of the document the caller resolved the refused text to.",
+      "message": "The document at {path|json} gives {elementId|json} an anchor quoting {chars} characters, past {limit}",
+      "params": {
+        "path": "string",
+        "elementId": "string",
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "elementId": "t1",
+        "chars": 5000,
+        "limit": "the 1024-character limit for the passage one anchor quotes; quote a shorter passage, or split a replacement across changes"
+      },
+      "exampleText": "The document at \"notes/a\" gives \"t1\" an anchor quoting 5000 characters, past the 1024-character limit for the passage one anchor quotes; quote a shorter passage, or split a replacement across changes",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "AnchorQuoteTooLongError"
+    },
+    {
+      "name": "TooManyOpenThreadsUpdate",
+      "code": "too_many_open_threads",
+      "status": 413,
+      "family": "sync-write",
+      "description": "More open comment threads than one document keeps, said of an update that has not been resolved to a document.",
+      "message": "This update would leave {count} open comment threads on a document, past {limit}",
+      "params": {
+        "count": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "count": 600,
+        "limit": "the limit of 500 open comment threads for one document; resolve some first"
+      },
+      "exampleText": "This update would leave 600 open comment threads on a document, past the limit of 500 open comment threads for one document; resolve some first",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "TooManyOpenThreadsError"
+    },
+    {
+      "name": "TooManyOpenThreadsDocument",
+      "code": "too_many_open_threads",
+      "status": 413,
+      "family": "sync-write",
+      "description": "More open comment threads than one document keeps, said of the document the caller resolved the refused text to.",
+      "message": "The document at {path|json} holds {count} open comment threads, past {limit}",
+      "params": {
+        "path": "string",
+        "count": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "count": 600,
+        "limit": "the limit of 500 open comment threads for one document; resolve some first"
+      },
+      "exampleText": "The document at \"notes/a\" holds 600 open comment threads, past the limit of 500 open comment threads for one document; resolve some first",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "TooManyOpenThreadsError"
+    },
+    {
+      "name": "TooManyOpenChangesUpdate",
+      "code": "too_many_open_changes",
+      "status": 413,
+      "family": "sync-write",
+      "description": "More open proposed changes than one document keeps, said of an update that has not been resolved to a document.",
+      "message": "This update would leave {count} open proposed changes on a document, past {limit}",
+      "params": {
+        "count": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "count": 600,
+        "limit": "the limit of 1000 open proposed changes for one document; adopt or dismiss some first"
+      },
+      "exampleText": "This update would leave 600 open proposed changes on a document, past the limit of 1000 open proposed changes for one document; adopt or dismiss some first",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "TooManyOpenChangesError"
+    },
+    {
+      "name": "TooManyOpenChangesDocument",
+      "code": "too_many_open_changes",
+      "status": 413,
+      "family": "sync-write",
+      "description": "More open proposed changes than one document keeps, said of the document the caller resolved the refused text to.",
+      "message": "The document at {path|json} holds {count} open proposed changes, past {limit}",
+      "params": {
+        "path": "string",
+        "count": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "count": 600,
+        "limit": "the limit of 1000 open proposed changes for one document; adopt or dismiss some first"
+      },
+      "exampleText": "The document at \"notes/a\" holds 600 open proposed changes, past the limit of 1000 open proposed changes for one document; adopt or dismiss some first",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "TooManyOpenChangesError"
+    },
+    {
+      "name": "TooManyThreadMessagesUpdate",
+      "code": "too_many_thread_messages",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A comment thread holding more messages than one thread keeps, said of an update that has not been resolved to a document.",
+      "message": "This update would leave a comment thread of {count} messages, past {limit}",
+      "params": {
+        "count": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "count": 600,
+        "limit": "the limit of 1000 messages in one comment thread; open a new thread to continue"
+      },
+      "exampleText": "This update would leave a comment thread of 600 messages, past the limit of 1000 messages in one comment thread; open a new thread to continue",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "TooManyThreadMessagesError"
+    },
+    {
+      "name": "TooManyThreadMessagesDocument",
+      "code": "too_many_thread_messages",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A comment thread holding more messages than one thread keeps, said of the document the caller resolved the refused text to.",
+      "message": "The document at {path|json} holds a comment thread of {count} messages, past {limit}",
+      "params": {
+        "path": "string",
+        "count": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "count": 600,
+        "limit": "the limit of 1000 messages in one comment thread; open a new thread to continue"
+      },
+      "exampleText": "The document at \"notes/a\" holds a comment thread of 600 messages, past the limit of 1000 messages in one comment thread; open a new thread to continue",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "TooManyThreadMessagesError"
+    },
+    {
+      "name": "TagsCountBoardUpdate",
+      "code": "tags_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A board given more tags than it may carry, in an update.",
+      "message": "This update would give the board {amount} tags, past {limit}",
+      "params": {
+        "amount": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "amount": 300,
+        "limit": "the 1024-tag limit for one document, board, node or edge"
+      },
+      "exampleText": "This update would give the board 300 tags, past the 1024-tag limit for one document, board, node or edge",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "TagsTooLargeError"
+    },
+    {
+      "name": "TagsCountBoardDocument",
+      "code": "tags_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A board carrying more tags than it may, in a resolved document.",
+      "message": "The document at {path|json} gives the board {amount} tags, past {limit}",
+      "params": {
+        "path": "string",
+        "amount": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "amount": 300,
+        "limit": "the 1024-tag limit for one document, board, node or edge"
+      },
+      "exampleText": "The document at \"notes/a\" gives the board 300 tags, past the 1024-tag limit for one document, board, node or edge",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "TagsTooLargeError"
+    },
+    {
+      "name": "TagsCountElementUpdate",
+      "code": "tags_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A node or edge given more tags than it may carry, in an update.",
+      "message": "This update would give element {elementId|json} {amount} tags, past {limit}",
+      "params": {
+        "elementId": "string",
+        "amount": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "elementId": "n1",
+        "amount": 300,
+        "limit": "the 1024-tag limit for one document, board, node or edge"
+      },
+      "exampleText": "This update would give element \"n1\" 300 tags, past the 1024-tag limit for one document, board, node or edge",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "TagsTooLargeError"
+    },
+    {
+      "name": "TagsCountElementDocument",
+      "code": "tags_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A node or edge carrying more tags than it may, in a resolved document.",
+      "message": "The document at {path|json} gives element {elementId|json} {amount} tags, past {limit}",
+      "params": {
+        "path": "string",
+        "elementId": "string",
+        "amount": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "elementId": "n1",
+        "amount": 300,
+        "limit": "the 1024-tag limit for one document, board, node or edge"
+      },
+      "exampleText": "The document at \"notes/a\" gives element \"n1\" 300 tags, past the 1024-tag limit for one document, board, node or edge",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "TagsTooLargeError"
+    },
+    {
+      "name": "TagsLengthBoardUpdate",
+      "code": "tags_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A board given a tag longer than a tag may be, in an update.",
+      "message": "This update would give the board a tag of {amount} characters, past {limit}",
+      "params": {
+        "amount": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "amount": 500,
+        "limit": "the 1024-character limit for one tag"
+      },
+      "exampleText": "This update would give the board a tag of 500 characters, past the 1024-character limit for one tag",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "TagsTooLargeError"
+    },
+    {
+      "name": "TagsLengthBoardDocument",
+      "code": "tags_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A board carrying a tag longer than a tag may be, in a resolved document.",
+      "message": "The document at {path|json} gives the board a tag of {amount} characters, past {limit}",
+      "params": {
+        "path": "string",
+        "amount": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "amount": 500,
+        "limit": "the 1024-character limit for one tag"
+      },
+      "exampleText": "The document at \"notes/a\" gives the board a tag of 500 characters, past the 1024-character limit for one tag",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "TagsTooLargeError"
+    },
+    {
+      "name": "TagsLengthElementUpdate",
+      "code": "tags_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A node or edge given a tag longer than a tag may be, in an update.",
+      "message": "This update would give element {elementId|json} a tag of {amount} characters, past {limit}",
+      "params": {
+        "elementId": "string",
+        "amount": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "elementId": "n1",
+        "amount": 500,
+        "limit": "the 1024-character limit for one tag"
+      },
+      "exampleText": "This update would give element \"n1\" a tag of 500 characters, past the 1024-character limit for one tag",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "TagsTooLargeError"
+    },
+    {
+      "name": "TagsLengthElementDocument",
+      "code": "tags_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A node or edge carrying a tag longer than a tag may be, in a resolved document.",
+      "message": "The document at {path|json} gives element {elementId|json} a tag of {amount} characters, past {limit}",
+      "params": {
+        "path": "string",
+        "elementId": "string",
+        "amount": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "elementId": "n1",
+        "amount": 500,
+        "limit": "the 1024-character limit for one tag"
+      },
+      "exampleText": "The document at \"notes/a\" gives element \"n1\" a tag of 500 characters, past the 1024-character limit for one tag",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "TagsTooLargeError"
+    },
+    {
+      "name": "CanvasTooLargeNodesUpdate",
+      "code": "too_many_nodes_or_edges",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A canvas an update would leave with more nodes than one canvas may hold.",
+      "message": "This update would leave a canvas of {count} nodes, past {limit}",
+      "params": {
+        "count": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "count": 3000,
+        "limit": "the 2000-node limit for one canvas; remove nodes first, or split the board across canvases"
+      },
+      "exampleText": "This update would leave a canvas of 3000 nodes, past the 2000-node limit for one canvas; remove nodes first, or split the board across canvases",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "CanvasTooLargeError"
+    },
+    {
+      "name": "CanvasTooLargeNodesDocument",
+      "code": "too_many_nodes_or_edges",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A resolved document whose canvas holds more nodes than one canvas may.",
+      "message": "The document at {path|json} is a canvas of {count} nodes, past {limit}",
+      "params": {
+        "path": "string",
+        "count": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "count": 3000,
+        "limit": "the 2000-node limit for one canvas; remove nodes first, or split the board across canvases"
+      },
+      "exampleText": "The document at \"notes/a\" is a canvas of 3000 nodes, past the 2000-node limit for one canvas; remove nodes first, or split the board across canvases",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "CanvasTooLargeError"
+    },
+    {
+      "name": "CanvasTooLargeEdgesAndLinesUpdate",
+      "code": "too_many_nodes_or_edges",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A canvas an update would leave with more edges and lines than one canvas may hold.",
+      "message": "This update would leave a canvas of {count} edges and lines, past {limit}",
+      "params": {
+        "count": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "count": 3000,
+        "limit": "the limit of 2000 edges and lines together for one canvas; remove edges or lines first, or split the board across canvases"
+      },
+      "exampleText": "This update would leave a canvas of 3000 edges and lines, past the limit of 2000 edges and lines together for one canvas; remove edges or lines first, or split the board across canvases",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "CanvasTooLargeError"
+    },
+    {
+      "name": "CanvasTooLargeEdgesAndLinesDocument",
+      "code": "too_many_nodes_or_edges",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A resolved document whose canvas holds more edges and lines than one canvas may.",
+      "message": "The document at {path|json} is a canvas of {count} edges and lines, past {limit}",
+      "params": {
+        "path": "string",
+        "count": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "count": 3000,
+        "limit": "the limit of 2000 edges and lines together for one canvas; remove edges or lines first, or split the board across canvases"
+      },
+      "exampleText": "The document at \"notes/a\" is a canvas of 3000 edges and lines, past the limit of 2000 edges and lines together for one canvas; remove edges or lines first, or split the board across canvases",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "CanvasTooLargeError"
+    },
+    {
+      "name": "ContentRootKindUpdate",
+      "code": "invalid_document_root",
+      "status": 400,
+      "family": "sync-write",
+      "description": "A document node's content key an update would leave holding something other than its content container.",
+      "message": "This update would leave a document holding something other than its own content container at {key|json}, which leaves that document unreadable",
+      "params": {
+        "key": "string"
+      },
+      "example": {
+        "key": "content"
+      },
+      "exampleText": "This update would leave a document holding something other than its own content container at \"content\", which leaves that document unreadable",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "ContentRootKindError"
+    },
+    {
+      "name": "ContentRootKindDocument",
+      "code": "invalid_document_root",
+      "status": 400,
+      "family": "sync-write",
+      "description": "A resolved document whose content key holds something other than its content container.",
+      "message": "The document at {path|json} is holding something other than its own content container at {key|json}, which leaves that document unreadable",
+      "params": {
+        "path": "string",
+        "key": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "key": "content"
+      },
+      "exampleText": "The document at \"notes/a\" is holding something other than its own content container at \"content\", which leaves that document unreadable",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "ContentRootKindError"
+    },
+    {
+      "name": "UnattachedContainerUpdate",
+      "code": "causal_gap",
+      "status": 409,
+      "family": "sync-write",
+      "description": "A write into a container whose creating change the write does not build on, in an update.",
+      "message": "This update writes into a container ({container}) created by a change they do not build on, so nothing of it was kept. Send them built on the change that creates the container",
+      "params": {
+        "container": "string"
+      },
+      "example": {
+        "container": "cid:1@2:Map"
+      },
+      "exampleText": "This update writes into a container (cid:1@2:Map) created by a change they do not build on, so nothing of it was kept. Send them built on the change that creates the container",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "UnattachedContainerError"
+    },
+    {
+      "name": "UnattachedContainerDocument",
+      "code": "causal_gap",
+      "status": 409,
+      "family": "sync-write",
+      "description": "The same, found in the history of a resolved document.",
+      "message": "The document at {path|json} holds in its history writes into a container ({container}) created by a change they do not build on, so nothing of it was kept. Send them built on the change that creates the container",
+      "params": {
+        "path": "string",
+        "container": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "container": "cid:1@2:Map"
+      },
+      "exampleText": "The document at \"notes/a\" holds in its history writes into a container (cid:1@2:Map) created by a change they do not build on, so nothing of it was kept. Send them built on the change that creates the container",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "UnattachedContainerError"
+    },
+    {
+      "name": "ReservedMapKeyUpdate",
+      "code": "reserved_map_key",
+      "status": 400,
+      "family": "sync-write",
+      "description": "A write naming `__proto__` as a map key, in an update.",
+      "message": "This update writes a key named \"__proto__\" (in {container}), which no document may hold, so nothing of it was kept",
+      "params": {
+        "container": "string"
+      },
+      "example": {
+        "container": "cid:1@2:Map"
+      },
+      "exampleText": "This update writes a key named \"__proto__\" (in cid:1@2:Map), which no document may hold, so nothing of it was kept",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "ReservedMapKeyError"
+    },
+    {
+      "name": "ReservedMapKeyDocument",
+      "code": "reserved_map_key",
+      "status": 400,
+      "family": "sync-write",
+      "description": "The same, found in the history of a resolved document.",
+      "message": "The document at {path|json} holds in its history a write of a key named \"__proto__\" (in {container}), which no document may hold, so nothing of it was kept",
+      "params": {
+        "path": "string",
+        "container": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "container": "cid:1@2:Map"
+      },
+      "exampleText": "The document at \"notes/a\" holds in its history a write of a key named \"__proto__\" (in cid:1@2:Map), which no document may hold, so nothing of it was kept",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "ReservedMapKeyError"
+    },
+    {
+      "name": "ReservedKeyWrite",
+      "code": "reserved_map_key",
+      "status": 400,
+      "family": "sync-write",
+      "description": "A value write holding a key named `__proto__`, refused before its first operation.",
+      "message": "This write holds a key named \"__proto__\" (in {container}), which no document may hold, so nothing of it was kept",
+      "params": {
+        "container": "string"
+      },
+      "example": {
+        "container": "doc"
+      },
+      "exampleText": "This write holds a key named \"__proto__\" (in doc), which no document may hold, so nothing of it was kept",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "ReservedKeyWriteError"
+    },
+    {
+      "name": "RetiredShapeWrittenUpdate",
+      "code": "retired_stored_shape",
+      "status": 400,
+      "family": "sync-write",
+      "description": "A write of a shape an older version stored and no reader serves, in an update.",
+      "message": "This update would write {found}, a form an older version stored and this one no longer reads, so nothing of it was kept",
+      "params": {
+        "found": "string"
+      },
+      "example": {
+        "found": "node \"n1\" stored under the retired key"
+      },
+      "exampleText": "This update would write node \"n1\" stored under the retired key, a form an older version stored and this one no longer reads, so nothing of it was kept",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "RetiredShapeWrittenError"
+    },
+    {
+      "name": "RetiredShapeWrittenDocument",
+      "code": "retired_stored_shape",
+      "status": 400,
+      "family": "sync-write",
+      "description": "The same, found in the history of a resolved document.",
+      "message": "The document at {path|json} holds in its history {found}, a form an older version stored and this one no longer reads, so nothing of it was kept",
+      "params": {
+        "path": "string",
+        "found": "string"
+      },
+      "example": {
+        "path": "notes/a",
+        "found": "node \"n1\" stored under the retired key"
+      },
+      "exampleText": "The document at \"notes/a\" holds in its history node \"n1\" stored under the retired key, a form an older version stored and this one no longer reads, so nothing of it was kept",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "RetiredShapeWrittenError"
+    },
+    {
+      "name": "RetiredCommentPlaneWrittenUpdate",
+      "code": "retired_comment_plane",
+      "status": 400,
+      "family": "sync-write",
+      "description": "A write of a row in the comment plane before threads, in an update.",
+      "message": "This update would write a comment in the flat comments plane an older version kept comments in ({rows} there now), which this one no longer reads, so nothing of it was kept",
+      "params": {
+        "rows": "integer"
+      },
+      "example": {
+        "rows": 2
+      },
+      "exampleText": "This update would write a comment in the flat comments plane an older version kept comments in (2 there now), which this one no longer reads, so nothing of it was kept",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "RetiredCommentPlaneWrittenError"
+    },
+    {
+      "name": "RetiredCommentPlaneWrittenDocument",
+      "code": "retired_comment_plane",
+      "status": 400,
+      "family": "sync-write",
+      "description": "The same, found in the history of a resolved document.",
+      "message": "The document at {path|json} holds in its history a comment in the flat comments plane an older version kept comments in ({rows} there now), which this one no longer reads, so nothing of it was kept",
+      "params": {
+        "path": "string",
+        "rows": "integer"
+      },
+      "example": {
+        "path": "notes/a",
+        "rows": 2
+      },
+      "exampleText": "The document at \"notes/a\" holds in its history a comment in the flat comments plane an older version kept comments in (2 there now), which this one no longer reads, so nothing of it was kept",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "RetiredCommentPlaneWrittenError"
+    },
+    {
+      "name": "OffGrammarPath",
+      "code": "invalid_path",
+      "status": 400,
+      "family": "sync-write",
+      "description": "Documents or folders put at paths the path grammar refuses. The caller shortens each path to its first 120 characters and names at most three.",
+      "message": "This update would put documents or folders at paths this keeper cannot store: {paths|json_list}. A path may be at most {maxLength} characters, and each segment may hold only ASCII letters, digits and interior hyphens",
+      "params": {
+        "paths": "string[]",
+        "maxLength": "integer"
+      },
+      "example": {
+        "paths": ["a b", "c"],
+        "maxLength": 1024
+      },
+      "exampleText": "This update would put documents or folders at paths this keeper cannot store: \"a b\", \"c\". A path may be at most 1024 characters, and each segment may hold only ASCII letters, digits and interior hyphens",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "OffGrammarPathError"
+    },
+    {
+      "name": "OffGrammarPathMore",
+      "code": "invalid_path",
+      "status": 400,
+      "family": "sync-write",
+      "description": "The same with more paths than are named; `more` counts the ones left out.",
+      "message": "This update would put documents or folders at paths this keeper cannot store: {paths|json_list} and {more} more. A path may be at most {maxLength} characters, and each segment may hold only ASCII letters, digits and interior hyphens",
+      "params": {
+        "paths": "string[]",
+        "more": "integer",
+        "maxLength": "integer"
+      },
+      "example": {
+        "paths": ["a b", "c", "d e"],
+        "more": 2,
+        "maxLength": 1024
+      },
+      "exampleText": "This update would put documents or folders at paths this keeper cannot store: \"a b\", \"c\", \"d e\" and 2 more. A path may be at most 1024 characters, and each segment may hold only ASCII letters, digits and interior hyphens",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "OffGrammarPathError"
+    },
+    {
+      "name": "UnreadableDocumentMeta",
+      "code": "unreadable_document_meta",
+      "status": 400,
+      "family": "sync-write",
+      "description": "Workspace nodes an update would leave unreadable to this keeper.",
+      "message": "This update would leave workspace nodes this keeper cannot read ({nodes|list}), which hides the documents they hold and everything below them; a document needs a known kind, a segment, its id and whole-number timestamps, and a folder carries only its segment",
+      "params": {
+        "nodes": "string[]"
+      },
+      "example": {
+        "nodes": ["a", "b/c"]
+      },
+      "exampleText": "This update would leave workspace nodes this keeper cannot read (a, b/c), which hides the documents they hold and everything below them; a document needs a known kind, a segment, its id and whole-number timestamps, and a folder carries only its segment",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "UnreadableDocumentMetaError"
+    },
+    {
+      "name": "DocumentKindChangedNamedKind",
+      "code": "document_kind_changed",
+      "status": 400,
+      "family": "sync-write",
+      "description": "An update leaving the envelope of a named document saying another kind than the document records.",
+      "message": "This update would leave the envelope of document {documentId} saying \"{kind}\" while the document is recorded as \"{recorded}\"; a document keeps the kind it was created as",
+      "params": {
+        "documentId": "string",
+        "kind": "string",
+        "recorded": "string"
+      },
+      "example": {
+        "documentId": "d1",
+        "kind": "markdown",
+        "recorded": "spatial"
+      },
+      "exampleText": "This update would leave the envelope of document d1 saying \"markdown\" while the document is recorded as \"spatial\"; a document keeps the kind it was created as",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "DocumentKindChangedError"
+    },
+    {
+      "name": "DocumentKindChangedNamedNoKind",
+      "code": "document_kind_changed",
+      "status": 400,
+      "family": "sync-write",
+      "description": "An update leaving the envelope of a named document saying no kind than the document records.",
+      "message": "This update would leave the envelope of document {documentId} saying no kind while the document is recorded as \"{recorded}\"; a document keeps the kind it was created as",
+      "params": {
+        "documentId": "string",
+        "recorded": "string"
+      },
+      "example": {
+        "documentId": "d1",
+        "recorded": "spatial"
+      },
+      "exampleText": "This update would leave the envelope of document d1 saying no kind while the document is recorded as \"spatial\"; a document keeps the kind it was created as",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "DocumentKindChangedError"
+    },
+    {
+      "name": "DocumentKindChangedUnnamedKind",
+      "code": "document_kind_changed",
+      "status": 400,
+      "family": "sync-write",
+      "description": "An update leaving the envelope of a document the keeper could not name saying another kind than the document records.",
+      "message": "This update would leave the envelope of a document saying \"{kind}\" while the document is recorded as \"{recorded}\"; a document keeps the kind it was created as",
+      "params": {
+        "kind": "string",
+        "recorded": "string"
+      },
+      "example": {
+        "kind": "markdown",
+        "recorded": "spatial"
+      },
+      "exampleText": "This update would leave the envelope of a document saying \"markdown\" while the document is recorded as \"spatial\"; a document keeps the kind it was created as",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "DocumentKindChangedError"
+    },
+    {
+      "name": "DocumentKindChangedUnnamedNoKind",
+      "code": "document_kind_changed",
+      "status": 400,
+      "family": "sync-write",
+      "description": "An update leaving the envelope of a document the keeper could not name saying no kind than the document records.",
+      "message": "This update would leave the envelope of a document saying no kind while the document is recorded as \"{recorded}\"; a document keeps the kind it was created as",
+      "params": {
+        "recorded": "string"
+      },
+      "example": {
+        "recorded": "spatial"
+      },
+      "exampleText": "This update would leave the envelope of a document saying no kind while the document is recorded as \"spatial\"; a document keeps the kind it was created as",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "DocumentKindChangedError"
+    },
+    {
+      "name": "DocumentNameTooLong",
+      "code": "document_name_too_long",
+      "status": 400,
+      "family": "sync-write",
+      "description": "Documents an update would give a display name past the limit.",
+      "message": "This update would give {paths|json_list} a display name past {maxLength} characters, the most a name may have",
+      "params": {
+        "paths": "string[]",
+        "maxLength": "integer"
+      },
+      "example": {
+        "paths": ["a", "b"],
+        "maxLength": 200
+      },
+      "exampleText": "This update would give \"a\", \"b\" a display name past 200 characters, the most a name may have",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "DocumentNameTooLongError"
+    },
+    {
+      "name": "FolderNameRefused",
+      "code": "folder_name_refused",
+      "status": 400,
+      "family": "sync-write",
+      "description": "Folders an update would give a display name no folder may have; the reason is the folder-name rule's own sentence.",
+      "message": "This update would give the folder {paths|json_list} a name no folder may have. {reason}",
+      "params": {
+        "paths": "string[]",
+        "reason": "string"
+      },
+      "example": {
+        "paths": ["a"],
+        "reason": "A folder name cannot be blank."
+      },
+      "exampleText": "This update would give the folder \"a\" a name no folder may have. A folder name cannot be blank.",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "FolderNameRefusedError"
+    },
+    {
+      "name": "CausalGap",
+      "code": "causal_gap",
+      "status": 409,
+      "family": "sync-write",
+      "description": "An update building on changes this keeper has not received; sending again once it holds them lands.",
+      "message": "This update builds on changes this keeper has not received yet, so nothing of it was kept. Send the changes it builds on first",
+      "params": {},
+      "example": {},
+      "exampleText": "This update builds on changes this keeper has not received yet, so nothing of it was kept. Send the changes it builds on first",
+      "surfaces": ["sync-write", "api-v1"],
+      "source": "CausalGapError"
+    },
+    {
+      "name": "TooManyDocuments",
+      "code": "too_many_documents",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A write leaving the workspace record listing more documents than a workspace holds.",
+      "message": "This write would leave the workspace holding {documents} documents; a workspace holds at most {limit}. Move some documents to another workspace first",
+      "params": {
+        "documents": "integer",
+        "limit": "integer"
+      },
+      "example": {
+        "documents": 2001,
+        "limit": 2000
+      },
+      "exampleText": "This write would leave the workspace holding 2001 documents; a workspace holds at most 2000. Move some documents to another workspace first",
+      "surfaces": ["sync-write", "api-v1", "mcp-tools"],
+      "source": "TooManyDocumentsError"
+    },
+    {
+      "name": "TooManyFolders",
+      "code": "too_many_folders",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A write leaving the workspace record listing more folders than a workspace holds.",
+      "message": "This write would leave the workspace holding {folders} folders; a workspace holds at most {limit}. Move or delete some folders' documents first",
+      "params": {
+        "folders": "integer",
+        "limit": "integer"
+      },
+      "example": {
+        "folders": 4001,
+        "limit": 4000
+      },
+      "exampleText": "This write would leave the workspace holding 4001 folders; a workspace holds at most 4000. Move or delete some folders' documents first",
+      "surfaces": ["sync-write", "api-v1", "mcp-tools"],
+      "source": "TooManyFoldersError"
+    },
+    {
+      "name": "TooManyWorkspaces",
+      "code": "too_many_workspaces",
+      "status": 413,
+      "description": "A workspace create in a namespace already holding the most workspaces one person may hold on a shared keeper.",
+      "message": "\"{namespace}\" already holds {limit} workspaces, the most one person may hold on this server",
+      "params": {
+        "namespace": "string",
+        "limit": "integer"
+      },
+      "example": {
+        "namespace": "ns",
+        "limit": 1000
+      },
+      "exampleText": "\"ns\" already holds 1000 workspaces, the most one person may hold on this server",
+      "surfaces": ["api-v1", "documents-api", "mcp-tools"],
+      "source": "TooManyWorkspacesError"
+    },
+    {
+      "name": "TooManyVersions",
+      "code": "too_many_versions",
+      "status": 413,
+      "family": "version",
+      "description": "A manual version save past the document's version ceiling, or a restore point past the same ceiling.",
+      "message": "This document already keeps {limit} saved versions, the most one document keeps; no further version can be saved for it",
+      "params": {
+        "limit": "integer"
+      },
+      "example": {
+        "limit": 50
+      },
+      "exampleText": "This document already keeps 50 saved versions, the most one document keeps; no further version can be saved for it",
+      "surfaces": ["documents-api", "mcp-tools"],
+      "source": "TooManyVersionsError"
+    },
+    {
+      "name": "DocumentNotFound",
+      "code": "document_not_found",
+      "status": 404,
+      "description": "A document the workspace does not hold, named for an MCP caller.",
+      "message": "Document not found: {documentId} in workspace {workspaceId}",
+      "params": {
+        "documentId": "string",
+        "workspaceId": "string"
+      },
+      "example": {
+        "documentId": "d1",
+        "workspaceId": "w1"
+      },
+      "exampleText": "Document not found: d1 in workspace w1",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "WorkspaceDocumentNotFoundError"
+    },
+    {
+      "name": "DocumentNotFoundInIndex",
+      "code": "document_not_found",
+      "status": 404,
+      "description": "A document the index does not hold, named by the path or id the caller gave.",
+      "message": "No document \"{target}\" in workspace \"{workspaceId}\"",
+      "params": {
+        "target": "string",
+        "workspaceId": "string"
+      },
+      "example": {
+        "target": "a/b",
+        "workspaceId": "w1"
+      },
+      "exampleText": "No document \"a/b\" in workspace \"w1\"",
+      "surfaces": ["api-v1", "mcp-tools", "documents-api"],
+      "source": "DocumentNotFoundError"
+    },
+    {
+      "name": "DocumentSnapshotNotFound",
+      "code": "document_not_found",
+      "status": 404,
+      "description": "A document indexed but never written, so holding no stored bytes.",
+      "message": "document has no saved snapshot: {documentId}",
+      "params": {
+        "documentId": "string"
+      },
+      "example": {
+        "documentId": "d1"
+      },
+      "exampleText": "document has no saved snapshot: d1",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "SnapshotNotFoundError"
+    },
+    {
+      "name": "DocumentEngineTrapLoading",
+      "code": "document_engine_trap",
+      "status": 500,
+      "description": "The CRDT engine aborted while the CRDT engine loaded a document; the caller cannot fix it by rewording.",
+      "message": "The CRDT engine aborted while loading {subject}; nothing from this write was stored. A very large document is the usual trigger. If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted.",
+      "params": {
+        "subject": "string"
+      },
+      "example": {
+        "subject": "document d1"
+      },
+      "exampleText": "The CRDT engine aborted while loading document d1; nothing from this write was stored. A very large document is the usual trigger. If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted.",
+      "surfaces": ["sync-write", "api-v1", "documents-api", "mcp-tools"],
+      "source": "DocumentEngineTrapError"
+    },
+    {
+      "name": "DocumentEngineTrapSaving",
+      "code": "document_engine_trap",
+      "status": 500,
+      "description": "The CRDT engine aborted while the CRDT engine saved a document; the caller cannot fix it by rewording.",
+      "message": "The CRDT engine aborted while saving {subject}; nothing from this write was stored. A very large document is the usual trigger. If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted.",
+      "params": {
+        "subject": "string"
+      },
+      "example": {
+        "subject": "document d1"
+      },
+      "exampleText": "The CRDT engine aborted while saving document d1; nothing from this write was stored. A very large document is the usual trigger. If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted.",
+      "surfaces": ["sync-write", "api-v1", "documents-api", "mcp-tools"],
+      "source": "DocumentEngineTrapError"
+    },
+    {
+      "name": "DocumentEngineTrapImporting",
+      "code": "document_engine_trap",
+      "status": 500,
+      "description": "The CRDT engine aborted while the CRDT engine took a client's update; the caller cannot fix it by rewording.",
+      "message": "The CRDT engine aborted while importing an update into {subject}; nothing from this write was stored. A very large document is the usual trigger. The in-memory copy was dropped, so the next request reloads what was stored; sending the same update again aborts the same way. After a trap this process may abort on other large writes too, until the daemon restarts.",
+      "params": {
+        "subject": "string"
+      },
+      "example": {
+        "subject": "document d1"
+      },
+      "exampleText": "The CRDT engine aborted while importing an update into document d1; nothing from this write was stored. A very large document is the usual trigger. The in-memory copy was dropped, so the next request reloads what was stored; sending the same update again aborts the same way. After a trap this process may abort on other large writes too, until the daemon restarts.",
+      "surfaces": ["sync-write", "api-v1", "documents-api", "mcp-tools"],
+      "source": "DocumentEngineTrapError"
+    },
+    {
+      "name": "DocumentEngineTrapRunningRecovered",
+      "code": "document_engine_trap",
+      "status": 500,
+      "description": "The Rust core aborted running an operation and was reset.",
+      "message": "The Rust core aborted while running {subject}; nothing from this request was stored. The core was reset, so the next request runs on a fresh instance; sending the same input again may abort the same way.",
+      "params": {
+        "subject": "string"
+      },
+      "example": {
+        "subject": "layout"
+      },
+      "exampleText": "The Rust core aborted while running layout; nothing from this request was stored. The core was reset, so the next request runs on a fresh instance; sending the same input again may abort the same way.",
+      "surfaces": ["sync-write", "api-v1", "documents-api", "mcp-tools"],
+      "source": "DocumentEngineTrapError"
+    },
+    {
+      "name": "DocumentEngineTrapRunningUnrecoverable",
+      "code": "document_engine_trap",
+      "status": 500,
+      "description": "The Rust core aborted running an operation and could not be reset.",
+      "message": "The Rust core aborted while running {subject}; nothing from this request was stored. The core could not be reset and answers every request with this until the daemon restarts.",
+      "params": {
+        "subject": "string"
+      },
+      "example": {
+        "subject": "layout"
+      },
+      "exampleText": "The Rust core aborted while running layout; nothing from this request was stored. The core could not be reset and answers every request with this until the daemon restarts.",
+      "surfaces": ["sync-write", "api-v1", "documents-api", "mcp-tools"],
+      "source": "DocumentEngineTrapError"
+    },
+    {
+      "name": "DocumentKindMismatch",
+      "code": "document_kind_mismatch",
+      "status": 409,
+      "description": "A write in a format the document is not in; `detail` carries the per-tool consequence and the tool to use instead.",
+      "message": "Document {documentId} is a {kind} document. {detail}",
+      "params": {
+        "documentId": "string",
+        "kind": "string",
+        "detail": "string"
+      },
+      "example": {
+        "documentId": "d1",
+        "kind": "markdown",
+        "detail": "Use wb_body_edit."
+      },
+      "exampleText": "Document d1 is a markdown document. Use wb_body_edit.",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "DocumentKindMismatchError"
+    },
+    {
+      "name": "WorkspaceNotFoundForCallerRead",
+      "code": "workspace_not_found",
+      "status": 404,
+      "description": "A workspace nothing answers to, in the advice for a read, no other workspace known.",
+      "message": "Workspace not found: \"{workspaceId}\". Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).",
+      "params": {
+        "workspaceId": "string"
+      },
+      "example": {
+        "workspaceId": "w1"
+      },
+      "exampleText": "Workspace not found: \"w1\". Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "WorkspaceNotFoundForCallerError"
+    },
+    {
+      "name": "WorkspaceNotFoundForCallerReadKnown",
+      "code": "workspace_not_found",
+      "status": 404,
+      "description": "The same, naming the workspaces that do exist.",
+      "message": "Workspace not found: \"{workspaceId}\". Workspaces here: {known|quoted_list}. Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).",
+      "params": {
+        "workspaceId": "string",
+        "known": "string[]"
+      },
+      "example": {
+        "workspaceId": "w1",
+        "known": ["a", "b"]
+      },
+      "exampleText": "Workspace not found: \"w1\". Workspaces here: \"a\", \"b\". Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "WorkspaceNotFoundForCallerError"
+    },
+    {
+      "name": "WorkspaceNotFoundForCallerCreate",
+      "code": "workspace_not_found",
+      "status": 404,
+      "description": "A workspace nothing answers to, in the advice for a create, no other workspace known.",
+      "message": "Workspace not found: \"{workspaceId}\". Pass createWorkspace: true on this wb_workspace_edit call to create it along with the document.",
+      "params": {
+        "workspaceId": "string"
+      },
+      "example": {
+        "workspaceId": "w1"
+      },
+      "exampleText": "Workspace not found: \"w1\". Pass createWorkspace: true on this wb_workspace_edit call to create it along with the document.",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "WorkspaceNotFoundForCallerError"
+    },
+    {
+      "name": "WorkspaceNotFoundForCallerCreateKnown",
+      "code": "workspace_not_found",
+      "status": 404,
+      "description": "The same, naming the workspaces that do exist.",
+      "message": "Workspace not found: \"{workspaceId}\". Workspaces here: {known|quoted_list}. Pass createWorkspace: true on this wb_workspace_edit call to create it along with the document.",
+      "params": {
+        "workspaceId": "string",
+        "known": "string[]"
+      },
+      "example": {
+        "workspaceId": "w1",
+        "known": ["a", "b"]
+      },
+      "exampleText": "Workspace not found: \"w1\". Workspaces here: \"a\", \"b\". Pass createWorkspace: true on this wb_workspace_edit call to create it along with the document.",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "WorkspaceNotFoundForCallerError"
+    },
+    {
+      "name": "WorkspaceNotFoundInIndex",
+      "code": "workspace_not_found",
+      "status": 404,
+      "description": "A workspace the index does not hold; workspaces never materialize implicitly.",
+      "message": "Workspace not found: \"{workspaceId}\". Create it before adding documents to it.",
+      "params": {
+        "workspaceId": "string"
+      },
+      "example": {
+        "workspaceId": "w1"
+      },
+      "exampleText": "Workspace not found: \"w1\". Create it before adding documents to it.",
+      "surfaces": ["api-v1", "mcp-tools", "documents-api"],
+      "source": "WorkspaceNotFoundError"
+    },
+    {
+      "name": "WorkspaceNotFoundByHandle",
+      "code": "workspace_not_found",
+      "status": 404,
+      "description": "A workspace nothing answers to, in the one voice the daemon's document routes answer it, naming the handle the caller typed.",
+      "message": "Workspace \"{handle}\" not found",
+      "params": {
+        "handle": "string"
+      },
+      "example": {
+        "handle": "w1"
+      },
+      "exampleText": "Workspace \"w1\" not found",
+      "surfaces": ["documents-api"],
+      "source": "workspaceNotFoundRefusal"
+    },
+    {
+      "name": "DocumentPathTaken",
+      "code": "document_path_taken",
+      "status": 409,
+      "description": "A create or move onto a path the workspace already holds.",
+      "message": "Document path \"{path}\" already exists in workspace \"{workspaceId}\"",
+      "params": {
+        "path": "string",
+        "workspaceId": "string"
+      },
+      "example": {
+        "path": "a/b",
+        "workspaceId": "w1"
+      },
+      "exampleText": "Document path \"a/b\" already exists in workspace \"w1\"",
+      "surfaces": ["api-v1", "mcp-tools", "documents-api"],
+      "source": "DocumentPathTakenError"
+    },
+    {
+      "name": "DisplayNameTaken",
+      "code": "display_name_taken",
+      "status": 409,
+      "description": "A name a sibling of the same kind under the same parent already shows; the displayName is trimmed as the sentence quotes it.",
+      "message": "Another {kind} here is already called \"{displayName|trim}\". Choose a name no other {kind} here has.",
+      "params": {
+        "kind": "string",
+        "displayName": "string"
+      },
+      "example": {
+        "kind": "folder",
+        "displayName": " Notes "
+      },
+      "exampleText": "Another folder here is already called \"Notes\". Choose a name no other folder here has.",
+      "surfaces": ["api-v1", "mcp-tools", "documents-api"],
+      "source": "DisplayNameTakenError"
+    },
+    {
+      "name": "WorkspaceSegmentTaken",
+      "code": "workspace_segment_taken",
+      "status": 409,
+      "description": "A workspace segment another workspace in the registry already holds.",
+      "message": "Workspace segment \"{segment}\" is already taken",
+      "params": {
+        "segment": "string"
+      },
+      "example": {
+        "segment": "notes"
+      },
+      "exampleText": "Workspace segment \"notes\" is already taken",
+      "surfaces": ["api-v1", "mcp-tools", "documents-api"],
+      "source": "WorkspaceSegmentTakenError"
+    },
+    {
+      "name": "WorkspaceSegmentTakenInNamespace",
+      "code": "workspace_segment_taken",
+      "status": 409,
+      "description": "The same, in a registry shared by several namespaces.",
+      "message": "Workspace segment \"{segment}\" is already taken in namespace \"{namespace}\"",
+      "params": {
+        "segment": "string",
+        "namespace": "string"
+      },
+      "example": {
+        "segment": "notes",
+        "namespace": "ns"
+      },
+      "exampleText": "Workspace segment \"notes\" is already taken in namespace \"ns\"",
+      "surfaces": ["api-v1", "mcp-tools", "documents-api"],
+      "source": "WorkspaceSegmentTakenError"
+    },
+    {
+      "name": "WorkspaceSegmentUnusable",
+      "code": "workspace_segment_unusable",
+      "status": 400,
+      "description": "A create naming a handle that could never be a segment.",
+      "message": "Cannot create workspace \"{handle}\": a new workspace is addressed by its segment, which must be ASCII letters, digits and interior hyphens, and must not itself be shaped like a canonical id. Choose a name that fits, or address an existing workspace by its id.",
+      "params": {
+        "handle": "string"
+      },
+      "example": {
+        "handle": "no way!"
+      },
+      "exampleText": "Cannot create workspace \"no way!\": a new workspace is addressed by its segment, which must be ASCII letters, digits and interior hyphens, and must not itself be shaped like a canonical id. Choose a name that fits, or address an existing workspace by its id.",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "WorkspaceSegmentUnusableError"
+    },
+    {
+      "name": "DocumentNameConflict",
+      "code": "document_name_conflict",
+      "status": 400,
+      "description": "A create given a display name twice, as `name` and as the frontmatter title, and the two disagree.",
+      "message": "name \"{given}\" and the frontmatter title \"{title}\" are two display names for one document. Give one of them, or make them the same.",
+      "params": {
+        "given": "string",
+        "title": "string"
+      },
+      "example": {
+        "given": "A",
+        "title": "B"
+      },
+      "exampleText": "name \"A\" and the frontmatter title \"B\" are two display names for one document. Give one of them, or make them the same.",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "DocumentNameConflictError"
+    },
+    {
+      "name": "DocumentHasDescendants",
+      "code": "document_has_descendants",
+      "status": 409,
+      "description": "A delete or move that would strand or swallow the documents below its target; `detail` says which to delete first.",
+      "message": "Document \"{path}\" has descendants. {detail}",
+      "params": {
+        "path": "string",
+        "detail": "string"
+      },
+      "example": {
+        "path": "a",
+        "detail": "Delete a/b first."
+      },
+      "exampleText": "Document \"a\" has descendants. Delete a/b first.",
+      "surfaces": ["api-v1", "mcp-tools", "documents-api"],
+      "source": "DocumentHasDescendantsError"
+    },
+    {
+      "name": "DocumentMoveIntoSelf",
+      "code": "document_move_into_self",
+      "status": 400,
+      "description": "A move whose destination lies inside the subtree being moved.",
+      "message": "Cannot move \"{from}\" to \"{to}\": the destination is inside the subtree being moved",
+      "params": {
+        "from": "string",
+        "to": "string"
+      },
+      "example": {
+        "from": "a",
+        "to": "a/b"
+      },
+      "exampleText": "Cannot move \"a\" to \"a/b\": the destination is inside the subtree being moved",
+      "surfaces": ["documents-api", "mcp-tools"],
+      "source": "DocumentMoveIntoSelfError"
+    },
+    {
+      "name": "CannotPlaceCopyContested",
+      "code": "cannot_place_copy",
+      "status": 409,
+      "description": "A duplicate of a path that more than one document carries.",
+      "message": "More than one document carries \"{path}\" in workspace \"{workspaceId}\". Resolve by documentId, or rename one of them.",
+      "params": {
+        "path": "string",
+        "workspaceId": "string"
+      },
+      "example": {
+        "path": "a",
+        "workspaceId": "w1"
+      },
+      "exampleText": "More than one document carries \"a\" in workspace \"w1\". Resolve by documentId, or rename one of them.",
+      "surfaces": ["documents-api", "mcp-tools"],
+      "source": "DocumentPathContestedError"
+    },
+    {
+      "name": "CannotPlaceCopyNoRoom",
+      "code": "cannot_place_copy",
+      "status": 409,
+      "description": "A duplicate of a document whose folder is so deep that no copy segment fits beside it.",
+      "message": "There is no room beside \"{path}\" for a copy: its folder's path is too long.",
+      "params": {
+        "path": "string"
+      },
+      "example": {
+        "path": "a/b"
+      },
+      "exampleText": "There is no room beside \"a/b\" for a copy: its folder's path is too long.",
+      "surfaces": ["documents-api"],
+      "source": "NoRoomForCopyError"
+    },
+    {
+      "name": "DocumentSerializeFailed",
+      "code": "document_serialize_failed",
+      "status": 409,
+      "description": "A stored value the document's format has no spelling for; `cause` is the thrown error as its reader words it.",
+      "message": "Document {documentId} cannot be read as {format}: {cause}. Rewrite it with `wb_workspace_edit`'s `document.set` op to repair it.",
+      "params": {
+        "documentId": "string",
+        "format": "string",
+        "cause": "string"
+      },
+      "example": {
+        "documentId": "d1",
+        "format": "okf",
+        "cause": "a value YAML cannot carry"
+      },
+      "exampleText": "Document d1 cannot be read as okf: a value YAML cannot carry. Rewrite it with `wb_workspace_edit`'s `document.set` op to repair it.",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "DocumentSerializeError"
+    },
+    {
+      "name": "StoredDocumentUnsupportedVersion",
+      "code": "stored_document_unsupported_version",
+      "status": 500,
+      "description": "A stored record intact in a shape this build does not know: the reader is old, the data is not damaged. The message is the keeper's own.",
+      "message": "{message}",
+      "params": {
+        "message": "string"
+      },
+      "example": {
+        "message": "stored under version 9"
+      },
+      "exampleText": "stored under version 9",
+      "surfaces": ["api-v1", "mcp-tools", "documents-api"],
+      "source": "StoredDocumentUnreadableError"
+    },
+    {
+      "name": "CorruptStoredData",
+      "code": "corrupt_stored_data",
+      "status": 500,
+      "description": "A stored record the keeper holds and cannot read back, or a chunk set that does not reassemble. The message is the keeper's own.",
+      "message": "{message}",
+      "params": {
+        "message": "string"
+      },
+      "example": {
+        "message": "does not parse"
+      },
+      "exampleText": "does not parse",
+      "surfaces": ["api-v1", "mcp-tools", "documents-api"],
+      "source": "StoredDocumentUnreadableError, SnapshotReassemblyError"
+    },
+    {
+      "name": "RetiredCommentPlane",
+      "code": "retired_comment_plane",
+      "status": 409,
+      "family": "sync-write",
+      "description": "A document still holding comments in the plane before threads, which no reader serves; its data is untouched.",
+      "message": "this document holds {rows} comment{rows|s} saved by an older version in a form this version no longer reads (the flat comments plane before threads); its data has not been changed",
+      "params": {
+        "rows": "integer"
+      },
+      "example": {
+        "rows": 2
+      },
+      "exampleText": "this document holds 2 comments saved by an older version in a form this version no longer reads (the flat comments plane before threads); its data has not been changed",
+      "surfaces": ["api-v1", "mcp-tools", "documents-api"],
+      "source": "RetiredCommentPlaneError"
+    },
+    {
+      "name": "RetiredStoredShape",
+      "code": "retired_stored_shape",
+      "status": 409,
+      "family": "sync-write",
+      "description": "A document still holding a shape an older version stored and no reader serves; its data is untouched.",
+      "message": "this document holds {found}, saved by an older version in a form this version no longer reads; its data has not been changed",
+      "params": {
+        "found": "string"
+      },
+      "example": {
+        "found": "node \"n1\" stored under the retired key"
+      },
+      "exampleText": "this document holds node \"n1\" stored under the retired key, saved by an older version in a form this version no longer reads; its data has not been changed",
+      "surfaces": ["api-v1", "mcp-tools", "documents-api"],
+      "source": "RetiredStoredShapeError"
+    },
+    {
+      "name": "ReferenceRewriteBodyTooLarge",
+      "code": "markdown_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A reference rewrite that would leave a markdown body past the limit.",
+      "message": "The links would make the document body {chars} characters long, past {limit}",
+      "params": {
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "chars": 300000,
+        "limit": "the 262144-character limit for one document; split the content across documents"
+      },
+      "exampleText": "The links would make the document body 300000 characters long, past the 262144-character limit for one document; split the content across documents",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "ReferenceRewriteTooLargeError"
+    },
+    {
+      "name": "ReferenceRewriteNodeTextTooLarge",
+      "code": "node_text_too_large",
+      "status": 413,
+      "family": "sync-write",
+      "description": "A reference rewrite that would leave a node's text past the limit.",
+      "message": "The links would give node {nodeId|json} {chars} characters of text, past {limit}",
+      "params": {
+        "nodeId": "string",
+        "chars": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "nodeId": "n1",
+        "chars": 70000,
+        "limit": "the 8192-character limit for one node; split it across nodes, or put it in a markdown document and embed that"
+      },
+      "exampleText": "The links would give node \"n1\" 70000 characters of text, past the 8192-character limit for one node; split it across nodes, or put it in a markdown document and embed that",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "ReferenceRewriteTooLargeError"
+    },
+    {
+      "name": "OkfParseFailed",
+      "code": "okf_parse_failed",
+      "status": 400,
+      "description": "A markdown body that OKF cannot parse; `detail` is empty or names up to three issues.",
+      "message": "OKF parse failed at {stage}: {message}{detail}",
+      "params": {
+        "stage": "string",
+        "message": "string",
+        "detail": "string"
+      },
+      "example": {
+        "stage": "frontmatter",
+        "message": "bad yaml",
+        "detail": " — a.b: nope"
+      },
+      "exampleText": "OKF parse failed at frontmatter: bad yaml — a.b: nope",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "OkfParseError"
+    },
+    {
+      "name": "OkfNotYamlSafe",
+      "code": "okf_not_yaml_safe",
+      "status": 400,
+      "description": "A value YAML has no spelling for, refused while the caller still holds the content; same sentence as a parse failure, its own code.",
+      "message": "OKF parse failed at {stage}: {message}{detail}",
+      "params": {
+        "stage": "string",
+        "message": "string",
+        "detail": "string"
+      },
+      "example": {
+        "stage": "yaml-safe",
+        "message": ".nan has no YAML spelling",
+        "detail": ""
+      },
+      "exampleText": "OKF parse failed at yaml-safe: .nan has no YAML spelling",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "OkfParseError"
+    },
+    {
+      "name": "TagNotAdmitted",
+      "code": "tag_not_in_library",
+      "status": 400,
+      "description": "A tag value the workspace's own library does not admit under its key.",
+      "message": "tag \"{tag}\" on {what} is not admitted: the workspace's tag library (the document at \"{libraryPath}\") declares {key} as one of {admitted|list}",
+      "params": {
+        "tag": "string",
+        "what": "string",
+        "libraryPath": "string",
+        "key": "string",
+        "admitted": "string[]"
+      },
+      "example": {
+        "tag": "env:qa",
+        "what": "the board",
+        "libraryPath": "tags",
+        "key": "env",
+        "admitted": ["dev", "prod"]
+      },
+      "exampleText": "tag \"env:qa\" on the board is not admitted: the workspace's tag library (the document at \"tags\") declares env as one of dev, prod",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "TagLibraryError"
+    },
+    {
+      "name": "TagExclusive",
+      "code": "tag_not_in_library",
+      "status": 400,
+      "description": "Two values under a key the library declares exclusive.",
+      "message": "{key} is one value at a time in the workspace's tag library (the document at \"{libraryPath}\"), and this write leaves {what} with {carried|and_list}",
+      "params": {
+        "key": "string",
+        "libraryPath": "string",
+        "what": "string",
+        "carried": "string[]"
+      },
+      "example": {
+        "key": "env",
+        "libraryPath": "tags",
+        "what": "node redis",
+        "carried": ["env:dev", "env:prod"]
+      },
+      "exampleText": "env is one value at a time in the workspace's tag library (the document at \"tags\"), and this write leaves node redis with env:dev and env:prod",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "TagLibraryError"
+    },
+    {
+      "name": "FacetWriteRejected",
+      "code": "facet_write_rejected",
+      "status": 400,
+      "description": "A registered facet's payload its own schema refuses, or one written where it does not belong; `reason` names what to change.",
+      "message": "facet \"{facetKey}\" rejected: {reason}",
+      "params": {
+        "facetKey": "string",
+        "reason": "string"
+      },
+      "example": {
+        "facetKey": "visual.shape/v1",
+        "reason": "bad payload"
+      },
+      "exampleText": "facet \"visual.shape/v1\" rejected: bad payload",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "FacetWriteRejectedError"
+    },
+    {
+      "name": "SearchNeedsQueryOrFilter",
+      "code": "search_needs_query_or_filter",
+      "status": 400,
+      "description": "A search naming neither words nor a filter, in the tool's parameter names.",
+      "message": "Nothing to search for: pass `query` (words to match), or `tags` / `kind` (a filter to answer alone), or both. To list every document, use wb_document_list.",
+      "params": {},
+      "example": {},
+      "exampleText": "Nothing to search for: pass `query` (words to match), or `tags` / `kind` (a filter to answer alone), or both. To list every document, use wb_document_list.",
+      "surfaces": ["mcp-tools"],
+      "source": "SearchNeedsQueryOrFilterError"
+    },
+    {
+      "name": "SearchNeedsQueryOrFilterRoute",
+      "code": "search_needs_query_or_filter",
+      "status": 400,
+      "description": "The same, in the query string's own parameter names.",
+      "message": "Nothing to search for: pass `q` (words to match), or `tag` / `kind` (a filter to answer alone), or both.",
+      "params": {},
+      "example": {},
+      "exampleText": "Nothing to search for: pass `q` (words to match), or `tag` / `kind` (a filter to answer alone), or both.",
+      "surfaces": ["api-v1"],
+      "source": "create-server.ts search route"
+    },
+    {
+      "name": "NamelessLinkifyTarget",
+      "code": "nameless_link_target",
+      "status": 400,
+      "description": "A link-mentions target carrying no display name, so nothing names it in prose.",
+      "message": "Document {targetDocumentId} has no display name — nothing names it in prose, so there is nothing to linkify.",
+      "params": {
+        "targetDocumentId": "string"
+      },
+      "example": {
+        "targetDocumentId": "d1"
+      },
+      "exampleText": "Document d1 has no display name — nothing names it in prose, so there is nothing to linkify.",
+      "surfaces": ["api-v1", "mcp-tools"],
+      "source": "NamelessLinkifyTargetError"
+    },
+    {
+      "name": "InvalidBodyNotJson",
+      "code": "invalid_body",
+      "status": 400,
+      "description": "A write whose body is not JSON.",
+      "message": "the request body is not valid JSON",
+      "params": {},
+      "example": {},
+      "exampleText": "the request body is not valid JSON",
+      "surfaces": ["api-v1"],
+      "source": "create-server.ts readWriteBody"
+    },
+    {
+      "name": "InvalidRequest",
+      "code": "invalid_request",
+      "status": 400,
+      "description": "A request the schema or the route refuses; `reason` is composed by the caller (schema issues joined, an unknown query parameter, an identity named by the URL), which is the one place this contract does not own the sentence.",
+      "message": "{reason}",
+      "params": {
+        "reason": "string"
+      },
+      "example": {
+        "reason": "unknown query parameter \"x\"; it reads q"
+      },
+      "exampleText": "unknown query parameter \"x\"; it reads q",
+      "surfaces": ["api-v1"],
+      "source": "create-server.ts, api-errors.ts"
+    },
+    {
+      "name": "DatabaseBusy",
+      "code": "database_busy",
+      "status": 503,
+      "description": "The database another process holds locked; the same request may succeed shortly (Retry-After: 1).",
+      "message": "The database is busy; retry shortly.",
+      "params": {},
+      "example": {},
+      "exampleText": "The database is busy; retry shortly.",
+      "surfaces": ["api-v1", "documents-api"],
+      "source": "create-server.ts answerUnhandled"
+    },
+    {
+      "name": "InternalError",
+      "code": "internal_error",
+      "status": 500,
+      "description": "An uncaught throw. The body carries no part of the error: its message can hold a path, a statement or a secret.",
+      "message": "The server failed to handle this request.",
+      "params": {},
+      "example": {},
+      "exampleText": "The server failed to handle this request.",
+      "surfaces": ["api-v1"],
+      "source": "create-server.ts answerUnhandled"
+    }
+  ]
+}

@@ -1715,6 +1715,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "whiteboard-api-contracts"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "wasm-bindgen-test",
+ "whiteboard-ports",
+]
+
+[[package]]
 name = "whiteboard-canvas-render"
 version = "0.0.0"
 dependencies = [
