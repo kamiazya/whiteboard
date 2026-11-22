@@ -55,7 +55,7 @@ pub use index_rules::{
 };
 pub use index_writes::{
     CreateDocument, DeleteDocument, MoveDocument, Outcome, PurgeTrashEntry, RestoreDocument,
-    SetDocumentName, SetDocumentPinned, SetFolderName, TrashBlobs, create_document,
+    Restored, SetDocumentName, SetDocumentPinned, SetFolderName, TrashBlobs, create_document,
     delete_document, move_document, purge_trash_entry, restore_document, set_document_name_of,
     set_document_pinned, set_folder_name_of,
 };

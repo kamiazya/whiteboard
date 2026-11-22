@@ -235,10 +235,12 @@ fn a_delete_evacuates_a_document_and_records_the_names_of_the_folders_above_it()
     )
     .expect("restored");
     assert!(restored.saved);
-    assert_eq!(restored.value.map(|p| p.path), Some("one/two/d".to_owned()));
+    assert_eq!(restored.value.placed.map(|p| p.path), Some("one/two/d".to_owned()));
     assert_eq!(record.folder_names(), vec![("one".to_owned(), "Folder one".to_owned())]);
     assert!(record.trash().is_empty());
-    assert!(blobs.held.is_empty(), "the bytes went with the row");
+    let release = restored.value.release.expect("nothing else names the bytes");
+    blobs.delete(&release);
+    assert!(blobs.held.is_empty(), "the bytes go with the row once the keeper releases them");
 }
 
 #[test]
@@ -361,16 +363,16 @@ fn a_restore_answers_nothing_for_a_row_a_live_document_or_a_missing_blob() {
         .expect("answered")
     };
     let none = restore(&mut blobs);
-    assert_eq!((none.value, none.saved), (None, false));
+    assert_eq!((none.value.placed, none.saved), (None, false));
     trashed(&record, "a", &mut blobs);
     let digest = blobs.held.keys().next().cloned().expect("a blob");
     let bytes = blobs.held.remove(&digest).expect("bytes");
     let gone = restore(&mut blobs);
-    assert_eq!((gone.value, gone.saved), (None, false));
+    assert_eq!((gone.value.placed, gone.saved), (None, false));
     blobs.held.insert(digest, bytes);
     add_node(record.doc(), None, &document_meta(ID_A, "live"));
     let live = restore(&mut blobs);
-    assert_eq!((live.value, live.saved), (None, false));
+    assert_eq!((live.value.placed, live.saved), (None, false));
     assert_eq!(record.trash().len(), 1, "the row stays");
 }
 
@@ -518,4 +520,31 @@ fn a_write_stamped_with_a_time_no_date_holds_is_refused_before_it_writes_or_mint
     assert_eq!(record.documents().len(), 1, "nothing was written");
     let last = create_document(&record, &create("c", None), &mut minting(&id_of(2)), 8.64e15);
     assert!(last.is_ok(), "the last time a Date holds is stamped");
+}
+
+#[test]
+fn a_restore_leaves_the_bytes_for_the_keeper_to_release_after_it_saves() {
+    let doc = LoroDoc::new();
+    add_node(&doc, None, &document_meta(ID_A, "a"));
+    let record = writable(&doc);
+    let mut blobs = Blobs::default();
+    trashed(&record, "a", &mut blobs);
+    let row = record.trash().remove(0);
+    let blob = BlobRef { algorithm: row.algorithm.clone(), digest_hex: row.digest_hex.clone() };
+    let restored = restore_document(
+        &record,
+        &RestoreDocument { workspace_id: WORKSPACE, document_id: ID_A },
+        &mut blobs,
+    )
+    .expect("restored");
+    assert!(restored.saved);
+    assert!(blobs.held.contains_key(&blob.digest_hex), "released only after the save");
+    assert_eq!(restored.value.release, Some(blob));
+    let kept = restore_document(
+        &record,
+        &RestoreDocument { workspace_id: WORKSPACE, document_id: ID_A },
+        &mut blobs,
+    )
+    .expect("nothing to restore");
+    assert_eq!((kept.value.placed, kept.value.release), (None, None));
 }

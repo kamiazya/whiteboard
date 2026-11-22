@@ -243,8 +243,13 @@ fn run_trash(op: &str, call: &Call<'_>, blobs: &mut Blobs) -> Option<Done> {
         }
         "restoreDocument" => {
             let input = RestoreDocument { workspace_id, document_id: &text(args, "documentId") };
-            restore_document(record, &input, blobs)
-                .map(|done| (done.value.as_ref().map_or(Json::Null, placed_json), done.saved))
+            restore_document(record, &input, blobs).map(|done| {
+                // The keeper lets go of the bytes after it has saved.
+                if let Some(blob) = &done.value.release {
+                    blobs.delete(blob);
+                }
+                (done.value.placed.as_ref().map_or(Json::Null, placed_json), done.saved)
+            })
         }
         _ => return None,
     })

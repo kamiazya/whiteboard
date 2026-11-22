@@ -399,14 +399,12 @@ fn trash_entry(row: &TrashRow) -> TrashEntry {
     }
 }
 
-/// Lets go of a trash row's bytes unless another row names the same ones: a
+/// The bytes of a trash row to let go of, unless another row names the same ones: a
 /// blob is content-addressed, so one copy serves every row that names it.
-fn drop_blob_unless_named(rows: &[TrashRow], row: &TrashRow, blobs: &mut dyn TrashBlobs) {
+fn blob_to_release(rows: &[TrashRow], row: &TrashRow) -> Option<BlobRef> {
     let entries: Vec<TrashEntry> = rows.iter().map(trash_entry).collect();
     let entry = trash_entry(row);
-    if !is_named_by_another_row(&entries, &entry) {
-        blobs.delete(&entry.blob);
-    }
+    (!is_named_by_another_row(&entries, &entry)).then_some(entry.blob)
 }
 
 /// `purgeTrashEntry`'s input.
@@ -427,7 +425,9 @@ pub fn purge_trash_entry(
     let Some(row) = rows.iter().find(|row| row.document_id == input.document_id) else {
         return Ok(Outcome::unchanged(false));
     };
-    drop_blob_unless_named(&rows, row, blobs);
+    if let Some(blob) = blob_to_release(&rows, row) {
+        blobs.delete(&blob);
+    }
     forget_trash_entry(record.doc(), &row.document_id)?;
     Ok(Outcome::saved(true))
 }
@@ -466,20 +466,37 @@ fn restorable(
     Ok(judged.map(|placement| Restoring { bytes, parent, placement }))
 }
 
+/// What a restore answers: the document it placed, and the bytes the keeper lets go
+/// of once it has saved the record. After the save and not before: a failure
+/// between the two would leave a row naming bytes that are gone, where the other
+/// order strands a blob a later purge cannot reach, which costs space and not the
+/// document.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Restored {
+    pub placed: Option<PlacedDocument>,
+    pub release: Option<BlobRef>,
+}
+
+impl Restored {
+    fn nothing() -> Outcome<Self> {
+        Outcome::unchanged(Self { placed: None, release: None })
+    }
+}
+
 /// `restoreDocument`: brings a deleted document back under the id it had, as a
 /// copy (loro will not revive a deleted node) so a share link still resolves.
-/// `None`, with nothing written, when the row, the bytes or the room is not there.
+/// Nothing placed, and nothing written, when the row, the bytes or the room is not there.
 pub fn restore_document(
     record: &WorkspaceRecord,
     input: &RestoreDocument<'_>,
-    blobs: &mut dyn TrashBlobs,
-) -> Result<Outcome<Option<PlacedDocument>>, IndexError> {
+    blobs: &dyn TrashBlobs,
+) -> Result<Outcome<Restored>, IndexError> {
     let rows = record.trash();
     let Some(row) = rows.iter().find(|row| row.document_id == input.document_id) else {
-        return Ok(Outcome::unchanged(None));
+        return Ok(Restored::nothing());
     };
     let Some(Restoring { bytes, parent, placement }) = restorable(record, row, blobs)? else {
-        return Ok(Outcome::unchanged(None));
+        return Ok(Restored::nothing());
     };
     // A refusal rather than `None`: the row is fine and restorable once the workspace has room.
     let nodes = record.index_nodes();
@@ -490,7 +507,7 @@ pub fn restore_document(
     )?;
     let placed = match import_subtree(record, &bytes, parent.as_deref()) {
         Ok(Some(document_id)) => document_id,
-        Ok(None) => return Ok(Outcome::unchanged(None)),
+        Ok(None) => return Ok(Restored::nothing()),
         Err(PlaceError::Unreadable(error)) => return Err(IndexError::UnreadableTrashBytes(error)),
         Err(PlaceError::Refused(error)) => return Err(error.into()),
     };
@@ -498,11 +515,8 @@ pub fn restore_document(
         reapply_folder_names(record.doc(), names)?;
     }
     forget_trash_entry(record.doc(), &row.document_id)?;
-    // After the save in a keeper, not before: a failure between the two would
-    // leave a row naming bytes that are gone. The blob is let go of by the
-    // keeper's save and not here.
-    drop_blob_unless_named(&record.trash(), row, blobs);
-    Ok(Outcome::saved(record.placed_document(&placed)))
+    let release = blob_to_release(&record.trash(), row);
+    Ok(Outcome::saved(Restored { placed: record.placed_document(&placed), release }))
 }
 
 #[cfg(test)]
