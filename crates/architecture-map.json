@@ -187,7 +187,7 @@
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det", "whiteboard-model"],
       "allowedThirdParty": {
-        "loro": "the CRDT itself: the Rust crate npm loro-crdt is built from, pinned exactly in lock-step with the npm version (ADR-0054 decision 13; tools/arch-lint's loro-lock-step test compares the lockfiles, loro-internal included, which the manifest pin alone leaves floating); pure Rust with no I/O in the shared layer; verified before adopting against deny.toml (MIT), the unsafe ledger and the wasm32 import scan"
+        "loro": "the CRDT itself: the Rust crate npm loro-crdt is built from, pinned exactly in lock-step with the npm version (ADR-0054 decision 13; tools/arch-lint's loro-lock-step test compares the lockfiles, loro-internal included, which the manifest pin alone leaves floating); pure Rust with no I/O, but its tree reaches randomness (getrandom, rand: a peer id per document) and wasm-bindgen on wasm32, so deny.toml records scoped exceptions for loro's tree alone (MPL-2.0 im, sized-chunks and bitmaps, BSL-1.0 xxhash-rust, four unmaintained advisories, getrandom and rand through loro's crates only) and xtask's CORE_IMPORT_ALLOWANCES lets this crate alone import wasm-bindgen's modules; the artifact that links it must supply randomness from its host"
       },
       "absorbs": ["packages/loro-adapter"]
     },

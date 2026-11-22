@@ -11,7 +11,15 @@ all-features = true
 # accepted one goes in `ignore` with the reason it does not reach us.
 version = 2
 yanked = "deny"
-ignore = []
+# Each entry below is reachable only through `loro` (whiteboard-crdt's CRDT,
+# pinned in lock-step with npm loro-crdt); `cargo tree -i <crate>` names loro
+# as the sole path. None has a patched release to move to.
+ignore = [
+  { id = "RUSTSEC-2023-0089", reason = "atomic-polyfill is unmaintained; reached only through loro (loro-internal and serde_columnar via postcard's heapless 0.7)" },
+  { id = "RUSTSEC-2026-0247", reason = "bitmaps is unmaintained; reached only through loro (loro-internal via im and sized-chunks)" },
+  { id = "RUSTSEC-2026-0248", reason = "im is unmaintained; reached only through loro (loro-internal's persistent collections)" },
+  { id = "RUSTSEC-2026-0251", reason = "sized-chunks is unmaintained; reached only through loro (loro-internal via im)" },
+]
 
 [licenses]
 version = 2
@@ -27,7 +35,18 @@ allow = [
 ]
 # libFuzzer's own sources, which libfuzzer-sys compiles into the nightly-only
 # fuzz targets; never shipped.
-exceptions = [{ crate = "libfuzzer-sys", allow = ["NCSA"] }]
+#
+# The rest are loro's dependency tree and nothing else: im, sized-chunks and
+# bitmaps are MPL-2.0 (file-level copyleft, used unmodified as a dependency;
+# their notices ship) and xxhash-rust is BSL-1.0 (permissive, Boost). Per-crate
+# so the licences stay refused for every other crate.
+exceptions = [
+  { crate = "libfuzzer-sys", allow = ["NCSA"] },
+  { crate = "im", allow = ["MPL-2.0"] },
+  { crate = "sized-chunks", allow = ["MPL-2.0"] },
+  { crate = "bitmaps", allow = ["MPL-2.0"] },
+  { crate = "xxhash-rust", allow = ["BSL-1.0"] },
+]
 
 [bans]
 multiple-versions = "warn"
@@ -58,8 +77,13 @@ deny = [
   # through the prelude, which is a dev-dependency (arch-map refuses it as a
   # normal one, since no crate lists it in allowedInternalDeps), so it never
   # reaches a built artifact.
-  { crate = "getrandom", wrappers = ["whiteboard-daemon", "whiteboard-worker", "jobserver", "rand", "whiteboard-proptest"], reason = "randomness is a port (IdMint); core is seeded" },
-  { crate = "rand", wrappers = ["proptest"], reason = "test randomness only, for the property runner" },
+  # loro draws a random peer id and a hash seed per LoroDoc; its tree is the one
+  # core dependency that reaches randomness, as a DIRECT parent only: loro-internal
+  # (peer id), ahash (hash seed), rand_core (through rand 0.8) and
+  # loro_fractional_index. The wasm artifact that links whiteboard-crdt must
+  # supply that randomness from its host.
+  { crate = "getrandom", wrappers = ["whiteboard-daemon", "whiteboard-worker", "jobserver", "rand", "whiteboard-proptest", "loro-internal", "ahash", "rand_core"], reason = "randomness is a port (IdMint); core is seeded; loro's tree is the one scoped exception" },
+  { crate = "rand", wrappers = ["proptest", "loro-internal", "loro_fractional_index"], reason = "test randomness only, for the property runner; loro's tree is the one scoped exception" },
   { crate = "proptest", wrappers = ["whiteboard-proptest"], reason = "every property goes through the one prelude (QR-14b)" },
 ]
 # serde_json's recursion limit (128 levels) is part of every JSON entry's

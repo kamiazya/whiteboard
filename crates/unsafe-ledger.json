@@ -1,17 +1,53 @@
 {
   "$comment": "The `unsafe` tokens each registry dependency's source carries, across both Cargo workspaces (root and crates/fuzz) and every platform the lockfiles resolve, read by `cargo xtask unsafe-ledger` (QR-28c). The count is a lexer's: every `unsafe` keyword outside comments and literals, used or not, so it over-counts and measures arrival, not risk. Shrink-only: a count above its ceiling fails until the entry is raised BY HAND with its reason updated, after someone has read what arrived; a count below fails until `--update` banks it; a crate with unsafe and no entry, or an entry for a crate gone from the tree, fails. A reason says where the crate sits (shipped, build time, xtask, fuzz) and what the unsafe is for. Measured 2026-11-06.",
   "crates": {
+    "ahash": {
+      "ceiling": 7,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: hasher under loro-internal and hashbrown; a few raw-pointer reads"
+    },
+    "aho-corasick": {
+      "ceiling": 227,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: string-set matcher under regex-automata, itself under tracing-subscriber (loro-internal logging); SIMD and unchecked indexing"
+    },
+    "append-only-bytes": {
+      "ceiling": 17,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: loro-internal's append-only byte arena; raw slices over a growing buffer"
+    },
     "arbitrary": {
       "ceiling": 5,
       "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: structured-input derivation for fuzz targets"
+    },
+    "arrayvec": {
+      "ceiling": 52,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: fixed-capacity vector under loro-internal and heapless; MaybeUninit storage"
+    },
+    "arref": {
+      "ceiling": 3,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: loro's mutable references into distinct array slots; raw pointers"
+    },
+    "atomic-polyfill": {
+      "ceiling": 21,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: atomics for targets without them, under heapless 0.7 (RUSTSEC-2023-0089 ignored in deny.toml)"
     },
     "bitflags": {
       "ceiling": 2,
       "reason": "xtask only, never shipped: flag types under wasmparser"
     },
+    "bitmaps": {
+      "ceiling": 15,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: fixed-size bitsets under im (RUSTSEC-2026-0247 ignored in deny.toml); raw array casts"
+    },
     "bumpalo": {
       "ceiling": 185,
       "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: arena allocator of wasm-bindgen-macro-support"
+    },
+    "byteorder": {
+      "ceiling": 40,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: integer reads and writes over byte slices; unchecked copies"
+    },
+    "bytes": {
+      "ceiling": 161,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: shared byte buffers under loro-internal; refcounted raw storage"
     },
     "cc": {
       "ceiling": 34,
@@ -28,6 +64,14 @@
     "cpufeatures": {
       "ceiling": 11,
       "reason": "tests only (through the whiteboard-proptest dev-dependency), never shipped: CPU feature detection for chacha20 under rand"
+    },
+    "critical-section": {
+      "ceiling": 17,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: interrupt-free critical sections under heapless; target-specific hooks"
+    },
+    "either": {
+      "ceiling": 2,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: sum type; a few unchecked conversions"
     },
     "find-msvc-tools": {
       "ceiling": 55,
@@ -49,17 +93,37 @@
       "ceiling": 136,
       "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: future combinators under js-sys's promise bridge"
     },
+    "generator": {
+      "ceiling": 130,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: stackful coroutines, loom's dependency; assembly context switch"
+    },
     "getrandom": {
-      "ceiling": 113,
-      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: OS randomness FFI, reached only through cc's jobserver"
+      "ceiling": 267,
+      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: OS randomness FFI, reached only through cc's jobserver ; also loro's dependency tree (whiteboard-crdt), whose peer-id randomness (js backend on wasm32, OS FFI native) arrived"
+    },
+    "hash32": {
+      "ceiling": 17,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: fixed hashers under heapless; a few raw reads"
     },
     "hashbrown": {
-      "ceiling": 455,
-      "reason": "xtask only, never shipped: the hash table under wasmparser's indexmap"
+      "ceiling": 785,
+      "reason": "xtask only, never shipped: the hash table under wasmparser's indexmap ; also loro's dependency tree (whiteboard-crdt), whose hash tables (raw table storage) arrived"
+    },
+    "heapless": {
+      "ceiling": 738,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: fixed-capacity collections under postcard; MaybeUninit storage and atomics"
+    },
+    "im": {
+      "ceiling": 23,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: persistent collections under loro-internal (RUSTSEC-2026-0248 ignored in deny.toml); node storage"
     },
     "indexmap": {
       "ceiling": 13,
       "reason": "xtask only, never shipped: wasmparser's ordered map"
+    },
+    "itertools": {
+      "ceiling": 38,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: iterator adapters under loro-internal; a few unchecked buffers"
     },
     "itoa": {
       "ceiling": 13,
@@ -73,6 +137,10 @@
       "ceiling": 28,
       "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: bindings to the JS globals the test runner reports through"
     },
+    "lazy_static": {
+      "ceiling": 3,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: lazy statics under loom and tracing; a static cell"
+    },
     "libc": {
       "ceiling": 800,
       "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: libc bindings under cc/jobserver/getrandom"
@@ -85,6 +153,50 @@
       "ceiling": 21,
       "reason": "shipped in every core artifact through whiteboard-det (fdlibm sin and cos): read_volatile in force_eval, which keeps an expression raising a floating-point exception from being optimised away, and get_unchecked in the reduction tables' release-mode indexing (debug builds index with checks); the core::intrinsics calls compile only under the `unstable` feature, which is off"
     },
+    "lock_api": {
+      "ceiling": 297,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: lock wrapper traits under parking_lot; raw guard plumbing"
+    },
+    "log": {
+      "ceiling": 6,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: logging facade under tracing and loro; static logger pointer"
+    },
+    "loom": {
+      "ceiling": 63,
+      "reason": "loro's dependency tree only (whiteboard-crdt), not shipped (built on native only or not at all): concurrency model checker, a cfg(loom) dependency of loro-internal's sync shim; never built outside a loom run"
+    },
+    "loro": {
+      "ceiling": 3,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: the loro facade; a few unsafe blocks over loro-internal handles"
+    },
+    "loro-common": {
+      "ceiling": 5,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: loro's ids and value types; a few unchecked conversions"
+    },
+    "loro-delta": {
+      "ceiling": 3,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: loro's delta sequences; arena and pointer plumbing"
+    },
+    "loro-internal": {
+      "ceiling": 19,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: the CRDT engine itself; unsafe in its arena, state and sync shims"
+    },
+    "loro-rle": {
+      "ceiling": 1,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: run-length-encoded sequences; unchecked slice splits"
+    },
+    "loro-thunderdome": {
+      "ceiling": 4,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: loro's generational arena; MaybeUninit slots"
+    },
+    "lz4_flex": {
+      "ceiling": 77,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: LZ4 compression of snapshots; unchecked copies unless its safe features are chosen"
+    },
+    "matchers": {
+      "ceiling": 1,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: regex matchers under tracing-subscriber; one unsafe block"
+    },
     "memchr": {
       "ceiling": 333,
       "reason": "xtask, and the wasm artifact through serde_json (the OKF exports' wire): byte search inside serde_json"
@@ -93,9 +205,21 @@
       "ceiling": 12,
       "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: coverage counters, compiled only under the unstable test-coverage cfg"
     },
+    "nonmax": {
+      "ceiling": 10,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: integers with a niche; transmutes to NonZero"
+    },
     "nu-ansi-term": {
       "ceiling": 1,
       "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: colouring of the runner's output (Windows console FFI)"
+    },
+    "num-bigint": {
+      "ceiling": 8,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: big integers under loro-internal's value types; unchecked digit access"
+    },
+    "num-complex": {
+      "ceiling": 2,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: complex numbers under num-bigint's tree; a transmute"
     },
     "num-traits": {
       "ceiling": 1,
@@ -105,9 +229,29 @@
       "ceiling": 14,
       "reason": "xtask only, never shipped: zero-copy casts of header structs from file bytes (the Pod trait, alignment- and length-checked) and a read-cache lifetime transmute; harden-check reads ELF headers through it"
     },
+    "once_cell": {
+      "ceiling": 49,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: lazy cells; UnsafeCell plumbing"
+    },
+    "parking_lot": {
+      "ceiling": 86,
+      "reason": "loro's dependency tree only (whiteboard-crdt), not shipped (built on native only or not at all): locks under loro-internal; raw lock plumbing; native only"
+    },
+    "parking_lot_core": {
+      "ceiling": 139,
+      "reason": "loro's dependency tree only (whiteboard-crdt), not shipped (built on native only or not at all): parking lot under parking_lot; thread parking over OS futexes; native only"
+    },
     "pin-project-lite": {
       "ceiling": 46,
       "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: pin projection in futures-util and tokio"
+    },
+    "postcard": {
+      "ceiling": 11,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: serde wire format under loro-internal; a few unchecked reads"
+    },
+    "ppv-lite86": {
+      "ceiling": 168,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: SIMD abstraction under rand_chacha; intrinsics"
     },
     "proc-macro2": {
       "ceiling": 6,
@@ -117,13 +261,37 @@
       "ceiling": 5,
       "reason": "tests only (through the whiteboard-proptest dev-dependency), never shipped: the property runner; its RNG byte-fill helpers in test_runner/rng.rs"
     },
+    "psm": {
+      "ceiling": 27,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: stack-pointer assembly under stacker; assembly shims"
+    },
+    "quick_cache": {
+      "ceiling": 47,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: cache under loro-internal; raw entry storage"
+    },
     "r-efi": {
-      "ceiling": 332,
-      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: UEFI bindings of getrandom, for a target never built"
+      "ceiling": 347,
+      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: UEFI bindings of getrandom, for a target never built ; also loro's dependency tree (whiteboard-crdt), whose UEFI bindings reached through getrandom, never built arrived"
     },
     "rand": {
-      "ceiling": 16,
-      "reason": "tests only (through the whiteboard-proptest dev-dependency), never shipped: rand's fill and macro plumbing under proptest's runner"
+      "ceiling": 30,
+      "reason": "tests only (through the whiteboard-proptest dev-dependency), never shipped: rand's fill and macro plumbing under proptest's runner ; also loro's dependency tree (whiteboard-crdt), whose 0.8 for peer ids and fractional indexes arrived"
+    },
+    "rand_chacha": {
+      "ceiling": 1,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: ChaCha generator under rand 0.8; one unsafe block"
+    },
+    "rand_core": {
+      "ceiling": 2,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: generator traits under rand 0.8 and 0.10; a few transmutes"
+    },
+    "redox_syscall": {
+      "ceiling": 178,
+      "reason": "loro's dependency tree only (whiteboard-crdt), not shipped (built on native only or not at all): Redox OS syscall wrappers under parking_lot_core; never built for any target here"
+    },
+    "regex-automata": {
+      "ceiling": 55,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: regex engine under tracing-subscriber; unchecked indexing"
     },
     "rustversion": {
       "ceiling": 2,
@@ -132,6 +300,14 @@
     "same-file": {
       "ceiling": 3,
       "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: walkdir's same-file check (Windows handle FFI)"
+    },
+    "scoped-tls": {
+      "ceiling": 2,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: scoped thread-local under loom; a static pointer"
+    },
+    "scopeguard": {
+      "ceiling": 3,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: drop guards; ptr reads"
     },
     "semver": {
       "ceiling": 47,
@@ -149,21 +325,73 @@
       "ceiling": 17,
       "reason": "xtask, and the wasm artifact (the OKF exports' wire, parsed under deny.toml's depth ban): JSON reading"
     },
+    "sharded-slab": {
+      "ceiling": 61,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: slab under tracing-subscriber; atomics and raw cells"
+    },
     "shlex": {
       "ceiling": 6,
       "reason": "build time only, never shipped: libfuzzer-sys's build (fuzz) and minicov's (wasm test harness): shell-word splitting inside cc"
+    },
+    "sized-chunks": {
+      "ceiling": 137,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: fixed-size chunks under im (RUSTSEC-2026-0251 ignored in deny.toml); MaybeUninit arrays"
     },
     "slab": {
       "ceiling": 6,
       "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: futures-util's slab allocator"
     },
+    "smallvec": {
+      "ceiling": 80,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: inline vectors under loro-internal; MaybeUninit storage"
+    },
+    "spin": {
+      "ceiling": 117,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: spin locks under loro-internal's no_std fallbacks; atomics and raw cells"
+    },
+    "stable_deref_trait": {
+      "ceiling": 25,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: marker trait impls; unsafe trait impls only"
+    },
+    "stacker": {
+      "ceiling": 20,
+      "reason": "loro's dependency tree only (whiteboard-crdt), not shipped (built on native only or not at all): stack growth under loro-internal's recursion guards; assembly shims; native only"
+    },
     "syn": {
-      "ceiling": 78,
-      "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: Rust parser of every derive; mostly the `unsafe` keyword as a TOKEN it parses, not unsafe code"
+      "ceiling": 201,
+      "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: Rust parser of every derive; mostly the `unsafe` keyword as a TOKEN it parses, not unsafe code ; also loro's dependency tree (whiteboard-crdt), whose derives (build time) arrived"
+    },
+    "thread_local": {
+      "ceiling": 27,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: per-thread storage under tracing-subscriber; raw tables"
     },
     "tokio": {
       "ceiling": 1153,
       "reason": "resolved in the lockfile only, never built here: wasm-bindgen-futures names it for emscripten under an unstable cfg, and it arrives with wasm-bindgen-test (a wasm32 dev-dependency); deny.toml records the same wrapper"
+    },
+    "tracing": {
+      "ceiling": 7,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: instrumentation under loro-internal; callsite registry"
+    },
+    "tracing-attributes": {
+      "ceiling": 1,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: proc macro of tracing; an unsafe keyword in generated code"
+    },
+    "tracing-core": {
+      "ceiling": 28,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: tracing's dispatcher; callsite atomics and static dispatch"
+    },
+    "tracing-log": {
+      "ceiling": 1,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: log bridge of tracing; one unsafe block"
+    },
+    "tracing-subscriber": {
+      "ceiling": 29,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: subscribers under loro-internal's logging; registry and thread-local plumbing"
+    },
+    "twox-hash": {
+      "ceiling": 75,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: hasher under loro; byte reads"
     },
     "unarray": {
       "ceiling": 9,
@@ -181,6 +409,14 @@
       "ceiling": 5,
       "reason": "tests only (whiteboard-search's generator and oracle of its Unicode tables), never shipped: Hangul syllable decomposition and composition, `char::from_u32_unchecked` over arithmetic the source bounds to U+AC00..U+D7A3 before the call"
     },
+    "wasi": {
+      "ceiling": 62,
+      "reason": "loro's dependency tree only (whiteboard-crdt), not shipped (built on native only or not at all): WASI preview1 bindings under getrandom and std targets; never built for wasm32-unknown-unknown"
+    },
+    "wasip2": {
+      "ceiling": 752,
+      "reason": "loro's dependency tree only (whiteboard-crdt), not shipped (built on native only or not at all): WASI preview2 bindings under getrandom 0.4; never built for wasm32-unknown-unknown"
+    },
     "wasm-bindgen": {
       "ceiling": 136,
       "reason": "SHIPPED in the wasm artifact: the JS/wasm ABI glue (externref table, closures, string passing) is unsafe by nature; the one runtime dependency of whiteboard-wasm, pinned with the CLI"
@@ -197,9 +433,53 @@
       "ceiling": 22,
       "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: walkdir's Windows file-handle helpers (FFI)"
     },
+    "windows-core": {
+      "ceiling": 287,
+      "reason": "loro's dependency tree only (whiteboard-crdt), not shipped (built on native only or not at all): Windows API support under windows-* crates; Windows only, never built here"
+    },
+    "windows-implement": {
+      "ceiling": 13,
+      "reason": "loro's dependency tree only (whiteboard-crdt), not shipped (built on native only or not at all): proc macro of windows-core; Windows only"
+    },
+    "windows-interface": {
+      "ceiling": 17,
+      "reason": "loro's dependency tree only (whiteboard-crdt), not shipped (built on native only or not at all): proc macro of windows-core; Windows only"
+    },
+    "windows-link": {
+      "ceiling": 6,
+      "reason": "loro's dependency tree only (whiteboard-crdt), not shipped (built on native only or not at all): Windows import linking; Windows only"
+    },
+    "windows-result": {
+      "ceiling": 26,
+      "reason": "loro's dependency tree only (whiteboard-crdt), not shipped (built on native only or not at all): Windows HRESULT wrapper; Windows only"
+    },
+    "windows-strings": {
+      "ceiling": 76,
+      "reason": "loro's dependency tree only (whiteboard-crdt), not shipped (built on native only or not at all): Windows string types; Windows only"
+    },
     "windows-sys": {
       "ceiling": 12530,
       "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: Windows API bindings, resolved for Windows targets under nu-ansi-term and winapi-util and built for no target here"
+    },
+    "wit-bindgen": {
+      "ceiling": 254,
+      "reason": "loro's dependency tree only (whiteboard-crdt), not shipped (built on native only or not at all): component-model bindings under wasip2; never built for wasm32-unknown-unknown"
+    },
+    "xxhash-rust": {
+      "ceiling": 52,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: xxHash under loro (BSL-1.0, deny.toml exception); unchecked reads"
+    },
+    "yansi": {
+      "ceiling": 5,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: terminal colours under tracing-subscriber; one unsafe block"
+    },
+    "zerocopy": {
+      "ceiling": 649,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: byte-view casts under ahash and ppv-lite86; the unsafe core of the transmute checks"
+    },
+    "zerocopy-derive": {
+      "ceiling": 818,
+      "reason": "loro's dependency tree only (whiteboard-crdt), reachable from a wasm32 CRDT artifact when one ships: proc macro of zerocopy; unsafe keyword in generated impls"
     },
     "zmij": {
       "ceiling": 70,

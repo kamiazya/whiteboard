@@ -69,7 +69,7 @@ native. `cargo xtask cross-target` runs each core crate's tests on both
 and fails when the two pass different counts, so a test module needs
 `#[cfg(target_arch = "wasm32")] use wasm_bindgen_test::wasm_bindgen_test as test;`
 to count (QR-21 layer 3). `cargo xtask wasm-imports` fails a core crate whose wasm32 build
-imports ANYTHING, with a presence guard on the crate's own function count
+imports ANYTHING (one ledgered exception, `CORE_IMPORT_ALLOWANCES`: `whiteboard-crdt` may import wasm-bindgen's modules, which `loro-internal` links unconditionally; stale or orphaned entries fail, and the artifact that links it must supply randomness from its host), with a presence guard on the crate's own function count
 (an artifact holding only std passes vacuously; the first LTO'd version did).
 
 ## What a change here is held to
