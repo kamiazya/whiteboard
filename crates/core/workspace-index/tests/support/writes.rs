@@ -10,11 +10,11 @@ use whiteboard_crdt::{deep_value_with_id, version_pairs};
 use whiteboard_model::Value;
 use whiteboard_model::encoding::base64_to_bytes;
 use whiteboard_workspace_index::{
-    BlobRef, CreateDocument, DeleteDocument, IndexError, MoveDocument, PlacedDocument,
-    PurgeTrashEntry, RestoreDocument, SetDocumentName, SetDocumentPinned, SetFolderName,
-    TrashBlobs, WorkspaceRecord, create_document, delete_document, move_document,
-    purge_trash_entry, restore_document, set_document_name_of, set_document_pinned,
-    set_folder_name_of,
+    BlobRef, CreateDocument, DeleteDocument, DuplicateDocument, IndexError, MoveDocument,
+    PlacedDocument, PurgeTrashEntry, RestoreDocument, SetDocumentName, SetDocumentPinned,
+    SetFolderName, TrashBlobs, WorkspaceRecord, create_document, delete_document,
+    duplicate_document, move_document, purge_trash_entry, restore_document, set_document_name_of,
+    set_document_pinned, set_folder_name_of,
 };
 
 /// The clock the recorder pins `Date.now` to.
@@ -186,6 +186,15 @@ fn run(
                 name,
             };
             create_document(record, &input, mint, RECORDED_NOW)
+                .map(|done| (entry_json(&done.value), done.saved))
+        }
+        "duplicateDocument" => {
+            let input = DuplicateDocument {
+                workspace_id: &workspace_id,
+                path: &text(args, "path"),
+                without_annotations: args["withoutAnnotations"].as_bool().unwrap_or_default(),
+            };
+            duplicate_document(record, &input, mint, RECORDED_NOW)
                 .map(|done| (entry_json(&done.value), done.saved))
         }
         "moveDocument" => {

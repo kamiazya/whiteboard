@@ -1,12 +1,10 @@
 //! The index's pure rules against the recorded answers of the TypeScript.
 //!
 //! `packages/workspace-index/src/oracle/index-rules.jsonl` is that recording,
-//! frozen. This replays every row whose input is plain values: the rules over
-//! a node list, a name, a path, trash rows and a found document, and the reads
-//! over a workspace record's snapshot bytes. The writes over a record are not
-//! ported, so they are counted and skipped by op name, and every op must be in
-//! one of the two ledgers below with its row count, so a recorder change that
-//! drops or adds rows fails here. A write row also holds what the keeper stored
+//! frozen. This replays every row: the rules over a node list, a name, a path,
+//! trash rows and a found document, and the reads and writes over a workspace
+//! record's snapshot bytes. Every op must be in one of the two ledgers below
+//! with its row count, so a recorder change that drops or adds rows fails here. A write row also holds what the keeper stored
 //! after it: the record's deep value with its container ids, its version vector
 //! (which counts the operations the write appended, so the Rust writers must
 //! append the same ones), the saves and the blobs left.
@@ -52,11 +50,12 @@ const REPLAYED: &[(&str, usize)] = &[
     ("deleteDocument", 31),
     ("purgeTrashEntry", 24),
     ("restoreDocument", 52),
+    ("duplicateDocument", 28),
 ];
 
-/// The ops not replayed, with their rows: the index's writes over a record's
-/// snapshot bytes that are not ported yet.
-const DEFERRED: &[(&str, usize)] = &[("duplicateDocument", 28)];
+/// The ops not replayed, with their rows. Empty: every op the recorder takes is
+/// ported, and one it adds has to be ported or listed here.
+const DEFERRED: &[(&str, usize)] = &[];
 
 fn str_of(row: &Json, key: &str) -> Option<String> {
     row[key].as_str().map(str::to_owned)

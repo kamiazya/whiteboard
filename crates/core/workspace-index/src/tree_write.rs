@@ -3,15 +3,15 @@
 //! operations and the record's version vector moves the same way.
 
 use crate::display_name::js_trim;
-use crate::node_meta::{NodeRead, WORKSPACE_TREE_KEY};
+use crate::node_meta::{META_KEYS as NODE_META_KEYS, NodeRead, WORKSPACE_TREE_KEY};
 use crate::record::{PINNED_KEY, WORKSPACE_META_KEY};
 use crate::trash::WORKSPACE_TRASH_KEY;
 use crate::walk::{Walked, walk};
 use std::collections::BTreeMap;
 use whiteboard_crdt::{
-    ContainerKind, LoroDoc, LoroValue, NodeId, WriteError, commit, create_node, delete_meta,
-    delete_node, delete_root_entry, move_node, open_meta_container, open_root_list, set_meta,
-    set_root_entry,
+    ContainerKind, LoroDoc, LoroValue, NodeAt, NodeId, WriteError, commit, create_node,
+    delete_meta, delete_node, delete_root_entry, fill_meta, move_node, open_meta_container,
+    open_root_list, set_meta, set_root_entry,
 };
 use whiteboard_model::Value;
 
@@ -174,18 +174,19 @@ pub struct NewDocument<'a> {
 }
 
 /// Creates a document at `path`, making the folders above it. A folder already
-/// standing there is promoted to the document; `false`, with nothing written,
-/// when a document already owns the path.
+/// standing there is promoted to the document; nothing is written when a
+/// document already owns the path, which the caller finds by looking for the
+/// document it asked for.
 pub fn create_document_at_path(
     doc: &LoroDoc,
     path: &str,
     document: &NewDocument<'_>,
-) -> Result<bool, WriteError> {
+) -> Result<(), WriteError> {
     let segments: Vec<&str> = path.split('/').collect();
     let own = segments.last().copied().unwrap_or(path);
     let existing = walk(doc).0.into_iter().find(|walked| walked.path == path);
     if matches!(existing, Some(Walked { read: NodeRead::Document(_), .. })) {
-        return Ok(false);
+        return Ok(());
     }
     let named_folder =
         matches!(&existing, Some(Walked { read: NodeRead::Folder { name: Some(_), .. }, .. }));
@@ -209,7 +210,7 @@ pub fn create_document_at_path(
     set_meta(doc, tree, node, "updatedAt", &Value::Number(document.now_ms))?;
     attach_content_containers(doc, node)?;
     commit(doc);
-    Ok(true)
+    Ok(())
 }
 
 /// Re-parents the node at `from` to sit at `to`, renaming its own segment; its
@@ -265,6 +266,37 @@ pub fn record_trash_entry(doc: &LoroDoc, document_id: &str, row: &Value) -> Resu
 /// Takes a document's row out of the trash map.
 pub fn forget_trash_entry(doc: &LoroDoc, document_id: &str) -> Result<(), WriteError> {
     delete_root_entry(doc, WORKSPACE_TRASH_KEY, document_id)?;
+    commit(doc);
+    Ok(())
+}
+
+/// What a copy of a document leaves behind: the annotation layer, when asked, and
+/// whatever a node keeps for itself.
+fn travels_to_copy(key: &str, without_annotations: bool) -> bool {
+    let annotation = matches!(key, "threads" | "proposals");
+    !(key.starts_with("plane:")
+        || (without_annotations && annotation)
+        || NODE_META_KEYS.contains(&key))
+}
+
+/// Makes the content of the document node `to` (just created, holding its
+/// containers empty) equal the content of `from`, and stamps `updatedAt` when
+/// that changed anything. A value copy: nothing of the source's history, id,
+/// path, pin or timestamps travels.
+pub fn copy_document_content(
+    doc: &LoroDoc,
+    from: NodeId,
+    to: NodeId,
+    without_annotations: bool,
+    now_ms: f64,
+) -> Result<(), WriteError> {
+    let tree = WORKSPACE_TREE_KEY;
+    let wanted = |key: &str, _kind: ContainerKind| travels_to_copy(key, without_annotations);
+    let changed =
+        fill_meta(NodeAt { doc, tree, node: from }, NodeAt { doc, tree, node: to }, &wanted)?;
+    if changed {
+        set_meta(doc, tree, to, "updatedAt", &Value::Number(now_ms))?;
+    }
     commit(doc);
     Ok(())
 }

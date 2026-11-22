@@ -27,6 +27,12 @@ pub fn js_trim(text: &str) -> &str {
     text.trim_matches(|c| u16::try_from(u32::from(c)).is_ok_and(is_js_whitespace))
 }
 
+/// `String.prototype.trimEnd`.
+#[must_use]
+pub fn js_trim_end(text: &str) -> &str {
+    text.trim_end_matches(|c| u16::try_from(u32::from(c)).is_ok_and(is_js_whitespace))
+}
+
 /// What two display names are compared as: trimmed, NFC-normalised, lower-cased.
 #[must_use]
 pub fn display_name_key(name: &str) -> String {

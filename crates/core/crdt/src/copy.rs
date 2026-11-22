@@ -5,7 +5,8 @@
 use crate::tree::{ContainerKind, NodeId, kind_of};
 use crate::write::{WriteError, refused};
 use loro::{
-    Container, ContainerTrait, LoroDoc, LoroMap, LoroMovableList, LoroText, ValueOrContainer,
+    Container, ContainerTrait, LoroDoc, LoroMap, LoroMovableList, LoroText, LoroValue,
+    ValueOrContainer,
 };
 use whiteboard_det::utf16;
 
@@ -60,7 +61,7 @@ fn copy_container(target: &LoroMap, key: &str, container: &Container) -> Result<
     match container {
         Container::Map(source) => {
             let child = target.insert_container(key, LoroMap::new()).map_err(refused)?;
-            fill_map(&child, source)
+            fill_map(&child, source).map(|_| ())
         }
         Container::Text(source) => {
             let child = target.insert_container(key, LoroText::new()).map_err(refused)?;
@@ -68,54 +69,65 @@ fn copy_container(target: &LoroMap, key: &str, container: &Container) -> Result<
         }
         Container::List(_) | Container::MovableList(_) => {
             let child = target.insert_container(key, LoroMovableList::new()).map_err(refused)?;
-            push_all(&child, container)
+            push_all(&child, container).map(|_| ())
         }
         _ => Ok(()),
     }
 }
 
 /// A sequence's entries as plain values: a container inside one is flattened
-/// to the value it holds, which is what a copy of a sequence carries.
-fn push_all(child: &LoroMovableList, container: &Container) -> Result<(), WriteError> {
+/// to the value it holds, which is what a copy of a sequence carries. Says
+/// whether it held any.
+fn push_all(child: &LoroMovableList, container: &Container) -> Result<bool, WriteError> {
     let held = ValueOrContainer::Container(container.clone());
-    let loro::LoroValue::List(items) = held.get_deep_value() else { return Ok(()) };
+    let LoroValue::List(items) = held.get_deep_value() else { return Ok(false) };
     for item in items.iter() {
         child.push(item.clone()).map_err(refused)?;
     }
-    Ok(())
+    Ok(!items.is_empty())
 }
 
-/// Makes `target`'s entries equal `source`'s, entry by entry: a container the
-/// source holds is synced into one of the same kind, an equal plain value
-/// appends nothing, and a key the source lacks is deleted.
-fn fill_map(target: &LoroMap, source: &LoroMap) -> Result<(), WriteError> {
+/// Makes `target`'s entries equal `source`'s, entry by entry, and says whether
+/// anything changed: a container the source holds is synced into one of the same
+/// kind, an equal plain value appends nothing, and a key the source lacks is
+/// deleted.
+fn fill_map(target: &LoroMap, source: &LoroMap) -> Result<bool, WriteError> {
+    let mut changed = false;
     for key in source.keys() {
         let key = key.to_string();
-        match source.get(&key) {
-            None => {}
-            Some(ValueOrContainer::Value(value)) => {
-                if let Some(ValueOrContainer::Container(_)) = target.get(&key) {
-                    target.delete(&key).map_err(refused)?;
-                }
-                target.insert(&key, value).map_err(refused)?;
-            }
+        changed |= match source.get(&key) {
+            Some(ValueOrContainer::Value(value)) => set_plain(target, &key, value)?,
             Some(ValueOrContainer::Container(container)) => sync_entry(target, &key, &container)?,
-        }
+            None => false,
+        };
     }
     let stale: Vec<String> =
         target.keys().map(|key| key.to_string()).filter(|key| source.get(key).is_none()).collect();
-    for key in stale {
-        target.delete(&key).map_err(refused)?;
+    for key in &stale {
+        target.delete(key).map_err(refused)?;
     }
-    Ok(())
+    Ok(changed || !stale.is_empty())
 }
 
-fn sync_entry(target: &LoroMap, key: &str, container: &Container) -> Result<(), WriteError> {
+/// A plain value at `key`, replacing a container that stands there; `false`
+/// when the key already holds an equal one.
+fn set_plain(target: &LoroMap, key: &str, value: LoroValue) -> Result<bool, WriteError> {
+    match target.get(key) {
+        Some(ValueOrContainer::Value(held)) if held == value => return Ok(false),
+        Some(ValueOrContainer::Container(_)) => target.delete(key).map_err(refused)?,
+        _ => {}
+    }
+    target.insert(key, value).map_err(refused)?;
+    Ok(true)
+}
+
+fn sync_entry(target: &LoroMap, key: &str, container: &Container) -> Result<bool, WriteError> {
     let Container::Map(source) = container else {
         if target.get(key).is_some() {
             target.delete(key).map_err(refused)?;
         }
-        return copy_container(target, key, container);
+        copy_container(target, key, container)?;
+        return Ok(true);
     };
     match target.get(key) {
         Some(ValueOrContainer::Container(Container::Map(existing))) => fill_map(&existing, source),
@@ -123,9 +135,67 @@ fn sync_entry(target: &LoroMap, key: &str, container: &Container) -> Result<(), 
             if held.is_some() {
                 target.delete(key).map_err(refused)?;
             }
-            fill_map(&copied_map(target, key)?, source)
+            fill_map(&copied_map(target, key)?, source)?;
+            Ok(true)
         }
     }
+}
+
+/// Fills the containers `to` holds, opening each it lacks, with what `from`
+/// holds at the same keys, for each container `wanted` admits; a key `to` holds
+/// as another kind is left alone. The containers `to` holds are taken to be
+/// empty, as a node's are when it has just been created. Says whether anything
+/// was written.
+pub fn fill_meta(
+    from: NodeAt<'_>,
+    to: NodeAt<'_>,
+    wanted: &dyn Fn(&str, ContainerKind) -> bool,
+) -> Result<bool, WriteError> {
+    let (source, target) = (meta(from)?, meta(to)?);
+    let mut keys: Vec<String> = source.keys().map(|key| key.to_string()).collect();
+    keys.sort();
+    let mut changed = false;
+    for key in keys {
+        let Some(ValueOrContainer::Container(held)) = source.get(&key) else { continue };
+        if wanted(&key, kind_of(&held)) {
+            changed |= fill_container(&target, &key, &held)?;
+        }
+    }
+    Ok(changed)
+}
+
+fn fill_container(target: &LoroMap, key: &str, held: &Container) -> Result<bool, WriteError> {
+    match (held, target.get(key)) {
+        (Container::Map(source), Some(ValueOrContainer::Container(Container::Map(into)))) => {
+            fill_map(&into, source)
+        }
+        (Container::Map(source), None) => {
+            fill_map(&target.insert_container(key, LoroMap::new()).map_err(refused)?, source)
+        }
+        (Container::Text(source), Some(ValueOrContainer::Container(Container::Text(into)))) => {
+            fill_text(&into, source)
+        }
+        (Container::Text(source), None) => {
+            fill_text(&target.insert_container(key, LoroText::new()).map_err(refused)?, source)
+        }
+        (
+            Container::List(_) | Container::MovableList(_),
+            Some(ValueOrContainer::Container(Container::MovableList(into))),
+        ) => push_all(&into, held),
+        (Container::List(_) | Container::MovableList(_), None) => {
+            push_all(&target.insert_container(key, LoroMovableList::new()).map_err(refused)?, held)
+        }
+        _ => Ok(false),
+    }
+}
+
+fn fill_text(into: &LoroText, source: &LoroText) -> Result<bool, WriteError> {
+    let wanted = source.to_string();
+    if wanted.is_empty() {
+        return Ok(false);
+    }
+    into.insert(0, &wanted).map_err(refused)?;
+    Ok(true)
 }
 
 /// The child map a copy opens at `key`: mergeable, so two peers creating one

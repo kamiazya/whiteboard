@@ -24,7 +24,7 @@ mod subtree;
 mod tree;
 mod write;
 
-pub use copy::{NodeAt, copy_meta};
+pub use copy::{NodeAt, copy_meta, fill_meta};
 pub use loro::{
     ExportMode, LoroDoc, LoroList, LoroMap, LoroMovableList, LoroText, LoroValue, TreeID,
     loro_value,

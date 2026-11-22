@@ -8,7 +8,7 @@ use whiteboard_model::checks::canonical_ulid;
 pub const WORKSPACE_TREE_KEY: &str = "tree";
 
 /// The keys a node keeps for itself; every other key is content.
-const META_KEYS: [&str; 7] =
+pub(crate) const META_KEYS: [&str; 7] =
     ["documentId", "segment", "kind", "name", "nameChosen", "createdAt", "updatedAt"];
 
 /// What a document node records about the document it is.

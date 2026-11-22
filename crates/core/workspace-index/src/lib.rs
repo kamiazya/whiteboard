@@ -15,10 +15,12 @@
 
 pub mod ceiling;
 pub mod content_digest;
+pub mod derive_copy;
 pub mod display_name;
 pub mod document_path;
 pub mod entry;
 pub mod first_free_segment;
+pub mod index_duplicate;
 pub mod index_error;
 pub mod index_reads;
 pub mod index_rules;
@@ -41,6 +43,7 @@ pub use display_name::{
 };
 pub use entry::{DocumentEntry, EntryError, Found, entry_of};
 pub use first_free_segment::first_free_segment;
+pub use index_duplicate::{DuplicateDocument, duplicate_document};
 pub use index_error::IndexError;
 pub use index_reads::{
     ReadError, list_documents, list_folder_names, list_pinned_documents, list_trash,

@@ -83,11 +83,22 @@ pub fn create_document(
     let document_id = mint();
     let document =
         NewDocument { document_id: &document_id, kind: input.kind, name: input.name, now_ms };
-    let written = create_document_at_path(record.doc(), &path, &document)?;
-    // Absent means a document already owns the path, and nothing was written. This
-    // is local: another replica may be creating the same path right now.
-    let created = record.document_by_id(&document_id).filter(|_| written).ok_or_else(|| {
-        IndexError::PathTaken { workspace_id: input.workspace_id.to_owned(), path: path.clone() }
+    create_document_at_path(record.doc(), &path, &document)?;
+    created_entry(record, input.workspace_id, &document_id, &path)
+}
+
+/// The entry of the document a write just created, answered as a resolve would.
+/// Absent means a document already owned the path and nothing was written. That
+/// is a local check: another replica may be creating the same path right now.
+pub(crate) fn created_entry(
+    record: &WorkspaceRecord,
+    workspace_id: &str,
+    document_id: &str,
+    path: &str,
+) -> Result<Outcome<DocumentEntry>, IndexError> {
+    let created = record.document_by_id(document_id).ok_or_else(|| IndexError::PathTaken {
+        workspace_id: workspace_id.to_owned(),
+        path: path.to_owned(),
     })?;
     Ok(Outcome::saved(entry_of(&created)?))
 }
