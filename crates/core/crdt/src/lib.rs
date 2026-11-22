@@ -33,9 +33,7 @@ pub use read::{
     ImportError, deep_value, frontier_pairs, import_bytes, loro_value_to_value, version_pairs,
 };
 pub use subtree::{SubtreeCopy, copy_subtree, export_subtree};
-pub use tree::{
-    ContainerKind, Entry, NodeId, node_entry, node_keys, peek, tree_children, tree_roots,
-};
+pub use tree::{ContainerKind, Entry, NodeId, Tree, peek, tree};
 pub use write::{
     WriteError, commit, create_node, deep_value_with_id, delete_meta, delete_node,
     delete_root_entry, move_node, open_meta_container, open_root_list, set_meta, set_peer_id,

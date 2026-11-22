@@ -6,12 +6,12 @@ use crate::display_name::js_trim;
 use crate::node_meta::{META_KEYS as NODE_META_KEYS, NodeRead, WORKSPACE_TREE_KEY};
 use crate::record::{PINNED_KEY, WORKSPACE_META_KEY};
 use crate::trash::WORKSPACE_TRASH_KEY;
-use crate::walk::{Walked, walk};
+use crate::walk::{Walked, walk, walk_in};
 use std::collections::BTreeMap;
 use whiteboard_crdt::{
     ContainerKind, LoroDoc, LoroValue, NodeAt, NodeId, WriteError, commit, create_node,
     delete_meta, delete_node, delete_root_entry, fill_meta, move_node, open_meta_container,
-    open_root_list, set_meta, set_root_entry,
+    open_root_list, set_meta, set_root_entry, tree,
 };
 use whiteboard_model::Value;
 
@@ -232,11 +232,12 @@ pub fn move_node_to_path(doc: &LoroDoc, from: &str, to: &str) -> Result<bool, Wr
 /// Removes the folders that hold nothing, from the deepest end of one walk, so
 /// emptying a folder can empty its parent in the same pass.
 pub fn prune_empty_folders(doc: &LoroDoc) -> Result<(), WriteError> {
-    for walked in walk(doc).0.iter().rev() {
+    let Some(held) = tree(doc, WORKSPACE_TREE_KEY) else { return Ok(()) };
+    for walked in walk_in(&held).0.iter().rev() {
         if !matches!(walked.read, NodeRead::Folder { .. }) {
             continue;
         }
-        if whiteboard_crdt::tree_children(doc, WORKSPACE_TREE_KEY, walked.id).is_empty() {
+        if held.children(walked.id).is_empty() {
             delete_node(doc, WORKSPACE_TREE_KEY, walked.id)?;
         }
     }

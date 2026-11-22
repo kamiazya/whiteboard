@@ -32,49 +32,52 @@ pub enum Entry {
     Container { kind: ContainerKind, value: Value },
 }
 
-/// The live roots of the tree container `name`, in tree order.
-#[must_use]
-pub fn tree_roots(doc: &LoroDoc, name: &str) -> Vec<NodeId> {
-    tree_of(doc, name)
-        .map(|tree| tree.roots().into_iter().map(NodeId).collect())
-        .unwrap_or_default()
-}
-
-/// The live children of `node`, in tree order.
-#[must_use]
-pub fn tree_children(doc: &LoroDoc, name: &str, node: NodeId) -> Vec<NodeId> {
-    let Some(tree) = tree_of(doc, name) else { return Vec::new() };
-    tree.children(node.0).unwrap_or_default().into_iter().map(NodeId).collect()
-}
-
-/// The keys of `node`'s meta map, ascending.
-#[must_use]
-pub fn node_keys(doc: &LoroDoc, name: &str, node: NodeId) -> Vec<String> {
-    let Some(Ok(meta)) = tree_of(doc, name).map(|tree| tree.get_meta(node.0)) else {
-        return Vec::new();
-    };
-    let mut keys: Vec<String> = meta.keys().map(|key| key.to_string()).collect();
-    keys.sort();
-    keys
-}
-
-/// The entry of `node`'s meta map at `key`.
-#[must_use]
-pub fn node_entry(doc: &LoroDoc, name: &str, node: NodeId, key: &str) -> Option<Entry> {
-    let meta = tree_of(doc, name)?.get_meta(node.0).ok()?;
-    Some(entry_of(&meta.get(key)?))
-}
+/// A tree container the document holds, resolved once. Finding it asks the
+/// document which roots it registers, which costs the size of the tree, so a
+/// read resolves it once and asks the handle for every node it reads.
+pub struct Tree(pub(crate) LoroTree);
 
 /// The tree root `name`, only when the document holds one: `get_tree` on a
 /// name the document lacks registers an empty root, which the next snapshot
 /// then carries. The shallow value lists exactly the roots the state holds.
-fn tree_of(doc: &LoroDoc, name: &str) -> Option<LoroTree> {
+#[must_use]
+pub fn tree(doc: &LoroDoc, name: &str) -> Option<Tree> {
     let LoroValue::Map(roots) = doc.get_value() else { return None };
     match roots.get(name) {
         Some(LoroValue::Container(id)) if id.container_type() == ContainerType::Tree => {
-            Some(doc.get_tree(name))
+            Some(Tree(doc.get_tree(name)))
         }
         _ => None,
+    }
+}
+
+impl Tree {
+    /// The live roots, in tree order.
+    #[must_use]
+    pub fn roots(&self) -> Vec<NodeId> {
+        self.0.roots().into_iter().map(NodeId).collect()
+    }
+
+    /// The live children of `node`, in tree order.
+    #[must_use]
+    pub fn children(&self, node: NodeId) -> Vec<NodeId> {
+        self.0.children(node.0).unwrap_or_default().into_iter().map(NodeId).collect()
+    }
+
+    /// The keys of `node`'s meta map, ascending.
+    #[must_use]
+    pub fn keys(&self, node: NodeId) -> Vec<String> {
+        let Ok(meta) = self.0.get_meta(node.0) else { return Vec::new() };
+        let mut keys: Vec<String> = meta.keys().map(|key| key.to_string()).collect();
+        keys.sort();
+        keys
+    }
+
+    /// The entry of `node`'s meta map at `key`.
+    #[must_use]
+    pub fn entry(&self, node: NodeId, key: &str) -> Option<Entry> {
+        let meta = self.0.get_meta(node.0).ok()?;
+        Some(entry_of(&meta.get(key)?))
     }
 }
 

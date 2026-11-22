@@ -1,6 +1,6 @@
 //! What a tree node records about itself, read without its content.
 
-use whiteboard_crdt::{Entry, LoroDoc, NodeId, node_entry, node_keys};
+use whiteboard_crdt::{Entry, NodeId, Tree};
 use whiteboard_model::Value;
 use whiteboard_model::checks::canonical_ulid;
 
@@ -45,14 +45,14 @@ impl NodeRead {
 /// Every key the node holds; a meta key's value is read and any other is
 /// present as nothing, because neither shape reads one. `None` when a meta key
 /// holds a container, which leaves the node unreadable.
-fn raw_meta(doc: &LoroDoc, node: NodeId) -> Option<Vec<(String, Value)>> {
+fn raw_meta(tree: &Tree, node: NodeId) -> Option<Vec<(String, Value)>> {
     let mut raw = Vec::new();
-    for key in node_keys(doc, WORKSPACE_TREE_KEY, node) {
+    for key in tree.keys(node) {
         if !META_KEYS.contains(&key.as_str()) {
             raw.push((key, Value::Null));
             continue;
         }
-        match node_entry(doc, WORKSPACE_TREE_KEY, node, &key) {
+        match tree.entry(node, &key) {
             Some(Entry::Container { .. }) => return None,
             Some(Entry::Value(value)) => raw.push((key, value)),
             None => {}
@@ -120,8 +120,8 @@ fn as_folder(raw: &[(String, Value)]) -> Option<NodeRead> {
 
 /// What `node` records about itself, or `None` for a node this build cannot read.
 #[must_use]
-pub fn read_node(doc: &LoroDoc, node: NodeId) -> Option<NodeRead> {
-    let raw = raw_meta(doc, node)?;
+pub fn read_node(tree: &Tree, node: NodeId) -> Option<NodeRead> {
+    let raw = raw_meta(tree, node)?;
     as_document(&raw).map(NodeRead::Document).or_else(|| as_folder(&raw))
 }
 

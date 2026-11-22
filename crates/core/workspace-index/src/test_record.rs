@@ -50,3 +50,8 @@ pub(crate) fn writable(doc: &LoroDoc) -> crate::WorkspaceRecord {
 pub(crate) fn id_of(n: usize) -> String {
     format!("01ARZ3NDEKTSV4RRFF{n:08}")
 }
+
+/// The first node's tree of a test record, which every test record holds.
+pub(crate) fn tree_of(doc: &LoroDoc) -> whiteboard_crdt::Tree {
+    whiteboard_crdt::tree(doc, "tree").expect("a record that holds a tree")
+}

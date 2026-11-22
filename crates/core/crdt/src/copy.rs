@@ -2,7 +2,7 @@
 //! the TypeScript's node copy does: a plain value is set and a container is
 //! made fresh at its key and filled with what the source holds.
 
-use crate::tree::{ContainerKind, NodeId, kind_of};
+use crate::tree::{ContainerKind, Entry, NodeId, Tree, kind_of};
 use crate::write::{WriteError, refused};
 use loro::{
     Container, ContainerTrait, LoroDoc, LoroMap, LoroMovableList, LoroText, LoroValue,
@@ -21,6 +21,15 @@ pub struct NodeAt<'a> {
     pub doc: &'a LoroDoc,
     pub tree: &'a str,
     pub node: NodeId,
+}
+
+impl NodeAt<'_> {
+    /// The entry of the node's meta map at `key`. The node is one the tree
+    /// holds, so the tree is registered and asking for it writes nothing.
+    #[must_use]
+    pub fn entry(&self, key: &str) -> Option<Entry> {
+        Tree(self.doc.get_tree(self.tree)).entry(self.node, key)
+    }
 }
 
 fn meta(at: NodeAt<'_>) -> Result<LoroMap, WriteError> {

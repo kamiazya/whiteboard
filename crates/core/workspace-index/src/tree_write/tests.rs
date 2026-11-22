@@ -59,7 +59,7 @@ fn a_chosen_name_is_marked_and_a_blank_or_absent_one_clears_both() {
     add_node(&doc, None, &document_meta(ID_A, "a"));
     let record = writable(&doc);
     let id = record.document_node(ID_A).expect("the document").id;
-    let read = |key| whiteboard_crdt::node_entry(record.doc(), "tree", id, key);
+    let read = |key| crate::test_record::tree_of(record.doc()).entry(id, key);
     set_document_name(record.doc(), id, Some("Plan")).expect("named");
     assert_eq!(
         (read("name"), read("nameChosen")),
@@ -146,7 +146,7 @@ fn a_folder_path_is_made_only_where_no_node_stands_and_a_document_is_reused_as_a
         ensure_folder_path(record.doc(), &["a", "b", "c", "d"]).expect("made").expect("a node");
     assert_eq!(paths(record.doc()), vec!["a", "a/b", "a/b/c", "a/b/c/d"]);
     assert_ne!(existing, deeper);
-    assert_eq!(whiteboard_crdt::tree_children(record.doc(), "tree", existing).len(), 1);
+    assert_eq!(crate::test_record::tree_of(record.doc()).children(existing).len(), 1);
 }
 
 #[test]
@@ -190,11 +190,11 @@ fn a_new_document_holds_every_content_container_from_its_creation() {
     let new = NewDocument { document_id: ID_A, kind: "markdown", name: None, now_ms: 1.0 };
     create_document_at_path(record.doc(), "x", &new).expect("created");
     let id = record.document_node(ID_A).expect("the document").id;
-    let keys = whiteboard_crdt::node_keys(record.doc(), "tree", id);
+    let keys = crate::test_record::tree_of(record.doc()).keys(id);
     for (key, kind) in CONTENT_CONTAINERS {
         assert!(keys.iter().any(|held| held == key), "{key}");
         assert!(matches!(
-            whiteboard_crdt::node_entry(record.doc(), "tree", id, key),
+            crate::test_record::tree_of(record.doc()).entry(id, key),
             Some(Entry::Container { kind: held, .. }) if held == kind
         ));
     }

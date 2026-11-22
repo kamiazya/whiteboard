@@ -11,9 +11,8 @@ mod cases {
     use whiteboard_crdt::{
         ContainerKind, Entry, NodeAt, NodeId, SubtreeCopy, WriteError, commit, copy_meta,
         copy_subtree, create_node, deep_value, deep_value_with_id, delete_meta, delete_node,
-        delete_root_entry, export_subtree, fill_meta, move_node, node_entry, node_keys,
-        open_meta_container, open_root_list, peek, set_meta, set_peer_id, set_root_entry,
-        tree_children, tree_roots, version_pairs,
+        delete_root_entry, export_subtree, fill_meta, move_node, open_meta_container,
+        open_root_list, peek, set_meta, set_peer_id, set_root_entry, tree, version_pairs,
     };
     use whiteboard_model::Value;
 
@@ -51,15 +50,15 @@ mod cases {
         let first = node(&doc, None);
         let second = node(&doc, None);
         let child = node(&doc, Some(first));
-        assert_eq!(tree_roots(&doc, T), vec![first, second]);
-        assert_eq!(tree_children(&doc, T, first), vec![child]);
+        assert_eq!(tree(&doc, T).expect("a tree").roots(), vec![first, second]);
+        assert_eq!(tree(&doc, T).expect("a tree").children(first), vec![child]);
         move_node(&doc, T, child, Some(second)).expect("moved under another root");
-        assert_eq!(tree_children(&doc, T, first), Vec::<NodeId>::new());
-        assert_eq!(tree_children(&doc, T, second), vec![child]);
+        assert_eq!(tree(&doc, T).expect("a tree").children(first), Vec::<NodeId>::new());
+        assert_eq!(tree(&doc, T).expect("a tree").children(second), vec![child]);
         move_node(&doc, T, child, None).expect("moved to the roots");
-        assert_eq!(tree_roots(&doc, T), vec![first, second, child]);
+        assert_eq!(tree(&doc, T).expect("a tree").roots(), vec![first, second, child]);
         delete_node(&doc, T, second).expect("deleted");
-        assert_eq!(tree_roots(&doc, T), vec![first, child]);
+        assert_eq!(tree(&doc, T).expect("a tree").roots(), vec![first, child]);
         assert!(delete_node(&doc, T, second).is_err(), "a node deleted twice is refused");
     }
 
@@ -147,11 +146,13 @@ mod cases {
         commit(&doc);
         assert_eq!(version_pairs(&doc), after_open, "opening a standing container appends nothing");
         assert!(matches!(
-            node_entry(&doc, T, tree_roots(&doc, T)[0], "list"),
+            tree(&doc, T).expect("a tree").entry(tree(&doc, T).expect("a tree").roots()[0], "list"),
             Some(Entry::Container { kind: ContainerKind::List, .. })
         ));
         assert!(matches!(
-            node_entry(&doc, T, tree_roots(&doc, T)[0], "moves"),
+            tree(&doc, T)
+                .expect("a tree")
+                .entry(tree(&doc, T).expect("a tree").roots()[0], "moves"),
             Some(Entry::Container { kind: ContainerKind::MovableList, .. })
         ));
         for kind in [ContainerKind::Tree, ContainerKind::Other] {
@@ -260,10 +261,12 @@ mod cases {
         let to = node(&target, None);
         copy_meta(at(&source, from), at(&target, to), &copy_all).expect("copied");
         let expected = |doc: &LoroDoc, id: NodeId| -> Vec<(String, Option<Entry>)> {
-            node_keys(doc, T, id)
+            tree(doc, T)
+                .expect("a tree")
+                .keys(id)
                 .into_iter()
                 .map(|key| {
-                    let entry = node_entry(doc, T, id, &key);
+                    let entry = tree(doc, T).expect("a tree").entry(id, &key);
                     (key, entry)
                 })
                 .collect()
@@ -296,7 +299,10 @@ mod cases {
             key != "map" && kind != Some(ContainerKind::Text)
         };
         copy_meta(at(&source, from), at(&target, to), &wanted).expect("copied");
-        assert_eq!(node_keys(&target, T, to), vec!["moves", "plainlist", "scalar"]);
+        assert_eq!(
+            tree(&target, T).expect("a tree").keys(to),
+            vec!["moves", "plainlist", "scalar"]
+        );
         let told = told.into_inner();
         assert!(told.contains(&("scalar".to_owned(), None)));
         assert!(told.contains(&("map".to_owned(), Some(ContainerKind::Map))));
@@ -315,26 +321,29 @@ mod cases {
         set_meta(&source, T, grandkid, "name", &text("grandkid")).expect("set");
         let seen = std::cell::RefCell::new(Vec::new());
         let note = |from: NodeAt<'_>, _: NodeAt<'_>| {
-            seen.borrow_mut().push(node_keys(from.doc, from.tree, from.node).len());
+            seen.borrow_mut()
+                .push(tree(from.doc, from.tree).expect("a tree").keys(from.node).len());
             Ok(())
         };
         let how = SubtreeCopy { wanted: &copy_all, finish: &note };
         let bytes = export_subtree(at(&source, root), &how).expect("exported");
         assert_eq!(seen.borrow().as_slice(), [5, 1, 1, 1].as_slice());
         let copy = whiteboard_crdt::import_bytes(&bytes).expect("a document");
-        let top = tree_roots(&copy, T);
+        let top = tree(&copy, T).expect("a tree").roots();
         assert_eq!(top.len(), 1);
         let names = |parent: NodeId| -> Vec<Option<Entry>> {
-            tree_children(&copy, T, parent)
+            tree(&copy, T)
+                .expect("a tree")
+                .children(parent)
                 .into_iter()
-                .map(|child| node_entry(&copy, T, child, "name"))
+                .map(|child| tree(&copy, T).expect("a tree").entry(child, "name"))
                 .collect()
         };
         assert_eq!(
             names(top[0]),
             vec![Some(Entry::Value(text("kid"))), Some(Entry::Value(text("other")))]
         );
-        let kid_copy = tree_children(&copy, T, top[0])[0];
+        let kid_copy = tree(&copy, T).expect("a tree").children(top[0])[0];
         assert_eq!(names(kid_copy), vec![Some(Entry::Value(text("grandkid")))]);
         assert_eq!(
             whiteboard_crdt::deep_value(&copy),
@@ -356,7 +365,7 @@ mod cases {
         let anchor = node(&target, None);
         let copied =
             copy_subtree(at(&source, root), (&target, T), Some(anchor), &PLAIN).expect("copied");
-        assert_eq!(tree_children(&target, T, anchor), vec![copied]);
+        assert_eq!(tree(&target, T).expect("a tree").children(anchor), vec![copied]);
         let failing = |_: NodeAt<'_>, _: NodeAt<'_>| Err(WriteError("hook".to_owned()));
         let how = SubtreeCopy { wanted: &copy_all, finish: &failing };
         assert_eq!(
@@ -387,16 +396,19 @@ mod cases {
         assert!(changed);
         for key in ["map", "body", "moves", "plainlist"] {
             assert_eq!(
-                node_entry(&target, T, to, key).map(|entry| match entry {
+                tree(&target, T).expect("a tree").entry(to, key).map(|entry| match entry {
                     Entry::Container { value, .. } | Entry::Value(value) => value,
                 }),
-                node_entry(&source, T, from, key).map(|entry| match entry {
+                tree(&source, T).expect("a tree").entry(from, key).map(|entry| match entry {
                     Entry::Container { value, .. } | Entry::Value(value) => value,
                 }),
                 "{key}"
             );
         }
-        assert_eq!(node_entry(&target, T, to, "scalar"), Some(Entry::Value(text("kept"))));
+        assert_eq!(
+            tree(&target, T).expect("a tree").entry(to, "scalar"),
+            Some(Entry::Value(text("kept")))
+        );
         let again = fill_meta(at(&source, from), at(&target, to), &|key, _| key == "nothing")
             .expect("filled");
         assert!(!again, "nothing was admitted");
@@ -416,12 +428,15 @@ mod cases {
         let changed = fill_meta(at(&source, from), at(&target, to), &|_, _| true).expect("filled");
         assert!(!changed, "an empty source adds nothing");
         assert!(matches!(
-            node_entry(&target, T, to, "map"),
+            tree(&target, T).expect("a tree").entry(to, "map"),
             Some(Entry::Container { kind: ContainerKind::Text, .. })
         ));
-        assert_eq!(node_entry(&target, T, to, "body"), Some(Entry::Value(text("a scalar"))));
+        assert_eq!(
+            tree(&target, T).expect("a tree").entry(to, "body"),
+            Some(Entry::Value(text("a scalar")))
+        );
         assert!(matches!(
-            node_entry(&target, T, to, "moves"),
+            tree(&target, T).expect("a tree").entry(to, "moves"),
             Some(Entry::Container { kind: ContainerKind::MovableList, .. })
         ));
     }
@@ -449,7 +464,7 @@ mod cases {
         held.insert("seq", "was a value").expect("set");
         assert!(fill_meta(at(&source, from), at(&target, to), &|_, _| true).expect("filled"));
         let Some(Entry::Container { value: Value::Map(entries), .. }) =
-            node_entry(&target, T, to, "map")
+            tree(&target, T).expect("a tree").entry(to, "map")
         else {
             panic!("a map")
         };
@@ -529,8 +544,8 @@ mod cases {
         assert!(fill_meta(at(&source, from), at(&other, stale), &|_, _| true).expect("filled"));
         for key in ["map", "body", "moves"] {
             assert_eq!(
-                node_entry(&other, T, stale, key),
-                node_entry(&source, T, from, key),
+                tree(&other, T).expect("a tree").entry(stale, key),
+                tree(&source, T).expect("a tree").entry(from, key),
                 "{key} reads as the source does"
             );
         }
@@ -562,7 +577,10 @@ mod cases {
         let before = ops(&target);
         assert!(fill_meta(at(&source, from), at(&target, to), &|_, _| true).expect("filled"));
         assert_eq!(ops(&target) - before, 2, "a delete, then the value");
-        assert_eq!(node_entry(&target, T, to, "map"), node_entry(&source, T, from, "map"));
+        assert_eq!(
+            tree(&target, T).expect("a tree").entry(to, "map"),
+            tree(&source, T).expect("a tree").entry(from, "map")
+        );
     }
 
     #[test]
@@ -572,9 +590,18 @@ mod cases {
         let target = LoroDoc::new();
         let to = node(&target, None);
         assert!(fill_meta(at(&source, from), at(&target, to), &|_, _| true).expect("filled"));
-        assert_eq!(node_entry(&target, T, to, "body"), node_entry(&source, T, from, "body"));
-        assert_eq!(node_entry(&target, T, to, "moves"), node_entry(&source, T, from, "moves"));
-        assert_eq!(node_entry(&target, T, to, "map"), node_entry(&source, T, from, "map"));
+        assert_eq!(
+            tree(&target, T).expect("a tree").entry(to, "body"),
+            tree(&source, T).expect("a tree").entry(from, "body")
+        );
+        assert_eq!(
+            tree(&target, T).expect("a tree").entry(to, "moves"),
+            tree(&source, T).expect("a tree").entry(from, "moves")
+        );
+        assert_eq!(
+            tree(&target, T).expect("a tree").entry(to, "map"),
+            tree(&source, T).expect("a tree").entry(from, "map")
+        );
     }
 
     #[test]
@@ -651,7 +678,10 @@ mod cases {
         let before = ops(&target);
         assert!(fill_meta(at(&source, from), at(&target, to), &|_, _| true).expect("filled"));
         assert_eq!(ops(&target) - before, 1, "only the value that differs is written");
-        assert_eq!(node_entry(&target, T, to, "map"), node_entry(&source, T, from, "map"));
+        assert_eq!(
+            tree(&target, T).expect("a tree").entry(to, "map"),
+            tree(&source, T).expect("a tree").entry(from, "map")
+        );
     }
 
     #[test]

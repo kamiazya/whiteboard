@@ -7,7 +7,7 @@ use crate::record::WorkspaceRecord;
 use crate::tree_write::{attach_content_containers, ensure_folder_path};
 use whiteboard_crdt::{
     ContainerKind, ImportError, NodeAt, SubtreeCopy, WriteError, commit, copy_subtree,
-    export_subtree, import_bytes, node_entry, tree_roots,
+    export_subtree, import_bytes, tree,
 };
 
 /// The content keys a document node declares, and what each must hold to be
@@ -41,7 +41,7 @@ fn travels(key: &str, held: Option<ContainerKind>) -> bool {
 /// A copied node that records a document is given every content container it
 /// may lack, so a document written before they were attached at creation holds them now.
 fn finish(from: NodeAt<'_>, to: NodeAt<'_>) -> Result<(), WriteError> {
-    if node_entry(from.doc, from.tree, from.node, "documentId").is_some() {
+    if from.entry("documentId").is_some() {
         attach_content_containers(to.doc, to.node)?;
     }
     Ok(())
@@ -85,10 +85,9 @@ pub fn import_subtree(
     parent_path: Option<&str>,
 ) -> Result<Option<String>, PlaceError> {
     let source = import_bytes(bytes).map_err(PlaceError::Unreadable)?;
-    let Some(first) = tree_roots(&source, WORKSPACE_TREE_KEY).into_iter().next() else {
-        return Ok(None);
-    };
-    let Some(NodeRead::Document(meta)) = read_node(&source, first) else { return Ok(None) };
+    let Some(held) = tree(&source, WORKSPACE_TREE_KEY) else { return Ok(None) };
+    let Some(first) = held.roots().into_iter().next() else { return Ok(None) };
+    let Some(NodeRead::Document(meta)) = read_node(&held, first) else { return Ok(None) };
     let parent = match parent_path {
         Some(path) => ensure_folder_path(record.doc(), &path.split('/').collect::<Vec<_>>())?,
         None => None,

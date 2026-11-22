@@ -43,7 +43,7 @@ fn a_walk_under_nodes_places_their_paths_below_the_prefix() {
     let a = add_node(&doc, None, &document_meta(ID_A, "a"));
     add_node(&doc, Some(a), &document_meta(ID_B, "b"));
     add_node(&doc, None, &document_meta(ID_C, "other"));
-    let roots = whiteboard_crdt::tree_roots(&doc, WORKSPACE_TREE_KEY);
-    let (walked, _) = walk_under(&doc, roots.into_iter().take(1).collect(), "p/q");
+    let held = whiteboard_crdt::tree(&doc, WORKSPACE_TREE_KEY).expect("a tree");
+    let (walked, _) = walk_under(&held, held.roots().into_iter().take(1).collect(), "p/q");
     assert_eq!(paths(&walked), vec!["p/q/a", "p/q/a/b"]);
 }

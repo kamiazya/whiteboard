@@ -119,7 +119,7 @@ pub fn set_meta(
 }
 
 /// Removes `key` from `node`'s meta map. A delete is an operation even for a
-/// key that was never there, so callers ask [`node_entry`](crate::node_entry) first.
+/// key that was never there, so callers ask [`Tree::entry`](crate::Tree::entry) first.
 pub fn delete_meta(doc: &LoroDoc, tree: &str, node: NodeId, key: &str) -> Result<(), WriteError> {
     meta_of(doc, tree, node)?.delete(key).map_err(refused)
 }

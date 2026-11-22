@@ -16,7 +16,7 @@
 use crate::document_path::is_document_path;
 use crate::node_meta::{NodeRead, WORKSPACE_TREE_KEY, read_node};
 use crate::walk::{Walked, walk_under};
-use whiteboard_crdt::{ImportError, import_bytes, tree_roots};
+use whiteboard_crdt::{ImportError, import_bytes, tree};
 use whiteboard_det::utf16;
 
 /// `DOCUMENT_NAME_MAX_LENGTH`, in UTF-16 units.
@@ -39,17 +39,16 @@ pub fn restorable_trash_documents(
     parent_path: Option<&str>,
 ) -> Result<Option<Placement>, ImportError> {
     let doc = import_bytes(bytes)?;
-    let Some(root) = tree_roots(&doc, WORKSPACE_TREE_KEY).into_iter().next() else {
-        return Ok(None);
-    };
+    let Some(held) = tree(&doc, WORKSPACE_TREE_KEY) else { return Ok(None) };
+    let Some(root) = held.roots().into_iter().next() else { return Ok(None) };
     // The bytes' root must be the row's document, so a row can only bring
     // back the document it is for.
-    let Some(NodeRead::Document(meta)) = read_node(&doc, root) else { return Ok(None) };
+    let Some(NodeRead::Document(meta)) = read_node(&held, root) else { return Ok(None) };
     if meta.document_id != document_id {
         return Ok(None);
     }
     let prefix = parent_path.unwrap_or("");
-    let (subtree, unreadable) = walk_under(&doc, vec![root], prefix);
+    let (subtree, unreadable) = walk_under(&held, vec![root], prefix);
     if unreadable > 0 {
         return Ok(None);
     }

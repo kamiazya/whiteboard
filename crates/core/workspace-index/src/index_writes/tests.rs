@@ -413,7 +413,7 @@ fn a_duplicate_copies_content_and_leaves_the_annotation_layer_when_asked() {
     assert_eq!(bare.value.path, "a-copy-2");
     let content = |id: &str, key: &str| {
         let walked = record.document_node(id).expect("the document");
-        whiteboard_crdt::node_entry(record.doc(), "tree", walked.id, key)
+        crate::test_record::tree_of(record.doc()).entry(walked.id, key)
     };
     let held = |entry: Option<whiteboard_crdt::Entry>| match entry {
         Some(whiteboard_crdt::Entry::Container { value, .. }) => Some(value),

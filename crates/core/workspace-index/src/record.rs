@@ -6,10 +6,10 @@ use crate::entry::Found;
 use crate::index_rules::Node;
 use crate::node_meta::{DocumentMeta, NodeRead, WORKSPACE_TREE_KEY};
 use crate::trash::{TrashRow, read_trash_rows};
-use crate::walk::{Walked, walk};
+use crate::walk::{Walked, walk, walk_in};
 use std::collections::BTreeSet;
 use whiteboard_crdt::{
-    ContainerKind, Entry, ImportError, LoroDoc, import_bytes, node_entry, peek, set_peer_id,
+    ContainerKind, Entry, ImportError, LoroDoc, Tree, import_bytes, peek, set_peer_id, tree,
 };
 use whiteboard_model::Value;
 
@@ -92,10 +92,10 @@ impl WorkspaceRecord {
     }
 
     /// The content a document node holds, keyed by container, for its digest.
-    fn content_of(&self, walked: &Walked) -> Vec<(String, Value)> {
+    fn content_of(tree: &Tree, walked: &Walked) -> Vec<(String, Value)> {
         CONTENT_KEYS
             .iter()
-            .filter_map(|key| match node_entry(&self.doc, WORKSPACE_TREE_KEY, walked.id, key)? {
+            .filter_map(|key| match tree.entry(walked.id, key)? {
                 Entry::Value(value) | Entry::Container { value, .. } => {
                     Some(((*key).to_owned(), value))
                 }
@@ -103,7 +103,7 @@ impl WorkspaceRecord {
             .collect()
     }
 
-    fn found_of(&self, walked: &Walked, meta: &DocumentMeta, shadowed: bool) -> Found {
+    fn found_of(tree: &Tree, walked: &Walked, meta: &DocumentMeta, shadowed: bool) -> Found {
         Found {
             document_id: meta.document_id.clone(),
             path: walked.path.clone(),
@@ -112,7 +112,7 @@ impl WorkspaceRecord {
             shadowed: shadowed.then_some(true),
             created_at: meta.created_at,
             updated_at: meta.updated_at,
-            content_digest: content_digest_of(&self.content_of(walked)),
+            content_digest: content_digest_of(&Self::content_of(tree, walked)),
         }
     }
 
@@ -121,12 +121,13 @@ impl WorkspaceRecord {
     /// converged and a listing that dropped half of it would look like loss.
     #[must_use]
     pub fn documents(&self) -> Vec<Found> {
+        let Some(held) = tree(&self.doc, WORKSPACE_TREE_KEY) else { return Vec::new() };
         let mut seen: BTreeSet<String> = BTreeSet::new();
         let mut out = Vec::new();
-        for walked in self.nodes() {
+        for walked in walk_in(&held).0 {
             let NodeRead::Document(meta) = &walked.read else { continue };
             let shadowed = !seen.insert(walked.path.clone());
-            out.push(self.found_of(&walked, meta, shadowed));
+            out.push(Self::found_of(&held, &walked, meta, shadowed));
         }
         out
     }
@@ -134,9 +135,10 @@ impl WorkspaceRecord {
     /// The first document in tree order that carries `document_id`.
     #[must_use]
     pub fn document_by_id(&self, document_id: &str) -> Option<Found> {
-        self.nodes().into_iter().find_map(|walked| match &walked.read {
+        let held = tree(&self.doc, WORKSPACE_TREE_KEY)?;
+        walk_in(&held).0.into_iter().find_map(|walked| match &walked.read {
             NodeRead::Document(meta) if meta.document_id == document_id => {
-                Some(self.found_of(&walked, meta, false))
+                Some(Self::found_of(&held, &walked, meta, false))
             }
             _ => None,
         })
@@ -146,12 +148,15 @@ impl WorkspaceRecord {
     /// stands: every stored field, its path and the digest of its content.
     #[must_use]
     pub fn placed_document(&self, document_id: &str) -> Option<PlacedDocument> {
-        let walked = self.document_node(document_id)?;
+        let held = tree(&self.doc, WORKSPACE_TREE_KEY)?;
+        let walked = walk_in(&held).0.into_iter().find(|walked| {
+            matches!(&walked.read, NodeRead::Document(meta) if meta.document_id == document_id)
+        })?;
         let NodeRead::Document(meta) = &walked.read else { return None };
         Some(PlacedDocument {
             meta: meta.clone(),
             path: walked.path.clone(),
-            content_digest: content_digest_of(&self.content_of(&walked)),
+            content_digest: content_digest_of(&Self::content_of(&held, &walked)),
         })
     }
 

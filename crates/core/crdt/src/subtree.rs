@@ -3,7 +3,7 @@
 //! record as bytes and how those bytes come back.
 
 use crate::copy::{NodeAt, copy_meta};
-use crate::tree::{ContainerKind, NodeId, tree_children};
+use crate::tree::{ContainerKind, NodeId, Tree};
 use crate::write::{WriteError, create_node};
 use loro::{ExportMode, LoroDoc};
 
@@ -25,6 +25,7 @@ pub fn copy_subtree(
     how: &SubtreeCopy<'_>,
 ) -> Result<NodeId, WriteError> {
     let mut copied: Option<NodeId> = None;
+    let source_tree = Tree(from.doc.get_tree(from.tree));
     let mut stack: Vec<(NodeId, Option<NodeId>)> = vec![(from.node, parent)];
     while let Some((source, under)) = stack.pop() {
         let node = create_node(into.0, into.1, under)?;
@@ -33,7 +34,7 @@ pub fn copy_subtree(
         copy_meta(here, there, how.wanted)?;
         (how.finish)(here, there)?;
         copied.get_or_insert(node);
-        for child in tree_children(from.doc, from.tree, source).into_iter().rev() {
+        for child in source_tree.children(source).into_iter().rev() {
             stack.push((child, Some(node)));
         }
     }

@@ -2,11 +2,12 @@ use super::*;
 use crate::test_record::{ID_A, add_node, document_meta, meta_of};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
-use whiteboard_crdt::{LoroText, tree_roots};
+use whiteboard_crdt::{LoroDoc, LoroText, tree};
 
 fn first(doc: &LoroDoc) -> Option<NodeRead> {
-    let root = *tree_roots(doc, WORKSPACE_TREE_KEY).first().expect("a root");
-    read_node(doc, root)
+    let held = tree(doc, WORKSPACE_TREE_KEY).expect("a tree");
+    let root = *held.roots().first().expect("a root");
+    read_node(&held, root)
 }
 
 /// A document node whose meta is the baseline plus `extra`, set after creation.

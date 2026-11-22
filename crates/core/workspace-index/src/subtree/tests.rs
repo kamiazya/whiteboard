@@ -1,13 +1,14 @@
 use super::*;
+use crate::test_record::tree_of;
 use crate::test_record::{ID_A, ID_B, ID_C, add_node, document_meta, meta_of, writable};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
-use whiteboard_crdt::{Entry, LoroDoc, LoroMap, LoroText, node_keys};
+use whiteboard_crdt::{Entry, LoroDoc, LoroMap, LoroText};
 use whiteboard_model::Value;
 
 fn held(record: &WorkspaceRecord, document_id: &str, key: &str) -> Option<Entry> {
     let walked = record.document_node(document_id)?;
-    node_entry(record.doc(), WORKSPACE_TREE_KEY, walked.id, key)
+    tree_of(record.doc()).entry(walked.id, key)
 }
 
 #[test]
@@ -49,7 +50,7 @@ fn an_exported_subtree_comes_back_with_its_content_and_its_children_in_order() {
     assert_eq!(held(&target, ID_A, "nodes"), held(&record, ID_A, "nodes"));
     let walked = target.document_node(ID_A).expect("the document");
     assert_eq!(
-        node_keys(target.doc(), WORKSPACE_TREE_KEY, walked.id),
+        tree_of(target.doc()).keys(walked.id),
         vec![
             "body",
             "canvas",
@@ -102,8 +103,9 @@ fn a_folder_exports_without_attaching_containers() {
     let record = writable(&doc);
     let bytes = export_subtree_at(&record, "f").expect("exported").expect("something");
     let copy = whiteboard_crdt::import_bytes(&bytes).expect("a document");
-    let root = whiteboard_crdt::tree_roots(&copy, WORKSPACE_TREE_KEY)[0];
-    assert_eq!(node_keys(&copy, WORKSPACE_TREE_KEY, root), vec!["segment"]);
+    let held = tree_of(&copy);
+    let root = held.roots()[0];
+    assert_eq!(held.keys(root), vec!["segment"]);
 }
 
 #[test]
