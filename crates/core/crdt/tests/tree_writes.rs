@@ -653,4 +653,17 @@ mod cases {
         assert_eq!(ops(&target) - before, 1, "only the value that differs is written");
         assert_eq!(node_entry(&target, T, to, "map"), node_entry(&source, T, from, "map"));
     }
+
+    #[test]
+    fn a_write_to_a_deleted_node_is_refused_by_every_writer() {
+        let doc = LoroDoc::new();
+        let gone = node(&doc, None);
+        let kept = held_node(&doc, &[("k", "v")], "t", &["i"]);
+        delete_node(&doc, T, gone).expect("deleted");
+        assert!(set_meta(&doc, T, gone, "k", &text("v")).is_err());
+        assert!(delete_meta(&doc, T, gone, "k").is_err());
+        assert!(open_meta_container(&doc, T, gone, "k", ContainerKind::Map).is_err());
+        assert!(copy_meta(at(&doc, kept), at(&doc, gone), &copy_all).is_err());
+        assert!(fill_meta(at(&doc, kept), at(&doc, gone), &|_, _| true).is_err());
+    }
 }

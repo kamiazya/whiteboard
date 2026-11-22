@@ -537,3 +537,35 @@ fn an_error_converts_from_what_a_write_refuses_with() {
         IndexError::InvalidTime(crate::entry::EntryError::InvalidTime)
     );
 }
+
+#[test]
+fn every_schema_checked_write_refuses_a_workspace_id_that_is_not_one() {
+    let doc = LoroDoc::new();
+    add_node(&doc, None, &document_meta(ID_A, "a"));
+    add_node(&doc, None, &[("segment", "f".to_owned())]);
+    let record = writable(&doc);
+    let invalid = Err(IndexError::InvalidInput);
+    assert_eq!(
+        move_document(&record, &MoveDocument { workspace_id: "x", from: "a", to: "b" }),
+        invalid
+    );
+    assert_eq!(
+        set_document_name_of(
+            &record,
+            &SetDocumentName { workspace_id: "x", document_id: ID_A, name: None }
+        ),
+        invalid
+    );
+    assert_eq!(
+        set_folder_name_of(&record, &SetFolderName { workspace_id: "x", path: "f", name: None }),
+        invalid
+    );
+    assert_eq!(record.documents().len(), 1);
+}
+
+#[test]
+fn a_create_stamped_with_a_time_no_date_holds_is_written_and_then_refused_as_an_entry() {
+    let record = writable(&LoroDoc::new());
+    let refused = create_document(&record, &create("a", None), &mut minting(&id_of(1)), 9.0e15);
+    assert_eq!(refused, Err(IndexError::InvalidTime(crate::entry::EntryError::InvalidTime)));
+}
