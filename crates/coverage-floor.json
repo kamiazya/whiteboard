@@ -74,8 +74,8 @@
     },
     "core/crdt": {
       "lines": 97,
-      "regions": 93,
-      "reason": "first measured 2026-11-22 at 93.75% lines and 93.93% regions over the reading of npm loro-crdt's bytes (tests/js_to_rust.rs replays the recorded crdt-read.jsonl and crdt-write.jsonl), the Rust-written corpus (tests/rust_to_js.rs) and the value conversion's direct cases (tests/value_conversion.rs: past +-2^53, an unresolved container id); what is left are the arms of a value kind or an import error the recorded documents never build. Lines raised to 97 with the tree and map writers and the node copy (tests/tree_writes.rs, and the document index's recorded writes replayed through them): 97.34% lines and 93.3% regions; the regions left are the arms of a loro refusal a valid record never reaches"
+      "regions": 96,
+      "reason": "first measured 2026-11-22 at 93.75% lines and 93.93% regions over the reading of npm loro-crdt's bytes (tests/js_to_rust.rs replays the recorded crdt-read.jsonl and crdt-write.jsonl), the Rust-written corpus (tests/rust_to_js.rs) and the value conversion's direct cases (tests/value_conversion.rs: past +-2^53, an unresolved container id); what is left are the arms of a value kind or an import error the recorded documents never build. Lines raised to 97 with the tree and map writers and the node copy (tests/tree_writes.rs, and the document index's recorded writes replayed through them): 97.34% lines and 93.3% regions; the regions left are the arms of a loro refusal a valid record never reaches. Regions raised to 96 with the engine's content queries (src/content.rs, held to the recorded crdt-engine.jsonl by tests/engine_oracle.rs and to the arrangements it lacks by tests/content_queries.rs): 96.19% regions measured over this crate alone"
     },
     "core/history": {
       "lines": 100,
