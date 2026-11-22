@@ -300,3 +300,6 @@ pub fn copy_document_content(
     commit(doc);
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

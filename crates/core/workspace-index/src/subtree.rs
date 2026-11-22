@@ -98,3 +98,6 @@ pub fn import_subtree(
     commit(record.doc());
     Ok(Some(meta.document_id))
 }
+
+#[cfg(test)]
+mod tests;

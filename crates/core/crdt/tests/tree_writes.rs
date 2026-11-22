@@ -1,21 +1,21 @@
 //! A tree and the maps beside it, written one loro call for one npm loro-crdt
 //! call: what each writer appends, and what it leaves alone.
 
-use loro::{ContainerTrait, ExportMode, LoroDoc, LoroMap, LoroMovableList, LoroText, LoroValue};
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen_test::wasm_bindgen_test as test;
-use whiteboard_crdt::{
-    ContainerKind, Entry, NodeAt, NodeId, SubtreeCopy, WriteError, commit, copy_meta, copy_subtree,
-    create_node, deep_value, deep_value_with_id, delete_meta, delete_node, delete_root_entry,
-    export_subtree, fill_meta, move_node, node_entry, node_keys, open_meta_container,
-    open_root_list, peek, set_meta, set_peer_id, set_root_entry, tree_children, tree_roots,
-    version_pairs,
-};
-use whiteboard_model::Value;
-
 #[cfg(test)]
 mod cases {
-    use super::*;
+    use loro::{
+        ContainerTrait, ExportMode, LoroDoc, LoroMap, LoroMovableList, LoroText, LoroValue,
+    };
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+    use whiteboard_crdt::{
+        ContainerKind, Entry, NodeAt, NodeId, SubtreeCopy, WriteError, commit, copy_meta,
+        copy_subtree, create_node, deep_value, deep_value_with_id, delete_meta, delete_node,
+        delete_root_entry, export_subtree, fill_meta, move_node, node_entry, node_keys,
+        open_meta_container, open_root_list, peek, set_meta, set_peer_id, set_root_entry,
+        tree_children, tree_roots, version_pairs,
+    };
+    use whiteboard_model::Value;
 
     const T: &str = "t";
 
@@ -640,5 +640,17 @@ mod cases {
         let Some(Value::Map(tree)) = held(&roots, "t") else { panic!("the tree") };
         assert_eq!(held(&tree, "cid"), Some(text("cid:root-t:Tree")));
         assert_ne!(deep_value_with_id(&doc), deep_value(&doc));
+    }
+
+    #[test]
+    fn a_plain_value_that_differs_is_replaced_and_one_that_is_equal_is_left() {
+        let source = LoroDoc::new();
+        let from = held_node(&source, &[("same", "s"), ("differs", "new")], "", &[]);
+        let target = LoroDoc::new();
+        let to = held_node(&target, &[("same", "s"), ("differs", "old")], "", &[]);
+        let before = ops(&target);
+        assert!(fill_meta(at(&source, from), at(&target, to), &|_, _| true).expect("filled"));
+        assert_eq!(ops(&target) - before, 1, "only the value that differs is written");
+        assert_eq!(node_entry(&target, T, to, "map"), node_entry(&source, T, from, "map"));
     }
 }

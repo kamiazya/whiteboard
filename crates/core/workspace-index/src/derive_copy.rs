@@ -37,14 +37,10 @@ pub fn derive_copy_name(base_name: &str, existing_names: &[String]) -> String {
     if free(&first) {
         return first;
     }
-    let mut n = 2_usize;
-    loop {
-        let name = candidate(&format!(" (copy {n})"));
-        if free(&name) {
-            return name;
-        }
-        n = n.saturating_add(1);
-    }
+    // At most as many numbers are taken as there are names, so one within that
+    // many more is free.
+    let numbers = 2..=existing_names.len().saturating_add(2);
+    numbers.map(|n| candidate(&format!(" (copy {n})"))).find(|name| free(name)).unwrap_or(first)
 }
 
 /// `path` without the hyphens a cut can leave at its end.
@@ -70,13 +66,14 @@ pub fn derive_copy_path(source_path: &str, existing_paths: &[String]) -> Option<
         let kept = trim_trailing_hyphens(fit_to_length(leaf, room));
         (!kept.is_empty()).then(|| format!("{folder}{kept}{suffix}"))
     };
-    let mut suffix = "-copy".to_owned();
-    for n in 2_usize.. {
+    // At most as many paths are taken as there are paths, so one within that
+    // many more is free.
+    let numbered = (2..=existing_paths.len().saturating_add(2)).map(|n| format!("-copy-{n}"));
+    for suffix in std::iter::once("-copy".to_owned()).chain(numbered) {
         let path = candidate(&suffix)?;
         if !existing_paths.contains(&path) {
             return Some(path);
         }
-        suffix = format!("-copy-{n}");
     }
     None
 }
