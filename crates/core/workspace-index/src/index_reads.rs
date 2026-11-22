@@ -60,8 +60,14 @@ pub fn resolve_document_by_id(
 /// holds, since a delete removes the node without touching the pinned list.
 #[must_use]
 pub fn list_pinned_documents(record: &WorkspaceRecord) -> Vec<String> {
-    let live: std::collections::BTreeSet<String> =
-        record.documents().into_iter().map(|found| found.document_id).collect();
+    let live: std::collections::BTreeSet<String> = record
+        .nodes()
+        .into_iter()
+        .filter_map(|walked| match walked.read {
+            crate::node_meta::NodeRead::Document(meta) => Some(meta.document_id),
+            crate::node_meta::NodeRead::Folder { .. } => None,
+        })
+        .collect();
     record.pinned().into_iter().filter(|id| live.contains(id)).collect()
 }
 

@@ -66,18 +66,22 @@ enum Pending<'a> {
 /// The members of a list or a mapping pushed so they pop in order, each led by
 /// its separator and key.
 fn push_members<'a>(stack: &mut Vec<Pending<'a>>, value: &'a Value) {
-    let members: Vec<(Option<&'a str>, &'a Value)> = match value {
-        Value::Seq(items) => items.iter().map(|item| (None, item)).collect(),
+    match value {
+        Value::Seq(items) => push_in_order(stack, items.iter().map(|item| (None, item)).collect()),
         Value::Map(entries) => {
-            let mut sorted: Vec<(Option<&str>, &Value)> =
-                entries.iter().map(|(key, item)| (Some(key.as_str()), item)).collect();
-            sorted.sort_by(|a, b| {
-                a.0.unwrap_or("").encode_utf16().cmp(b.0.unwrap_or("").encode_utf16())
-            });
-            sorted
+            push_keyed(stack, entries.iter().map(|(key, item)| (key.as_str(), item)).collect());
         }
-        _ => return,
-    };
+        _ => {}
+    }
+}
+
+/// A mapping's members, keys in UTF-16 order.
+fn push_keyed<'a>(stack: &mut Vec<Pending<'a>>, mut entries: Vec<(&'a str, &'a Value)>) {
+    entries.sort_by(|a, b| a.0.encode_utf16().cmp(b.0.encode_utf16()));
+    push_in_order(stack, entries.into_iter().map(|(key, item)| (Some(key), item)).collect());
+}
+
+fn push_in_order<'a>(stack: &mut Vec<Pending<'a>>, members: Vec<(Option<&'a str>, &'a Value)>) {
     for (index, (key, item)) in members.into_iter().enumerate().rev() {
         let mut head = if index == 0 { String::new() } else { ",".to_owned() };
         if let Some(key) = key {
@@ -113,8 +117,11 @@ fn open_value<'a>(out: &mut String, stack: &mut Vec<Pending<'a>>, value: &'a Val
 /// writer chose.
 #[must_use]
 pub fn stable_stringify(root: &Value) -> String {
+    drain(vec![Pending::Value(root)])
+}
+
+fn drain(mut stack: Vec<Pending<'_>>) -> String {
     let mut out = String::new();
-    let mut stack = vec![Pending::Value(root)];
     while let Some(next) = stack.pop() {
         match next {
             Pending::Text(text) => out.push_str(&text),
@@ -143,9 +150,15 @@ fn cyrb53(input: &str) -> String {
 /// order and container order are irrelevant to the answer; only values are.
 #[must_use]
 pub fn content_digest_of(content: &[(String, Value)]) -> String {
-    let held: Vec<(String, Value)> =
-        content.iter().filter(|(_, value)| !holds_nothing(value)).cloned().collect();
-    cyrb53(&stable_stringify(&Value::Map(held)))
+    let held: Vec<(&str, &Value)> = content
+        .iter()
+        .filter(|(_, value)| !holds_nothing(value))
+        .map(|(key, value)| (key.as_str(), value))
+        .collect();
+    let mut stack = vec![Pending::Text("}".to_owned())];
+    push_keyed(&mut stack, held);
+    stack.push(Pending::Text("{".to_owned()));
+    cyrb53(&drain(stack))
 }
 
 #[cfg(test)]

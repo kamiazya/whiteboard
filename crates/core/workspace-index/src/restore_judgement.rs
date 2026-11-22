@@ -3,8 +3,8 @@
 //! A trash row and the bytes it names both arrive from outside the keeper: the
 //! row is synced data any writer of the record can rewrite, and a promotion
 //! carries bytes the other keeper chose. A restore places what they say into
-//! the live record without passing the sync-write checks, so it is held to the
-//! same bounds here: the path grammar on every node it places (folders
+//! the live record without passing the sync-write checks, so this judges these
+//! of their bounds (not all of them; see the ponytail below): the path grammar on every node it places (folders
 //! included), the name bound and readable node meta. Judged on the bytes
 //! alone, before anything touches the live record, so a refusal leaves the
 //! workspace as it was.

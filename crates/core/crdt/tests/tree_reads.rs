@@ -114,3 +114,30 @@ fn a_path_into_the_record_is_peeked_without_registering_what_is_absent() {
     let Value::Map(roots) = deep_value(&doc) else { panic!("a map") };
     assert!(roots.iter().all(|(key, _)| key != "missing"));
 }
+
+#[test]
+fn reading_a_tree_the_record_lacks_leaves_its_bytes_and_value_as_they_were() {
+    let elsewhere = LoroDoc::new();
+    let node = tree_roots(
+        &{
+            node!(&elsewhere, None);
+            elsewhere
+        },
+        "t",
+    )[0];
+    let doc = LoroDoc::new();
+    doc.get_map("outer").insert("k", 1_i64).expect("set");
+    doc.get_map("t").insert("k", 2_i64).expect("a map named as the tree is");
+    doc.commit();
+    let bytes = doc.export(loro::ExportMode::Snapshot).expect("a snapshot");
+    let value = deep_value(&doc);
+    for name in ["absent", "t"] {
+        assert!(tree_roots(&doc, name).is_empty());
+        assert!(tree_children(&doc, name, node).is_empty());
+        assert!(node_keys(&doc, name, node).is_empty());
+        assert_eq!(node_entry(&doc, name, node, "k"), None);
+    }
+    doc.commit();
+    assert_eq!(doc.export(loro::ExportMode::Snapshot).expect("a snapshot"), bytes);
+    assert_eq!(deep_value(&doc), value);
+}
