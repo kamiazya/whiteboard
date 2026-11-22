@@ -73,10 +73,10 @@ fn plain(value: &Value) -> Result<LoroValue, WriteError> {
     })
 }
 
-/// `n` as an integer when it is a whole number a double holds exactly.
+/// `n` as an integer when it is a whole number within +-2^53, the range npm loro-crdt stores as an integer.
 fn whole_number(n: f64) -> Option<i64> {
     const EXACT: f64 = 9_007_199_254_740_992.0;
-    (n.fract() == 0.0 && n.abs() < EXACT).then(|| n.to_string().parse().ok()).flatten()
+    (n.fract() == 0.0 && n.abs() <= EXACT).then(|| n.to_string().parse().ok()).flatten()
 }
 
 fn meta_of(doc: &LoroDoc, tree: &str, node: NodeId) -> Result<LoroMap, WriteError> {

@@ -71,7 +71,9 @@ mod cases {
             ("negative", Value::Number(-3.0)),
             ("fraction", Value::Number(2.5)),
             ("edge", Value::Number(9_007_199_254_740_991.0)),
-            ("past", Value::Number(9_007_199_254_740_992.0)),
+            ("top", Value::Number(9_007_199_254_740_992.0)),
+            ("bottom", Value::Number(-9_007_199_254_740_992.0)),
+            ("past", Value::Number(9_007_199_254_740_994.0)),
             ("flag", Value::Bool(true)),
             ("nothing", Value::Null),
             ("word", text("w")),
@@ -84,7 +86,11 @@ mod cases {
         assert_eq!(held(&doc, "negative"), Some(LoroValue::I64(-3)));
         assert_eq!(held(&doc, "fraction"), Some(LoroValue::Double(2.5)));
         assert_eq!(held(&doc, "edge"), Some(LoroValue::I64(9_007_199_254_740_991)));
-        assert_eq!(held(&doc, "past"), Some(LoroValue::Double(9_007_199_254_740_992.0)));
+        // npm loro-crdt stores the whole numbers from -2^53 to 2^53 as integers
+        // (its JSON export refuses both ends as past a JavaScript number) and 2^53 + 2 as a double.
+        assert_eq!(held(&doc, "top"), Some(LoroValue::I64(9_007_199_254_740_992)));
+        assert_eq!(held(&doc, "bottom"), Some(LoroValue::I64(-9_007_199_254_740_992)));
+        assert_eq!(held(&doc, "past"), Some(LoroValue::Double(9_007_199_254_740_994.0)));
         assert_eq!(held(&doc, "flag"), Some(LoroValue::Bool(true)));
         assert_eq!(held(&doc, "nothing"), Some(LoroValue::Null));
         assert_eq!(held(&doc, "word"), Some(LoroValue::from("w")));
