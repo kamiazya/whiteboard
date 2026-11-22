@@ -221,6 +221,10 @@ fn an_edge_and_a_line_are_held_to_their_own_schemas() {
         let want = json!({ "ok": { "canvas": { "nodes": [], "edges": [stored] }, "skipped": 0 } });
         check("an edge", &doc, QueryName::SpatialCanvas, &want);
     }
+}
+
+#[test]
+fn a_line_is_held_to_its_own_schema() {
     let point = |x: i64| json!({ "kind": "point", "point": { "x": x, "y": 2 } });
     let on = |n: &str| json!({ "kind": "node", "node": n });
     let line = |from: Json, to: Json| json!({ "id": "l", "from": from, "to": to });
@@ -355,6 +359,10 @@ fn content_is_the_half_the_kind_names() {
         QueryName::DocumentContentWithTags,
         &json!({ "ok": { "content": { "kind": "markdown", "body": "" }, "tags": [] } }),
     );
+}
+
+#[test]
+fn content_without_a_type_or_for_a_spatial_document_carries_no_summary() {
     let untyped =
         doc_of(&[("document", "kind", json!("markdown")), ("core", "description", json!("d"))]);
     check(
@@ -503,6 +511,12 @@ fn trust_facets_keep_the_fields_whose_events_the_schema_reads() {
         &json!({ "ok": { "generated": { "by": "a", "at": at } } }),
     );
     check("junk", &doc_of(&[("trust", "junk", json!(1))]), QueryName::TrustFacets, &none);
+}
+
+#[test]
+fn a_trust_field_with_an_event_the_schema_refuses_is_dropped() {
+    let at = "2020-01-01T00:00:00Z";
+    let none = json!({ "ok": { "$undefined": true } });
     check(
         "empty list",
         &doc_of(&[("trust", "verified", json!([]))]),

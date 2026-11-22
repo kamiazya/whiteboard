@@ -307,6 +307,14 @@ pub fn answer_content_query(doc: &LoroDoc, query: &Query) -> Option<ReadResponse
             );
             ok(Value::Number(rows))
         }
+        _ => return answer_document_query(doc, query),
+    })
+}
+
+/// The queries over a document's whole content: the canvas, the half its kind
+/// names, and the envelope facets.
+fn answer_document_query(doc: &LoroDoc, query: &Query) -> Option<ReadResponse> {
+    Some(match query.query {
         QueryName::SpatialCanvas => match canvas::spatial_canvas(doc) {
             Ok(value) => ok(value?),
             Err(refusal) => refused(refusal),
