@@ -1,4 +1,3 @@
-import '../../store/_test-loro-records.js'
 import {
   readWorkspaceNodes,
   setWorkspaceDocumentName,
@@ -52,8 +51,8 @@ function bodyUpdate(text: string): Uint8Array<ArrayBuffer> {
 
 /** What the record holds as the name of the note, and whether somebody chose it. */
 async function nameOfNote() {
-  const { getWorkspaceDoc } = await import('../../store/workspace-doc-cache.js')
-  const record = await getWorkspaceDoc(WS)
+  const { workspaceRecordCopy } = await import('../../store/_test-workspace-record.js')
+  const record = await workspaceRecordCopy(WS)
   const node = readWorkspaceNodes(record).find((each) => each.path === PATH)
   if (node === undefined || node.type !== 'document') throw new Error('no note')
   return { name: node.meta.name, nameChosen: node.meta.nameChosen }
@@ -62,17 +61,15 @@ async function nameOfNote() {
 /** Takes the name off the note, the way a note nobody has named stands. */
 async function clearNameUnless(chosen: string | null) {
   if (chosen !== null) return
-  const { getWorkspaceDoc, saveWorkspaceDoc } = await import('../../store/workspace-doc-cache.js')
-  const record = await getWorkspaceDoc(WS)
-  setWorkspaceDocumentName(record, { documentId: await documentIdAt(serverDeps, WS, PATH) })
-  await saveWorkspaceDoc(WS, record)
+  const { editWorkspaceRecord } = await import('../../store/_test-workspace-record.js')
+  const documentId = await documentIdAt(serverDeps, WS, PATH)
+  await editWorkspaceRecord(WS, (record) => setWorkspaceDocumentName(record, { documentId }))
 }
 
 async function setChosenName(name: string) {
-  const { getWorkspaceDoc, saveWorkspaceDoc } = await import('../../store/workspace-doc-cache.js')
-  const record = await getWorkspaceDoc(WS)
-  setWorkspaceDocumentName(record, { documentId: await documentIdAt(serverDeps, WS, PATH), name })
-  await saveWorkspaceDoc(WS, record)
+  const { editWorkspaceRecord } = await import('../../store/_test-workspace-record.js')
+  const documentId = await documentIdAt(serverDeps, WS, PATH)
+  await editWorkspaceRecord(WS, (record) => setWorkspaceDocumentName(record, { documentId, name }))
 }
 
 // A restore writes a version's content back through the keeper's one

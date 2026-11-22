@@ -13,7 +13,6 @@
  * puts the evidence only in `served`, so a route that follows the global
  * answers with the ambient dir's emptiness rather than refusing the address.
  */
-import './store/_test-loro-records.js'
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -26,12 +25,12 @@ import { resetDataDirForTests, setDataDirForTests } from '../shared/data-dir-sec
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { documentIdAt, documentOf } from './routes/_test-helpers.js'
+import { editWorkspaceRecord } from './store/_test-workspace-record.js'
 import { disposeAutoCompact, uninstallAutoCompact } from './store/auto-compact.js'
 import { clearDbCacheForTests, closeDb } from './store/db/index.js'
-import { getWorkspaceDoc } from './store/document-store.js'
 import { loadWorkspaceNames } from './store/names-store.js'
 import { storeScope } from './store/store-scope.js'
-import { _clearWorkspaceDocCacheForTests, saveWorkspaceDoc } from './store/workspace-doc-cache.js'
+import { _clearWorkspaceDocCacheForTests } from './store/workspace-doc-cache.js'
 
 const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 const MARK = 'only-in-served'
@@ -197,9 +196,7 @@ describe('createApp over a dir the process global does not name', () => {
 
   it('reads the last compaction stamp off the served dir', async () => {
     const { app, scope } = await bootBoth()
-    const workspaceDoc = await getWorkspaceDoc(WS, scope)
-    setWorkspaceLastCompactedAt(workspaceDoc, 1_234_567)
-    await saveWorkspaceDoc(WS, workspaceDoc, scope)
+    await editWorkspaceRecord(WS, (record) => setWorkspaceLastCompactedAt(record, 1_234_567), scope)
 
     const res = await app.request('/api/runtime/storage')
     expect(((await res.json()) as { lastAutoCompactedAt: number | null }).lastAutoCompactedAt).toBe(
@@ -213,12 +210,12 @@ describe('createApp over a dir the process global does not name', () => {
   ] as const) {
     it(`reports the newest compaction stamp across workspaces (${first} then ${second})`, async () => {
       const { app, scope } = await bootBoth()
-      const a = await getWorkspaceDoc(WS, scope)
-      setWorkspaceLastCompactedAt(a, first)
-      await saveWorkspaceDoc(WS, a, scope)
-      const b = await getWorkspaceDoc(SERVED_ONLY_WORKSPACE, scope)
-      setWorkspaceLastCompactedAt(b, second)
-      await saveWorkspaceDoc(SERVED_ONLY_WORKSPACE, b, scope)
+      await editWorkspaceRecord(WS, (a) => setWorkspaceLastCompactedAt(a, first), scope)
+      await editWorkspaceRecord(
+        SERVED_ONLY_WORKSPACE,
+        (b) => setWorkspaceLastCompactedAt(b, second),
+        scope,
+      )
 
       const res = await app.request('/api/runtime/storage')
       expect(

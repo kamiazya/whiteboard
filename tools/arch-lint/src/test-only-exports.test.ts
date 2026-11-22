@@ -203,16 +203,12 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
-  'packages/mcp-server/src/server/store/workspace-doc-cache.ts#saveWorkspaceDoc':
-    'persists a record a test edited as a document and announces it, which the store and route tests do to a record they changed directly; every shipped write saves through its record session, which calls it',
-  'packages/mcp-server/src/server/store/workspace-doc-cache.ts#openWorkspaceDocIfStored':
-    "the stored-or-nothing record as a document, which the cache's own tests and the store tests inspect the cached instance through; shipped reads take it through `withStoredWorkspaceRecord`, which lends it, and the cache's `WorkspaceDocs.open` is its one shipped caller",
   'packages/mcp-server/src/server/store/document-store.ts#saveDocument':
     'a document handed to the store as a LoroDoc, which the store and route tests build their fixtures with; its shipped caller is `saveDocumentBytes` beside it, which opens the bytes it is given as a document first',
   'packages/loro-adapter/src/workspace-tree.ts#resolveWorkspaceDocument':
     "the document a path names, read from a LoroDoc workspace record, which the store tests inspect the cached instance through; shipped reads resolve a path through a record session's `workspaceDocumentEntry` query, which both record kinds answer",
   'packages/mcp-server/src/server/store/workspace-doc-cache.ts#workspaceDocCacheMaxEntries':
-    "how many records the active kind keeps resident, which the cache's tests fill past to watch the bound drop one; nothing shipped asks, since the cache applies it itself",
+    "how many records the cache keeps resident, which the cache's tests fill past to watch the bound drop one; nothing shipped asks, since the cache applies it itself",
   'packages/mcp-server/src/server/store/workspace-doc-cache.ts#releaseWorkspaceDocLoan':
     'gives back the loan a cache-backed `WorkspaceDocs` made of a record, which the store tests do for a record they opened through it; shipped holders release it through the index kind `cacheBackedRecordKind` builds',
   'packages/mcp-server/src/server/store/workspace-record-kind.ts#LEASE_IDLE_MS':

@@ -1,6 +1,5 @@
 import { isAbsolute } from 'node:path'
 import { Cron } from 'croner'
-import { z } from 'zod'
 import type { EnvIssue, ParsedSetting } from '../../shared/env-setting.js'
 import { parseOptionalMilliseconds } from '../../shared/env-setting.js'
 import { DB_URL_ENV, resolveDatabaseLocation } from './db/location.js'
@@ -19,26 +18,10 @@ import { DB_URL_ENV, resolveDatabaseLocation } from './db/location.js'
 const FILE_GC_INTERVAL_ENV = 'WHITEBOARD_FILE_GC_INTERVAL_MS'
 const FILE_GC_GRACE_ENV = 'WHITEBOARD_FILE_GC_GRACE_MS'
 const WORKSPACE_TAIL_ENV = 'WHITEBOARD_WORKSPACE_TAIL_MS'
-const RECORD_KIND_ENV = 'WHITEBOARD_RECORD_KIND'
 const BACKUP_DIR_ENV = 'WHITEBOARD_BACKUP_DIR'
 const BACKUP_CRON_ENV = 'WHITEBOARD_BACKUP_CRON'
 const BACKUP_TZ_ENV = 'WHITEBOARD_BACKUP_TZ'
 const BACKUP_KEEP_ENV = 'WHITEBOARD_BACKUP_KEEP'
-
-/** What holds a workspace record in memory: an engine lease, or a `LoroDoc` (the older kind). */
-const recordKindNameSchema = z.enum(['lease', 'loro'])
-export type RecordKindName = z.infer<typeof recordKindNameSchema>
-
-/** Which record kind the daemon holds workspace records as. Unset takes `lease`. */
-export function parseRecordKind(
-  env: NodeJS.ProcessEnv = process.env,
-): ParsedSetting<RecordKindName> {
-  const trimmed = env[RECORD_KIND_ENV]?.trim()
-  if (trimmed === undefined || trimmed === '') return { ok: true, value: 'lease' }
-  const parsed = recordKindNameSchema.safeParse(trimmed)
-  if (!parsed.success) return { ok: false, reason: 'must be `lease` or `loro`' }
-  return { ok: true, value: parsed.data }
-}
 
 /** How often the file-GC sweeper runs. `0` disables it. */
 export function parseFileGcIntervalMs(
@@ -270,7 +253,6 @@ function parseSettingIssues(env: NodeJS.ProcessEnv): EnvIssue[] {
     [FILE_GC_INTERVAL_ENV, parseFileGcIntervalMs],
     [FILE_GC_GRACE_ENV, parseFileGcGraceMs],
     [WORKSPACE_TAIL_ENV, parseWorkspaceTailMs],
-    [RECORD_KIND_ENV, parseRecordKind],
     [BACKUP_DIR_ENV, parseBackupDir],
     [BACKUP_CRON_ENV, parseBackupSchedule],
     [BACKUP_KEEP_ENV, parseBackupKeep],

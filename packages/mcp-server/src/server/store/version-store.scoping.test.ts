@@ -1,4 +1,3 @@
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -35,8 +34,10 @@ vi.mock('../config.js', () => ({
 }))
 
 const { FileVersionStore } = await import('./version-store.js')
-const { saveDocument, compactWorkspace, getWorkspaceDoc, _clearWorkspaceDocCacheForTests } =
-  await import('./document-store.js')
+const { saveDocument, compactWorkspace, _clearWorkspaceDocCacheForTests } = await import(
+  './document-store.js'
+)
+const { workspaceRecordCopy } = await import('./_test-workspace-record.js')
 const { frontiersToBase64 } = await import('@kamiazya/whiteboard-history')
 const { encodeFrontiers } = await import('loro-crdt')
 
@@ -443,7 +444,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       // Dated before every other row while standing at the HEAD: oldest by
       // time, newest in the history.
       const head = encodeFrontiers(
-        (await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')).frontiers(),
+        (await workspaceRecordCopy('01PAW75F73PVC402Y3V151KT6R')).frontiers(),
       )
       const carried = { id: 'carried-at-head', documentId, createdAt: 0, auto: false }
       await store.adopt('01PAW75F73PVC402Y3V151KT6R', [

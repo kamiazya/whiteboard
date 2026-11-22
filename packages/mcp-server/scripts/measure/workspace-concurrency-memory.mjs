@@ -34,7 +34,7 @@ const DOCUMENTS = Number(process.env.DOCUMENTS ?? 360)
 const ROUNDS = Number(process.env.ROUNDS ?? 5)
 const CHURN = Number(process.env.CHURN ?? 8)
 const HELD = [1, 2, 4]
-// The residency bounds `workspace-record-kind.ts` sets per kind.
+// The residency bounds the daemon applied per kind while both kinds existed (the lease one is `workspace-record-kind.ts`'s).
 const BOUNDS = { loro: 16, lease: 4 }
 
 if (typeof globalThis.gc !== 'function') {

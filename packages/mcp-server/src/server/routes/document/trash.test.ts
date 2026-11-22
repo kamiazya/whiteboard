@@ -8,7 +8,6 @@
  * route.
  */
 
-import '../../store/_test-loro-records.js'
 import {
   listTrashResponseSchema,
   purgeTrashEntryResponseSchema,
@@ -34,8 +33,7 @@ import {
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { storeMemoryModule } from '../../../shared/test-utils/store-memory.module.js'
-import { getWorkspaceDoc } from '../../store/document-store.js'
-import { saveWorkspaceDoc } from '../../store/workspace-doc-cache.js'
+import { editWorkspaceRecord, workspaceRecordCopy } from '../../store/_test-workspace-record.js'
 import { testDocumentRouterOptions, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-trash-test-')
@@ -362,15 +360,13 @@ describe('trash routes', () => {
     const deps = await realDeps()
     const app = await appWithRealDeps(deps)
     await deleteAt(app, WS, 'twice')
-    const record = await getWorkspaceDoc(WS)
+    const record = await workspaceRecordCopy(WS)
     const [entry] = readTrashEntries(record)
     if (entry === undefined) throw new Error('the delete recorded no trash entry')
     await app.request(`/api/workspaces/${WS}/trash/${documentId}/restore`, { method: 'POST' })
     // The row a merge from another replica can leave beside the live
     // document: same documentId, still in the trash.
-    const placed = await getWorkspaceDoc(WS)
-    recordTrashEntry(placed, entry)
-    await saveWorkspaceDoc(WS, placed)
+    await editWorkspaceRecord(WS, (placed) => recordTrashEntry(placed, entry))
 
     const again = await app.request(`/api/workspaces/${WS}/trash/${documentId}/restore`, {
       method: 'POST',

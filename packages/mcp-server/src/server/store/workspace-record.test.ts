@@ -1,8 +1,7 @@
 /**
- * What the daemon owes a workspace record whichever kind holds it: the store's
- * operations answer the same, a write another process makes is served and
- * announced, the bound and the idle time give records back, and nothing stays
- * on loan. Each block runs once per kind (`WHITEBOARD_RECORD_KIND`).
+ * What the daemon owes a workspace record it holds: the store's operations
+ * answer, a write another process makes is served and announced, the bound and
+ * the idle time give records back, and nothing stays on loan.
  */
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -12,7 +11,6 @@ import { workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import { RecordStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { describeUnderBothRecordKinds } from './_test-record-kinds.js'
 import { LEASE_IDLE_MS } from './workspace-record-kind.js'
 
 let tempDir: string
@@ -73,7 +71,7 @@ async function foreignWrite(workspaceId: string, path: string, documentId: strin
 const paths = async (workspaceId: string) =>
   (await store.listDocuments(workspaceId)).map((entry) => entry.path).sort()
 
-describeUnderBothRecordKinds('the store', () => {
+describe('the store', () => {
   it('saves, lists, renames, loads and deletes a document, and leaves nothing on loan', async () => {
     await store.saveDocument(ws(0), 'a', canvas('hello'), { kind: 'spatial' })
     await store.saveDocument(ws(0), 'dir/b', canvas('there'), { kind: 'spatial' })
@@ -147,9 +145,8 @@ describe('a record nobody uses', () => {
     next += 1
     return next
   }
-  const idleReleases = async (kind: 'loro' | 'lease', armed: boolean) => {
+  const idleReleases = async (armed: boolean) => {
     const { recordIdleReleaseWorker } = await import('./record-idle-release.js')
-    cache._setWorkspaceRecordKindForTests(kind)
     if (armed) recordIdleReleaseWorker.start()
     const releases = cache._workspaceRecordReleasesForTests()
     // Faked before the save: the wait is armed by the record being kept.
@@ -162,16 +159,14 @@ describe('a record nobody uses', () => {
     } finally {
       vi.useRealTimers()
       await recordIdleReleaseWorker.stop()
-      cache._setWorkspaceRecordKindForTests(null)
     }
   }
 
-  it('is given back after the idle time when records are leases and the worker is armed', async () => {
-    expect(await idleReleases('lease', true)).toBe(1)
+  it('is given back after the idle time when the worker is armed', async () => {
+    expect(await idleReleases(true)).toBe(1)
   })
 
-  it('is kept when the worker is not armed, and when records are LoroDocs', async () => {
-    expect(await idleReleases('lease', false)).toBe(0)
-    expect(await idleReleases('loro', true)).toBe(0)
+  it('is kept when the worker is not armed', async () => {
+    expect(await idleReleases(false)).toBe(0)
   })
 })

@@ -1,4 +1,3 @@
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -42,9 +41,8 @@ vi.mock('../config.js', () => ({
 const { FileVersionStore } = await import('./version-store.js')
 
 const { saveDocument } = await import('./document-store.js')
-const { getWorkspaceDoc, _clearWorkspaceDocCacheForTests } = await import(
-  './workspace-doc-cache.js'
-)
+const { _clearWorkspaceDocCacheForTests } = await import('./workspace-doc-cache.js')
+const { editWorkspaceRecord } = await import('./_test-workspace-record.js')
 
 // Version save refuses a path with no document, so tests seed each path they
 // checkpoint — the shape production always has (auto-version fires after
@@ -329,9 +327,14 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     await saveDocument(SESS_1, 'canvas-a', live, { kind: 'spatial', overwrite: true })
     // An op in the cached record nothing has persisted: what a writer inside
     // the workspace barrier holds between its edit and its save.
-    const cached = await getWorkspaceDoc(SESS_1)
-    cached.getMap('unpersisted').set('op', 1)
-    cached.commit()
+    await editWorkspaceRecord(
+      SESS_1,
+      (cached) => cached.getMap('unpersisted').set('op', 1),
+      undefined,
+      {
+        save: false,
+      },
+    )
 
     const entry = await store.save(SESS_1, 'canvas-a', { auto: false })
 

@@ -3,7 +3,6 @@
 // document-written observer is told, and which writes the automatic checkpoint
 // takes. Through the production container, since each is a join between the
 // tool in server-core and a keeper in this package.
-import './_test-loro-records.js'
 import {
   createCanvasEditTool,
   type DocumentWritten,
@@ -33,7 +32,7 @@ const { installAutoCheckpoint, uninstallAutoCheckpointForTests } = await import(
 )
 const { disposeAutoCompact } = await import('./auto-compact.js')
 const { getDb } = await import('./db/index.js')
-const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
+const { storedWorkspaceRecordCopy } = await import('./_test-workspace-record.js')
 const { frontiersToBase64 } = await import('@kamiazya/whiteboard-history')
 const { encodeFrontiers } = await import('loro-crdt')
 
@@ -108,7 +107,7 @@ describe('what an agent write leaves in the history', () => {
       .select(['frontiers', 'contentDigest', 'documentId'])
       .where('workspaceId', '=', workspaceId)
       .execute()
-    const record = await openWorkspaceDocIfStored(workspaceId)
+    const record = await storedWorkspaceRecordCopy(workspaceId)
     expect(row?.documentId).toBe(documentId)
     expect(row?.frontiers).toBe(frontiersToBase64(encodeFrontiers(record?.frontiers() ?? [])))
     const placed = await deps.documentIndex.resolveDocumentById({ workspaceId, documentId })

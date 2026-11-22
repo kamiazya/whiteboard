@@ -20,15 +20,10 @@ import { corruptStoredData, isCorruptStoredDataError } from './corrupt-stored-da
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { RecordCache } from './record-cache.js'
 import { scheduleIdleRelease } from './record-idle-release.js'
-import type { RecordKindName } from './storage-env.js'
 import { documentStoreReady } from './store-handles.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
 import { withWorkspaceWriteLock, workspaceWriteLockInUse } from './workspace-lock.js'
-import {
-  type WorkspaceRecordKind,
-  workspaceRecordKindFromEnv,
-  workspaceRecordKindNamed,
-} from './workspace-record-kind.js'
+import { WORKSPACE_RECORD_KIND } from './workspace-record-kind.js'
 
 /**
  * The live WORKSPACE records this process serves and writes through, one
@@ -54,30 +49,12 @@ import {
  * (`followRecord`) before it serves the document.
  */
 
-// A record is held as `object`: which kind it is (a `LoroDoc`, an engine lease)
-// is the active kind's business (`workspace-record-kind.ts`), and nothing here
-// reads a record except through it.
+// A record is held as `object`: what it is (an engine lease) is
+// `workspace-record-kind.ts`'s business, and nothing here reads a record except
+// through it.
 type Held = object
 
-let active: WorkspaceRecordKind | undefined
-
-/** The kind this process holds workspace records as, from the environment until a test says otherwise. */
-function recordKind(): WorkspaceRecordKind {
-  active ??= workspaceRecordKindFromEnv()
-  return active
-}
-
-/**
- * Test-only: holds records as `name` from now on (`null` returns to the
- * environment's choice). What the cache held is given back first, since it was
- * loaded by the other kind.
- */
-export function _setWorkspaceRecordKindForTests(name: RecordKindName | null): void {
-  records?.clear()
-  records = undefined
-  droppedVersions.clear()
-  active = name === null ? undefined : workspaceRecordKindNamed(name)
-}
+const recordKind = () => WORKSPACE_RECORD_KIND
 
 // What giving a record back is seen as by a test that wants to watch the loans of
 // a record end.
@@ -109,6 +86,14 @@ export function _watchWorkspaceRecordLoansForTests(): {
 
 let loanWatch: { counts: Map<object, number>; taken: number } | null = null
 
+/** Test-only: the record the cache holds for a workspace right now, without counting a use; `undefined` when none is held. */
+export function _heldWorkspaceRecordForTests(
+  workspaceId: string,
+  scope: StoreScope = globalStoreScope,
+): Held | undefined {
+  return records?.get(workspaceDocCacheKey(scope, workspaceId))
+}
+
 /** Test-only: the records the cache has given back since this was first asked for. */
 export function _workspaceRecordReleasesForTests(): Held[] {
   releasedForTests ??= []
@@ -121,9 +106,7 @@ export function _workspaceRecordReleasesForTests(): Held[] {
  * Without a bound every record the process ever opened stayed for its
  * lifetime — the daily file-GC sweep opens every workspace it keeps — and in
  * server mode one process serves every tenant over one WASM heap.
- * The count is the active kind's (`workspace-record-kind.ts` carries the
- * measurement behind each): a lease takes about four times what a `LoroDoc` does,
- * so fewer are kept.
+ * The count is `workspace-record-kind.ts`'s, with the measurement behind it.
  * A miss costs one read of the stored record, which is what a restart costs.
  *
  * Dropping a record is safe because this module already serves a writer it
@@ -174,11 +157,7 @@ function rememberDropped(key: string, record: Held): void {
   }
 }
 
-/**
- * The records themselves, bounded and released as the active kind says: a
- * `LoroDoc` is given back by collecting it, so that kind sets no idle time,
- * while a cache of engine leases drops one nobody used for a while.
- */
+/** The records themselves, bounded, and dropped when nobody has used one for a while. */
 let records: RecordCache<Held> | undefined
 
 function recordCache(): RecordCache<Held> {
@@ -186,7 +165,8 @@ function recordCache(): RecordCache<Held> {
   const kind = recordKind()
   records = new RecordCache<Held>({
     maxEntries: kind.maxEntries,
-    ...(kind.idleMs === null ? {} : { idleMs: kind.idleMs, schedule: scheduleIdleRelease }),
+    idleMs: kind.idleMs,
+    schedule: scheduleIdleRelease,
     release: (record) => {
       kind.index.release(record)
       releasedForTests?.push(record)
@@ -466,43 +446,6 @@ export function cacheBackedRecordKind(): IndexRecordKind<Held> {
   return { ...recordKind().index, release: releaseWorkspaceDocLoan }
 }
 
-/** Reads through a loan and gives it back, for a caller that keeps nothing of it. */
-function viaLoan(lent: Lent | null): LegacyRecord | null {
-  lent?.give()
-  return lent === null ? null : asLegacy(lent.doc)
-}
-
-/**
- * The record as the `LoroDoc` a caller mutates and hands back to `saveWorkspaceDoc`.
- * That reading exists only while records are held as `LoroDoc`s; an engine lease
- * is not one, and a caller that asks for it under the other kind has to say so
- * rather than be handed something it cannot use.
- */
-function asLegacy(record: Held): LegacyRecord {
-  if (recordKind().name !== 'loro') {
-    throw new Error('a workspace record is a LoroDoc only under WHITEBOARD_RECORD_KIND=loro')
-  }
-  return record as LegacyRecord
-}
-
-export async function getWorkspaceDoc(
-  workspaceId: string,
-  scope: StoreScope = globalStoreScope,
-): Promise<LegacyRecord> {
-  // `create` answers a record, so the null arm is unreachable.
-  return viaLoan(
-    await lendRecord(workspaceId, scope, (docs) => docs.create(workspaceId)),
-  ) as LegacyRecord
-}
-
-/** The workspace doc when one is STORED (or cached); null otherwise — a read path must not mint one. */
-export async function openWorkspaceDocIfStored(
-  workspaceId: string,
-  scope: StoreScope = globalStoreScope,
-): Promise<LegacyRecord | null> {
-  return viaLoan(await lendRecord(workspaceId, scope, (docs) => docs.open(workspaceId)))
-}
-
 type WorkspaceDocUpdatedListener = (workspaceId: string, update: Uint8Array) => void
 const workspaceDocUpdatedListeners = new Set<WorkspaceDocUpdatedListener>()
 
@@ -533,21 +476,13 @@ export function emitWorkspaceDocUpdated(workspaceId: string, update: Uint8Array)
 /**
  * Subscribe to persisted workspace-document updates. Every mutation path —
  * per-document saves, delete/rename, restore, workspace-granularity imports —
- * funnels through `saveWorkspaceDoc`, so one subscription here is the whole
+ * funnels through `saveRecord`, so one subscription here is the whole
  * sync fan-out surface. Listeners get the exact bytes the store persisted;
  * importing them into a replica of the workspace document converges it.
  */
 export function onWorkspaceDocUpdated(listener: WorkspaceDocUpdatedListener): () => void {
   workspaceDocUpdatedListeners.add(listener)
   return () => workspaceDocUpdatedListeners.delete(listener)
-}
-
-export async function saveWorkspaceDoc(
-  workspaceId: string,
-  doc: LegacyRecord,
-  scope: StoreScope = globalStoreScope,
-): Promise<Uint8Array | null> {
-  return saveRecord(workspaceId, doc, scope)
 }
 
 async function saveRecord(
@@ -667,7 +602,7 @@ export function cacheBackedWorkspaceDocs(
  * The cached record bound to its operations and its save, for the duration of
  * `fn`: `null` when nothing is stored. A reader that holds the record only
  * through the session is ignorant of what holds it, and the bracket is where
- * the holder is acquired and given back — which a `LoroDoc` needs neither of.
+ * the holder is acquired and given back.
  */
 export async function withStoredWorkspaceRecord<T>(
   workspaceId: string,
@@ -680,7 +615,7 @@ export async function withStoredWorkspaceRecord<T>(
 
 /**
  * The live workspace record for the length of `fn`: minted empty inside a
- * registered workspace, like `getWorkspaceDoc`, and given back when `fn`
+ * registered workspace, and given back when `fn`
  * returns or throws. The cache counts the bracket as a user, so the record is
  * not given back to whatever lent it while the bracket reads it, whatever the
  * cache does with its entry meanwhile.

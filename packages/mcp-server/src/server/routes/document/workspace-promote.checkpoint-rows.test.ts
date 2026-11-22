@@ -6,7 +6,6 @@
  * shadowed; one at its manual ceiling is left out of `recorded` without failing
  * the rest.
  */
-import '../../store/_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -35,9 +34,8 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { _clearWorkspaceDocCacheForTests, getWorkspaceDoc } = await import(
-  '../../store/document-store.js'
-)
+const { _clearWorkspaceDocCacheForTests } = await import('../../store/document-store.js')
+const { workspaceRecordCopy } = await import('../../store/_test-workspace-record.js')
 const { createIsolatedDb } = await import('../../store/db/test-helpers.js')
 const { getDb } = await import('../../store/db/index.js')
 
@@ -103,7 +101,7 @@ it('leaves one manual row per owned document, at one frontier, with the digest a
   })
   if (result.kind !== 'promoted') throw new Error(`not promoted: ${result.kind}`)
 
-  const held = readWorkspaceDocuments(await getWorkspaceDoc(WS))
+  const held = readWorkspaceDocuments(await workspaceRecordCopy(WS))
   const owned = held.filter((entry) => entry.shadowed !== true)
   const shadowedIds = held
     .filter((entry) => entry.shadowed === true)

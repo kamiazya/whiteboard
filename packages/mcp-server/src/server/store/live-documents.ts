@@ -51,7 +51,7 @@ export function liveDocuments(scope: StoreScope = globalStoreScope): LiveDocumen
 /**
  * The workspace-granularity half of the same seam, in the same bundle file
  * (one mechanic bundle per composition, not one per axis). `save`'s
- * subscriber fan-out lives inside `saveWorkspaceDoc`, which is what lets
+ * subscriber fan-out lives inside `saveRecord`, which is what lets
  * the seam promise callers never broadcast separately.
  */
 export function workspaceDocuments(scope: StoreScope = globalStoreScope): WorkspaceDocuments {

@@ -336,8 +336,8 @@ function recordIdleReleaseWork(): BackgroundWork {
   return {
     name: 'record-idle-release',
     trigger:
-      'a workspace record nobody has used for five minutes, when records are held as engine ' +
-      'leases (WHITEBOARD_RECORD_KIND, `lease` by default); a LoroDoc is freed by collecting it',
+      'a workspace record nobody has used for five minutes, which is held as an engine lease ' +
+      'until it is given back',
     instances: {
       runs: 'every-instance',
       because:

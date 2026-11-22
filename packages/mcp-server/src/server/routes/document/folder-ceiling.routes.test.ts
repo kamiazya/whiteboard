@@ -5,7 +5,6 @@
  * every folder its path names that the tree does not hold yet: a version
  * restored to a new path.
  */
-import '../../store/_test-loro-records.js'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { readWorkspaceNodes, WORKSPACE_TREE_KEY } from '@kamiazya/whiteboard-loro-adapter'
@@ -41,7 +40,9 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { saveDocument } = await import('../../store/document-store.js')
-const { getWorkspaceDoc, saveWorkspaceDoc } = await import('../../store/workspace-doc-cache.js')
+const { editWorkspaceRecord, workspaceRecordCopy } = await import(
+  '../../store/_test-workspace-record.js'
+)
 const { createDocumentRouter } = await import('../document.js')
 
 beforeEach(async () => {
@@ -53,16 +54,15 @@ const foldersIn = (record: LoroDoc) =>
   readWorkspaceNodes(record).filter((node) => node.type === 'folder').length
 
 async function storedFolders(): Promise<number> {
-  return foldersIn(await getWorkspaceDoc(WS))
+  return foldersIn(await workspaceRecordCopy(WS))
 }
 
 /** Fills the stored record up to `total` folders with raw root folder nodes, in one save. */
 async function fillTo(total: number): Promise<void> {
-  const record = await getWorkspaceDoc(WS)
-  const tree = record.getTree(WORKSPACE_TREE_KEY)
-  for (let i = foldersIn(record); i < total; i++) tree.createNode().data.set('segment', `f${i}`)
-  record.commit()
-  await saveWorkspaceDoc(WS, record)
+  await editWorkspaceRecord(WS, (record) => {
+    const tree = record.getTree(WORKSPACE_TREE_KEY)
+    for (let i = foldersIn(record); i < total; i++) tree.createNode().data.set('segment', `f${i}`)
+  })
 }
 
 function router() {

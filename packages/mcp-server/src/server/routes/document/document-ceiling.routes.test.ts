@@ -4,7 +4,6 @@
  * sync update answers: a duplicate, a restore from the trash, and a version
  * restored to a new path.
  */
-import '../../store/_test-loro-records.js'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { documentDuplicateByIdApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
@@ -41,7 +40,7 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { saveDocument } = await import('../../store/document-store.js')
-const { getWorkspaceDoc, saveWorkspaceDoc } = await import('../../store/workspace-doc-cache.js')
+const { editWorkspaceRecord } = await import('../../store/_test-workspace-record.js')
 const { createDocumentRouter } = await import('../document.js')
 
 beforeEach(async () => {
@@ -63,18 +62,17 @@ function crockford(n: number): string {
 
 /** Fills the stored record up to `total` documents with raw tree nodes, in one save. */
 async function fillTo(total: number): Promise<void> {
-  const record = await getWorkspaceDoc(WS)
-  const tree = record.getTree(WORKSPACE_TREE_KEY)
-  for (let i = readWorkspaceDocuments(record).length; i < total; i++) {
-    const node = tree.createNode()
-    node.data.set('documentId', `01BRWC${crockford(i).padStart(20, '0')}`)
-    node.data.set('segment', `filler-${i}`)
-    node.data.set('kind', 'markdown')
-    node.data.set('createdAt', 1_000)
-    node.data.set('updatedAt', 1_000)
-  }
-  record.commit()
-  await saveWorkspaceDoc(WS, record)
+  await editWorkspaceRecord(WS, (record) => {
+    const tree = record.getTree(WORKSPACE_TREE_KEY)
+    for (let i = readWorkspaceDocuments(record).length; i < total; i++) {
+      const node = tree.createNode()
+      node.data.set('documentId', `01BRWC${crockford(i).padStart(20, '0')}`)
+      node.data.set('segment', `filler-${i}`)
+      node.data.set('kind', 'markdown')
+      node.data.set('createdAt', 1_000)
+      node.data.set('updatedAt', 1_000)
+    }
+  })
 }
 
 function post(url: string, body?: Uint8Array<ArrayBuffer>) {
