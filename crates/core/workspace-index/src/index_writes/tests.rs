@@ -231,7 +231,7 @@ fn a_delete_evacuates_a_document_and_records_the_names_of_the_folders_above_it()
     let restored = restore_document(
         &record,
         &RestoreDocument { workspace_id: WORKSPACE, document_id: ID_A },
-        &mut blobs,
+        &blobs,
     )
     .expect("restored");
     assert!(restored.saved);
@@ -389,7 +389,7 @@ fn a_restore_of_bytes_that_are_not_a_record_is_refused_not_answered_as_nothing()
     let refused = restore_document(
         &record,
         &RestoreDocument { workspace_id: WORKSPACE, document_id: ID_A },
-        &mut blobs,
+        &blobs,
     );
     assert!(matches!(refused, Err(IndexError::UnreadableTrashBytes(_))));
 }
@@ -534,7 +534,7 @@ fn a_restore_leaves_the_bytes_for_the_keeper_to_release_after_it_saves() {
     let restored = restore_document(
         &record,
         &RestoreDocument { workspace_id: WORKSPACE, document_id: ID_A },
-        &mut blobs,
+        &blobs,
     )
     .expect("restored");
     assert!(restored.saved);
@@ -543,7 +543,7 @@ fn a_restore_leaves_the_bytes_for_the_keeper_to_release_after_it_saves() {
     let kept = restore_document(
         &record,
         &RestoreDocument { workspace_id: WORKSPACE, document_id: ID_A },
-        &mut blobs,
+        &blobs,
     )
     .expect("nothing to restore");
     assert_eq!((kept.value.placed, kept.value.release), (None, None));
