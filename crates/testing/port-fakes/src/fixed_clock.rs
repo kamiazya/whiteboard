@@ -21,9 +21,13 @@ impl FixedClock {
         self.bits.store(ms.to_bits(), Ordering::SeqCst);
     }
 
-    /// Moves the clock forward by `ms`, which may be negative.
+    /// Moves the clock forward by `ms`, which may be negative. One atomic
+    /// read-modify-write, so concurrent advances each add to the reading they
+    /// replace and none is lost.
     pub fn advance(&self, ms: f64) {
-        self.set(self.now_ms() + ms);
+        let step = |bits: u64| Some((f64::from_bits(bits) + ms).to_bits());
+        // `step` never answers None, so the update cannot fail.
+        let _ = self.bits.fetch_update(Ordering::SeqCst, Ordering::SeqCst, step);
     }
 }
 
@@ -49,6 +53,22 @@ mod tests {
         assert!((clock.now_ms() - 1_700_000_000_000.0).abs() < f64::EPSILON);
         clock.set(0.5);
         assert!((clock.now_ms() - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn concurrent_advances_all_land() {
+        let clock = FixedClock::new(0.0);
+        std::thread::scope(|s| {
+            for _ in 0..8 {
+                s.spawn(|| {
+                    for _ in 0..1_000 {
+                        clock.advance(1.0);
+                    }
+                });
+            }
+        });
+        assert!((clock.now_ms() - 8_000.0).abs() < f64::EPSILON);
     }
 
     #[test]
