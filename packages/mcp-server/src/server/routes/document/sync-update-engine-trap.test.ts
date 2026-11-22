@@ -1,7 +1,7 @@
 /**
  * The editor's sync writes after the CRDT engine traps on one of them.
  *
- * A trap leaves the cached `LoroDoc` holding a lock it never released, so
+ * A trap leaves the cached record holding a lock it never released, so
  * every later call on that instance traps too. Kept cached, one oversize
  * write would leave the workspace answering 500 until the daemon restarts,
  * after a 400 that blamed the client's bytes. These run the real router over
@@ -9,12 +9,10 @@
  * that trapped answers `document_engine_trap`, and the next request is served
  * by a fresh instance.
  */
-import '../../store/_test-loro-records.js'
 import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getWorkspaceDoc } from '../../store/document-store.js'
 import { testDocumentRouterOptions, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-sync-engine-trap-')
@@ -29,6 +27,7 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { resolveTestServerDeps, seedWorkspaceRow } = await import('../_test-helpers.js')
+const { failWritesToWorkspaceRecord } = await import('../../store/_test-workspace-record.js')
 const { createDocumentRouter } = await import('../document.js')
 // Pre-load ws.js, mirroring the other route tests' documented cycle
 // workaround for document.ts's dynamic import.
@@ -40,11 +39,12 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-/** What loro-crdt's WASM throws when a Rust panic aborts a call. */
-function poison(doc: LoroDoc): void {
-  vi.spyOn(doc, 'import').mockImplementation(() => {
-    throw Object.assign(new Error('unreachable'), { name: 'RuntimeError' })
-  })
+/** What loro-crdt's WASM throws when a Rust panic aborts a call: every later write to the record throws it too. */
+async function poison(workspaceId: string): Promise<void> {
+  await failWritesToWorkspaceRecord(
+    workspaceId,
+    Object.assign(new Error('unreachable'), { name: 'RuntimeError' }),
+  )
 }
 
 function workspaceRecord(path: string, mode: 'update' | 'snapshot'): Uint8Array<ArrayBuffer> {
@@ -75,7 +75,7 @@ async function setup() {
 describe('a sync write the CRDT engine traps on', () => {
   it('workspace-document update answers document_engine_trap and the next request is served', async () => {
     const { app, post } = await setup()
-    poison(await getWorkspaceDoc(WS))
+    await poison(WS)
 
     const trapped = await post(
       `/api/w/${WS}/workspace-document/update`,
@@ -94,7 +94,7 @@ describe('a sync write the CRDT engine traps on', () => {
 
   it('promote answers document_engine_trap and the next promote lands', async () => {
     const { post } = await setup()
-    poison(await getWorkspaceDoc(WS))
+    await poison(WS)
     const promote = (path: string) =>
       post(
         `/api/w/${WS}/workspace-document/promote`,

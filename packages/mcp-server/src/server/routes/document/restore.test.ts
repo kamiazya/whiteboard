@@ -1,4 +1,3 @@
-import '../../store/_test-loro-records.js'
 import {
   writeMarkdownBody,
   writeSpatialCanvas,
@@ -346,20 +345,22 @@ describe('POST /api/workspaces/:workspaceId/documents/:documentId/versions/:id/r
     // record unsaved — not only the save failure path above. Spied on the
     // cached INSTANCE, not the prototype: version machinery commits its own
     // clones and projections first, and those must pass through.
-    const { getWorkspaceDoc } = await import('../../store/workspace-doc-cache.js')
-    const cachedRecord = await getWorkspaceDoc(SESSION1)
-    const commitSpy = vi.spyOn(cachedRecord, 'commit').mockImplementationOnce(() => {
-      throw new Error('simulated commit failure')
-    })
+    const { failWritesToWorkspaceRecord } = await import('../../store/_test-workspace-record.js')
+    const { _heldWorkspaceRecordForTests } = await import('../../store/workspace-doc-cache.js')
+    const { held: cachedRecord, restore: restoreWrites } = await failWritesToWorkspaceRecord(
+      SESSION1,
+      new Error('simulated commit failure'),
+      { once: true },
+    )
 
     const restoreRes = await app.request(
       `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/${saveBody.version.id}/restore`,
       { method: 'POST' },
     )
-    commitSpy.mockRestore()
+    restoreWrites()
 
     expect(restoreRes.status).toBe(500)
-    expect(await getWorkspaceDoc(SESSION1)).not.toBe(cachedRecord)
+    expect(_heldWorkspaceRecordForTests(SESSION1)).not.toBe(cachedRecord)
 
     const reloaded = await loadDocument(SESSION1, 'canvas-a')
     const ids = Object.keys(reloaded.getMap('nodes').toJSON()).sort()

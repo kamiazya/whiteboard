@@ -1,13 +1,16 @@
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
+import { workspaceRecordCopy } from './_test-workspace-record.js'
 import { clearDbCacheForTests, closeDb } from './db/index.js'
 import { globalStoreScope, storeScope } from './store-scope.js'
-import { _clearWorkspaceDocCacheForTests, getWorkspaceDoc } from './workspace-doc-cache.js'
+import {
+  _clearWorkspaceDocCacheForTests,
+  _heldWorkspaceRecordForTests,
+} from './workspace-doc-cache.js'
 
 let dir: string
 let other: string
@@ -109,11 +112,17 @@ describe('the live workspace documents are cached per scope', () => {
   it('hands two scopes their own document for the same workspace id', async () => {
     const [a, b] = [storeScope(dir), storeScope(other)]
 
-    const docA = await getWorkspaceDoc('ws-1', a)
-    const docB = await getWorkspaceDoc('ws-1', b)
+    await workspaceRecordCopy('ws-1', a)
+    await workspaceRecordCopy('ws-1', b)
+    const heldA = _heldWorkspaceRecordForTests('ws-1', a)
+    const heldB = _heldWorkspaceRecordForTests('ws-1', b)
 
-    expect(docA).not.toBe(docB)
-    expect(await getWorkspaceDoc('ws-1', a)).toBe(docA)
-    expect(await getWorkspaceDoc('ws-1', b)).toBe(docB)
+    expect(heldA).toBeDefined()
+    expect(heldB).toBeDefined()
+    expect(heldA).not.toBe(heldB)
+    await workspaceRecordCopy('ws-1', a)
+    await workspaceRecordCopy('ws-1', b)
+    expect(_heldWorkspaceRecordForTests('ws-1', a)).toBe(heldA)
+    expect(_heldWorkspaceRecordForTests('ws-1', b)).toBe(heldB)
   })
 })

@@ -1,4 +1,3 @@
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,6 +6,7 @@ import { RecordStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
+import { importWorkspaceRecord } from './_test-workspace-record.js'
 import { createIsolatedDb } from './db/test-helpers.js'
 import { storeScope } from './store-scope.js'
 import {
@@ -14,7 +14,7 @@ import {
   _setNamedDigestsBudgetForTests,
   trashBlobNamedElsewhere,
 } from './trash-blob-named-elsewhere.js'
-import { _clearWorkspaceDocCacheForTests, saveWorkspaceDoc } from './workspace-doc-cache.js'
+import { _clearWorkspaceDocCacheForTests } from './workspace-doc-cache.js'
 
 const REF = { algorithm: 'sha-256', digestHex: 'a'.repeat(64) } as const
 const OTHER_REF = { algorithm: 'sha-256', digestHex: 'b'.repeat(64) } as const
@@ -46,7 +46,7 @@ async function storeRecordNaming(
     blob: ref,
   })
   doc.commit()
-  await saveWorkspaceDoc(workspaceId, doc, storeScope(dir))
+  await importWorkspaceRecord(workspaceId, doc, storeScope(dir))
 }
 
 it("answers yes for a blob another workspace's trash names", async () => {
@@ -139,7 +139,7 @@ describe('the bound on what is remembered', () => {
       })
     }
     doc.commit()
-    await saveWorkspaceDoc(workspaceId, doc, storeScope(dir))
+    await importWorkspaceRecord(workspaceId, doc, storeScope(dir))
   }
 
   it('forgets the least recently used record once the digest budget is spent', async () => {

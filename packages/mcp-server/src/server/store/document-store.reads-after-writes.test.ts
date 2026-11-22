@@ -12,8 +12,7 @@ import { nodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { RecordStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { describeUnderBothRecordKinds } from './_test-record-kinds.js'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
 vi.mock('../config.js', () => ({
@@ -58,7 +57,7 @@ async function textAt(path: string): Promise<string | undefined> {
   return node === undefined ? undefined : nodeText(node)
 }
 
-describeUnderBothRecordKinds('a read after a write', () => {
+describe('a read after a write', () => {
   it('serves the stored content after a save that failed to persist', async () => {
     await saveDocument(WS, 'kept', canvasDoc('stored'), { kind: 'spatial' })
 

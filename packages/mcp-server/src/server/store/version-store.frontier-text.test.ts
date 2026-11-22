@@ -1,4 +1,3 @@
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -25,7 +24,8 @@ vi.mock('../config.js', () => ({
 }))
 
 const { FileVersionStore } = await import('./version-store.js')
-const { saveDocument, getWorkspaceDoc } = await import('./document-store.js')
+const { saveDocument } = await import('./document-store.js')
+const { workspaceRecordCopy } = await import('./_test-workspace-record.js')
 
 const WS = '01PAW75F73PVC402Y3V151KT6R'
 
@@ -56,7 +56,7 @@ describe('the point a version row records', () => {
 
   it('is the record frontiers as the engine encodes them, in base64', async () => {
     const saved = await store.save(WS, 'doc', { auto: false })
-    const record = await getWorkspaceDoc(WS)
+    const record = await workspaceRecordCopy(WS)
     expect((await rowOf(saved.id)).frontiers).toBe(
       frontiersToBase64(encodeFrontiers(record.oplogFrontiers())),
     )

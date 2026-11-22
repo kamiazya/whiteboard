@@ -5,7 +5,6 @@
  * agent edit the web app cannot see, or vice versa, is silent divergence.
  */
 
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -44,11 +43,12 @@ const {
   saveDocument,
   loadDocument,
   cacheBackedWorkspaceDocs,
-  getWorkspaceDoc,
   resolveDocumentIdAtPath,
   workspaceRegistry,
 } = await import('./document-store.js')
 const { WorkspaceRoutedDocumentStore } = await import('./workspace-plane.js')
+const { failWritesToWorkspaceRecord } = await import('./_test-workspace-record.js')
+const { _heldWorkspaceRecordForTests } = await import('./workspace-doc-cache.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { getDb } = await import('./db/index.js')
 const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
@@ -329,7 +329,7 @@ it('the index creates, renames and deletes on the tree', async () => {
 it('does not keep serving an agent write whose persistence failed', async () => {
   // A save mutates the LIVE projection before the record is persisted, so a
   // failure in between leaves every cached reader ahead of durable state and
-  // the next read serves content that was never written. `saveWorkspaceDoc`
+  // the next read serves content that was never written. `saveRecord`
   // is what prevents that, by evicting both caches in its catch — the choke
   // point every durable workspace write funnels through, which is why this
   // path inherits the guard without repeating it.
@@ -373,11 +373,11 @@ it('does not keep serving an agent write whose persistence failed', async () => 
 })
 
 it('a CRDT engine trap evicts the workspace record, so the next write rebuilds it from storage', async () => {
-  // After a WASM trap the LoroDoc that was inside the call keeps a lock it
+  // After a WASM trap the document that was inside the call keeps a lock it
   // never released, and every later call on THAT instance traps again while a
   // fresh one works. The cached record is that instance, so without evicting
   // it one oversize write leaves the workspace unwritable until the daemon
-  // restarts. A poisoned instance is modelled by a `commit` that always throws
+  // restarts. A poisoned instance is modelled by writes to it that always throw
   // the trap; the rebuilt record is a different instance and is not affected.
   const { routed } = await stores()
   await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('persisted'), {
@@ -393,10 +393,10 @@ it('a CRDT engine trap evicts the workspace record, so the next write rebuilds i
   const trap = Object.assign(new Error('unreachable'), { name: 'RuntimeError' })
   expect(isEngineTrap(trap)).toBe(true)
 
-  const poisoned = await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')
-  const commit = vi.spyOn(poisoned, 'commit').mockImplementation(() => {
-    throw trap
-  })
+  const { held: poisoned, restore: restoreWrites } = await failWritesToWorkspaceRecord(
+    '01PAW75F73PVC402Y3V151KT6R',
+    trap,
+  )
   // Built on the snapshot a tool would have loaded: an edit from an unrelated
   // peer is concurrent with the stored text, and the CRDT picks its winner by
   // peer id, so the content assertion below would be a coin flip.
@@ -422,11 +422,11 @@ it('a CRDT engine trap evicts the workspace record, so the next write rebuilds i
   }
 
   await expect(save('trapped')).rejects.toBe(trap)
-  commit.mockRestore()
+  restoreWrites()
 
   await save('after-trap')
   expect(readText(await loadDocument('01PAW75F73PVC402Y3V151KT6R', 'design'))).toBe('after-trap')
-  expect(await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')).not.toBe(poisoned)
+  expect(_heldWorkspaceRecordForTests('01PAW75F73PVC402Y3V151KT6R')).not.toBe(poisoned)
 })
 
 it('an ordinary save failure keeps the cached record', async () => {
@@ -439,10 +439,10 @@ it('an ordinary save failure keeps the cached record', async () => {
   const rowId = await resolveDocumentIdAtPath('01PAW75F73PVC402Y3V151KT6R', 'design')
   if (rowId === null) throw new Error('document missing from the tree')
 
-  const live = await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')
-  vi.spyOn(live, 'commit').mockImplementation(() => {
-    throw new Error('not a trap')
-  })
+  const { held: live, restore: restoreWrites } = await failWritesToWorkspaceRecord(
+    '01PAW75F73PVC402Y3V151KT6R',
+    new Error('not a trap'),
+  )
   const edited = canvasDoc('refused')
   const { manifest, chunks } = chunkSnapshot(
     new Uint8Array(edited.export({ mode: 'snapshot' })),
@@ -456,7 +456,8 @@ it('an ordinary save failure keeps the cached record', async () => {
       frontier: new Uint8Array(edited.oplogVersion().encode()),
     }),
   ).rejects.toThrow('not a trap')
-  expect(await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')).toBe(live)
+  restoreWrites()
+  expect(_heldWorkspaceRecordForTests('01PAW75F73PVC402Y3V151KT6R')).toBe(live)
 })
 
 describe('DocumentStore conformance (production wiring: routed over a tree-backed workspace)', () => {

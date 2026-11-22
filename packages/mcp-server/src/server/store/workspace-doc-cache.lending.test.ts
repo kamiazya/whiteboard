@@ -2,16 +2,14 @@
  * A bracket over the workspace record holds it: the record a `withRecord`
  * reads is not given back while the bracket is running, however the cache has
  * treated its entry meanwhile, and is given back once the bracket has ended
- * and the entry has gone. The cache holds `LoroDoc`s, for which giving back is
- * a no-op, so the loan is watched through the cache's own release.
+ * and the entry has gone. The loan is watched through the cache's own release.
  */
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { describeUnderBothRecordKinds } from './_test-record-kinds.js'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
 vi.mock('../config.js', () => ({
@@ -34,7 +32,7 @@ const {
   _workspaceRecordLoansForTests,
 } = await import('./workspace-doc-cache.js')
 const { RecordCache } = await import('./record-cache.js')
-const { workspaceRecordKindNamed } = await import('./workspace-record-kind.js')
+const { WORKSPACE_RECORD_KIND } = await import('./workspace-record-kind.js')
 const { globalStoreScope } = await import('./store-scope.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
@@ -56,7 +54,7 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true })
 })
 
-describeUnderBothRecordKinds('a bracket over the workspace record', (kind) => {
+describe('a bracket over the workspace record', () => {
   it('holds the record past the entry it was lent from, and gives it back when it ends', async () => {
     const releases = _workspaceRecordReleasesForTests()
     await warm(ws(0))
@@ -127,7 +125,7 @@ describeUnderBothRecordKinds('a bracket over the workspace record', (kind) => {
     await warm(ws(0))
     _clearWorkspaceDocCacheForTests()
     // A second cold open's keep lands between this one's keep and its acquire.
-    const other = await workspaceRecordKindNamed(kind).index.empty()
+    const other = await WORKSPACE_RECORD_KIND.index.empty()
     const keep = RecordCache.prototype.keep
     let interleaved = false
     const spy = vi.spyOn(RecordCache.prototype, 'keep').mockImplementation(function (

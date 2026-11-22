@@ -17,15 +17,13 @@
  * Deterministic rather than racy: the writer holds the lock across the
  * whole window, so the interleaving is imposed instead of hoped for.
  */
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { deleteWorkspaceNodeAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import { hasDocumentTrash } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getWorkspaceDoc } from './document-store.js'
-import { saveWorkspaceDoc } from './workspace-doc-cache.js'
+import { editWorkspaceRecord } from './_test-workspace-record.js'
 
 let tempDir: string
 
@@ -135,9 +133,9 @@ describe('wbDocumentDelete', () => {
     await deps.documentTeardown.around(
       { workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1', documentId: created.documentId, path: 'gone' },
       async () => {
-        const record = await getWorkspaceDoc('01ZVM89A4A1V9FS03Z9J64KEK1')
-        expect(deleteWorkspaceNodeAtPath(record, 'gone')).toBe(true)
-        await saveWorkspaceDoc('01ZVM89A4A1V9FS03Z9J64KEK1', record)
+        await editWorkspaceRecord('01ZVM89A4A1V9FS03Z9J64KEK1', (record) => {
+          expect(deleteWorkspaceNodeAtPath(record, 'gone')).toBe(true)
+        })
       },
     )
 

@@ -4,7 +4,6 @@
  * pin (ADR-0050 decision 3), so an attestation sent beside the bytes names a
  * credential nothing here can check, and is refused before anything lands.
  */
-import '../../store/_test-loro-records.js'
 import { createHash } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -50,7 +49,7 @@ import type * as versionEntry from '@kamiazya/whiteboard-server-core/versions/ve
 import { PROMOTE_MAX_JUDGED_SIZE } from '@kamiazya/whiteboard-server-core/versions/version-entry'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { getWorkspaceDoc } from '../../store/document-store.js'
+import { workspaceRecordCopy } from '../../store/_test-workspace-record.js'
 import {
   documentIdAt,
   documentOf,
@@ -440,7 +439,7 @@ it('carries a trashed document so the daemon restores it with its content', asyn
     },
   )
   expect(restored.status).toBe(200)
-  const workspaceDoc = await getWorkspaceDoc('01M8BBN7JS60N0ZAR13NP8SXBF')
+  const workspaceDoc = await workspaceRecordCopy('01M8BBN7JS60N0ZAR13NP8SXBF')
   expect(readMarkdownBody(documentContainers(workspaceDoc, GONE_ID))).toBe(
     '# trashed in the browser',
   )
@@ -464,7 +463,7 @@ it.each([
     },
   )
   expect(restored.status).toBe(404)
-  const workspaceDoc = await getWorkspaceDoc('01M8BBN7JS60N0ZAR13NP8SXBF')
+  const workspaceDoc = await workspaceRecordCopy('01M8BBN7JS60N0ZAR13NP8SXBF')
   expect(resolveWorkspaceDocumentById(workspaceDoc, GONE_ID)).toBeNull()
 })
 
@@ -499,7 +498,7 @@ it.each([
     },
   )
   expect(other.status).toBe(200)
-  const workspaceDoc = await getWorkspaceDoc('01GMPGTKWFGGGN52ZV6JFQP5HM')
+  const workspaceDoc = await workspaceRecordCopy('01GMPGTKWFGGGN52ZV6JFQP5HM')
   expect(readMarkdownBody(documentContainers(workspaceDoc, GONE_ID))).toBe(
     '# trashed in the browser',
   )
@@ -538,7 +537,7 @@ it('carries saved versions: listed for their document, label kept, restorable to
     { method: 'POST' },
   )
   expect(restored.status).toBe(200)
-  const workspaceDoc = await getWorkspaceDoc('01M8BBN7JS60N0ZAR13NP8SXBF')
+  const workspaceDoc = await workspaceRecordCopy('01M8BBN7JS60N0ZAR13NP8SXBF')
   expect(readMarkdownBody(documentContainers(workspaceDoc, ROADMAP_ID))).toBe('# as drafted')
 })
 

@@ -1,4 +1,3 @@
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -206,7 +205,7 @@ describe('saveDocument / loadDocument', () => {
   it("persists the workspace record's frontier as the live workspace doc's oplog version", async () => {
     const { getDb } = await import('./db/index.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
-    const { getWorkspaceDoc } = await import('./document-store.js')
+    const { workspaceRecordCopy } = await import('./_test-workspace-record.js')
     const doc = new LoroDoc()
     doc.getMovableList('elements').insert(0, 'x')
     doc.commit()
@@ -217,7 +216,7 @@ describe('saveDocument / loadDocument', () => {
     const result = await store.readFrontier({
       docRef: { kind: 'workspace-tree', workspaceId: SESSION1 },
     })
-    const workspaceDoc = await getWorkspaceDoc(SESSION1)
+    const workspaceDoc = await workspaceRecordCopy(SESSION1)
     expect(result?.frontier).toEqual(workspaceDoc.oplogVersion().encode())
   })
 
@@ -639,12 +638,12 @@ describe('listDocuments', () => {
   // left the row saying 'spatial' while the tree node still said
   // 'markdown' — the kind sync above only wrote the row.
   it('an explicit-kind re-save updates the TREE node kind, not only the row', async () => {
-    const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
+    const { storedWorkspaceRecordCopy } = await import('./_test-workspace-record.js')
     const { resolveWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')
     await saveDocument(SESSION1, 'note', new LoroDoc(), { kind: 'markdown' })
     await saveDocument(SESSION1, 'note', new LoroDoc(), { overwrite: true, kind: 'spatial' })
 
-    const workspaceDoc = await openWorkspaceDocIfStored(SESSION1)
+    const workspaceDoc = await storedWorkspaceRecordCopy(SESSION1)
     expect(workspaceDoc).not.toBeNull()
     if (workspaceDoc === null) throw new Error('unreachable')
     expect(resolveWorkspaceDocument(workspaceDoc, 'note')?.kind).toBe('spatial')

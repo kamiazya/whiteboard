@@ -3,11 +3,10 @@
  * workspace it is asked for, and every record it keeps shares one WASM heap.
  *
  * Residency is observed through instance identity — a hit answers the cached
- * `LoroDoc`, a reopen answers a new one — because that is what a caller can
+ * record, a reopen answers a new one — because that is what a caller can
  * tell apart, and what an eviction that loses state would change.
  */
 
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -34,13 +33,14 @@ vi.mock('../config.js', () => ({
 }))
 
 const {
-  getWorkspaceDoc,
-  openWorkspaceDocIfStored,
-  saveWorkspaceDoc,
   _clearWorkspaceDocCacheForTests,
+  _heldWorkspaceRecordForTests,
   evictWorkspaceDocCache,
   workspaceDocCacheMaxEntries,
 } = await import('./workspace-doc-cache.js')
+const { editWorkspaceRecord, storedWorkspaceRecordCopy, workspaceRecordCopy } = await import(
+  './_test-workspace-record.js'
+)
 const { loadDocument, saveDocument, onWorkspaceDocUpdated } = await import('./document-store.js')
 const { getDb } = await import('./db/index.js')
 const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
@@ -64,10 +64,29 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true })
 })
 
+/** What the cache holds for a workspace, an instance a caller can tell apart from a reopened one. */
+function heldRecord(workspaceId: string): object {
+  const held = _heldWorkspaceRecordForTests(workspaceId)
+  if (held === undefined) throw new Error(`no record is held for ${workspaceId}`)
+  return held
+}
+
+/** Opens (minting when nothing is stored) the workspace's record and answers the instance the cache holds. */
+async function openHeld(workspaceId: string): Promise<object> {
+  await workspaceRecordCopy(workspaceId)
+  return heldRecord(workspaceId)
+}
+
+/** Reads the workspace's stored record and answers the instance the cache holds afterwards, if any. */
+async function reopenHeld(workspaceId: string): Promise<object | undefined> {
+  await storedWorkspaceRecordCopy(workspaceId)
+  return _heldWorkspaceRecordForTests(workspaceId)
+}
+
 /** Opens workspaces `from..to-1`, answering each instance in order. */
-async function openRange(from: number, to: number): Promise<LoroDoc[]> {
-  const docs: LoroDoc[] = []
-  for (let i = from; i < to; i += 1) docs.push(await getWorkspaceDoc(ws(i)))
+async function openRange(from: number, to: number): Promise<object[]> {
+  const docs: object[] = []
+  for (let i = from; i < to; i += 1) docs.push(await openHeld(ws(i)))
   return docs
 }
 
@@ -80,37 +99,37 @@ describe('the workspace-record cache bound', () => {
     // Newest first, so every check is a hit on an entry already most-recent
     // relative to the ones still to be checked — no check evicts another.
     for (let i = N; i >= 1; i -= 1) {
-      expect(await getWorkspaceDoc(ws(i))).toBe(opened[i])
+      expect(await openHeld(ws(i))).toBe(opened[i])
     }
-    expect(await getWorkspaceDoc(ws(0))).not.toBe(opened[0])
+    expect(await openHeld(ws(0))).not.toBe(opened[0])
   })
 
   it('counts a hit as a use, so a touched record outlives an untouched one', async () => {
     const N = workspaceDocCacheMaxEntries()
     const opened = await openRange(0, N)
-    expect(await getWorkspaceDoc(ws(0))).toBe(opened[0])
+    expect(await openHeld(ws(0))).toBe(opened[0])
 
-    await getWorkspaceDoc(ws(N))
+    await openHeld(ws(N))
 
-    expect(await openWorkspaceDocIfStored(ws(0))).toBe(opened[0])
-    expect(await openWorkspaceDocIfStored(ws(1))).not.toBe(opened[1])
+    expect(await reopenHeld(ws(0))).toBe(opened[0])
+    expect(await reopenHeld(ws(1))).not.toBe(opened[1])
   })
 
   it('reopens an evicted record with the same content and frontier', async () => {
     const N = workspaceDocCacheMaxEntries()
-    const first = await getWorkspaceDoc(ws(0))
-    first.getMap('probe').set('k', 'v')
-    first.commit()
-    await saveWorkspaceDoc(ws(0), first)
-    const content = first.toJSON()
-    const frontier = first.oplogVersion()
+    await editWorkspaceRecord(ws(0), (record) => record.getMap('probe').set('k', 'v'))
+    const first = heldRecord(ws(0))
+    const before = await workspaceRecordCopy(ws(0))
+    const content = before.toJSON()
+    const frontier = before.oplogVersion()
 
     await openRange(1, N + 1)
-    const reopened = await getWorkspaceDoc(ws(0))
+    const reopened = await openHeld(ws(0))
+    const after = await workspaceRecordCopy(ws(0))
 
     expect(reopened).not.toBe(first)
-    expect(reopened.toJSON()).toEqual(content)
-    expect(reopened.oplogVersion().compare(frontier)).toBe(0)
+    expect(after.toJSON()).toEqual(content)
+    expect(after.oplogVersion().compare(frontier)).toBe(0)
   })
 
   it('never evicts a record whose write lock is held', async () => {
@@ -119,19 +138,25 @@ describe('the workspace-record cache bound', () => {
     const released = new Promise<void>((resolve) => {
       release = resolve
     })
-    let held!: LoroDoc
-    let seenAfter!: LoroDoc
+    let held!: object
+    let seenAfter!: object
     let holder!: Promise<void>
     const entered = new Promise<void>((resolveEntered) => {
       holder = withWorkspaceWriteLock(ws(0), async () => {
-        held = await getWorkspaceDoc(ws(0))
         // An edit not yet saved: exactly what an eviction here would lose.
-        held.getMap('probe').set('unsaved', true)
-        held.commit()
+        await editWorkspaceRecord(
+          ws(0),
+          (record) => record.getMap('probe').set('unsaved', true),
+          undefined,
+          {
+            save: false,
+          },
+        )
+        held = heldRecord(ws(0))
         resolveEntered()
         await released
-        seenAfter = await getWorkspaceDoc(ws(0))
-        await saveWorkspaceDoc(ws(0), seenAfter)
+        seenAfter = await openHeld(ws(0))
+        await editWorkspaceRecord(ws(0), () => {})
       })
     })
     await entered
@@ -141,23 +166,23 @@ describe('the workspace-record cache bound', () => {
     await holder
 
     expect(seenAfter).toBe(held)
-    expect(seenAfter.getMap('probe').get('unsaved')).toBe(true)
+    expect((await workspaceRecordCopy(ws(0))).getMap('probe').get('unsaved')).toBe(true)
   })
 
   it('drops a record once its lock is released and it is least recently used', async () => {
     const N = workspaceDocCacheMaxEntries()
-    let held!: LoroDoc
+    let held!: object
     await withWorkspaceWriteLock(ws(0), async () => {
-      held = await getWorkspaceDoc(ws(0))
+      held = await openHeld(ws(0))
       await openRange(1, N + 1)
     })
     // The lock's queue entry clears a few microtasks after the holder
     // returns; until then the record still counts as in use.
     await vi.waitFor(() => expect(workspaceWriteLockInUse(ws(0))).toBe(false))
 
-    await getWorkspaceDoc(ws(N + 1))
+    await openHeld(ws(N + 1))
 
-    expect(await openWorkspaceDocIfStored(ws(0))).not.toBe(held)
+    expect(await reopenHeld(ws(0))).not.toBe(held)
   })
 })
 
@@ -212,8 +237,7 @@ describe('a dropped workspace record and what was derived from it', () => {
 
   it('announces a foreign edit made while the record was out of the cache', async () => {
     await saveDocument(ws(0), 'd', canvasDoc('before'), { kind: 'spatial' })
-    const replica = new LoroDoc()
-    replica.import((await getWorkspaceDoc(ws(0))).export({ mode: 'snapshot' }))
+    const replica = await workspaceRecordCopy(ws(0))
     const off = onWorkspaceDocUpdated((workspaceId, update) => {
       if (workspaceId === ws(0)) replica.import(update)
     })
@@ -221,7 +245,7 @@ describe('a dropped workspace record and what was derived from it', () => {
       await openRange(1, workspaceDocCacheMaxEntries() + 1)
       await foreignEdit(ws(0), 'd', 'after')
 
-      const reopened = await getWorkspaceDoc(ws(0))
+      const reopened = await workspaceRecordCopy(ws(0))
 
       expect(replica.version().compare(reopened.version())).toBe(0)
     } finally {
@@ -241,7 +265,7 @@ describe('a dropped workspace record and what was derived from it', () => {
     })
     try {
       await foreignEdit(ws(0), 'd', 'after')
-      await getWorkspaceDoc(ws(0))
+      await workspaceRecordCopy(ws(0))
 
       expect(announced).toEqual([])
     } finally {
@@ -257,7 +281,7 @@ describe('the bound after a write lock releases', () => {
     const released = new Promise<void>((resolve) => {
       release = resolve
     })
-    const held: LoroDoc[] = []
+    const held: object[] = []
     const entered: Promise<void>[] = []
     const holders: Promise<void>[] = []
     for (let i = 0; i < N; i += 1) {
@@ -265,7 +289,7 @@ describe('the bound after a write lock releases', () => {
         new Promise<void>((resolveEntered) => {
           holders.push(
             withWorkspaceWriteLock(ws(i), async () => {
-              held[i] = await getWorkspaceDoc(ws(i))
+              held[i] = await openHeld(ws(i))
               resolveEntered()
               await released
             }),
@@ -275,13 +299,13 @@ describe('the bound after a write lock releases', () => {
     }
     await Promise.all(entered)
     // Every resident record is locked, so this one runs the cache over the bound.
-    const extra = await getWorkspaceDoc(ws(N))
+    const extra = await openHeld(ws(N))
     release()
     await Promise.all(holders)
     await vi.waitFor(() => expect(workspaceWriteLockInUse(ws(0))).toBe(false))
 
-    expect(await getWorkspaceDoc(ws(N))).toBe(extra)
+    expect(await openHeld(ws(N))).toBe(extra)
 
-    expect(await openWorkspaceDocIfStored(ws(0))).not.toBe(held[0])
+    expect(await reopenHeld(ws(0))).not.toBe(held[0])
   })
 })

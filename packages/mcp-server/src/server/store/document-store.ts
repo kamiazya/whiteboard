@@ -58,7 +58,6 @@ export {
   emitWorkspaceDocUpdated,
   evictWorkspaceDocCache,
   followWorkspaceRecord,
-  getWorkspaceDoc,
   loadDocument,
   onWorkspaceDocUpdated,
 } from './workspace-doc-cache.js'
@@ -173,7 +172,7 @@ async function findRegistryRow(
 /**
  * The workspaces REGISTRY, read from the daemon's `workspaces` table — the
  * one row-shaped truth the collapse kept (who this daemon keeps, not what
- * they contain). `saveWorkspaceDoc` upserts it, so a workspace exists here
+ * they contain). `saveRecord` upserts it, so a workspace exists here
  * exactly when a stored record does.
  *
  * Serves ADR-0019's `segment`/`displayName` identity layers when the row

@@ -1,4 +1,3 @@
-import './_test-loro-records.js'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -92,7 +91,7 @@ describe('names-store', () => {
   // what every replica converges on.
   it('mirrors pin and unpin into the workspace record pinned list', async () => {
     const { resolveDocumentIdAtPath } = await import('./document-store.js')
-    const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
+    const { storedWorkspaceRecordCopy } = await import('./_test-workspace-record.js')
     const { readPinnedDocumentIds } = await import('@kamiazya/whiteboard-loro-adapter')
     const idOf = async (path: string) => {
       const id = await resolveDocumentIdAtPath('01WWQTBYFRHW3XPWFX2J1XKH6P', path)
@@ -102,13 +101,15 @@ describe('names-store', () => {
 
     await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'b', true)
     await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'a', true)
-    const doc = await openWorkspaceDocIfStored('01WWQTBYFRHW3XPWFX2J1XKH6P')
-    expect(doc).not.toBeNull()
-    if (doc === null) throw new Error('unreachable')
-    expect(readPinnedDocumentIds(doc)).toEqual([await idOf('b'), await idOf('a')])
+    const pinned = async () => {
+      const doc = await storedWorkspaceRecordCopy('01WWQTBYFRHW3XPWFX2J1XKH6P')
+      if (doc === null) throw new Error('unreachable')
+      return readPinnedDocumentIds(doc)
+    }
+    expect(await pinned()).toEqual([await idOf('b'), await idOf('a')])
 
     await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'b', false)
-    expect(readPinnedDocumentIds(doc)).toEqual([await idOf('a')])
+    expect(await pinned()).toEqual([await idOf('a')])
   })
 
   it('setWorkspaceName persists the workspace name and loadWorkspaceNames returns it', async () => {
@@ -208,9 +209,9 @@ describe('names-store', () => {
 
   describe('document display name in the workspace record', () => {
     async function nodeName(path: string): Promise<string | undefined> {
-      const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
+      const { storedWorkspaceRecordCopy } = await import('./_test-workspace-record.js')
       const { resolveWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')
-      const doc = await openWorkspaceDocIfStored('01WWQTBYFRHW3XPWFX2J1XKH6P')
+      const doc = await storedWorkspaceRecordCopy('01WWQTBYFRHW3XPWFX2J1XKH6P')
       if (doc === null) throw new Error('no workspace record')
       const entry = resolveWorkspaceDocument(doc, path)
       if (entry === null) throw new Error(`no document at ${path}`)
@@ -231,8 +232,7 @@ describe('names-store', () => {
     // the document gone; the name of a document that no longer exists is not an error.
     it('writes nothing, and does not fail, for a document removed while it waited for the lock', async () => {
       const { resolveDocumentIdAtPath } = await import('./document-store.js')
-      const { saveWorkspaceDoc } = await import('./workspace-doc-cache.js')
-      const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
+      const { editWorkspaceRecord } = await import('./_test-workspace-record.js')
       const { deleteWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')
       const { withWorkspaceWriteLock } = await import('./workspace-lock.js')
       const documentId = await resolveDocumentIdAtPath('01WWQTBYFRHW3XPWFX2J1XKH6P', 'path')
@@ -250,10 +250,9 @@ describe('names-store', () => {
       try {
         const holder = withWorkspaceWriteLock('01WWQTBYFRHW3XPWFX2J1XKH6P', async () => {
           await holderMayFinish
-          const doc = await openWorkspaceDocIfStored('01WWQTBYFRHW3XPWFX2J1XKH6P')
-          if (doc === null) throw new Error('no workspace record')
-          deleteWorkspaceDocument(doc, { documentId })
-          await saveWorkspaceDoc('01WWQTBYFRHW3XPWFX2J1XKH6P', doc)
+          await editWorkspaceRecord('01WWQTBYFRHW3XPWFX2J1XKH6P', (doc) =>
+            deleteWorkspaceDocument(doc, { documentId }),
+          )
         })
         const rename = setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'path', 'Too late')
         await pathCheckedSignal
@@ -276,17 +275,16 @@ describe('names-store', () => {
   // nothing of it, so an id can outlive its document; it names no path to report.
   it('omits a pinned document that has left the tree, keeping the others in order', async () => {
     const { resolveDocumentIdAtPath } = await import('./document-store.js')
-    const { saveWorkspaceDoc } = await import('./workspace-doc-cache.js')
-    const { openWorkspaceDocIfStored } = await import('./workspace-doc-cache.js')
+    const { editWorkspaceRecord } = await import('./_test-workspace-record.js')
     const { deleteWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')
     await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'a', true)
     await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'b', true)
     await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'c1', true)
     const gone = await resolveDocumentIdAtPath('01WWQTBYFRHW3XPWFX2J1XKH6P', 'b')
-    const doc = await openWorkspaceDocIfStored('01WWQTBYFRHW3XPWFX2J1XKH6P')
-    if (doc === null || gone === null) throw new Error('fixture missing')
-    deleteWorkspaceDocument(doc, { documentId: gone })
-    await saveWorkspaceDoc('01WWQTBYFRHW3XPWFX2J1XKH6P', doc)
+    if (gone === null) throw new Error('fixture missing')
+    await editWorkspaceRecord('01WWQTBYFRHW3XPWFX2J1XKH6P', (doc) =>
+      deleteWorkspaceDocument(doc, { documentId: gone }),
+    )
 
     expect((await loadWorkspaceNames('01WWQTBYFRHW3XPWFX2J1XKH6P')).pinned).toEqual(['a', 'c1'])
   })
