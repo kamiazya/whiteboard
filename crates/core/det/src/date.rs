@@ -149,7 +149,7 @@ mod tests {
     /// Times across the whole range and, densely, across years 0..=9999, where
     /// the year is four digits and the other branch of the year rule runs.
     fn any_time() -> impl Strategy<Value = f64> {
-        prop_oneof![-8.64e15_f64..=8.64e15, -6.2167219200e13_f64..=2.5340230080e14]
+        prop_oneof![-8.64e15_f64..=8.64e15, -62_167_219_200_000.0_f64..=253_402_300_799_999.0]
     }
 
     #[test]
@@ -179,9 +179,8 @@ mod tests {
     #[test]
     fn a_whole_millisecond_is_refused_exactly_past_the_range() {
         let refused = Floor::new("a time past the range");
-        check(-10_000_000_000_000_000_i64..=10_000_000_000_000_000, None, |n| {
-            #[expect(clippy::cast_precision_loss, reason = "the property is about magnitude")]
-            let ms = n as f64;
+        let whole = (-1e16_f64..=1e16).prop_map(f64::trunc);
+        check(whole, None, |ms| {
             refused.draw(ms.abs() > 8.64e15);
             prop_assert_eq!(iso_string(ms).is_err(), ms.abs() > 8.64e15);
             Ok(())
