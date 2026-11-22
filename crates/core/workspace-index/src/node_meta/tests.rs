@@ -38,6 +38,7 @@ fn a_document_reads_as_what_its_meta_records() {
     let node = add_node(&doc, None, &document_meta(ID_A, "a"));
     let meta = meta_of(&doc, node);
     meta.insert("name", "Plan").expect("set");
+    meta.insert("nameChosen", true).expect("set");
     meta.insert("createdAt", 5_i64).expect("set");
     meta.insert("updatedAt", 6.0_f64).expect("set");
     assert_eq!(
@@ -47,6 +48,7 @@ fn a_document_reads_as_what_its_meta_records() {
             segment: "a".to_owned(),
             kind: "markdown".to_owned(),
             name: Some("Plan".to_owned()),
+            name_chosen: true,
             created_at: Some(5.0),
             updated_at: Some(6.0),
         }))

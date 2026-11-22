@@ -25,6 +25,12 @@ impl std::fmt::Display for WriteError {
 
 impl std::error::Error for WriteError {}
 
+impl From<loro::LoroEncodeError> for WriteError {
+    fn from(error: loro::LoroEncodeError) -> Self {
+        refused(error)
+    }
+}
+
 impl From<loro::LoroError> for WriteError {
     fn from(error: loro::LoroError) -> Self {
         refused(error)

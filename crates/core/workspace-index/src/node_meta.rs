@@ -18,6 +18,8 @@ pub struct DocumentMeta {
     pub segment: String,
     pub kind: String,
     pub name: Option<String>,
+    /// Set beside a name somebody chose, and cleared with it.
+    pub name_chosen: bool,
     pub created_at: Option<f64>,
     pub updated_at: Option<f64>,
 }
@@ -99,6 +101,7 @@ fn as_document(raw: &[(String, Value)]) -> Option<DocumentMeta> {
         segment: optional_text(raw, "segment").ok().flatten()?,
         kind: kind.clone(),
         name: optional_text(raw, "name").ok()?,
+        name_chosen: field(raw, "nameChosen").is_some(),
         created_at: optional_integer(raw, "createdAt").ok()?,
         updated_at: optional_integer(raw, "updatedAt").ok()?,
     })

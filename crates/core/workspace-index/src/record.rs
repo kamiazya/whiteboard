@@ -33,7 +33,15 @@ const CONTENT_KEYS: [&str; 13] = [
 pub(crate) const WORKSPACE_META_KEY: &str = "workspaceMeta";
 pub(crate) const PINNED_KEY: &str = "pinned";
 
-/// A workspace record held for reading.
+/// A document as the record stores it, placed by its ancestry.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PlacedDocument {
+    pub meta: DocumentMeta,
+    pub path: String,
+    pub content_digest: String,
+}
+
+/// A workspace record held for reading and for writing.
 pub struct WorkspaceRecord {
     doc: LoroDoc,
 }
@@ -131,6 +139,19 @@ impl WorkspaceRecord {
                 Some(self.found_of(&walked, meta, false))
             }
             _ => None,
+        })
+    }
+
+    /// The first document in tree order that carries `document_id`, as it
+    /// stands: every stored field, its path and the digest of its content.
+    #[must_use]
+    pub fn placed_document(&self, document_id: &str) -> Option<PlacedDocument> {
+        let walked = self.document_node(document_id)?;
+        let NodeRead::Document(meta) = &walked.read else { return None };
+        Some(PlacedDocument {
+            meta: meta.clone(),
+            path: walked.path.clone(),
+            content_digest: content_digest_of(&self.content_of(&walked)),
         })
     }
 

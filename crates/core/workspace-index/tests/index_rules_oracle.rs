@@ -49,16 +49,14 @@ const REPLAYED: &[(&str, usize)] = &[
     ("setDocumentName", 58),
     ("createDocument", 76),
     ("moveDocument", 56),
+    ("deleteDocument", 31),
+    ("purgeTrashEntry", 24),
+    ("restoreDocument", 52),
 ];
 
 /// The ops not replayed, with their rows: the index's writes over a record's
 /// snapshot bytes that are not ported yet.
-const DEFERRED: &[(&str, usize)] = &[
-    ("restoreDocument", 52),
-    ("deleteDocument", 31),
-    ("duplicateDocument", 28),
-    ("purgeTrashEntry", 24),
-];
+const DEFERRED: &[(&str, usize)] = &[("duplicateDocument", 28)];
 
 fn str_of(row: &Json, key: &str) -> Option<String> {
     row[key].as_str().map(str::to_owned)

@@ -27,6 +27,7 @@ pub mod move_collision;
 pub mod node_meta;
 pub mod record;
 pub mod restore_judgement;
+pub mod subtree;
 #[cfg(test)]
 mod test_record;
 pub mod trash;
@@ -50,10 +51,12 @@ pub use index_rules::{
     refuse_moved_name, refuse_sibling_document_name, same_display_name,
 };
 pub use index_writes::{
-    CreateDocument, MoveDocument, Outcome, SetDocumentName, SetDocumentPinned, SetFolderName,
-    create_document, move_document, set_document_name_of, set_document_pinned, set_folder_name_of,
+    CreateDocument, DeleteDocument, MoveDocument, Outcome, PurgeTrashEntry, RestoreDocument,
+    SetDocumentName, SetDocumentPinned, SetFolderName, TrashBlobs, create_document,
+    delete_document, move_document, purge_trash_entry, restore_document, set_document_name_of,
+    set_document_pinned, set_folder_name_of,
 };
 pub use move_collision::move_collision;
-pub use record::WorkspaceRecord;
+pub use record::{PlacedDocument, WorkspaceRecord};
 pub use restore_judgement::{Placement, restorable_trash_documents};
 pub use trash::TrashRow;

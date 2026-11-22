@@ -5,11 +5,13 @@
 use crate::display_name::js_trim;
 use crate::node_meta::{NodeRead, WORKSPACE_TREE_KEY};
 use crate::record::{PINNED_KEY, WORKSPACE_META_KEY};
+use crate::trash::WORKSPACE_TRASH_KEY;
 use crate::walk::{Walked, walk};
 use std::collections::BTreeMap;
 use whiteboard_crdt::{
     ContainerKind, LoroDoc, LoroValue, NodeId, WriteError, commit, create_node, delete_meta,
-    delete_node, move_node, open_meta_container, open_root_list, set_meta,
+    delete_node, delete_root_entry, move_node, open_meta_container, open_root_list, set_meta,
+    set_root_entry,
 };
 use whiteboard_model::Value;
 
@@ -250,4 +252,19 @@ pub fn delete_node_at_path(doc: &LoroDoc, path: &str) -> Result<bool, WriteError
     delete_node(doc, WORKSPACE_TREE_KEY, found.id)?;
     commit(doc);
     Ok(true)
+}
+
+/// Records what a delete evacuated in the trash map beside the tree, under the
+/// document's id; the bytes live elsewhere, only the row naming them syncs.
+pub fn record_trash_entry(doc: &LoroDoc, document_id: &str, row: &Value) -> Result<(), WriteError> {
+    set_root_entry(doc, WORKSPACE_TRASH_KEY, document_id, row)?;
+    commit(doc);
+    Ok(())
+}
+
+/// Takes a document's row out of the trash map.
+pub fn forget_trash_entry(doc: &LoroDoc, document_id: &str) -> Result<(), WriteError> {
+    delete_root_entry(doc, WORKSPACE_TRASH_KEY, document_id)?;
+    commit(doc);
+    Ok(())
 }

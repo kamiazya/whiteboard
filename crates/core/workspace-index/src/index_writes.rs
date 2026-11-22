@@ -5,25 +5,33 @@
 //! The ids a write mints and the clock it stamps with are handed in, so a keeper
 //! (and the oracle replay) decides them.
 
-use crate::ceiling::{documents_in, refuse_new_documents, refuse_new_folders_at};
+use crate::ceiling::{
+    documents_in, folders_in, folders_missing_for, refuse_new_documents, refuse_new_folders,
+    refuse_new_folders_at,
+};
 use crate::display_name::{Named, NamedKind, js_trim, sibling_display_name_taken};
 use crate::document_path::is_self_or_descendant;
 use crate::entry::{DocumentEntry, entry_of};
 use crate::index_error::IndexError;
 use crate::index_rules::{
-    DisplayNameTaken, distinct_unnamed_path, refuse_moved_name, refuse_sibling_document_name,
-    same_display_name,
+    BlobRef, DisplayNameTaken, TrashEntry, distinct_unnamed_path, is_named_by_another_row,
+    refuse_moved_name, refuse_sibling_document_name, same_display_name,
 };
 use crate::move_collision::move_collision;
 use crate::node_meta::NodeRead;
-use crate::record::WorkspaceRecord;
+use crate::record::{PlacedDocument, WorkspaceRecord};
+use crate::restore_judgement::{Placement, restorable_trash_documents};
+use crate::subtree::{PlaceError, export_subtree_at, import_subtree};
+use crate::trash::TrashRow;
 use crate::tree_write::{
-    NewDocument, create_document_at_path, move_node_to_path, prune_empty_folders,
+    NewDocument, create_document_at_path, delete_node_at_path, forget_trash_entry,
+    move_node_to_path, prune_empty_folders, reapply_folder_names, record_trash_entry,
     set_document_name, set_folder_name, set_pinned,
 };
 use crate::write_input::{
     check_create, require_folder_name, require_id, require_name, require_path,
 };
+use whiteboard_model::Value;
 
 /// What a write answered, and whether the keeper must save the record.
 #[derive(Debug, Clone, PartialEq)]
@@ -35,6 +43,10 @@ pub struct Outcome<T> {
 impl<T> Outcome<T> {
     fn saved(value: T) -> Self {
         Self { value, saved: true }
+    }
+
+    fn unchanged(value: T) -> Self {
+        Self { value, saved: false }
     }
 }
 
@@ -241,4 +253,242 @@ pub fn set_folder_name_of(
     }
     set_folder_name(record.doc(), input.path, input.name)?;
     Ok(Outcome::saved(()))
+}
+
+/// Where a deleted document's bytes are kept, by what they hold: the keeper's
+/// content-addressed store, handed in so the index never learns where it is.
+pub trait TrashBlobs {
+    /// Stores `bytes` and answers the address they are kept at.
+    fn put(&mut self, bytes: Vec<u8>) -> BlobRef;
+    /// The bytes kept at `blob`, or `None` when nothing is.
+    fn get(&self, blob: &BlobRef) -> Option<Vec<u8>>;
+    /// Lets go of the bytes kept at `blob`.
+    fn delete(&mut self, blob: &BlobRef);
+}
+
+/// `deleteDocument`'s input.
+pub struct DeleteDocument<'a> {
+    pub workspace_id: &'a str,
+    pub path: &'a str,
+}
+
+/// The most folder names one trash row keeps — the nearest, when more were named.
+const TRASH_FOLDER_NAMES_MAX: usize = 256;
+
+/// The named folders above `path` among `named`, shallowest first, as a trash
+/// row keeps them so a restore can show them again.
+fn named_folders_above(named: &[(String, String)], path: &str) -> Vec<(String, String)> {
+    let segments: Vec<&str> = path.split('/').collect();
+    let mut above: Vec<(String, String)> = (1..segments.len())
+        .filter_map(|depth| {
+            let folder = segments.get(..depth)?.join("/");
+            named.iter().find(|(held, _)| *held == folder).cloned()
+        })
+        .collect();
+    above.drain(..above.len().saturating_sub(TRASH_FOLDER_NAMES_MAX));
+    above
+}
+
+fn text(value: &str) -> Value {
+    Value::String(value.to_owned())
+}
+
+/// The trash row a delete records, as the map stores it.
+fn trash_row_value(
+    document: (&str, Option<&str>),
+    path: &str,
+    folder_names: &[(String, String)],
+    blob: &BlobRef,
+    deleted_at: f64,
+) -> Value {
+    let mut entries = vec![
+        ("documentId".to_owned(), text(document.0)),
+        ("path".to_owned(), text(path)),
+        ("deletedAt".to_owned(), Value::Number(deleted_at)),
+        (
+            "blob".to_owned(),
+            Value::Map(vec![
+                ("algorithm".to_owned(), text(&blob.algorithm)),
+                ("digestHex".to_owned(), text(&blob.digest_hex)),
+            ]),
+        ),
+    ];
+    if let Some(name) = document.1 {
+        entries.push(("name".to_owned(), text(name)));
+    }
+    if !folder_names.is_empty() {
+        let rows = folder_names
+            .iter()
+            .map(|(path, name)| {
+                Value::Map(vec![("path".to_owned(), text(path)), ("name".to_owned(), text(name))])
+            })
+            .collect();
+        entries.push(("folderNames".to_owned(), Value::Seq(rows)));
+    }
+    Value::Map(entries)
+}
+
+/// Stores a document's bytes and records the trash row naming them; the delete
+/// follows only once both stand.
+fn evacuate(
+    record: &WorkspaceRecord,
+    document: (&str, Option<&str>),
+    path: &str,
+    blobs: &mut dyn TrashBlobs,
+    now_ms: f64,
+) -> Result<(), IndexError> {
+    let Some(bytes) = export_subtree_at(record, path)? else { return Ok(()) };
+    let blob = blobs.put(bytes);
+    let folder_names = named_folders_above(&record.folder_names(), path);
+    let row = trash_row_value(document, path, &folder_names, &blob, now_ms);
+    record_trash_entry(record.doc(), document.0, &row)?;
+    Ok(())
+}
+
+/// `deleteDocument`: the node at the path leaves the tree, a document after
+/// its bytes are stored and its row recorded, and the folders it emptied go
+/// with it. A path nothing holds is already gone.
+pub fn delete_document(
+    record: &WorkspaceRecord,
+    input: &DeleteDocument<'_>,
+    blobs: &mut dyn TrashBlobs,
+    now_ms: f64,
+) -> Result<Outcome<()>, IndexError> {
+    let nodes = record.index_nodes();
+    let Some(target) = nodes.iter().find(|node| node.path == input.path) else {
+        return Ok(Outcome::unchanged(()));
+    };
+    // Every document can hold children, and only the NAMED path is evacuated,
+    // so a cascade would destroy the descendants with no trash row to bring
+    // them back: the caller names what it is destroying.
+    let below = nodes
+        .iter()
+        .find(|node| node.path != input.path && is_self_or_descendant(&node.path, input.path));
+    if let Some(descendant) = below {
+        return Err(IndexError::HasDescendants {
+            path: input.path.to_owned(),
+            detail: format!("Delete \"{}\" and any others below it first.", descendant.path),
+        });
+    }
+    // Evacuate BEFORE removing: a deleted node cannot be moved back and a shallow
+    // snapshot drops its content, so nothing live can serve as the copy afterwards.
+    if let Some(document_id) = &target.document_id {
+        evacuate(record, (document_id, target.name.as_deref()), input.path, blobs, now_ms)?;
+    }
+    delete_node_at_path(record.doc(), input.path)?;
+    prune_empty_folders(record.doc())?;
+    Ok(Outcome::saved(()))
+}
+
+fn trash_entry(row: &TrashRow) -> TrashEntry {
+    TrashEntry {
+        document_id: row.document_id.clone(),
+        blob: BlobRef { algorithm: row.algorithm.clone(), digest_hex: row.digest_hex.clone() },
+    }
+}
+
+/// Lets go of a trash row's bytes unless another row names the same ones: a
+/// blob is content-addressed, so one copy serves every row that names it.
+fn drop_blob_unless_named(rows: &[TrashRow], row: &TrashRow, blobs: &mut dyn TrashBlobs) {
+    let entries: Vec<TrashEntry> = rows.iter().map(trash_entry).collect();
+    let entry = trash_entry(row);
+    if !is_named_by_another_row(&entries, &entry) {
+        blobs.delete(&entry.blob);
+    }
+}
+
+/// `purgeTrashEntry`'s input.
+pub struct PurgeTrashEntry<'a> {
+    pub workspace_id: &'a str,
+    pub document_id: &'a str,
+}
+
+/// `purgeTrashEntry`: destroys a trashed document for good. The bytes go before
+/// the row, so a failure part-way leaves the row standing and a second purge
+/// finishes the job. `false`, with nothing written, when no row names it.
+pub fn purge_trash_entry(
+    record: &WorkspaceRecord,
+    input: &PurgeTrashEntry<'_>,
+    blobs: &mut dyn TrashBlobs,
+) -> Result<Outcome<bool>, IndexError> {
+    let rows = record.trash();
+    let Some(row) = rows.iter().find(|row| row.document_id == input.document_id) else {
+        return Ok(Outcome::unchanged(false));
+    };
+    drop_blob_unless_named(&rows, row, blobs);
+    forget_trash_entry(record.doc(), &row.document_id)?;
+    Ok(Outcome::saved(true))
+}
+
+/// `restoreDocument`'s input.
+pub struct RestoreDocument<'a> {
+    pub workspace_id: &'a str,
+    pub document_id: &'a str,
+}
+
+/// What a restore places: the bytes, the folder they go under and what they hold.
+struct Restoring {
+    bytes: Vec<u8>,
+    parent: Option<String>,
+    placement: Placement,
+}
+
+/// What a restore of a trash row stops at, before anything is placed: `None`
+/// for a row, a copy or bytes that cannot be brought back.
+fn restorable(
+    record: &WorkspaceRecord,
+    row: &TrashRow,
+    blobs: &dyn TrashBlobs,
+) -> Result<Option<Restoring>, IndexError> {
+    // A second node under one id lists twice and contests its path; the row
+    // stays, since the trashed copy may hold what the live one lacks.
+    if record.document_node(&row.document_id).is_some() {
+        return Ok(None);
+    }
+    let blob = BlobRef { algorithm: row.algorithm.clone(), digest_hex: row.digest_hex.clone() };
+    // The row survives a missing blob: it is the only record the document existed.
+    let Some(bytes) = blobs.get(&blob) else { return Ok(None) };
+    let parent = row.path.rsplit_once('/').map(|(above, _)| above.to_owned());
+    let judged = restorable_trash_documents(&bytes, &row.document_id, parent.as_deref())
+        .map_err(IndexError::UnreadableTrashBytes)?;
+    Ok(judged.map(|placement| Restoring { bytes, parent, placement }))
+}
+
+/// `restoreDocument`: brings a deleted document back under the id it had, as a
+/// copy (loro will not revive a deleted node) so a share link still resolves.
+/// `None`, with nothing written, when the row, the bytes or the room is not there.
+pub fn restore_document(
+    record: &WorkspaceRecord,
+    input: &RestoreDocument<'_>,
+    blobs: &mut dyn TrashBlobs,
+) -> Result<Outcome<Option<PlacedDocument>>, IndexError> {
+    let rows = record.trash();
+    let Some(row) = rows.iter().find(|row| row.document_id == input.document_id) else {
+        return Ok(Outcome::unchanged(None));
+    };
+    let Some(Restoring { bytes, parent, placement }) = restorable(record, row, blobs)? else {
+        return Ok(Outcome::unchanged(None));
+    };
+    // A refusal rather than `None`: the row is fine and restorable once the workspace has room.
+    let nodes = record.index_nodes();
+    refuse_new_documents(documents_in(&nodes), placement.documents)?;
+    refuse_new_folders(
+        folders_in(&nodes),
+        placement.folders.saturating_add(folders_missing_for(&nodes, &row.path)),
+    )?;
+    let placed = match import_subtree(record, &bytes, parent.as_deref()) {
+        Ok(Some(document_id)) => document_id,
+        Ok(None) => return Ok(Outcome::unchanged(None)),
+        Err(PlaceError::Unreadable(error)) => return Err(IndexError::UnreadableTrashBytes(error)),
+        Err(PlaceError::Refused(error)) => return Err(error.into()),
+    };
+    if let Some(names) = &row.folder_names {
+        reapply_folder_names(record.doc(), names)?;
+    }
+    forget_trash_entry(record.doc(), &row.document_id)?;
+    // After the save in a keeper, not before: a failure between the two would
+    // leave a row naming bytes that are gone. The blob is let go of by the
+    // keeper's save and not here.
+    drop_blob_unless_named(&record.trash(), row, blobs);
+    Ok(Outcome::saved(record.placed_document(&placed)))
 }

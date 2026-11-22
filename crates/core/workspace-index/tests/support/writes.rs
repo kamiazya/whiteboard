@@ -10,8 +10,10 @@ use whiteboard_crdt::{deep_value_with_id, version_pairs};
 use whiteboard_model::Value;
 use whiteboard_model::encoding::base64_to_bytes;
 use whiteboard_workspace_index::{
-    CreateDocument, IndexError, MoveDocument, SetDocumentName, SetDocumentPinned, SetFolderName,
-    WorkspaceRecord, create_document, move_document, set_document_name_of, set_document_pinned,
+    BlobRef, CreateDocument, DeleteDocument, IndexError, MoveDocument, PlacedDocument,
+    PurgeTrashEntry, RestoreDocument, SetDocumentName, SetDocumentPinned, SetFolderName,
+    TrashBlobs, WorkspaceRecord, create_document, delete_document, move_document,
+    purge_trash_entry, restore_document, set_document_name_of, set_document_pinned,
     set_folder_name_of,
 };
 
@@ -81,6 +83,7 @@ fn refused(error: &IndexError) -> Json {
                 "displayName": taken.display_name,
             }),
         ),
+        IndexError::UnreadableTrashBytes(_) => json!({ "err": "string" }),
         other => json!({ "err": format!("{other:?}") }),
     }
 }
@@ -89,6 +92,7 @@ fn refused(error: &IndexError) -> Json {
 /// recorder's store draws new digests from.
 pub(crate) struct Blobs {
     pub(crate) held: BTreeMap<String, Vec<u8>>,
+    next: u64,
 }
 
 impl Blobs {
@@ -108,8 +112,53 @@ impl Blobs {
                     .collect()
             })
             .unwrap_or_default();
-        Self { held }
+        Self { held, next: 0 }
     }
+}
+
+impl TrashBlobs for Blobs {
+    fn put(&mut self, bytes: Vec<u8>) -> BlobRef {
+        let digest_hex = loop {
+            self.next += 1;
+            let digest = format!("{:064}", self.next);
+            if !self.held.contains_key(&digest) {
+                break digest;
+            }
+        };
+        self.held.insert(digest_hex.clone(), bytes);
+        BlobRef { algorithm: "sha-256".to_owned(), digest_hex }
+    }
+
+    fn get(&self, blob: &BlobRef) -> Option<Vec<u8>> {
+        self.held.get(&blob.digest_hex).cloned()
+    }
+
+    fn delete(&mut self, blob: &BlobRef) {
+        self.held.remove(&blob.digest_hex);
+    }
+}
+
+/// A restored document as the record stores it, in the recorder's shape.
+fn placed_json(placed: &PlacedDocument) -> Json {
+    let meta = &placed.meta;
+    let mut out = json!({
+        "documentId": meta.document_id,
+        "segment": meta.segment,
+        "kind": meta.kind,
+        "path": placed.path,
+        "contentDigest": placed.content_digest,
+    });
+    for (key, value) in [
+        ("name", meta.name.clone().map(Json::from)),
+        ("nameChosen", meta.name_chosen.then(|| Json::from(true))),
+        ("createdAt", meta.created_at.map(|n| json_of(&Value::Number(n)))),
+        ("updatedAt", meta.updated_at.map(|n| json_of(&Value::Number(n)))),
+    ] {
+        if let (Some(value), Some(fields)) = (value, out.as_object_mut()) {
+            fields.insert(key.to_owned(), value);
+        }
+    }
+    out
 }
 
 type Done = Result<(Json, bool), IndexError>;
@@ -124,6 +173,7 @@ fn run(
     record: &WorkspaceRecord,
     args: &Json,
     mint: &mut dyn FnMut() -> String,
+    blobs: &mut Blobs,
 ) -> Option<Done> {
     let workspace_id = text(args, "workspaceId");
     let name = args["name"].as_str();
@@ -167,6 +217,27 @@ fn run(
                 SetFolderName { workspace_id: &workspace_id, path: &text(args, "path"), name };
             set_folder_name_of(record, &input).map(|done| (Json::Null, done.saved))
         }
+        "deleteDocument" => {
+            let input = DeleteDocument { workspace_id: &workspace_id, path: &text(args, "path") };
+            delete_document(record, &input, blobs, RECORDED_NOW)
+                .map(|done| (Json::Null, done.saved))
+        }
+        "purgeTrashEntry" => {
+            let input = PurgeTrashEntry {
+                workspace_id: &workspace_id,
+                document_id: &text(args, "documentId"),
+            };
+            purge_trash_entry(record, &input, blobs)
+                .map(|done| (Json::from(done.value), done.saved))
+        }
+        "restoreDocument" => {
+            let input = RestoreDocument {
+                workspace_id: &workspace_id,
+                document_id: &text(args, "documentId"),
+            };
+            restore_document(record, &input, blobs)
+                .map(|done| (done.value.as_ref().map_or(Json::Null, placed_json), done.saved))
+        }
         _ => return None,
     })
 }
@@ -175,8 +246,7 @@ fn run(
 pub(crate) fn write_answer(row: &Json) -> Option<Replayed> {
     let op = row["op"].as_str()?;
     let args = &row["args"];
-    let blobs = Blobs::of(row);
-    let digests = blobs.held.keys().cloned().collect();
+    let mut blobs = Blobs::of(row);
     let Some(before) = row["before"].as_str() else {
         return Some(Replayed {
             result: refusal(
@@ -186,7 +256,7 @@ pub(crate) fn write_answer(row: &Json) -> Option<Replayed> {
             deep: None,
             vv: json!([]),
             saves: 0,
-            blobs: digests,
+            blobs: blobs.held.keys().cloned().collect(),
             minted: 0,
         });
     };
@@ -201,7 +271,7 @@ pub(crate) fn write_answer(row: &Json) -> Option<Replayed> {
         minted += 1;
         queue.pop().unwrap_or_default()
     };
-    let done = run(op, &record, args, &mut mint)?;
+    let done = run(op, &record, args, &mut mint, &mut blobs)?;
     let saves = usize::from(done.as_ref().is_ok_and(|(_, saved)| *saved));
     let result = done.map_or_else(|error| refused(&error), |(value, _)| ok(value));
     let vv = version_pairs(record.doc());
@@ -210,7 +280,7 @@ pub(crate) fn write_answer(row: &Json) -> Option<Replayed> {
         deep: (saves > 0).then(|| json_of(&deep_value_with_id(record.doc()))),
         vv: json!(vv.iter().map(|(peer, counter)| json!([peer, counter])).collect::<Vec<_>>()),
         saves,
-        blobs: digests,
+        blobs: blobs.held.keys().cloned().collect(),
         minted,
     })
 }

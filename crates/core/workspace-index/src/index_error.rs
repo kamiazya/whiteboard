@@ -3,7 +3,7 @@
 
 use crate::entry::EntryError;
 use crate::index_rules::DisplayNameTaken;
-use whiteboard_crdt::WriteError;
+use whiteboard_crdt::{ImportError, WriteError};
 
 /// A refused write. Nothing of it was kept.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,6 +49,8 @@ pub enum IndexError {
     },
     /// A stored timestamp no JavaScript `Date` holds.
     InvalidTime(EntryError),
+    /// A trash row's bytes are not a document loro reads.
+    UnreadableTrashBytes(ImportError),
     /// Loro refused an operation the write needed.
     Record(WriteError),
 }

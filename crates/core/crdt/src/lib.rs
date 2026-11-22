@@ -20,6 +20,7 @@
 
 mod copy;
 mod read;
+mod subtree;
 mod tree;
 mod write;
 
@@ -31,6 +32,7 @@ pub use loro::{
 pub use read::{
     ImportError, deep_value, frontier_pairs, import_bytes, loro_value_to_value, version_pairs,
 };
+pub use subtree::{SubtreeCopy, copy_subtree, export_subtree};
 pub use tree::{
     ContainerKind, Entry, NodeId, node_entry, node_keys, peek, tree_children, tree_roots,
 };
