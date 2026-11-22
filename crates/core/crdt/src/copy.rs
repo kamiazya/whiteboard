@@ -69,22 +69,21 @@ fn copy_container(target: &LoroMap, key: &str, container: &Container) -> Result<
         }
         Container::List(_) | Container::MovableList(_) => {
             let child = target.insert_container(key, LoroMovableList::new()).map_err(refused)?;
-            push_all(&child, container).map(|_| ())
+            push_all(&child, container)
         }
         _ => Ok(()),
     }
 }
 
 /// A sequence's entries as plain values: a container inside one is flattened
-/// to the value it holds, which is what a copy of a sequence carries. Says
-/// whether it held any.
-fn push_all(child: &LoroMovableList, container: &Container) -> Result<bool, WriteError> {
+/// to the value it holds, which is what a copy of a sequence carries.
+fn push_all(child: &LoroMovableList, container: &Container) -> Result<(), WriteError> {
     let held = ValueOrContainer::Container(container.clone());
-    let LoroValue::List(items) = held.get_deep_value() else { return Ok(false) };
+    let LoroValue::List(items) = held.get_deep_value() else { return Ok(()) };
     for item in items.iter() {
         child.push(item.clone()).map_err(refused)?;
     }
-    Ok(!items.is_empty())
+    Ok(())
 }
 
 /// Makes `target`'s entries equal `source`'s, entry by entry, and says whether
@@ -181,19 +180,33 @@ fn fill_container(target: &LoroMap, key: &str, held: &Container) -> Result<bool,
         (
             Container::List(_) | Container::MovableList(_),
             Some(ValueOrContainer::Container(Container::MovableList(into))),
-        ) => push_all(&into, held),
+        ) => fill_list(&into, held),
         (Container::List(_) | Container::MovableList(_), None) => {
-            push_all(&target.insert_container(key, LoroMovableList::new()).map_err(refused)?, held)
+            fill_list(&target.insert_container(key, LoroMovableList::new()).map_err(refused)?, held)
         }
         _ => Ok(false),
     }
 }
 
-fn fill_text(into: &LoroText, source: &LoroText) -> Result<bool, WriteError> {
-    let wanted = source.to_string();
-    if wanted.is_empty() {
+/// Makes `into` hold the entries `source` holds, rewriting it only when they differ.
+fn fill_list(into: &LoroMovableList, source: &Container) -> Result<bool, WriteError> {
+    let held = ValueOrContainer::Container(source.clone());
+    let LoroValue::List(wanted) = held.get_deep_value() else { return Ok(false) };
+    if into.get_deep_value() == LoroValue::List(wanted.clone()) {
         return Ok(false);
     }
+    into.clear().map_err(refused)?;
+    push_all(into, source)?;
+    Ok(true)
+}
+
+/// Makes `into` read as `source` does, rewriting it only when it differs.
+fn fill_text(into: &LoroText, source: &LoroText) -> Result<bool, WriteError> {
+    let wanted = source.to_string();
+    if into.to_string() == wanted {
+        return Ok(false);
+    }
+    into.delete(0, into.len_unicode()).map_err(refused)?;
     into.insert(0, &wanted).map_err(refused)?;
     Ok(true)
 }

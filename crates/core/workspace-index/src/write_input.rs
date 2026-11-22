@@ -57,3 +57,6 @@ pub fn check_create(
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

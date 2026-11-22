@@ -503,3 +503,6 @@ pub fn restore_document(
     drop_blob_unless_named(&record.trash(), row, blobs);
     Ok(Outcome::saved(record.placed_document(&placed)))
 }
+
+#[cfg(test)]
+mod tests;

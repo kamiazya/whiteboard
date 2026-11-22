@@ -60,3 +60,6 @@ pub fn folders_missing_for(nodes: &[Node], path: &str) -> usize {
 pub fn refuse_new_folders_at(nodes: &[Node], path: &str) -> Result<(), IndexError> {
     refuse_new_folders(folders_in(nodes), folders_missing_for(nodes, path))
 }
+
+#[cfg(test)]
+mod tests;

@@ -80,3 +80,6 @@ pub fn derive_copy_path(source_path: &str, existing_paths: &[String]) -> Option<
     }
     None
 }
+
+#[cfg(test)]
+mod tests;

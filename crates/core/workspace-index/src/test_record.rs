@@ -40,3 +40,13 @@ pub(crate) fn snapshot(doc: &LoroDoc) -> Vec<u8> {
     doc.commit();
     doc.export(ExportMode::Snapshot).expect("a snapshot exports")
 }
+
+/// A record a keeper would write, over `doc`'s snapshot, as the peer the oracle replays as.
+pub(crate) fn writable(doc: &LoroDoc) -> crate::WorkspaceRecord {
+    crate::WorkspaceRecord::open_as(&snapshot(doc), 1).expect("a snapshot opens")
+}
+
+/// A canonical document id for the nth test document.
+pub(crate) fn id_of(n: usize) -> String {
+    format!("01ARZ3NDEKTSV4RRFF{n:08}")
+}
