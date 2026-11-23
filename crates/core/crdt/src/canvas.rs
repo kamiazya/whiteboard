@@ -82,6 +82,13 @@ pub(crate) fn read_canvas(doc: &LoroDoc) -> Result<Canvas, Refusal> {
     Ok(Canvas { nodes, edges, lines, facets, tags, skipped })
 }
 
+impl Canvas {
+    /// The nodes the schema accepted.
+    pub(crate) fn nodes(&self) -> &[LoroValue] {
+        &self.nodes
+    }
+}
+
 fn records(held: &[LoroValue]) -> Option<Value> {
     Some(Value::Seq(held.iter().map(stored::emit).collect::<Option<Vec<_>>>()?))
 }

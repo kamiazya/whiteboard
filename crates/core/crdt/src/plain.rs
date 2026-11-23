@@ -56,16 +56,22 @@ pub(crate) fn plain(value: &LoroValue) -> Option<Value> {
 pub(crate) fn plain_object<'a>(
     entries: impl Iterator<Item = (&'a String, &'a LoroValue)>,
 ) -> Option<Value> {
-    let mut written = entries
+    let written = entries
         .map(|(k, v)| Some((k.clone(), plain(v)?)))
         .collect::<Option<Vec<(String, Value)>>>()?;
+    Some(object_of(written))
+}
+
+/// An object as the wire writes it: keys ascending, and wrapped when the one
+/// key it has is a marker's name.
+pub(crate) fn object_of(mut written: Vec<(String, Value)>) -> Value {
     written.sort_by(|a, b| a.0.cmp(&b.0));
-    Some(match written.as_slice() {
+    match written.as_slice() {
         [(only, _)] if MARKERS.contains(&only.as_str()) => {
             Value::Map(vec![("$object".to_owned(), Value::Map(written))])
         }
         _ => Value::Map(written),
-    })
+    }
 }
 
 fn number(d: f64) -> Value {

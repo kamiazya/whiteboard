@@ -9,7 +9,7 @@
 //! carries. A container is resolved once per query, never per entry.
 
 use crate::plain::{Undecided, plain, plain_object, undefined};
-use crate::{canvas, envelope, stored};
+use crate::{annotations, canvas, envelope, image_refs, proposals, stored};
 use loro::{ContainerType, LoroDoc, LoroMap, LoroText, LoroValue, TextDelta, ValueOrContainer};
 use whiteboard_model::Value;
 use whiteboard_model::crdt::{Query, QueryName, ReadResponse};
@@ -47,7 +47,7 @@ pub(crate) fn map_of(doc: &LoroDoc, key: &str) -> LoroMap {
     doc.get_map(key)
 }
 
-fn text_of(doc: &LoroDoc) -> LoroText {
+pub(crate) fn text_of(doc: &LoroDoc) -> LoroText {
     doc.get_text(BODY_KEY)
 }
 
@@ -255,7 +255,7 @@ fn refused(Refusal(class): Refusal) -> ReadResponse {
 }
 
 /// The content queries this crate answers, by the contract's name.
-pub const CONTENT_QUERIES: [QueryName; 14] = [
+pub const CONTENT_QUERIES: [QueryName; 20] = [
     QueryName::DocumentKind,
     QueryName::NodeLocks,
     QueryName::EdgeLocks,
@@ -270,6 +270,12 @@ pub const CONTENT_QUERIES: [QueryName; 14] = [
     QueryName::DocumentContentWithTags,
     QueryName::CoreFacets,
     QueryName::TrustFacets,
+    QueryName::Annotations,
+    QueryName::CommentThreads,
+    QueryName::ThreadMessageCounts,
+    QueryName::ThreadMarks,
+    QueryName::Proposals,
+    QueryName::ImageRefIds,
 ];
 
 /// Answers `query` over a document that is the root of its own `LoroDoc`, or
@@ -334,6 +340,28 @@ fn answer_document_query(doc: &LoroDoc, query: &Query) -> Option<ReadResponse> {
             ok(envelope::core_facets(doc).map_or_else(|| Some(undefined()), |core| core.value())?)
         }
         QueryName::TrustFacets => ok(envelope::trust_facets(doc).ok()?.unwrap_or_else(undefined)),
+        _ => return answer_annotation_query(doc, query),
+    })
+}
+
+/// The queries over the annotation layer and what a document references.
+fn answer_annotation_query(doc: &LoroDoc, query: &Query) -> Option<ReadResponse> {
+    if !takes_no_arguments(query) {
+        return None;
+    }
+    Some(match query.query {
+        QueryName::Annotations => match annotations::annotations(doc) {
+            Ok(threads) => ok(threads),
+            Err(refusal) => refused(refusal),
+        },
+        QueryName::CommentThreads => ok(annotations::comment_threads(doc)),
+        QueryName::ThreadMessageCounts => ok(annotations::thread_message_counts(doc)),
+        QueryName::ThreadMarks => ok(annotations::thread_marks(doc)),
+        QueryName::Proposals => ok(proposals::proposals(doc)?),
+        QueryName::ImageRefIds => match image_refs::image_ref_ids(doc) {
+            Ok(ids) => ok(ids),
+            Err(refusal) => refused(refusal),
+        },
         _ => return None,
     })
 }
@@ -350,6 +378,15 @@ fn kind_asked_by(query: &Query) -> Result<Option<DocumentKind>, Undecided> {
             _ => Err(Undecided),
         },
         _ => Err(Undecided),
+    }
+}
+
+/// Whether the query names no argument, the only form these reads are answered in.
+fn takes_no_arguments(query: &Query) -> bool {
+    match &query.args {
+        None => true,
+        Some(Value::Map(args)) => args.is_empty(),
+        Some(_) => false,
     }
 }
 
