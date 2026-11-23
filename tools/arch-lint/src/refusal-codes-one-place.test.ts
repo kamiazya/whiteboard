@@ -166,8 +166,8 @@ function objectionsTo(
 function reachesCode(text: string, code: string): boolean {
   const camel = code.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase())
   return (
-    text.includes(`REFUSAL_CODE_${code.toUpperCase()}`) ||
-    text.includes(`REFUSAL_CODES.${camel}`) ||
+    new RegExp(`\\bREFUSAL_CODE_${code.toUpperCase()}(?![\\w$])`).test(text) ||
+    new RegExp(`\\bREFUSAL_CODES\\.${camel}(?![\\w$])`).test(text) ||
     text.includes(`REFUSAL_CODES['${camel}']`) ||
     text.includes(`REFUSAL_CODES["${camel}"]`) ||
     new RegExp(`['"\`]${code}['"\`]`).test(text)
@@ -246,6 +246,9 @@ describe('the refusal codes are written in one place', () => {
       expect(reachesCode(text, code), text).toBe(true)
     }
     expect(reachesCode('REFUSAL_CODES.tooManyFolders too_many_documents_x', code)).toBe(false)
+    // A longer member or constant sharing the prefix names another code.
+    expect(reachesCode('REFUSAL_CODES.tooManyDocumentsExtra', code)).toBe(false)
+    expect(reachesCode('REFUSAL_CODE_TOO_MANY_DOCUMENTS_EXTRA', code)).toBe(false)
   })
 
   it('has no shared file spelling a contract code or answering one the contract lacks', () => {
