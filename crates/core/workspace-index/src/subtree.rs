@@ -61,14 +61,9 @@ pub fn export_subtree_at(
 }
 
 /// The subtree rooted at `node` exported as [`export_subtree_at`] exports
-/// one, for a caller holding the node from a walk it already paid for. `None`
-/// when the tree does not hold the node or a delete took it.
-pub(crate) fn export_node(doc: &LoroDoc, node: NodeId) -> Result<Option<Vec<u8>>, WriteError> {
-    if !tree(doc, WORKSPACE_TREE_KEY).is_some_and(|held| held.is_live(node)) {
-        return Ok(None);
-    }
-    let from = NodeAt { doc, tree: WORKSPACE_TREE_KEY, node };
-    export_subtree(from, &COPY).map(Some)
+/// one, for a caller holding a live node from a walk it already paid for.
+pub(crate) fn export_node(doc: &LoroDoc, node: NodeId) -> Result<Vec<u8>, WriteError> {
+    export_subtree(NodeAt { doc, tree: WORKSPACE_TREE_KEY, node }, &COPY)
 }
 
 /// Why an exported subtree was not placed.

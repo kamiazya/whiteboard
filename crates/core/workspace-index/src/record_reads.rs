@@ -56,21 +56,6 @@ fn removed_entry(removed: Removed) -> Value {
     map(entries)
 }
 
-/// The texts an `{ ok: [...] }` answer holds; `None` for a refusal.
-fn ok_texts(answer: &Value) -> Option<Vec<String>> {
-    let Value::Map(entries) = answer else { return None };
-    let [(key, Value::Seq(items))] = entries.as_slice() else { return None };
-    (key == "ok").then(|| {
-        items
-            .iter()
-            .filter_map(|item| match item {
-                Value::String(text) => Some(text.clone()),
-                _ => None,
-            })
-            .collect()
-    })
-}
-
 /// The images every live document names, sorted as JavaScript sorts strings,
 /// and the nodes no reader reads; the keeper's trash bytes are asked of
 /// nobody, so a trashed document names nothing. A document whose read is
@@ -84,8 +69,18 @@ fn file_references(doc: &LoroDoc) -> Option<ReadResponse> {
     for walked in walk(doc).0 {
         let NodeRead::Document(meta) = &walked.read else { continue };
         let answer = answer_hosted(doc, &asked, &meta.document_id, &[])?;
-        let Some(ids) = ok_texts(&answer.value) else { return Some(answer) };
-        referenced.extend(ids);
+        if let Value::Map(entries) = &answer.value
+            && let [(key, Value::Seq(ids))] = entries.as_slice()
+            && key == "ok"
+        {
+            for id in ids {
+                if let Value::String(id) = id {
+                    referenced.push(id.clone());
+                }
+            }
+        } else {
+            return Some(answer);
+        }
     }
     referenced.sort_by(|a, b| a.encode_utf16().cmp(b.encode_utf16()));
     referenced.dedup();
@@ -102,11 +97,8 @@ fn file_references(doc: &LoroDoc) -> Option<ReadResponse> {
 /// container's length; null for one the record lists no document for.
 fn container_place(doc: &LoroDoc, container: &str) -> Value {
     let found = container_node(doc, container).and_then(|(node, length)| {
-        let held = tree(doc, WORKSPACE_TREE_KEY)?;
-        let Some(whiteboard_crdt::Entry::Value(Value::String(id))) = held.entry(node, "documentId")
-        else {
-            return None;
-        };
+        let held = tree(doc, WORKSPACE_TREE_KEY).and_then(|held| held.entry(node, "documentId"));
+        let Some(whiteboard_crdt::Entry::Value(Value::String(id))) = held else { return None };
         let placed = WorkspaceRecord::over(doc).placed_document(&id)?;
         let mut entries =
             vec![("documentId", text(&placed.meta.document_id)), ("path", text(&placed.path))];
@@ -142,18 +134,17 @@ fn projection(doc: &LoroDoc, document_id: &str) -> Option<ReadResponse> {
     );
     let Some(found) = found else { return Some(ok(Value::Null)) };
     let projected = project_node(NodeAt { doc, tree: WORKSPACE_TREE_KEY, node: found.id }).ok()?;
-    let read = |query| answer_content(&projected, query);
-    Some(ok(map(vec![
-        ("value", plain_value(&projected)?),
-        ("documentContent", read(QueryName::DocumentContent)?),
-        ("stateSize", read(QueryName::StateSize)?),
-        ("contentDigest", read(QueryName::ContentDigest)?),
-    ])))
-}
-
-fn answer_content(doc: &LoroDoc, query: QueryName) -> Option<Value> {
-    let asked = Query { query, args: None };
-    whiteboard_crdt::answer_content_query(doc, &asked).map(|answer| answer.value)
+    let reads = [
+        ("documentContent", QueryName::DocumentContent),
+        ("stateSize", QueryName::StateSize),
+        ("contentDigest", QueryName::ContentDigest),
+    ];
+    let mut entries = vec![("value", plain_value(&projected)?)];
+    for (key, query) in reads {
+        let asked = Query { query, args: None };
+        entries.push((key, whiteboard_crdt::answer_content_query(&projected, &asked)?.value));
+    }
+    Some(ok(map(entries)))
 }
 
 fn since_read(doc: &LoroDoc, query: QueryName, since: &VersionVector) -> Option<ReadResponse> {

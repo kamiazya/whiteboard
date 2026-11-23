@@ -6,8 +6,9 @@
 //! inside, outside and above the tree, under a tree of another name, uncreated
 //! or malformed; images named by a body or by a node the readers refuse; and
 //! the since-readers after each kind of write, a delete that leaves a survivor
-//! below included, one peer's writes past a version that holds another's, and
-//! two peers' writes touching one document.
+//! below included, one peer's writes past a version that holds another's, two
+//! peers' writes touching one document, and a write inside a list or inside a
+//! container its root's key no longer holds.
 //!
 //! `fixtures/record_read_cases.jsonl` holds each record's bytes (a row with a
 //! `snapshot`) and each read of it with the TypeScript's answer (`expect`). A

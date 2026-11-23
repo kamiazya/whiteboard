@@ -56,8 +56,11 @@ fn document_above(held: &Tree, walked: &[Walked], node: NodeId) -> Option<String
 }
 
 fn placed_documents(doc: &LoroDoc) -> Vec<Placed> {
-    let Some(held) = tree(doc, WORKSPACE_TREE_KEY) else { return Vec::new() };
-    let walked = walk_in(&held).0;
+    tree(doc, WORKSPACE_TREE_KEY).map_or_else(Vec::new, |held| placed_in(&held))
+}
+
+fn placed_in(held: &Tree) -> Vec<Placed> {
+    let walked = walk_in(held).0;
     walked
         .iter()
         .filter_map(|each| match &each.read {
@@ -66,7 +69,7 @@ fn placed_documents(doc: &LoroDoc) -> Vec<Placed> {
                 path: each.path.clone(),
                 name: meta.name.clone(),
                 node: each.id,
-                above: document_above(&held, &walked, each.id),
+                above: document_above(held, &walked, each.id),
             }),
             NodeRead::Folder { .. } => None,
         })
@@ -165,10 +168,13 @@ pub fn documents_removed_since(
     evacuees.sort_by_key(|each| std::cmp::Reverse(depth(&each.path)));
     let mut out = Vec::new();
     for evacuee in evacuees {
-        cut(&before, &survivors, &evacuee.path).map_err(|_| NotRemoved::Unread)?;
-        let exported = export_node(&before, evacuee.node).map_err(|_| NotRemoved::Unread)?;
-        let Some(bytes) = exported else { continue };
-        let state = import_bytes(&bytes).map_err(|_| NotRemoved::Unread)?;
+        // Live: a cut takes only survivors, and an evacuee below one is
+        // deeper than the evacuee it is cut for, so exported before it.
+        let state = cut(&before, &survivors, &evacuee.path)
+            .and_then(|()| export_node(&before, evacuee.node))
+            .ok()
+            .and_then(|bytes| import_bytes(&bytes).ok())
+            .ok_or(NotRemoved::Unread)?;
         out.push(Removed {
             document_id: evacuee.document_id.clone(),
             path: evacuee.path.clone(),
@@ -188,13 +194,10 @@ fn cut(
     path: &str,
 ) -> Result<(), whiteboard_crdt::WriteError> {
     let held = tree(before, WORKSPACE_TREE_KEY);
-    for &(_, node) in survivors.iter().filter(|(under, _)| *under == path) {
-        if held.as_ref().is_some_and(|held| held.is_live(node)) {
-            delete_node(before, WORKSPACE_TREE_KEY, node)?;
-            commit(before);
-        }
-    }
-    Ok(())
+    let live = |node: NodeId| held.as_ref().is_some_and(|held| held.is_live(node));
+    survivors.iter().filter(|&&(under, node)| under == path && live(node)).try_for_each(
+        |&(_, node)| delete_node(before, WORKSPACE_TREE_KEY, node).map(|()| commit(before)),
+    )
 }
 
 #[cfg(test)]
