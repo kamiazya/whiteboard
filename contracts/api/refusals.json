@@ -12,6 +12,10 @@
       "code": "markdown_too_large",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "run"
+      },
       "description": "One insert longer than a markdown body may be, in an update.",
       "message": "This update inserts {chars} characters in one piece, past {limit}",
       "params": {
@@ -31,6 +35,10 @@
       "code": "markdown_too_large",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "body"
+      },
       "description": "A markdown body an update would leave longer than the limit and longer than it was.",
       "message": "This update would make a document body {chars} characters long, past {limit}",
       "params": {
@@ -50,6 +58,10 @@
       "code": "markdown_too_large",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "runs"
+      },
       "description": "Separate inserts that together cost more to apply than one at the limit, in an update.",
       "message": "This update makes {runs} separate inserts of {chars} characters in all, which together cost more to apply than one insert at the {maxChars}-character limit for one write",
       "params": {
@@ -159,6 +171,10 @@
       "code": "node_text_too_large",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "node-text"
+      },
       "description": "A node's text past its limit, said of an update that has not been resolved to a document.",
       "message": "This update would give node {nodeId|json} {chars} characters of text, past {limit}",
       "params": {
@@ -203,6 +219,10 @@
       "code": "node_location_too_large",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "node-location"
+      },
       "description": "A link's URL, a file's path or a group's background past its limit, said of an update that has not been resolved to a document.",
       "message": "This update would give node {nodeId|json} a location of {chars} characters, past {limit}",
       "params": {
@@ -212,10 +232,10 @@
       },
       "example": {
         "nodeId": "n1",
-        "chars": 5000,
+        "chars": 8193,
         "limit": "the 8192-character limit"
       },
-      "exampleText": "This update would give node \"n1\" a location of 5000 characters, past the 8192-character limit",
+      "exampleText": "This update would give node \"n1\" a location of 8193 characters, past the 8192-character limit",
       "surfaces": ["sync-write", "api-v1"],
       "source": "NodeLocationTooLargeError"
     },
@@ -235,10 +255,10 @@
       "example": {
         "path": "notes/a",
         "nodeId": "n1",
-        "chars": 5000,
+        "chars": 8193,
         "limit": "the 8192-character limit"
       },
-      "exampleText": "The document at \"notes/a\" gives node \"n1\" a location of 5000 characters, past the 8192-character limit",
+      "exampleText": "The document at \"notes/a\" gives node \"n1\" a location of 8193 characters, past the 8192-character limit",
       "surfaces": ["sync-write", "api-v1"],
       "source": "NodeLocationTooLargeError"
     },
@@ -247,6 +267,10 @@
       "code": "label_too_large",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "label"
+      },
       "description": "An edge's, line's or group's label past its limit, said of an update that has not been resolved to a document.",
       "message": "This update would give {elementId|json} a label of {chars} characters, past {limit}",
       "params": {
@@ -291,6 +315,10 @@
       "code": "comment_too_large",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "comment-message"
+      },
       "description": "A comment message past its limit, said of an update that has not been resolved to a document.",
       "message": "This update would make comment message {messageId|json} {chars} characters long, past {limit}",
       "params": {
@@ -335,6 +363,10 @@
       "code": "container_name_too_long",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "container-name"
+      },
       "description": "A container named past its limit; the name is never repeated, only its length, said of an update that has not been resolved to a document.",
       "message": "This update would bring in a container named with {chars} characters, past {limit}",
       "params": {
@@ -375,6 +407,10 @@
       "code": "comment_anchor_too_large",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "thread-anchor"
+      },
       "description": "A comment thread anchored to more nodes than a canvas may hold, said of an update that has not been resolved to a document.",
       "message": "This update would leave comment thread {threadId|json} anchored to {count} nodes, past {limit}",
       "params": {
@@ -419,6 +455,10 @@
       "code": "anchor_quote_too_long",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "anchor-quote"
+      },
       "description": "A thread or a proposed passage anchored by a quote past its limit, said of an update that has not been resolved to a document.",
       "message": "This update would give {elementId|json} an anchor quoting {chars} characters, past {limit}",
       "params": {
@@ -463,6 +503,10 @@
       "code": "too_many_open_threads",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "open-threads"
+      },
       "description": "More open comment threads than one document keeps, said of an update that has not been resolved to a document.",
       "message": "This update would leave {count} open comment threads on a document, past {limit}",
       "params": {
@@ -503,6 +547,10 @@
       "code": "too_many_open_changes",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "open-changes"
+      },
       "description": "More open proposed changes than one document keeps, said of an update that has not been resolved to a document.",
       "message": "This update would leave {count} open proposed changes on a document, past {limit}",
       "params": {
@@ -510,10 +558,10 @@
         "limit": "string"
       },
       "example": {
-        "count": 600,
+        "count": 1001,
         "limit": "the limit of 1000 open proposed changes for one document; adopt or dismiss some first"
       },
-      "exampleText": "This update would leave 600 open proposed changes on a document, past the limit of 1000 open proposed changes for one document; adopt or dismiss some first",
+      "exampleText": "This update would leave 1001 open proposed changes on a document, past the limit of 1000 open proposed changes for one document; adopt or dismiss some first",
       "surfaces": ["sync-write", "api-v1"],
       "source": "TooManyOpenChangesError"
     },
@@ -531,10 +579,10 @@
       },
       "example": {
         "path": "notes/a",
-        "count": 600,
+        "count": 1001,
         "limit": "the limit of 1000 open proposed changes for one document; adopt or dismiss some first"
       },
-      "exampleText": "The document at \"notes/a\" holds 600 open proposed changes, past the limit of 1000 open proposed changes for one document; adopt or dismiss some first",
+      "exampleText": "The document at \"notes/a\" holds 1001 open proposed changes, past the limit of 1000 open proposed changes for one document; adopt or dismiss some first",
       "surfaces": ["sync-write", "api-v1"],
       "source": "TooManyOpenChangesError"
     },
@@ -543,6 +591,10 @@
       "code": "too_many_thread_messages",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "thread-messages"
+      },
       "description": "A comment thread holding more messages than one thread keeps, said of an update that has not been resolved to a document.",
       "message": "This update would leave a comment thread of {count} messages, past {limit}",
       "params": {
@@ -550,10 +602,10 @@
         "limit": "string"
       },
       "example": {
-        "count": 600,
+        "count": 1001,
         "limit": "the limit of 1000 messages in one comment thread; open a new thread to continue"
       },
-      "exampleText": "This update would leave a comment thread of 600 messages, past the limit of 1000 messages in one comment thread; open a new thread to continue",
+      "exampleText": "This update would leave a comment thread of 1001 messages, past the limit of 1000 messages in one comment thread; open a new thread to continue",
       "surfaces": ["sync-write", "api-v1"],
       "source": "TooManyThreadMessagesError"
     },
@@ -571,10 +623,10 @@
       },
       "example": {
         "path": "notes/a",
-        "count": 600,
+        "count": 1001,
         "limit": "the limit of 1000 messages in one comment thread; open a new thread to continue"
       },
-      "exampleText": "The document at \"notes/a\" holds a comment thread of 600 messages, past the limit of 1000 messages in one comment thread; open a new thread to continue",
+      "exampleText": "The document at \"notes/a\" holds a comment thread of 1001 messages, past the limit of 1000 messages in one comment thread; open a new thread to continue",
       "surfaces": ["sync-write", "api-v1"],
       "source": "TooManyThreadMessagesError"
     },
@@ -583,6 +635,10 @@
       "code": "tags_too_large",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "tags"
+      },
       "description": "A board given more tags than it may carry, in an update.",
       "message": "This update would give the board {amount} tags, past {limit}",
       "params": {
@@ -590,10 +646,10 @@
         "limit": "string"
       },
       "example": {
-        "amount": 300,
+        "amount": 1025,
         "limit": "the 1024-tag limit for one document, board, node or edge"
       },
-      "exampleText": "This update would give the board 300 tags, past the 1024-tag limit for one document, board, node or edge",
+      "exampleText": "This update would give the board 1025 tags, past the 1024-tag limit for one document, board, node or edge",
       "surfaces": ["sync-write", "api-v1"],
       "source": "TagsTooLargeError"
     },
@@ -611,10 +667,10 @@
       },
       "example": {
         "path": "notes/a",
-        "amount": 300,
+        "amount": 1025,
         "limit": "the 1024-tag limit for one document, board, node or edge"
       },
-      "exampleText": "The document at \"notes/a\" gives the board 300 tags, past the 1024-tag limit for one document, board, node or edge",
+      "exampleText": "The document at \"notes/a\" gives the board 1025 tags, past the 1024-tag limit for one document, board, node or edge",
       "surfaces": ["sync-write", "api-v1"],
       "source": "TagsTooLargeError"
     },
@@ -632,10 +688,10 @@
       },
       "example": {
         "elementId": "n1",
-        "amount": 300,
+        "amount": 1025,
         "limit": "the 1024-tag limit for one document, board, node or edge"
       },
-      "exampleText": "This update would give element \"n1\" 300 tags, past the 1024-tag limit for one document, board, node or edge",
+      "exampleText": "This update would give element \"n1\" 1025 tags, past the 1024-tag limit for one document, board, node or edge",
       "surfaces": ["sync-write", "api-v1"],
       "source": "TagsTooLargeError"
     },
@@ -655,10 +711,10 @@
       "example": {
         "path": "notes/a",
         "elementId": "n1",
-        "amount": 300,
+        "amount": 1025,
         "limit": "the 1024-tag limit for one document, board, node or edge"
       },
-      "exampleText": "The document at \"notes/a\" gives element \"n1\" 300 tags, past the 1024-tag limit for one document, board, node or edge",
+      "exampleText": "The document at \"notes/a\" gives element \"n1\" 1025 tags, past the 1024-tag limit for one document, board, node or edge",
       "surfaces": ["sync-write", "api-v1"],
       "source": "TagsTooLargeError"
     },
@@ -674,10 +730,10 @@
         "limit": "string"
       },
       "example": {
-        "amount": 500,
+        "amount": 1025,
         "limit": "the 1024-character limit for one tag"
       },
-      "exampleText": "This update would give the board a tag of 500 characters, past the 1024-character limit for one tag",
+      "exampleText": "This update would give the board a tag of 1025 characters, past the 1024-character limit for one tag",
       "surfaces": ["sync-write", "api-v1"],
       "source": "TagsTooLargeError"
     },
@@ -695,10 +751,10 @@
       },
       "example": {
         "path": "notes/a",
-        "amount": 500,
+        "amount": 1025,
         "limit": "the 1024-character limit for one tag"
       },
-      "exampleText": "The document at \"notes/a\" gives the board a tag of 500 characters, past the 1024-character limit for one tag",
+      "exampleText": "The document at \"notes/a\" gives the board a tag of 1025 characters, past the 1024-character limit for one tag",
       "surfaces": ["sync-write", "api-v1"],
       "source": "TagsTooLargeError"
     },
@@ -716,10 +772,10 @@
       },
       "example": {
         "elementId": "n1",
-        "amount": 500,
+        "amount": 1025,
         "limit": "the 1024-character limit for one tag"
       },
-      "exampleText": "This update would give element \"n1\" a tag of 500 characters, past the 1024-character limit for one tag",
+      "exampleText": "This update would give element \"n1\" a tag of 1025 characters, past the 1024-character limit for one tag",
       "surfaces": ["sync-write", "api-v1"],
       "source": "TagsTooLargeError"
     },
@@ -739,10 +795,10 @@
       "example": {
         "path": "notes/a",
         "elementId": "n1",
-        "amount": 500,
+        "amount": 1025,
         "limit": "the 1024-character limit for one tag"
       },
-      "exampleText": "The document at \"notes/a\" gives element \"n1\" a tag of 500 characters, past the 1024-character limit for one tag",
+      "exampleText": "The document at \"notes/a\" gives element \"n1\" a tag of 1025 characters, past the 1024-character limit for one tag",
       "surfaces": ["sync-write", "api-v1"],
       "source": "TagsTooLargeError"
     },
@@ -751,6 +807,10 @@
       "code": "too_many_nodes_or_edges",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "canvas-size"
+      },
       "description": "A canvas an update would leave with more nodes than one canvas may hold.",
       "message": "This update would leave a canvas of {count} nodes, past {limit}",
       "params": {
@@ -831,6 +891,10 @@
       "code": "invalid_document_root",
       "status": 400,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "content-root"
+      },
       "description": "A document node's content key an update would leave holding something other than its content container.",
       "message": "This update would leave a document holding something other than its own content container at {key|json}, which leaves that document unreadable",
       "params": {
@@ -867,6 +931,10 @@
       "code": "causal_gap",
       "status": 409,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "unattached-container"
+      },
       "description": "A write into a container whose creating change the write does not build on, in an update.",
       "message": "This update writes into a container ({container}) created by a change they do not build on, so nothing of it was kept. Send them built on the change that creates the container",
       "params": {
@@ -903,6 +971,10 @@
       "code": "reserved_map_key",
       "status": 400,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "reserved-map-key"
+      },
       "description": "A write naming `__proto__` as a map key, in an update.",
       "message": "This update writes a key named \"__proto__\" (in {container}), which no document may hold, so nothing of it was kept",
       "params": {
@@ -939,6 +1011,7 @@
       "code": "reserved_map_key",
       "status": 400,
       "family": "sync-write",
+      "module": "loro-adapter",
       "description": "A value write holding a key named `__proto__`, refused before its first operation.",
       "message": "This write holds a key named \"__proto__\" (in {container}), which no document may hold, so nothing of it was kept",
       "params": {
@@ -956,6 +1029,10 @@
       "code": "retired_stored_shape",
       "status": 400,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "retired-shape"
+      },
       "description": "A write of a shape an older version stored and no reader serves, in an update.",
       "message": "This update would write {found}, a form an older version stored and this one no longer reads, so nothing of it was kept",
       "params": {
@@ -992,6 +1069,10 @@
       "code": "retired_comment_plane",
       "status": 400,
       "family": "sync-write",
+      "breach": {
+        "table": "text",
+        "shape": "retired-comment-plane"
+      },
       "description": "A write of a row in the comment plane before threads, in an update.",
       "message": "This update would write a comment in the flat comments plane an older version kept comments in ({rows} there now), which this one no longer reads, so nothing of it was kept",
       "params": {
@@ -1028,6 +1109,10 @@
       "code": "invalid_path",
       "status": 400,
       "family": "sync-write",
+      "breach": {
+        "table": "workspace",
+        "shape": "invalid-path"
+      },
       "description": "Documents or folders put at paths the path grammar refuses. The caller shortens each path to its first 120 characters and names at most three.",
       "message": "This update would put documents or folders at paths this keeper cannot store: {paths|json_list}. A path may be at most {maxLength} characters, and each segment may hold only ASCII letters, digits and interior hyphens",
       "params": {
@@ -1068,6 +1153,10 @@
       "code": "unreadable_document_meta",
       "status": 400,
       "family": "sync-write",
+      "breach": {
+        "table": "workspace",
+        "shape": "unreadable-document-meta"
+      },
       "description": "Workspace nodes an update would leave unreadable to this keeper.",
       "message": "This update would leave workspace nodes this keeper cannot read ({nodes|list}), which hides the documents they hold and everything below them; a document needs a known kind, a segment, its id and whole-number timestamps, and a folder carries only its segment",
       "params": {
@@ -1085,6 +1174,10 @@
       "code": "document_kind_changed",
       "status": 400,
       "family": "sync-write",
+      "breach": {
+        "table": "workspace",
+        "shape": "document-kind-changed"
+      },
       "description": "An update leaving the envelope of a named document saying another kind than the document records.",
       "message": "This update would leave the envelope of document {documentId} saying \"{kind}\" while the document is recorded as \"{recorded}\"; a document keeps the kind it was created as",
       "params": {
@@ -1161,6 +1254,10 @@
       "code": "document_name_too_long",
       "status": 400,
       "family": "sync-write",
+      "breach": {
+        "table": "workspace",
+        "shape": "document-name-too-long"
+      },
       "description": "Documents an update would give a display name past the limit.",
       "message": "This update would give {paths|json_list} a display name past {maxLength} characters, the most a name may have",
       "params": {
@@ -1180,6 +1277,10 @@
       "code": "folder_name_refused",
       "status": 400,
       "family": "sync-write",
+      "breach": {
+        "table": "workspace",
+        "shape": "folder-name-refused"
+      },
       "description": "Folders an update would give a display name no folder may have; the reason is the folder-name rule's own sentence.",
       "message": "This update would give the folder {paths|json_list} a name no folder may have. {reason}",
       "params": {
@@ -1199,6 +1300,10 @@
       "code": "causal_gap",
       "status": 409,
       "family": "sync-write",
+      "breach": {
+        "table": "workspace",
+        "shape": "causal-gap"
+      },
       "description": "An update building on changes this keeper has not received; sending again once it holds them lands.",
       "message": "This update builds on changes this keeper has not received yet, so nothing of it was kept. Send the changes it builds on first",
       "params": {},
@@ -1212,6 +1317,10 @@
       "code": "too_many_documents",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "workspace",
+        "shape": "too-many-documents"
+      },
       "description": "A write leaving the workspace record listing more documents than a workspace holds.",
       "message": "This write would leave the workspace holding {documents} documents; a workspace holds at most {limit}. Move some documents to another workspace first",
       "params": {
@@ -1231,6 +1340,10 @@
       "code": "too_many_folders",
       "status": 413,
       "family": "sync-write",
+      "breach": {
+        "table": "workspace",
+        "shape": "too-many-folders"
+      },
       "description": "A write leaving the workspace record listing more folders than a workspace holds.",
       "message": "This write would leave the workspace holding {folders} folders; a workspace holds at most {limit}. Move or delete some folders' documents first",
       "params": {
@@ -1763,6 +1876,7 @@
       "code": "retired_comment_plane",
       "status": 409,
       "family": "sync-write",
+      "module": "loro-adapter",
       "description": "A document still holding comments in the plane before threads, which no reader serves; its data is untouched.",
       "message": "this document holds {rows} comment{rows|s} saved by an older version in a form this version no longer reads (the flat comments plane before threads); its data has not been changed",
       "params": {
@@ -1780,6 +1894,7 @@
       "code": "retired_stored_shape",
       "status": 409,
       "family": "sync-write",
+      "module": "loro-adapter",
       "description": "A document still holding a shape an older version stored and no reader serves; its data is untouched.",
       "message": "this document holds {found}, saved by an older version in a form this version no longer reads; its data has not been changed",
       "params": {
@@ -1797,6 +1912,7 @@
       "code": "markdown_too_large",
       "status": 413,
       "family": "sync-write",
+      "module": "reference-graph",
       "description": "A reference rewrite that would leave a markdown body past the limit.",
       "message": "The links would make the document body {chars} characters long, past {limit}",
       "params": {
@@ -1816,6 +1932,7 @@
       "code": "node_text_too_large",
       "status": 413,
       "family": "sync-write",
+      "module": "reference-graph",
       "description": "A reference rewrite that would leave a node's text past the limit.",
       "message": "The links would give node {nodeId|json} {chars} characters of text, past {limit}",
       "params": {

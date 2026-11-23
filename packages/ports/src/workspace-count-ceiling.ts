@@ -1,4 +1,4 @@
-import { REFUSAL_CODES, REFUSALS, refusalMessage } from '@kamiazya/whiteboard-model'
+import { REFUSAL_CODE_TOO_MANY_WORKSPACES, TooManyWorkspaces } from '@kamiazya/whiteboard-model'
 
 /**
  * The most workspaces one NAMESPACE may hold on a keeper shared by several
@@ -18,11 +18,11 @@ export const NAMESPACE_MAX_WORKSPACES = 1000
 
 /** A create refused because its namespace already holds `NAMESPACE_MAX_WORKSPACES`. Nothing was written. */
 export class TooManyWorkspacesError extends Error {
-  readonly code = REFUSAL_CODES.tooManyWorkspaces
-  readonly status = REFUSALS.TooManyWorkspaces.status
+  readonly code = REFUSAL_CODE_TOO_MANY_WORKSPACES
+  readonly status = 413
 
   constructor(public readonly namespace: string) {
-    super(refusalMessage('TooManyWorkspaces', { namespace, limit: NAMESPACE_MAX_WORKSPACES }))
+    super(TooManyWorkspaces(namespace, NAMESPACE_MAX_WORKSPACES))
     this.name = 'TooManyWorkspacesError'
   }
 }

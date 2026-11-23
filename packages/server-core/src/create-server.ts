@@ -4,7 +4,35 @@ import {
   RetiredStoredShapeError,
   SYNC_TEXT_BREACH_CODES,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { REFUSAL_CODES, refusalMessage } from '@kamiazya/whiteboard-model'
+import {
+  DatabaseBusy,
+  InternalError,
+  InvalidBodyNotJson,
+  InvalidRequest,
+  REFUSAL_CODE_CORRUPT_STORED_DATA,
+  REFUSAL_CODE_DATABASE_BUSY,
+  REFUSAL_CODE_DISPLAY_NAME_TAKEN,
+  REFUSAL_CODE_DOCUMENT_HAS_DESCENDANTS,
+  REFUSAL_CODE_DOCUMENT_KIND_MISMATCH,
+  REFUSAL_CODE_DOCUMENT_NAME_CONFLICT,
+  REFUSAL_CODE_DOCUMENT_NOT_FOUND,
+  REFUSAL_CODE_DOCUMENT_PATH_TAKEN,
+  REFUSAL_CODE_DOCUMENT_SERIALIZE_FAILED,
+  REFUSAL_CODE_FACET_WRITE_REJECTED,
+  REFUSAL_CODE_INTERNAL_ERROR,
+  REFUSAL_CODE_INVALID_BODY,
+  REFUSAL_CODE_INVALID_REQUEST,
+  REFUSAL_CODE_NAMELESS_LINK_TARGET,
+  REFUSAL_CODE_OKF_NOT_YAML_SAFE,
+  REFUSAL_CODE_OKF_PARSE_FAILED,
+  REFUSAL_CODE_SEARCH_NEEDS_QUERY_OR_FILTER,
+  REFUSAL_CODE_STORED_DOCUMENT_UNSUPPORTED_VERSION,
+  REFUSAL_CODE_TAG_NOT_IN_LIBRARY,
+  REFUSAL_CODE_WORKSPACE_NOT_FOUND,
+  REFUSAL_CODE_WORKSPACE_SEGMENT_TAKEN,
+  REFUSAL_CODE_WORKSPACE_SEGMENT_UNUSABLE,
+  SearchNeedsQueryOrFilterRoute,
+} from '@kamiazya/whiteboard-model'
 import {
   DisplayNameTakenError,
   DocumentHasDescendantsError,
@@ -108,7 +136,7 @@ const URL_IDENTITY_KEYS = ['workspaceId', 'documentId'] as const
 
 /** A request refused in a sentence the caller composed; the code is the contract's. */
 function invalidRequest(reason: string): ApiErrorBody {
-  return errorBody(REFUSAL_CODES.invalidRequest, refusalMessage('InvalidRequest', { reason }))
+  return errorBody(REFUSAL_CODE_INVALID_REQUEST, InvalidRequest(reason))
 }
 
 function identityNamedBy(body: object): ApiErrorBody | undefined {
@@ -135,7 +163,7 @@ async function readWriteBody(
   try {
     json = await c.req.json()
   } catch {
-    return { refusal: errorBody(REFUSAL_CODES.invalidBody, refusalMessage('InvalidBodyNotJson')) }
+    return { refusal: errorBody(REFUSAL_CODE_INVALID_BODY, InvalidBodyNotJson()) }
   }
   const body = json !== null && typeof json === 'object' && !Array.isArray(json) ? json : {}
   const smuggled = identityNamedBy(body)
@@ -206,7 +234,7 @@ function resolvesWorkspace(
     const workspaceId = resolved?.workspaceId ?? handle
     if (resolved === null && !MAY_MINT_WORKSPACE.test(`${c.req.method} ${c.req.path}`)) {
       const refusal = await unknownWorkspaceRefusal(handle, deps.knownWorkspaceHandles)
-      return c.json(errorBody(REFUSAL_CODES.workspaceNotFound, refusal.message), 404)
+      return c.json(errorBody(REFUSAL_CODE_WORKSPACE_NOT_FOUND, refusal.message), 404)
     }
     c.set('workspaceId', workspaceId)
     await next()
@@ -262,11 +290,11 @@ export function answerUnhandled(
     const busy = isDatabaseBusy(err)
     report({ err, method: c.req.method, path: c.req.path, busy })
     if (busy) {
-      return c.json(errorBody(REFUSAL_CODES.databaseBusy, refusalMessage('DatabaseBusy')), 503, {
+      return c.json(errorBody(REFUSAL_CODE_DATABASE_BUSY, DatabaseBusy()), 503, {
         'Retry-After': '1',
       })
     }
-    return c.json(errorBody(REFUSAL_CODES.internalError, refusalMessage('InternalError')), 500)
+    return c.json(errorBody(REFUSAL_CODE_INTERNAL_ERROR, InternalError()), 500)
   }
 }
 
@@ -371,10 +399,7 @@ export function createServer(deps: ServerDeps) {
     } catch (err) {
       if (err instanceof SearchNeedsQueryOrFilterError) {
         return c.json(
-          errorBody(
-            REFUSAL_CODES.searchNeedsQueryOrFilter,
-            refusalMessage('SearchNeedsQueryOrFilterRoute'),
-          ),
+          errorBody(REFUSAL_CODE_SEARCH_NEEDS_QUERY_OR_FILTER, SearchNeedsQueryOrFilterRoute()),
           400,
         )
       }
@@ -428,7 +453,7 @@ export function createServer(deps: ServerDeps) {
       return c.json(await linkifyMentions(deps, parsed.data))
     } catch (err) {
       if (err instanceof NamelessLinkifyTargetError) {
-        return c.json(errorBody(REFUSAL_CODES.namelessLinkTarget, err.message), 400)
+        return c.json(errorBody(REFUSAL_CODE_NAMELESS_LINK_TARGET, err.message), 400)
       }
       return refuse(c, err)
     }
@@ -549,17 +574,17 @@ const refusalOf = (
  * reasoned exemption in `tools/arch-lint`'s `v1-refusals-cover-errors` ledger.
  */
 const REFUSALS: readonly Refusal[] = [
-  refusalOf(WorkspaceDocumentNotFoundError, REFUSAL_CODES.documentNotFound, 404),
+  refusalOf(WorkspaceDocumentNotFoundError, REFUSAL_CODE_DOCUMENT_NOT_FOUND, 404),
   // A document created and indexed but never written has no stored bytes —
   // a read miss, and not a workspace-level one.
-  refusalOf(SnapshotNotFoundError, REFUSAL_CODES.documentNotFound, 404),
+  refusalOf(SnapshotNotFoundError, REFUSAL_CODE_DOCUMENT_NOT_FOUND, 404),
   // The CRDT engine aborted while loading or saving a document, usually on a
   // very large body. A server fault the caller cannot fix by rewording, but
   // the document is named and a repeat is not a retry.
   refusalOf(DocumentEngineTrapError, DOCUMENT_ENGINE_TRAP_CODE, 500),
   // The route reads one format; a document in the other is a conflict with
   // what it is, which only reading it by its own kind resolves.
-  refusalOf(DocumentKindMismatchError, REFUSAL_CODES.documentKindMismatch, 409),
+  refusalOf(DocumentKindMismatchError, REFUSAL_CODE_DOCUMENT_KIND_MISMATCH, 409),
   // The tool layer's own error carries advice for an MCP caller; the index's
   // spelling of the same condition escapes untranslated from tools that call
   // `documentIndex.listDocuments` directly (backlinks, document-tags), and a
@@ -567,13 +592,13 @@ const REFUSALS: readonly Refusal[] = [
   {
     matches: (err) =>
       err instanceof WorkspaceNotFoundForCallerError || isWorkspaceNotFoundError(err),
-    code: () => REFUSAL_CODES.workspaceNotFound,
+    code: () => REFUSAL_CODE_WORKSPACE_NOT_FOUND,
     status: 404,
   },
-  refusalOf(DocumentPathTakenError, REFUSAL_CODES.documentPathTaken, 409),
+  refusalOf(DocumentPathTakenError, REFUSAL_CODE_DOCUMENT_PATH_TAKEN, 409),
   // A create naming the display name a sibling document already shows; the
   // message names the folder, and only the caller can pick another name.
-  refusalOf(DisplayNameTakenError, REFUSAL_CODES.displayNameTaken, 409),
+  refusalOf(DisplayNameTakenError, REFUSAL_CODE_DISPLAY_NAME_TAKEN, 409),
   // A create into a workspace at its document ceiling, in the code the sync
   // routes answer the same refusal with.
   refusalOf(TooManyDocumentsError, (err: TooManyDocumentsError) => err.code, 413),
@@ -593,7 +618,7 @@ const REFUSALS: readonly Refusal[] = [
   // The caller asked to create a workspace under a handle that cannot be a
   // segment (ADR-0019): the NAME is the problem, and only the caller can pick
   // another one.
-  refusalOf(WorkspaceSegmentUnusableError, REFUSAL_CODES.workspaceSegmentUnusable, 400),
+  refusalOf(WorkspaceSegmentUnusableError, REFUSAL_CODE_WORKSPACE_SEGMENT_UNUSABLE, 400),
   // A markdown body the schema admits (any string) that OKF cannot parse: the
   // reason names the stage, and only the caller can supply a body that
   // reaches the next one. A value YAML cannot carry has a code of its own, so
@@ -602,17 +627,17 @@ const REFUSALS: readonly Refusal[] = [
     OkfParseError,
     (err: OkfParseError) =>
       err.stage === OKF_YAML_SAFE_STAGE
-        ? REFUSAL_CODES.okfNotYamlSafe
-        : REFUSAL_CODES.okfParseFailed,
+        ? REFUSAL_CODE_OKF_NOT_YAML_SAFE
+        : REFUSAL_CODE_OKF_PARSE_FAILED,
     400,
   ),
   // A tag the workspace's own library does not admit (ADR-0040 decision 5);
   // the message names the ones it does.
-  refusalOf(TagLibraryError, REFUSAL_CODES.tagNotInLibrary, 400),
+  refusalOf(TagLibraryError, REFUSAL_CODE_TAG_NOT_IN_LIBRARY, 400),
   // A registered facet's payload its own schema refuses, or one written where
   // it does not belong (ADR-0013 decisions 6 and 10): the message names the
   // key and what to change.
-  refusalOf(FacetWriteRejectedError, REFUSAL_CODES.facetWriteRejected, 400),
+  refusalOf(FacetWriteRejectedError, REFUSAL_CODE_FACET_WRITE_REJECTED, 400),
   // A value holding a key named `__proto__`, refused by the writer before
   // its first op, in the code a sync update carrying one is refused with.
   refusalOf(ReservedKeyWriteError, (err: ReservedKeyWriteError) => err.code, 400),
@@ -625,27 +650,27 @@ const REFUSALS: readonly Refusal[] = [
   // the message names what was found.
   refusalOf(RetiredStoredShapeError, (err: RetiredStoredShapeError) => err.code, 409),
   // Two display names for one document, which no server choice could settle.
-  refusalOf(DocumentNameConflictError, REFUSAL_CODES.documentNameConflict, 400),
+  refusalOf(DocumentNameConflictError, REFUSAL_CODE_DOCUMENT_NAME_CONFLICT, 400),
   // Deleting a document takes the documents below it only when the caller
   // names them; the refusal says which to delete first.
-  refusalOf(DocumentHasDescendantsError, REFUSAL_CODES.documentHasDescendants, 409),
+  refusalOf(DocumentHasDescendantsError, REFUSAL_CODE_DOCUMENT_HAS_DESCENDANTS, 409),
   // An operation named a document the index no longer holds (a delete racing
   // another delete): a read miss like the others, not a server fault.
   {
     matches: isDocumentNotFoundError,
-    code: () => REFUSAL_CODES.documentNotFound,
+    code: () => REFUSAL_CODE_DOCUMENT_NOT_FOUND,
     status: 404,
   },
   // Another create bootstrapped the workspace's segment and the registry
   // cannot resolve it back, so the mint cannot converge on the winner.
   {
     matches: isWorkspaceSegmentTakenError,
-    code: () => REFUSAL_CODES.workspaceSegmentTaken,
+    code: () => REFUSAL_CODE_WORKSPACE_SEGMENT_TAKEN,
     status: 409,
   },
   // A stored value OKF has no spelling for: the request is fine and the
   // document cannot be projected until its content is rewritten.
-  refusalOf(DocumentSerializeError, REFUSAL_CODES.documentSerializeFailed, 409),
+  refusalOf(DocumentSerializeError, REFUSAL_CODE_DOCUMENT_SERIALIZE_FAILED, 409),
   // A record the keeper holds and cannot read back. `unsupported-version` is
   // a reader that is too old, `malformed` is damage; they ask the caller for
   // opposite things, so they carry different codes.
@@ -653,11 +678,11 @@ const REFUSALS: readonly Refusal[] = [
     StoredDocumentUnreadableError,
     (err: StoredDocumentUnreadableError) =>
       err.code === 'unsupported-version'
-        ? REFUSAL_CODES.storedDocumentUnsupportedVersion
-        : REFUSAL_CODES.corruptStoredData,
+        ? REFUSAL_CODE_STORED_DOCUMENT_UNSUPPORTED_VERSION
+        : REFUSAL_CODE_CORRUPT_STORED_DATA,
     500,
   ),
-  refusalOf(SnapshotReassemblyError, REFUSAL_CODES.corruptStoredData, 500),
+  refusalOf(SnapshotReassemblyError, REFUSAL_CODE_CORRUPT_STORED_DATA, 500),
 ]
 
 /** `said` is the reason as the caller's own words re-state it; the error's own message otherwise. */

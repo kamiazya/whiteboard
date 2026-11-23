@@ -12,7 +12,7 @@
  * intent — takes it as a value.
  */
 import type { ReferenceGraph } from '@kamiazya/whiteboard-canvas-render'
-import { refusalMessage, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { type SpatialCanvas, TagExclusive, TagNotAdmitted } from '@kamiazya/whiteboard-model'
 import {
   readTagLibrary,
   TAG_LIBRARY_PATH,
@@ -73,23 +73,10 @@ export function refuseAgainstLibrary(
   if (objection === undefined) return
   if (objection.kind === 'undeclared') {
     throw new TagLibraryError(
-      refusalMessage('TagNotAdmitted', {
-        tag: objection.tag,
-        what,
-        libraryPath: TAG_LIBRARY_PATH,
-        key: objection.key,
-        admitted: objection.admitted,
-      }),
+      TagNotAdmitted(objection.tag, what, TAG_LIBRARY_PATH, objection.key, objection.admitted),
     )
   }
-  throw new TagLibraryError(
-    refusalMessage('TagExclusive', {
-      key: objection.key,
-      libraryPath: TAG_LIBRARY_PATH,
-      what,
-      carried: objection.carried,
-    }),
-  )
+  throw new TagLibraryError(TagExclusive(objection.key, TAG_LIBRARY_PATH, what, objection.carried))
 }
 
 /** Whether one canvas can read anything from a library: the board, a node or an edge carries a tag. */

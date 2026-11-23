@@ -679,6 +679,11 @@ const RUST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'crates/ops/api-contracts/src/generated/refusals.rs#Refusal.status': 112,
   'crates/ops/api-contracts/src/generated/refusals.rs#Refusal.message': 110,
   'crates/ops/api-contracts/src/generated/refusals.rs#examples': 112,
+  // The refusals generator's two longest steps: one check per rule an entry can
+  // break, and the TypeScript module's sections written in order. Each is a
+  // sequence a reader follows top to bottom.
+  'crates/xtask/src/codegen/refusals.rs#check_entry': 77,
+  'crates/xtask/src/codegen/refusals.rs#ts': 69,
   // The map checked against itself and the workspace against the map: one
   // pass per rule, each a few lines, run in sequence. The next shrink is one
   // function per rule, the way the TypeScript checks are one module each.

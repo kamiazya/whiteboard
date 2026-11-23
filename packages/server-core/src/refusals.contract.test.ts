@@ -6,12 +6,6 @@ import {
   RetiredStoredShapeError,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  REFUSALS,
-  type RefusalName,
-  type RefusalParams,
-  refusalMessage,
-} from '@kamiazya/whiteboard-model'
-import {
   DisplayNameTakenError,
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
@@ -59,7 +53,7 @@ const contract = JSON.parse(
   readFileSync(join(import.meta.dirname, '../../../contracts/api/refusals.json'), 'utf8'),
 ) as {
   refusals: {
-    name: RefusalName
+    name: string
     code: string
     status: number
     example: Record<string, unknown>
@@ -79,14 +73,15 @@ const NOT_A_CLASS = [
   'InternalError',
   'SearchNeedsQueryOrFilterRoute',
   'WorkspaceNotFoundByHandle',
-] as const satisfies readonly RefusalName[]
-type NotAClass = (typeof NOT_A_CLASS)[number]
+] as const
 
 const CONTAINER = 'cid:1@2:Map' as never
 const at = (path: string) => ({ path })
 const textOf = (error: Error) => error.message
 
-type Factories = { [N in Exclude<RefusalName, NotAClass>]: (p: RefusalParams[N]) => Error }
+// The example's fields are held to the entry's params by the run below, which builds every class from them.
+type Params = Record<string, any>
+type Factories = Record<string, (p: Params) => Error>
 
 const FACTORIES: Factories = {
   MarkdownRunUpdate: (p) =>
@@ -421,15 +416,6 @@ describe('the refusal contract and the TypeScript that raises it', () => {
       const make = (FACTORIES as Record<string, ((p: never) => Error) | undefined>)[entry.name]
       if (make === undefined) continue
       expect(textOf(make(entry.example as never)), entry.name).toBe(entry.exampleText)
-    }
-  })
-
-  it('renders the generated template to the same sentence', () => {
-    for (const entry of contract.refusals) {
-      expect(REFUSALS[entry.name].code, entry.name).toBe(entry.code)
-      expect(REFUSALS[entry.name].status, entry.name).toBe(entry.status)
-      const say = refusalMessage as (n: RefusalName, p: unknown) => string
-      expect(say(entry.name, entry.example), entry.name).toBe(entry.exampleText)
     }
   })
 

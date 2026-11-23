@@ -1,5 +1,5 @@
 import { documentEditWrites } from '@kamiazya/whiteboard-loro-adapter'
-import { refusalMessage } from '@kamiazya/whiteboard-model'
+import { NamelessLinkifyTarget } from '@kamiazya/whiteboard-model'
 import { planLinkifyMentions } from '@kamiazya/whiteboard-reference-graph'
 import { withDocument } from '../document-session.js'
 import { documentContentOf } from '../document-session-reads.js'
@@ -20,7 +20,7 @@ import { withWorkspaceWrite } from './write-lock.js'
 /** The target carries no display name, so there is no prose to find. */
 export class NamelessLinkifyTargetError extends Error {
   constructor(readonly targetDocumentId: string) {
-    super(refusalMessage('NamelessLinkifyTarget', { targetDocumentId }))
+    super(NamelessLinkifyTarget(targetDocumentId))
     this.name = 'NamelessLinkifyTargetError'
   }
 }

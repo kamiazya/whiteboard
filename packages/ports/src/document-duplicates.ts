@@ -1,6 +1,6 @@
 import {
+  CannotPlaceCopyNoRoom,
   documentPathSchema,
-  refusalMessage,
   workspaceCanonicalIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -58,7 +58,7 @@ export function hasDocumentDuplicates(
  */
 export class NoRoomForCopyError extends Error {
   constructor(readonly path: string) {
-    super(refusalMessage('CannotPlaceCopyNoRoom', { path }))
+    super(CannotPlaceCopyNoRoom(path))
     this.name = 'NoRoomForCopyError'
   }
 }

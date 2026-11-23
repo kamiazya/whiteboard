@@ -88,9 +88,9 @@
       "reason": "first measured 2026-11-21 at 98.94% lines and 99.06% regions, with the recorded index-rules.jsonl replayed natively (tests/index_rules_oracle.rs: every row whose input is plain values) beside the unit tests of the path grammar, the display-name key and the ISO date; what is left are the arms of a node a recorded row never builds (an exhausted unnamed-address series, an entry with no time). Regions lowered from 99 to 97 when the index's writes joined, every recorded write row replayed (tests/index_rules_oracle.rs) beside the unit tests of the ceilings, copy derivation and refusals, and tests/large_record.rs: 97.46% regions measured, lines unmoved; each `?` after a loro call is a region whose error arm a valid record never reaches, and a test cannot make loro refuse an operation on a record the index just read"
     },
     "ops/api-contracts": {
-      "lines": 99,
-      "regions": 98,
-      "reason": "first measured 2026-11-22 at 100.00% lines and 99.82% regions: the generated Refusal is held to every entry of contracts/api/refusals.json (code, status and exampleText), the port mapping to PortError's own code and text, and each template filter to JavaScript's own answer (JSON.stringify against serde_json on every character below U+0100, String.prototype.trim's whitespace); the two regions left are the unreachable halves of a test's own unwrap"
+      "lines": 100,
+      "regions": 99,
+      "reason": "first measured 2026-11-22 at 100.00% lines and 99.82% regions, the floors the measurement rounds down to: the generated Refusal is held to every entry of contracts/api/refusals.json (code, status and exampleText), the port mapping to PortError's own code and text, and each template filter to JavaScript's own answer (JSON.stringify against serde_json on every character below U+0100, String.prototype.trim's whitespace); the two regions left are the unreachable halves of a test's own unwrap"
     },
     "ports/ports": {
       "lines": 99,

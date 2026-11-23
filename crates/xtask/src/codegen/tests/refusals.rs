@@ -2,6 +2,7 @@
 //! rule that refuses an entry, and what each language is given.
 
 use super::super::refusal_template::apply;
+use super::rust_emit::{rust_doc, rust_literal};
 use super::*;
 
 const CONTRACT: &str = r#"{
@@ -49,7 +50,7 @@ const CONTRACT: &str = r#"{
 
 fn files(text: &str) -> Result<(String, String), Vec<String>> {
     let mut out = generate(text)?;
-    let rust = out.remove(1).1;
+    let rust = out.pop().map(|file| file.1).unwrap_or_default();
     Ok((out.remove(0).1, rust))
 }
 
@@ -68,7 +69,7 @@ fn refused(from: &str, to: &str, expect: &str) {
 fn the_checked_in_contract_generates_both_halves() {
     let text = include_str!("../../../../../contracts/api/refusals.json");
     let (ts, rust) = files(text).unwrap();
-    assert!(ts.contains("export const REFUSALS = {"));
+    assert!(ts.contains("export const REFUSAL_CODES = {"));
     assert!(rust.contains("pub enum Refusal {"));
 }
 
@@ -76,13 +77,11 @@ fn the_checked_in_contract_generates_both_halves() {
 fn the_typescript_half_carries_the_table_the_params_and_the_codes() {
     let (ts, _) = files(CONTRACT).unwrap();
     for wanted in [
-        "/** Says hi. */\n  Greeted: {\n    code: 'greeted_thing',\n    status: 404,\n",
-        "    message: 'Hi {name|json}, {count} item{count|s}: {items|list} {{ok}}',\n",
-        "    message: \"It's plain {{.\",\n",
-        "export type RefusalName = keyof typeof REFUSALS\n",
-        "  Greeted: {\n    readonly count: number\n    readonly items: readonly string[]\n    readonly name: string\n  }\n",
-        "  Plain: Record<never, never>\n",
-        "export const REFUSAL_CODES = {\n  greetedThing: 'greeted_thing',\n  plainThing: 'plain_thing',\n} as const\n",
+        "/** Says hi. */\nexport const Greeted = (name: string, count: number, items: readonly string[]) =>\n  `Hi ${JSON.stringify(name)}, ${count} item${count === 1 ? '' : 's'}: ${items.join(', ')} {ok}`\n",
+        "export const Plain = () => \"It's plain {.\"\n",
+        "export const Echo = (reason: string) => `${reason}`\n",
+        "export const REFUSAL_CODE_GREETED_THING = 'greeted_thing'\nexport const REFUSAL_CODE_PLAIN_THING = 'plain_thing'\n",
+        "export const REFUSAL_CODES = {\n  greetedThing: REFUSAL_CODE_GREETED_THING,\n  plainThing: REFUSAL_CODE_PLAIN_THING,\n} as const\n",
         "export type RefusalCode = (typeof REFUSAL_CODES)[keyof typeof REFUSAL_CODES]\n",
         "export const SYNC_WRITE_REFUSAL_CODES = ['greeted_thing'] as const\n",
         "export const VERSION_REFUSAL_CODES = [] as const\n",
@@ -106,7 +105,7 @@ fn the_rust_half_compiles_each_template_into_its_own_formatting() {
         "Self::Greeted { .. } => 404,",
         "Self::Plain => \"It's plain {.\".to_owned(),",
         "Self::Echo { reason } => reason.clone(),",
-        "{items_list} {{ok}}\", name_json = json(name), count_s = plural_s(*count), items_list = list(items))",
+        "{{ok}}\", crate::refusal_text::json(name), crate::refusal_text::plural_s(*count), crate::refusal_text::list(items))",
         "(\"Greeted\", Refusal::Greeted { count: 2, items: vec![\"a\".to_owned(), \"b\".to_owned()], name: \"x\".to_owned() }),",
         "(\"Plain\", Refusal::Plain),",
         "f.write_str(&self.message())",
@@ -120,7 +119,7 @@ fn a_filter_applied_twice_to_one_param_is_bound_once() {
     let text = mutated("{count} item{count|s}", "{count|s}{count|s}{count}")
         .replace("Hi \\\"x\\\", 2 items", "Hi \\\"x\\\", ss2");
     let (_, rust) = files(&text).unwrap();
-    assert_eq!(rust.matches("count_s = plural_s(*count)").count(), 1, "{rust}");
+    assert_eq!(rust.matches("crate::refusal_text::plural_s(*count)").count(), 1, "{rust}");
 }
 
 #[test]
@@ -311,28 +310,22 @@ fn literals_are_written_as_the_formatters_of_each_language_write_them() {
 }
 
 #[test]
-fn a_property_string_moves_under_its_key_only_when_the_line_is_full() {
-    let mut out = String::new();
-    ts_property(&mut out, 4, "message", &ts_literal(&"x".repeat(100 - 4 - 9 - 2 - 1)));
-    assert!(out.starts_with("    message: '"), "{out}");
-    let mut out = String::new();
-    ts_property(&mut out, 4, "message", &ts_literal(&"x".repeat(100 - 4 - 9 - 2)));
-    assert!(out.starts_with("    message:\n      '"), "{out}");
-}
-
-#[test]
 fn an_array_stays_on_one_line_while_it_fits_and_otherwise_takes_a_line_each() {
+    let items = |names: &[&str]| names.iter().map(|n| (*n).to_owned()).collect::<Vec<_>>();
     let mut out = String::new();
-    ts_array(&mut out, "export const A = ", &["a", "b"]);
-    assert_eq!(out, "export const A = ['a', 'b'] as const\n");
+    ts_array(&mut out, "export const A = ", &items(&["a", "b"]));
+    assert_eq!(out, "export const A = [a, b] as const\n");
     let long = "x".repeat(90);
     let mut out = String::new();
-    ts_array(&mut out, "export const A = ", &[&long, "b"]);
-    assert_eq!(out, format!("export const A = [\n  '{long}',\n  'b',\n] as const\n"));
+    ts_array(&mut out, "export const A = ", &items(&[&long, "b"]));
+    assert_eq!(out, format!("export const A = [\n  {long},\n  b,\n] as const\n"));
     let mut out = String::new();
-    let exact = "x".repeat(100 - "export const A = ['".len() - "'] as const".len());
-    ts_array(&mut out, "export const A = ", &[&exact]);
+    let exact = "x".repeat(100 - "export const A = [".len() - "] as const".len());
+    ts_array(&mut out, "export const A = ", &items(&[&exact]));
     assert_eq!(out.lines().count(), 1, "{out}");
+    let mut out = String::new();
+    ts_array(&mut out, "export const A = ", &items(&[&format!("{exact}x")]));
+    assert_eq!(out.lines().count(), 3, "{out}");
 }
 
 #[test]
@@ -367,4 +360,273 @@ fn a_param_the_message_never_uses_is_refused() {
         .replace(r#""count": 2,"#, r#""count": 2, "extra": "e","#);
     let errors = files(&text).unwrap_err();
     assert!(errors.iter().any(|e| e.contains("param `extra` is never used")), "{errors:?}");
+}
+
+#[test]
+fn each_filter_compiles_to_the_javascript_it_names() {
+    let text = CONTRACT
+        .replace(
+            r#""message": "{reason}""#,
+            r#""message": "{reason|trim} {names|and_list} {names|json_list} {names|quoted_list} `{reason|json}` ${{x}}""#,
+        )
+        .replace(
+            r#""params": { "reason": "string" }"#,
+            r#""params": { "reason": "string", "names": "string[]" }"#,
+        )
+        .replace(
+            r#""example": { "reason": "because" }"#,
+            r#""example": { "reason": " because ", "names": ["a", "b"] }"#,
+        )
+        .replace(
+            r#""exampleText": "because""#,
+            r#""exampleText": "because a and b \"a\", \"b\" \"a\", \"b\" `\" because \"` ${x}""#,
+        );
+    let (ts, _) = files(&text).unwrap();
+    for wanted in [
+        "${reason.trim()} ${names.join(' and ')}",
+        "${names.map((i) => JSON.stringify(i)).join(', ')}",
+        "${names.map((i) => `\"${i}\"`).join(', ')}",
+        "\\`${JSON.stringify(reason)}\\` \\${x}",
+    ] {
+        assert!(ts.contains(wanted), "{wanted}\n{ts}");
+    }
+}
+
+#[test]
+fn a_signature_past_the_column_takes_a_param_to_a_line_and_the_body_joins_when_it_fits() {
+    let long = "w".repeat(70);
+    let text = CONTRACT
+        .replace("\"Echo\"", "\"EchoAndAnother\"")
+        .replace(r#""message": "{reason}""#, &format!(r#""message": "{{reason}} {{{long}}}""#))
+        .replace(
+            r#""params": { "reason": "string" }"#,
+            &format!(r#""params": {{ "reason": "string", "{long}": "string" }}"#),
+        )
+        .replace(
+            r#""example": { "reason": "because" }"#,
+            &format!(r#""example": {{ "reason": "because", "{long}": "x" }}"#),
+        )
+        .replace(r#""exampleText": "because""#, r#""exampleText": "because x""#);
+    let (ts, _) = files(&text).unwrap();
+    let wanted = format!(
+        "export const EchoAndAnother = (\n  reason: string,\n  {long}: string,\n) => `${{reason}} ${{{long}}}`\n"
+    );
+    assert!(ts.contains(&wanted), "{wanted}\n{ts}");
+}
+
+#[test]
+fn a_param_a_typescript_function_could_not_name_is_refused() {
+    for name in ["new", "i", "this"] {
+        let text = CONTRACT
+            .replace("\"reason\"", &format!("\"{name}\""))
+            .replace("{reason}", &format!("{{{name}}}"));
+        let errors = files(&text).unwrap_err();
+        assert!(
+            errors.iter().any(|e| e.contains("not a name both languages take")),
+            "{name}: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn breach_shapes_become_the_tables_the_sync_judge_answers_from() {
+    let text = CONTRACT
+        .replacen(
+            r#""family": "sync-write","#,
+            r#""family": "sync-write", "breach": { "table": "text", "shape": "node-text" },"#,
+            1,
+        )
+        .replace(
+            r#""code": "greeted_thing",
+      "status": 409,
+      "family": "sync-write","#,
+            r#""code": "greeted_thing",
+      "status": 409,
+      "family": "sync-write", "breach": { "table": "workspace", "shape": "plain" },"#,
+        );
+    let (ts, _) = files(&text).unwrap();
+    for wanted in [
+        "/** The code each text breach shape of a sync write is answered with. */\nexport const SYNC_TEXT_BREACH_CODES = {\n  'node-text': SYNC_WRITE_REFUSAL_CODES[0],\n} as const\n",
+        "export const SYNC_WORKSPACE_BREACH_CODES = {\n  plain: SYNC_WRITE_REFUSAL_CODES[0],\n} as const\n",
+    ] {
+        assert!(ts.contains(wanted), "{wanted}\n{ts}");
+    }
+}
+
+#[test]
+fn a_breach_shape_the_tables_could_not_hold_is_refused() {
+    let at = |breach: &str| {
+        CONTRACT.replacen(
+            r#""family": "sync-write","#,
+            &format!(r#""family": "sync-write", "breach": {breach},"#),
+            1,
+        )
+    };
+    for (breach, expect) in [
+        (r#"{ "table": "nowhere", "shape": "a" }"#, "breach table `nowhere`"),
+        (r#"{ "table": "text", "shape": "A" }"#, "not lowercase kebab-case"),
+        (r#"{ "table": "text", "shape": "a-" }"#, "not lowercase kebab-case"),
+        (r#"{ "table": "text", "shape": "a--b" }"#, "not lowercase kebab-case"),
+        (r#"{ "table": "text", "shape": "a_b" }"#, "not lowercase kebab-case"),
+        (r#"{ "table": "text", "shape": "" }"#, "not lowercase kebab-case"),
+    ] {
+        let errors = files(&at(breach)).unwrap_err();
+        assert!(errors.iter().any(|e| e.contains(expect)), "{breach}: {errors:?}");
+    }
+    let unsynced = CONTRACT.replacen(
+        r#""source": "S""#,
+        r#""breach": { "table": "text", "shape": "a" }, "source": "S""#,
+        2,
+    );
+    let errors = files(&unsynced).unwrap_err();
+    assert!(errors.iter().any(|e| e.contains("answered by a sync-write refusal")), "{errors:?}");
+    let twice = CONTRACT.replace(
+        r#""family": "sync-write","#,
+        r#""family": "sync-write", "breach": { "table": "text", "shape": "a" },"#,
+    );
+    let errors = files(&twice).unwrap_err();
+    assert!(errors.iter().any(|e| e.contains("is answered by two entries")), "{errors:?}");
+}
+
+#[test]
+fn a_refusal_with_a_module_is_generated_into_that_packages_own_file() {
+    let text = CONTRACT.replacen(
+        r#""family": "sync-write","#,
+        r#""family": "sync-write", "module": "loro-adapter","#,
+        1,
+    );
+    let all = generate(&text).unwrap();
+    let paths: Vec<&str> = all.iter().map(|(path, _, _)| path.as_str()).collect();
+    assert_eq!(
+        paths,
+        [
+            "packages/model/src/generated/refusals.ts",
+            "packages/loro-adapter/src/generated/refusals.ts",
+            "crates/ops/api-contracts/src/generated/refusals.rs",
+        ]
+    );
+    let (main, module) = (&all[0].1, &all[1].1);
+    assert!(module.contains("export const Greeted = "), "{module}");
+    assert!(!main.contains("export const Greeted = "), "{main}");
+    assert!(main.contains("export const Echo = "), "{main}");
+    assert!(all[2].1.contains("Greeted {"), "the Rust enum holds every refusal");
+    for bad in ["Loro", "a_b", "a-", "-a", "a--b", ""] {
+        let text = CONTRACT.replacen(
+            r#""family": "sync-write","#,
+            &format!(r#""family": "sync-write", "module": "{bad}","#),
+            1,
+        );
+        let errors = files(&text).unwrap_err();
+        assert!(
+            errors.iter().any(|e| e.contains("is not a package directory name")),
+            "{bad}: {errors:?}"
+        );
+    }
+}
+
+const AWKWARD: &str = r#"{
+  "$comment": "c",
+  "surfaces": { "api-v1": "the api" },
+  "refusals": [
+    {
+      "name": "Lone", "code": "lone", "status": 400, "description": "A lone integer.",
+      "message": "{count}", "params": { "count": "integer" }, "example": { "count": 7 },
+      "exampleText": "7", "surfaces": ["api-v1"], "source": "S"
+    },
+    {
+      "name": "Shadow", "code": "shadow", "status": 400, "description": "A param named for its filter.",
+      "message": "{json|json}", "params": { "json": "string" }, "example": { "json": "a\"b" },
+      "exampleText": "\"a\\\"b\"", "surfaces": ["api-v1"], "source": "S"
+    },
+    {
+      "name": "Collide", "code": "collide", "status": 400, "description": "A filtered placeholder beside a field its argument could be named for.",
+      "message": "{path|json}: {pathJson}", "params": { "path": "string", "pathJson": "string" },
+      "example": { "path": "p", "pathJson": "q" }, "exampleText": "\"p\": q",
+      "surfaces": ["api-v1"], "source": "S"
+    },
+    {
+      "name": "Lists", "code": "lists", "status": 400, "description": "Two lists whose argument names would meet.",
+      "message": "{paths|json_list}|{pathsJson|list}",
+      "params": { "paths": "string[]", "pathsJson": "string[]" },
+      "example": { "paths": ["a"], "pathsJson": ["b", "c"] }, "exampleText": "\"a\"|b, c",
+      "surfaces": ["api-v1"], "source": "S"
+    },
+    {
+      "name": "Plural", "code": "plural", "status": 400, "description": "One filter twice on one param.",
+      "message": "{n} item{n|s}{n|s}", "params": { "n": "integer" }, "example": { "n": 1 },
+      "exampleText": "1 item", "surfaces": ["api-v1"], "source": "S"
+    }
+  ]
+}"#;
+
+/// The generated Rust of a contract whose placeholders could collide, built
+/// into a program with the real filters, run, and its sentences read back.
+#[test]
+fn the_rust_half_of_an_awkward_contract_compiles_and_says_what_the_contract_pins() {
+    let all = generate(AWKWARD).unwrap();
+    let rust = &all.last().unwrap().1;
+    let dir = std::env::temp_dir().join(format!("xtask-refusals-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("generated.rs"), rust).unwrap();
+    let text = concat!(env!("CARGO_MANIFEST_DIR"), "/../ops/api-contracts/src/refusal_text.rs");
+    let main = format!(
+        r#"#[path = "{text}"]
+mod refusal_text;
+#[path = "generated.rs"]
+mod refusals;
+use refusals::Refusal;
+fn main() {{
+    let list = |items: &[&str]| items.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+    println!("{{}}", Refusal::Lone {{ count: 7 }}.message());
+    println!("{{}}", Refusal::Shadow {{ json: "a\"b".to_owned() }}.message());
+    println!("{{}}", Refusal::Collide {{ path: "p".to_owned(), path_json: "q".to_owned() }}.message());
+    println!("{{}}", Refusal::Lists {{ paths: list(&["a"]), paths_json: list(&["b", "c"]) }}.message());
+    println!("{{}}", Refusal::Plural {{ n: 1 }}.message());
+}}
+"#
+    );
+    std::fs::write(dir.join("main.rs"), main).unwrap();
+    let built = std::process::Command::new("rustc")
+        .args(["--edition", "2024", "--crate-name", "probe", "-o"])
+        .arg(dir.join("probe"))
+        .arg(dir.join("main.rs"))
+        .output()
+        .unwrap();
+    assert!(built.status.success(), "{}", String::from_utf8_lossy(&built.stderr));
+    let ran = std::process::Command::new(dir.join("probe")).output().unwrap();
+    let said = String::from_utf8(ran.stdout).unwrap();
+    let wanted = ["7", "\"a\\\"b\"", "\"p\": q", "\"a\"|b, c", "1 item"];
+    assert_eq!(said.lines().collect::<Vec<_>>(), wanted);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_lone_integer_placeholder_is_formatted_not_cloned() {
+    let (_, rust) = files(AWKWARD).unwrap();
+    assert!(rust.contains("Self::Lone { count } => format!(\"{count}\"),"), "{rust}");
+}
+
+#[test]
+fn a_filtered_placeholder_is_positional_and_qualified() {
+    let (_, rust) = files(AWKWARD).unwrap();
+    for wanted in [
+        "format!(\"{0}: {path_json}\", crate::refusal_text::json(path))",
+        "format!(\"{0}|{1}\", crate::refusal_text::json_list(paths), crate::refusal_text::list(paths_json))",
+        "format!(\"{n} item{0}{0}\", crate::refusal_text::plural_s(*n))",
+        "Self::Shadow { json } => format!(\"{0}\", crate::refusal_text::json(json)),",
+    ] {
+        assert!(rust.contains(wanted), "{wanted}\n{rust}");
+    }
+}
+
+#[test]
+fn a_description_that_would_end_its_doc_comment_and_codes_that_collide_are_refused() {
+    let text = mutated("\"Says hi.\"", "\"Matches /api/*/documents.\"");
+    let errors = files(&text).unwrap_err();
+    assert!(errors.iter().any(|e| e.contains("holds `*/`")), "{errors:?}");
+    let clash = CONTRACT.replace("plain_thing", "a1").replacen("greeted_thing", "a_1", 1);
+    let errors = files(&clash).unwrap_err();
+    assert!(errors.iter().any(|e| e.contains("codes `a_1` and `a1` are both `a1`")), "{errors:?}");
+    // One raw code said more than one way is not a collision.
+    assert!(files(CONTRACT).is_ok());
 }

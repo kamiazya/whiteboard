@@ -1,8 +1,8 @@
+import { MARKDOWN_LIMIT_PHRASE, NODE_TEXT_LIMIT_PHRASE } from '@kamiazya/whiteboard-model'
 import {
-  MARKDOWN_LIMIT_PHRASE,
-  NODE_TEXT_LIMIT_PHRASE,
-  refusalMessage,
-} from '@kamiazya/whiteboard-model'
+  ReferenceRewriteBodyTooLarge,
+  ReferenceRewriteNodeTextTooLarge,
+} from './generated/refusals.js'
 
 /**
  * The two bounds a reference rewrite can break: a markdown body's and a text
@@ -24,15 +24,8 @@ export class ReferenceRewriteTooLargeError extends Error {
   constructor(readonly breach: ReferenceRewriteBreach) {
     super(
       breach.shape === 'body'
-        ? refusalMessage('ReferenceRewriteBodyTooLarge', {
-            chars: breach.chars,
-            limit: MARKDOWN_LIMIT_PHRASE,
-          })
-        : refusalMessage('ReferenceRewriteNodeTextTooLarge', {
-            nodeId: breach.nodeId,
-            chars: breach.chars,
-            limit: NODE_TEXT_LIMIT_PHRASE,
-          }),
+        ? ReferenceRewriteBodyTooLarge(breach.chars, MARKDOWN_LIMIT_PHRASE)
+        : ReferenceRewriteNodeTextTooLarge(breach.nodeId, breach.chars, NODE_TEXT_LIMIT_PHRASE),
     )
     this.name = 'ReferenceRewriteTooLargeError'
   }

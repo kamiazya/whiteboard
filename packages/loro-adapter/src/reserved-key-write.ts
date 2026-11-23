@@ -1,4 +1,5 @@
-import { holdsReservedKey, REFUSAL_CODES, refusalMessage } from '@kamiazya/whiteboard-model'
+import { holdsReservedKey, SYNC_TEXT_BREACH_CODES } from '@kamiazya/whiteboard-model'
+import { ReservedKeyWrite } from './generated/refusals.js'
 
 /**
  * A value write refused because the value holds a key named `__proto__` —
@@ -7,10 +8,10 @@ import { holdsReservedKey, REFUSAL_CODES, refusalMessage } from '@kamiazya/white
  * Thrown before the first op, so nothing of the write was kept.
  */
 export class ReservedKeyWriteError extends Error {
-  readonly code = REFUSAL_CODES.reservedMapKey
+  readonly code = SYNC_TEXT_BREACH_CODES['reserved-map-key']
 
   constructor(readonly container: string) {
-    super(refusalMessage('ReservedKeyWrite', { container }))
+    super(ReservedKeyWrite(container))
     this.name = 'ReservedKeyWriteError'
   }
 }

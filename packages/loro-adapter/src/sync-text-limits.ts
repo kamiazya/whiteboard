@@ -10,9 +10,8 @@ import {
   CONTAINER_NAME_MAX_CHARS,
   growsPast,
   MARKDOWN_MAX_CHARS,
-  REFUSAL_CODES,
   RESERVED_MAP_KEY,
-  type SyncWriteRefusalCode,
+  SYNC_TEXT_BREACH_CODES,
 } from '@kamiazya/whiteboard-model'
 import {
   type ContainerID,
@@ -140,29 +139,7 @@ export type SyncTextBreach =
  * so the daemon's refusal and the browser keeper's cannot name the same
  * breach differently: a run and a body are both a markdown body too large.
  */
-export const SYNC_TEXT_BREACH_CODES = {
-  run: REFUSAL_CODES.markdownTooLarge,
-  runs: REFUSAL_CODES.markdownTooLarge,
-  body: REFUSAL_CODES.markdownTooLarge,
-  'node-text': REFUSAL_CODES.nodeTextTooLarge,
-  'node-location': REFUSAL_CODES.nodeLocationTooLarge,
-  label: REFUSAL_CODES.labelTooLarge,
-  'comment-message': REFUSAL_CODES.commentTooLarge,
-  tags: REFUSAL_CODES.tagsTooLarge,
-  'container-name': REFUSAL_CODES.containerNameTooLong,
-  'canvas-size': REFUSAL_CODES.tooManyNodesOrEdges,
-  'thread-anchor': REFUSAL_CODES.commentAnchorTooLarge,
-  'anchor-quote': REFUSAL_CODES.anchorQuoteTooLong,
-  'open-threads': REFUSAL_CODES.tooManyOpenThreads,
-  'open-changes': REFUSAL_CODES.tooManyOpenChanges,
-  'thread-messages': REFUSAL_CODES.tooManyThreadMessages,
-  'content-root': REFUSAL_CODES.invalidDocumentRoot,
-  'reserved-map-key': REFUSAL_CODES.reservedMapKey,
-  'retired-shape': REFUSAL_CODES.retiredStoredShape,
-  'retired-comment-plane': REFUSAL_CODES.retiredCommentPlane,
-  // Sent built on the change that creates the container, it is an ordinary write.
-  'unattached-container': REFUSAL_CODES.causalGap,
-} as const satisfies Record<SyncTextBreach['shape'], SyncWriteRefusalCode>
+export { SYNC_TEXT_BREACH_CODES }
 
 export interface SyncTextJudgement {
   /** The first limit the update breaks, or `null` when it may be kept. */

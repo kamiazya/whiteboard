@@ -6,7 +6,7 @@
 // pre-ADR-0037/0038 forms, a markdown body stored as a canvas text node, and
 // the Excalidraw `elements` list.
 
-import { documentKindSchema, REFUSAL_CODES, refusalMessage } from '@kamiazya/whiteboard-model'
+import { documentKindSchema, SYNC_TEXT_BREACH_CODES } from '@kamiazya/whiteboard-model'
 import { type ContainerID, LoroDoc, LoroList, type LoroMap, LoroMovableList } from 'loro-crdt'
 import {
   CANVAS_KEY,
@@ -19,6 +19,7 @@ import {
   peekTextOf,
   RETIRED_ELEMENTS_KEY,
 } from './containers.js'
+import { RetiredStoredShape } from './generated/refusals.js'
 
 /**
  * The key a canvas's facets, and a node's or edge's facets and embed, were
@@ -34,10 +35,10 @@ export const PRE_ADR_0037_EXTENSION_KEY = 'x-whiteboard'
  * without what the shape carried.
  */
 export class RetiredStoredShapeError extends Error {
-  readonly code = REFUSAL_CODES.retiredStoredShape
+  readonly code = SYNC_TEXT_BREACH_CODES['retired-shape']
 
   constructor(readonly found: string) {
-    super(refusalMessage('RetiredStoredShape', { found }))
+    super(RetiredStoredShape(found))
     this.name = 'RetiredStoredShapeError'
   }
 }

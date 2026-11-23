@@ -1,4 +1,10 @@
-import { type DocumentKind, describeThrown, refusalMessage } from '@kamiazya/whiteboard-model'
+import {
+  type DocumentKind,
+  DocumentKindMismatch,
+  DocumentSerializeFailed,
+  describeThrown,
+  FacetWriteRejected,
+} from '@kamiazya/whiteboard-model'
 import type { ServerDeps } from '../server-deps.js'
 
 /**
@@ -16,7 +22,7 @@ export class DocumentKindMismatchError extends Error {
     public readonly kind: DocumentKind,
     detail: string,
   ) {
-    super(refusalMessage('DocumentKindMismatch', { documentId, kind, detail }))
+    super(DocumentKindMismatch(documentId, kind, detail))
     this.name = 'DocumentKindMismatchError'
   }
 }
@@ -49,14 +55,7 @@ export class DocumentSerializeError extends Error {
     format: string,
     cause: unknown,
   ) {
-    super(
-      refusalMessage('DocumentSerializeFailed', {
-        documentId,
-        format,
-        cause: describeThrown(cause),
-      }),
-      { cause },
-    )
+    super(DocumentSerializeFailed(documentId, format, describeThrown(cause)), { cause })
     this.name = 'DocumentSerializeError'
   }
 }
@@ -94,7 +93,7 @@ export class FacetWriteRejectedError extends Error {
     public readonly facetKey: string,
     reason: string,
   ) {
-    super(refusalMessage('FacetWriteRejected', { facetKey, reason }))
+    super(FacetWriteRejected(facetKey, reason))
     this.name = 'FacetWriteRejectedError'
   }
 }

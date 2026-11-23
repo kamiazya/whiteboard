@@ -19,22 +19,62 @@ use std::fmt::Write as _;
 use serde::Deserialize;
 use serde_json::Value;
 
+mod rust_emit;
+
 use super::caps::rust_int;
 use super::emit::{header, within_width};
 use super::refusal_template::{Filter, Piece, Ty, is_camel, parse_template, render, strings};
+use rust_emit::rust;
 
 pub(super) const SOURCE: &str = "contracts/api/refusals.json";
 const TS_TARGET: &str = "packages/model/src/generated/refusals.ts";
+/// A refusal with a `module` goes to that package's own `src/generated/refusals.ts`.
 const RUST_TARGET: &str = "crates/ops/api-contracts/src/generated/refusals.rs";
 
 const STATUSES: &[u16] = &[400, 404, 409, 413, 500, 503];
 const FAMILIES: &[&str] = &["sync-write", "version"];
+/// The breach tables the TypeScript half emits, with the constant each is.
+const BREACH_TABLES: &[(&str, &str)] =
+    &[("text", "SYNC_TEXT_BREACH_CODES"), ("workspace", "SYNC_WORKSPACE_BREACH_CODES")];
 /// The widest a doc comment is wrapped, under biome's and rustfmt's 100.
 const COMMENT_WIDTH: usize = 92;
 /// biome.json's `lineWidth`, which decides where a property's string moves to its own line.
 const TS_LINE_WIDTH: usize = 100;
 /// The largest integer a JavaScript number holds exactly.
 const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
+
+/// Words a TypeScript parameter cannot be named, and `i`, the name the list
+/// filters use for an item.
+const JS_RESERVED: &[&str] = &[
+    "arguments",
+    "case",
+    "catch",
+    "class",
+    "default",
+    "delete",
+    "eval",
+    "export",
+    "finally",
+    "function",
+    "i",
+    "implements",
+    "import",
+    "interface",
+    "let",
+    "new",
+    "null",
+    "of",
+    "package",
+    "private",
+    "protected",
+    "public",
+    "switch",
+    "this",
+    "throw",
+    "var",
+    "void",
+    "with",
+];
 
 const RUST_KEYWORDS: &[&str] = &[
     "abstract", "as", "async", "await", "become", "box", "break", "const", "continue", "crate",
@@ -53,6 +93,16 @@ struct Contract {
     refusals: Vec<Entry>,
 }
 
+/// The sync judge's breach shape this entry answers: the key of a table of
+/// `SYNC_TEXT_BREACH_CODES` or `SYNC_WORKSPACE_BREACH_CODES`, which maps it to
+/// the entry's code.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Breach {
+    table: String,
+    shape: String,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct Entry {
@@ -60,6 +110,8 @@ struct Entry {
     code: String,
     status: u16,
     family: Option<String>,
+    breach: Option<Breach>,
+    module: Option<String>,
     description: String,
     message: String,
     #[serde(default)]
@@ -151,6 +203,33 @@ fn check_entry<'a>(
     {
         return Err(format!("family `{family}` is not one of {FAMILIES:?}"));
     }
+    if let Some(breach) = &entry.breach {
+        if !BREACH_TABLES.iter().any(|(table, _)| *table == breach.table) {
+            return Err(format!("breach table `{}` is not one of {BREACH_TABLES:?}", breach.table));
+        }
+        if entry.family.as_deref() != Some("sync-write") {
+            return Err("a breach shape is answered by a sync-write refusal".to_owned());
+        }
+        let kebab = breach.shape.starts_with(|c: char| c.is_ascii_lowercase())
+            && !breach.shape.ends_with('-')
+            && !breach.shape.contains("--")
+            && breach.shape.chars().all(|c| c.is_ascii_lowercase() || c == '-');
+        if !kebab {
+            return Err(format!("breach shape `{}` is not lowercase kebab-case", breach.shape));
+        }
+    }
+    if let Some(module) = &entry.module {
+        let ok = module.starts_with(|c: char| c.is_ascii_lowercase())
+            && !module.ends_with('-')
+            && !module.contains("--")
+            && module.chars().all(|c| c.is_ascii_lowercase() || c == '-');
+        if !ok {
+            return Err(format!("module `{module}` is not a package directory name"));
+        }
+    }
+    if entry.description.contains("*/") {
+        return Err("description holds `*/`, which would end its generated doc comment".to_owned());
+    }
     if entry.description.trim().is_empty() || entry.source.trim().is_empty() {
         return Err("description and source must say something".to_owned());
     }
@@ -166,7 +245,10 @@ fn check_entry<'a>(
     }
     let mut tys = BTreeMap::new();
     for (name, ty) in &entry.params {
-        if !is_camel(name) || RUST_KEYWORDS.contains(&name.as_str()) {
+        if !is_camel(name)
+            || RUST_KEYWORDS.contains(&name.as_str())
+            || JS_RESERVED.contains(&name.as_str())
+        {
             return Err(format!("param `{name}` is not a name both languages take"));
         }
         let ty = Ty::parse(ty).ok_or_else(|| format!("param `{name}` has no type `{ty}`"))?;
@@ -192,6 +274,29 @@ fn check(contract: &Contract) -> Result<Vec<Checked<'_>>, Vec<String>> {
         match check_entry(entry, &contract.surfaces) {
             Ok(entry) => checked.push(entry),
             Err(e) => errors.push(format!("{SOURCE}: {}: {e}", entry.name)),
+        }
+    }
+    let mut keys: BTreeMap<String, &str> = BTreeMap::new();
+    for entry in &contract.refusals {
+        let key = camel_of_code(&entry.code);
+        match keys.get(&key) {
+            Some(other) if *other != entry.code => errors.push(format!(
+                "{SOURCE}: codes `{other}` and `{}` are both `{key}` in REFUSAL_CODES",
+                entry.code
+            )),
+            _ => {
+                keys.insert(key, &entry.code);
+            }
+        }
+    }
+    let mut shapes = BTreeSet::new();
+    for entry in &contract.refusals {
+        let Some(breach) = &entry.breach else { continue };
+        if !shapes.insert((breach.table.as_str(), breach.shape.as_str())) {
+            errors.push(format!(
+                "{SOURCE}: breach shape `{}` of table `{}` is answered by two entries",
+                breach.shape, breach.table
+            ));
         }
     }
     let mut families: BTreeMap<&str, Option<&str>> = BTreeMap::new();
@@ -298,20 +403,9 @@ fn ts_literal(text: &str) -> String {
     out
 }
 
-/// `key: 'text',` where it fits a line, else the string under the key, which
-/// is where biome puts a string too long for one.
-fn ts_property(out: &mut String, indent: usize, key: &str, literal: &str) {
-    let pad = " ".repeat(indent);
-    if indent + key.len() + 2 + literal.chars().count() < TS_LINE_WIDTH {
-        let _ = writeln!(out, "{pad}{key}: {literal},");
-    } else {
-        let _ = writeln!(out, "{pad}{key}:\n{pad}  {literal},");
-    }
-}
-
 /// An array literal on one line where it fits, else one item to a line.
-fn ts_array(out: &mut String, lead: &str, items: &[&str]) {
-    let literals: Vec<String> = items.iter().map(|item| ts_literal(item)).collect();
+fn ts_array(out: &mut String, lead: &str, items: &[String]) {
+    let literals = items;
     let line = format!("{lead}[{}] as const", literals.join(", "));
     if line.chars().count() <= TS_LINE_WIDTH {
         let _ = writeln!(out, "{line}");
@@ -324,41 +418,140 @@ fn ts_array(out: &mut String, lead: &str, items: &[&str]) {
     out.push_str("] as const\n");
 }
 
+/// A template literal's text: the characters it may not hold raw escaped.
+fn ts_template_text(text: &str) -> String {
+    text.replace('`', "\\`").replace("${", "\\${")
+}
+
+/// What a filter turns a param into, as the TypeScript expression a template
+/// literal interpolates.
+fn ts_filtered(filter: Option<Filter>, field: &str) -> String {
+    let p = field.to_owned();
+    match filter {
+        None => p,
+        Some(Filter::Json) => format!("JSON.stringify({p})"),
+        Some(Filter::Trim) => format!("{p}.trim()"),
+        Some(Filter::S) => format!("{p} === 1 ? '' : 's'"),
+        Some(Filter::List) => format!("{p}.join(', ')"),
+        Some(Filter::AndList) => format!("{p}.join(' and ')"),
+        Some(Filter::JsonList) => format!("{p}.map((i) => JSON.stringify(i)).join(', ')"),
+        Some(Filter::QuotedList) => format!("{p}.map((i) => `\"${{i}}\"`).join(', ')"),
+    }
+}
+
+/// One refusal as an exported function from its params to its sentence, the
+/// template compiled the way the Rust half compiles it into a `format!`.
+/// The params in the order the message first names them, which is the order a
+/// TypeScript function takes them.
+fn param_order<'a>(e: &'a Checked<'_>) -> Vec<&'a str> {
+    let mut order: Vec<&str> = Vec::new();
+    for piece in &e.pieces {
+        if let Piece::Param { name, .. } = piece
+            && !order.contains(&name.as_str())
+        {
+            order.push(name);
+        }
+    }
+    order
+}
+
+/// The signature on one line where it fits, else one param to a line.
+fn ts_signature(e: &Checked<'_>, order: &[&str]) -> String {
+    let name = &e.entry.name;
+    let params: Vec<String> = order.iter().map(|p| format!("{p}: {}", e.tys[p].ts())).collect();
+    let one = format!("export const {name} = ({}) =>", params.join(", "));
+    if one.chars().count() <= TS_LINE_WIDTH {
+        return one;
+    }
+    let many = params.iter().fold(String::new(), |mut acc, p| {
+        let _ = writeln!(acc, "  {p},");
+        acc
+    });
+    format!("export const {name} = (\n{many}) =>")
+}
+
+/// One refusal as an exported function from its params to its sentence, the
+/// template compiled the way the Rust half compiles it into a `format!`.
+fn ts_refusal(out: &mut String, e: &Checked<'_>) {
+    let order = param_order(e);
+    let signature = ts_signature(e, &order);
+    let body = if order.is_empty() {
+        let text: String = e
+            .pieces
+            .iter()
+            .map(|piece| match piece {
+                Piece::Text(text) => text.as_str(),
+                Piece::Param { .. } => "",
+            })
+            .collect();
+        ts_literal(&text)
+    } else {
+        let mut text = String::from("`");
+        for piece in &e.pieces {
+            match piece {
+                Piece::Text(t) => text.push_str(&ts_template_text(t)),
+                Piece::Param { name, filter } => {
+                    let _ = write!(text, "${{{}}}", ts_filtered(*filter, name));
+                }
+            }
+        }
+        text.push('`');
+        text
+    };
+    let last = signature.rsplit('\n').next().unwrap_or_default();
+    let join = if format!("{last} {body}").chars().count() <= TS_LINE_WIDTH { " " } else { "\n  " };
+    let _ = writeln!(out, "{signature}{join}{body}");
+}
+
+/// The refusals one package holds, apart from the main file: the web build
+/// places each package in a chunk of its own, so a refusal only a lazily loaded
+/// package raises is kept in that package and stays in that chunk.
+fn ts_module(entries: &[Checked<'_>], module: &str) -> String {
+    let mut out = header(SOURCE);
+    out.push_str(
+        "\n// One function per refusal, in a module of their own so they stay with their raiser.\n",
+    );
+    for e in entries.iter().filter(|e| e.entry.module.as_deref() == Some(module)) {
+        out.push('\n');
+        ts_doc(&mut out, 0, &e.entry.description);
+        ts_refusal(&mut out, e);
+    }
+    out
+}
+
 fn ts(entries: &[Checked<'_>]) -> String {
     let mut out = header(SOURCE);
-    out.push_str("\n/** Every refusal by name: its code, HTTP status and message template. */\n");
-    out.push_str("export const REFUSALS = {\n");
-    for e in entries {
-        ts_doc(&mut out, 2, &e.entry.description);
-        let _ = writeln!(out, "  {}: {{", e.entry.name);
-        let _ = writeln!(out, "    code: {},", ts_literal(&e.entry.code));
-        let _ = writeln!(out, "    status: {},", e.entry.status);
-        ts_property(&mut out, 4, "message", &ts_literal(&e.entry.message));
-        out.push_str("  },\n");
-    }
-    out.push_str("} as const\n");
     out.push_str(
-        "\n/** The name of a refusal. */\nexport type RefusalName = keyof typeof REFUSALS\n",
+        "\n// One function per refusal, so a bundle carries only the sentences it raises.\n",
     );
-    out.push_str(
-        "\n/** The params each refusal's message names. */\nexport interface RefusalParams {\n",
-    );
-    for e in entries {
-        if e.tys.is_empty() {
-            let _ = writeln!(out, "  {}: Record<never, never>", e.entry.name);
-            continue;
-        }
-        let _ = writeln!(out, "  {}: {{", e.entry.name);
-        for (name, ty) in &e.tys {
-            let _ = writeln!(out, "    readonly {name}: {}", ty.ts());
-        }
-        out.push_str("  }\n");
+    for e in entries.iter().filter(|e| e.entry.module.is_none()) {
+        out.push('\n');
+        ts_doc(&mut out, 0, &e.entry.description);
+        ts_refusal(&mut out, e);
     }
-    out.push_str("}\n");
+    out.push_str("\n// One export per code, so a bundle carries only the codes it answers with.\n");
+    for code in distinct_codes(entries) {
+        let line = format!(
+            "export const REFUSAL_CODE_{} = {}",
+            code.to_ascii_uppercase(),
+            ts_literal(code)
+        );
+        if line.chars().count() <= TS_LINE_WIDTH {
+            let _ = writeln!(out, "{line}");
+        } else {
+            let _ = writeln!(
+                out,
+                "export const REFUSAL_CODE_{} =\n  {}",
+                code.to_ascii_uppercase(),
+                ts_literal(code)
+            );
+        }
+    }
     out.push_str("\n/** Every code a refusal carries, keyed by the camelCase of the code. */\n");
     out.push_str("export const REFUSAL_CODES = {\n");
     for code in distinct_codes(entries) {
-        let _ = writeln!(out, "  {}: {},", camel_of_code(code), ts_literal(code));
+        let _ =
+            writeln!(out, "  {}: REFUSAL_CODE_{},", camel_of_code(code), code.to_ascii_uppercase());
     }
     out.push_str("} as const\n");
     out.push_str("\n/** A code a refusal carries. */\n");
@@ -368,244 +561,31 @@ fn ts(entries: &[Checked<'_>]) -> String {
         ("version", "VERSION_REFUSAL_CODES", "a keeper refuses a version save with"),
     ] {
         let _ = write!(out, "\n/** The codes {what}. */\n");
-        ts_array(&mut out, &format!("export const {name} = "), &family_codes(entries, family));
+        let items: Vec<String> =
+            family_codes(entries, family).iter().map(|code| ts_literal(code)).collect();
+        ts_array(&mut out, &format!("export const {name} = "), &items);
     }
-    out
-}
-
-fn rust_literal(text: &str) -> String {
-    let mut out = String::from("\"");
-    for c in text.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            c if c.is_control() => {
-                let _ = write!(out, "\\u{{{:x}}}", u32::from(c));
-            }
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
-}
-
-fn rust_doc(out: &mut String, indent: usize, text: &str) {
-    let pad = " ".repeat(indent);
-    for line in wrap(text, COMMENT_WIDTH - indent) {
-        let _ = writeln!(out, "{pad}/// {line}");
-    }
-}
-
-fn rust_example(value: &Value, ty: Ty) -> String {
-    match (value, ty) {
-        (Value::Number(n), Ty::Int) => n.as_u64().map_or_else(String::new, rust_int),
-        (Value::String(s), Ty::Str) if s.is_empty() => "String::new()".to_owned(),
-        (Value::String(s), Ty::Str) => format!("{}.to_owned()", rust_literal(s)),
-        (list, _) => {
-            let items = strings(list).unwrap_or_default();
-            let items: Vec<String> =
-                items.iter().map(|s| format!("{}.to_owned()", rust_literal(s))).collect();
-            format!("vec![{}]", items.join(", "))
-        }
-    }
-}
-
-/// `Self::Name { a, b }`, `Self::Name { .. }` for a match that reads none of
-/// them, or the bare name of a refusal that has none.
-fn rust_pattern(e: &Checked<'_>, bind: bool) -> String {
-    if e.tys.is_empty() {
-        return format!("Self::{}", e.entry.name);
-    }
-    if !bind {
-        return format!("Self::{} {{ .. }}", e.entry.name);
-    }
-    let fields: Vec<String> = e.tys.keys().map(|name| snake_of_camel(name)).collect();
-    format!("Self::{} {{ {} }}", e.entry.name, fields.join(", "))
-}
-
-fn rust_message(e: &Checked<'_>) -> String {
-    let braces = |text: &str| text.replace('{', "{{").replace('}', "}}");
-    if e.tys.is_empty() {
-        let text: String = e
-            .pieces
-            .iter()
-            .map(|piece| match piece {
-                Piece::Text(text) => text.as_str(),
-                Piece::Param { .. } => "",
-            })
-            .collect();
-        return format!("{}.to_owned()", rust_literal(&text));
-    }
-    if let [Piece::Param { name, filter: None }] = e.pieces.as_slice() {
-        return format!("{}.clone()", snake_of_camel(name));
-    }
-    let mut format = String::new();
-    let mut named: Vec<String> = Vec::new();
-    for piece in &e.pieces {
-        match piece {
-            Piece::Text(text) => format.push_str(&braces(text)),
-            Piece::Param { name, filter: None } => {
-                let _ = write!(format, "{{{}}}", snake_of_camel(name));
-            }
-            Piece::Param { name, filter: Some(filter) } => {
-                let field = snake_of_camel(name);
-                let bound = format!("{field}_{}", filter.name());
-                let call = match filter {
-                    Filter::S => format!("plural_s(*{field})"),
-                    other => format!("{}({field})", other.name()),
-                };
-                let arg = format!("{bound} = {call}");
-                if !named.contains(&arg) {
-                    named.push(arg);
-                }
-                let _ = write!(format, "{{{bound}}}");
-            }
-        }
-    }
-    let rest = if named.is_empty() { String::new() } else { format!(", {}", named.join(", ")) };
-    format!("format!({}{rest})", rust_literal(&format))
-}
-
-const EXPECT_LONG_MATCH: &str = "    #[expect(\n        clippy::too_many_lines,\n        reason = \"one arm per refusal the contract lists\"\n    )]\n";
-
-fn rust_variants(out: &mut String, entries: &[Checked<'_>]) {
-    out.push_str(
-        "\n/// A refusal: the code and status a request is answered with, and its sentence.\n",
-    );
-    out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\npub enum Refusal {\n");
-    for e in entries {
-        rust_doc(out, 4, &e.entry.description);
-        if e.tys.is_empty() {
-            let _ = writeln!(out, "    {},", e.entry.name);
-            continue;
-        }
-        let _ = writeln!(out, "    {} {{", e.entry.name);
-        for (name, ty) in &e.tys {
-            let _ = writeln!(out, "        {}: {},", snake_of_camel(name), ty.rust());
-        }
-        out.push_str("    },\n");
-    }
-    out.push_str("}\n");
-}
-
-fn rust_codes(out: &mut String, entries: &[Checked<'_>]) {
-    out.push_str("\n/// Every code a refusal carries, as a constant.\npub mod code {\n");
-    for code in distinct_codes(entries) {
-        let _ = writeln!(
-            out,
-            "    pub const {}: &str = {};",
-            code.to_ascii_uppercase(),
-            rust_literal(code)
-        );
-    }
-    out.push_str("}\n");
-    let names = |codes: &[&str]| -> String {
-        codes
-            .iter()
-            .map(|c| format!("code::{}", c.to_ascii_uppercase()))
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-    let _ = write!(
-        out,
-        "\n/// Every code, once, in the order the contract first names it.\npub const CODES: &[&str] = &[{}];\n",
-        names(&distinct_codes(entries))
-    );
-    for (family, name, what) in [
-        ("sync-write", "SYNC_WRITE_CODES", "a keeper refuses a sync write with"),
-        ("version", "VERSION_CODES", "a keeper refuses a version save with"),
-    ] {
+    let sync_codes = family_codes(entries, "sync-write");
+    for (table, name) in BREACH_TABLES {
         let _ = write!(
             out,
-            "\n/// The codes {what}.\npub const {name}: &[&str] = &[{}];\n",
-            names(&family_codes(entries, family))
+            "\n/** The code each {table} breach shape of a sync write is answered with. */\nexport const {name} = {{\n"
         );
-    }
-}
-
-/// Match arms with the same body written as one arm over their patterns, in the
-/// order each body first appears: clippy's the lint against repeated arms refuses a repeat.
-fn rust_arms(out: &mut String, arms: &[(String, String)]) {
-    let mut order: Vec<&str> = Vec::new();
-    let mut by_body: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-    for (pattern, body) in arms {
-        let patterns = by_body.entry(body.as_str()).or_default();
-        if patterns.is_empty() {
-            order.push(body.as_str());
+        for e in entries {
+            let Some(breach) = e.entry.breach.as_ref().filter(|b| b.table == *table) else {
+                continue;
+            };
+            let key = if breach.shape.contains('-') {
+                ts_literal(&breach.shape)
+            } else {
+                breach.shape.clone()
+            };
+            // The family list holds each code once; a table names it by position.
+            let at = sync_codes.iter().position(|code| *code == e.entry.code).unwrap_or_default();
+            let _ = writeln!(out, "  {key}: SYNC_WRITE_REFUSAL_CODES[{at}],");
         }
-        patterns.push(pattern.as_str());
+        out.push_str("} as const\n");
     }
-    for body in order {
-        let _ = writeln!(out, "            {} => {body},", by_body[body].join(" | "));
-    }
-}
-
-fn rust_methods(out: &mut String, entries: &[Checked<'_>]) {
-    out.push_str("\nimpl Refusal {\n");
-    out.push_str("    /// The stable code a caller branches on.\n");
-    out.push_str(EXPECT_LONG_MATCH);
-    out.push_str(
-        "    #[must_use]\n    pub const fn code(&self) -> &'static str {\n        match self {\n",
-    );
-    let arms: Vec<(String, String)> = entries
-        .iter()
-        .map(|e| (rust_pattern(e, false), format!("code::{}", e.entry.code.to_ascii_uppercase())))
-        .collect();
-    rust_arms(out, &arms);
-    out.push_str("        }\n    }\n\n");
-    out.push_str("    /// The HTTP status the refusal travels with.\n");
-    out.push_str(EXPECT_LONG_MATCH);
-    out.push_str(
-        "    #[must_use]\n    pub const fn status(&self) -> u16 {\n        match self {\n",
-    );
-    let arms: Vec<(String, String)> =
-        entries.iter().map(|e| (rust_pattern(e, false), e.entry.status.to_string())).collect();
-    rust_arms(out, &arms);
-    out.push_str("        }\n    }\n\n");
-    out.push_str("    /// The sentence, as the TypeScript says it.\n");
-    out.push_str(EXPECT_LONG_MATCH);
-    out.push_str("    #[must_use]\n    pub fn message(&self) -> String {\n        match self {\n");
-    let arms: Vec<(String, String)> =
-        entries.iter().map(|e| (rust_pattern(e, true), rust_message(e))).collect();
-    rust_arms(out, &arms);
-    out.push_str("        }\n    }\n}\n");
-}
-
-fn rust_examples(out: &mut String, entries: &[Checked<'_>]) {
-    out.push_str("\n/// Each refusal built from the example the contract pins for it, by name.\n");
-    out.push_str("#[cfg(test)]\n");
-    out.push_str(EXPECT_LONG_MATCH.trim_start_matches("    "));
-    out.push_str("pub(crate) fn examples() -> Vec<(&'static str, Refusal)> {\n    vec![\n");
-    for e in entries {
-        let fields: Vec<String> = e
-            .tys
-            .iter()
-            .map(|(name, ty)| {
-                format!("{}: {}", snake_of_camel(name), rust_example(&e.entry.example[*name], *ty))
-            })
-            .collect();
-        let build = if fields.is_empty() {
-            format!("Refusal::{}", e.entry.name)
-        } else {
-            format!("Refusal::{} {{ {} }}", e.entry.name, fields.join(", "))
-        };
-        let _ = writeln!(out, "        ({}, {build}),", rust_literal(&e.entry.name));
-    }
-    out.push_str("    ]\n}\n");
-}
-
-fn rust(entries: &[Checked<'_>]) -> String {
-    let mut out = header(SOURCE);
-    out.push_str("\nuse std::fmt;\n\nuse crate::refusal_text::{\n");
-    out.push_str("    and_list, json, json_list, list, plural_s, quoted_list, trim,\n};\n");
-    rust_variants(&mut out, entries);
-    rust_codes(&mut out, entries);
-    rust_methods(&mut out, entries);
-    out.push_str(
-        "\nimpl fmt::Display for Refusal {\n    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {\n        f.write_str(&self.message())\n    }\n}\n",
-    );
-    rust_examples(&mut out, entries);
     out
 }
 
@@ -615,10 +595,25 @@ pub(super) fn generate(text: &str) -> Result<Vec<(String, String, bool)>, Vec<St
     let contract: Contract = serde_json::from_str(text)
         .map_err(|e| vec![format!("{SOURCE}: not the refusals contract: {e}")])?;
     let entries = check(&contract)?;
-    let ts_text = within_width(ts(&entries)).map_err(|long| {
-        long.into_iter().map(|e| format!("{TS_TARGET}: {e}")).collect::<Vec<_>>()
-    })?;
-    Ok(vec![(TS_TARGET.to_owned(), ts_text, false), (RUST_TARGET.to_owned(), rust(&entries), true)])
+    let mut files = Vec::new();
+    let mut modules: Vec<&str> = entries.iter().filter_map(|e| e.entry.module.as_deref()).collect();
+    modules.sort_unstable();
+    modules.dedup();
+    let mut texts = vec![(TS_TARGET.to_owned(), ts(&entries))];
+    for module in modules {
+        texts.push((
+            format!("packages/{module}/src/generated/refusals.ts"),
+            ts_module(&entries, module),
+        ));
+    }
+    for (target, text) in texts {
+        let text = within_width(text).map_err(|long| {
+            long.into_iter().map(|e| format!("{target}: {e}")).collect::<Vec<_>>()
+        })?;
+        files.push((target, text, false));
+    }
+    files.push((RUST_TARGET.to_owned(), rust(&entries), true));
+    Ok(files)
 }
 
 #[cfg(test)]

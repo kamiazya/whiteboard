@@ -1,7 +1,6 @@
 import {
-  REFUSAL_CODES,
-  REFUSALS,
-  refusalMessage,
+  REFUSAL_CODE_TOO_MANY_VERSIONS,
+  TooManyVersions,
   VERSION_REFUSAL_CODES,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -23,11 +22,11 @@ export type VersionRefusalCode = z.infer<typeof versionRefusalCodeSchema>
  * oldest of those.
  */
 export class TooManyVersionsError extends Error {
-  readonly code: VersionRefusalCode = REFUSAL_CODES.tooManyVersions
-  readonly status = REFUSALS.TooManyVersions.status
+  readonly code: VersionRefusalCode = REFUSAL_CODE_TOO_MANY_VERSIONS
+  readonly status = 413
 
   constructor(public readonly limit: number) {
-    super(refusalMessage('TooManyVersions', { limit }))
+    super(TooManyVersions(limit))
     this.name = 'TooManyVersionsError'
   }
 }

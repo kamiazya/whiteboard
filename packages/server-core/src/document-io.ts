@@ -1,10 +1,14 @@
 import { isEngineTrap } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  DocumentEngineTrapImporting,
+  DocumentEngineTrapLoading,
+  DocumentEngineTrapRunningRecovered,
+  DocumentEngineTrapRunningUnrecoverable,
+  DocumentEngineTrapSaving,
   type DocumentId,
+  DocumentSnapshotNotFound,
   messageOf,
-  REFUSAL_CODES,
-  type RefusalName,
-  refusalMessage,
+  REFUSAL_CODE_DOCUMENT_ENGINE_TRAP,
 } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES } from '@kamiazya/whiteboard-ports'
 import { getLogger } from './log.js'
@@ -29,7 +33,7 @@ const log = getLogger('document-io')
  */
 export class SnapshotNotFoundError extends Error {
   constructor(readonly documentId: string) {
-    super(refusalMessage('DocumentSnapshotNotFound', { documentId }))
+    super(DocumentSnapshotNotFound(documentId))
     this.name = 'SnapshotNotFoundError'
   }
 }
@@ -68,28 +72,30 @@ function engineTrapMessage(
   doing: DocumentEngineTrapError['doing'],
   recovered: boolean,
 ): string {
-  if (doing !== 'running') return refusalMessage(ENGINE_TRAP_NAMES[doing], { subject })
-  return refusalMessage(
-    recovered ? 'DocumentEngineTrapRunningRecovered' : 'DocumentEngineTrapRunningUnrecoverable',
-    { subject },
+  if (doing !== 'running') return ENGINE_TRAP_MESSAGES[doing](subject)
+  return (recovered ? DocumentEngineTrapRunningRecovered : DocumentEngineTrapRunningUnrecoverable)(
+    subject,
   )
 }
 
 // The importing advice does not promise a reload works: measured on loro-crdt
 // 1.13.6, fresh instances in the same process took a 64 Ki-character import
 // and trapped within a millisecond on 128 Ki and larger.
-const ENGINE_TRAP_NAMES = {
-  loading: 'DocumentEngineTrapLoading',
-  saving: 'DocumentEngineTrapSaving',
-  'importing an update into': 'DocumentEngineTrapImporting',
-} as const satisfies Record<Exclude<DocumentEngineTrapError['doing'], 'running'>, RefusalName>
+const ENGINE_TRAP_MESSAGES = {
+  loading: DocumentEngineTrapLoading,
+  saving: DocumentEngineTrapSaving,
+  'importing an update into': DocumentEngineTrapImporting,
+} as const satisfies Record<
+  Exclude<DocumentEngineTrapError['doing'], 'running'>,
+  (subject: string) => string
+>
 
 /**
  * The code every surface answers `DocumentEngineTrapError` with — `/api/v1`'s
  * refusal table and the sync routes alike — with status 500: a server fault
  * the caller cannot fix by rewording.
  */
-export const DOCUMENT_ENGINE_TRAP_CODE = REFUSAL_CODES.documentEngineTrap
+export const DOCUMENT_ENGINE_TRAP_CODE = REFUSAL_CODE_DOCUMENT_ENGINE_TRAP
 
 /**
  * Runs one load or save of a document and answers an engine abort as

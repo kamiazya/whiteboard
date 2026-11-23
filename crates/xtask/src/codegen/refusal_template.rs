@@ -53,7 +53,7 @@ pub(super) enum Filter {
 }
 
 impl Filter {
-    pub(super) const ALL: &'static [(&'static str, Self)] = &[
+    pub(super) const ALL: &[(&str, Self)] = &[
         ("json", Self::Json),
         ("trim", Self::Trim),
         ("s", Self::S),

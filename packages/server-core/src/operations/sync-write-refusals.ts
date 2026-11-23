@@ -9,28 +9,84 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   ANCHOR_NODES_LIMIT_PHRASE,
+  AnchorQuoteTooLongDocument,
+  AnchorQuoteTooLongUpdate,
   CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
   CANVAS_NODES_LIMIT_PHRASE,
+  CanvasTooLargeEdgesAndLinesDocument,
+  CanvasTooLargeEdgesAndLinesUpdate,
+  CanvasTooLargeNodesDocument,
+  CanvasTooLargeNodesUpdate,
+  CausalGap,
   COMMENT_MESSAGE_LIMIT_PHRASE,
   CONTAINER_NAME_LIMIT_PHRASE,
+  CommentAnchorTooLargeDocument,
+  CommentAnchorTooLargeUpdate,
+  CommentMessageTooLargeDocument,
+  CommentMessageTooLargeUpdate,
+  ContainerNameTooLongDocument,
+  ContainerNameTooLongUpdate,
+  ContentRootKindDocument,
+  ContentRootKindUpdate,
   DOCUMENT_NAME_MAX_LENGTH,
   DOCUMENT_PATH_MAX_LENGTH,
   type DocumentKind,
+  DocumentKindChangedNamedKind,
+  DocumentKindChangedNamedNoKind,
+  DocumentKindChangedUnnamedKind,
+  DocumentKindChangedUnnamedNoKind,
+  DocumentNameTooLong,
+  FolderNameRefused,
   LABEL_LIMIT_PHRASE,
+  LabelTooLargeDocument,
+  LabelTooLargeUpdate,
   MARKDOWN_LIMIT_PHRASE,
   MARKDOWN_MAX_CHARS,
+  MarkdownBodyDocument,
+  MarkdownBodyUpdate,
+  MarkdownRunDocument,
+  MarkdownRunDocumentWithBody,
+  MarkdownRunsDocument,
+  MarkdownRunsUpdate,
+  MarkdownRunUpdate,
   NODE_LOCATION_LIMIT_PHRASE,
   NODE_TEXT_LIMIT_PHRASE,
+  NodeLocationTooLargeDocument,
+  NodeLocationTooLargeUpdate,
+  NodeTextTooLargeDocument,
+  NodeTextTooLargeUpdate,
+  OffGrammarPath,
+  OffGrammarPathMore,
   OPEN_CHANGES_LIMIT_PHRASE,
   OPEN_THREADS_LIMIT_PHRASE,
-  type RefusalName,
-  type RefusalParams,
-  refusalMessage,
+  ReservedMapKeyDocument,
+  ReservedMapKeyUpdate,
+  RetiredCommentPlaneWrittenDocument,
+  RetiredCommentPlaneWrittenUpdate,
+  RetiredShapeWrittenDocument,
+  RetiredShapeWrittenUpdate,
   type SyncWriteRefusalCode,
   TAG_COUNT_LIMIT_PHRASE,
   TAG_LENGTH_LIMIT_PHRASE,
+  TagsCountBoardDocument,
+  TagsCountBoardUpdate,
+  TagsCountElementDocument,
+  TagsCountElementUpdate,
+  TagsLengthBoardDocument,
+  TagsLengthBoardUpdate,
+  TagsLengthElementDocument,
+  TagsLengthElementUpdate,
   TEXT_ANCHOR_QUOTE_LIMIT_PHRASE,
   THREAD_MESSAGES_LIMIT_PHRASE,
+  TooManyOpenChangesDocument,
+  TooManyOpenChangesUpdate,
+  TooManyOpenThreadsDocument,
+  TooManyOpenThreadsUpdate,
+  TooManyThreadMessagesDocument,
+  TooManyThreadMessagesUpdate,
+  UnattachedContainerDocument,
+  UnattachedContainerUpdate,
+  UnreadableDocumentMeta,
 } from '@kamiazya/whiteboard-model'
 import { SyncWriteRefusalError } from '@kamiazya/whiteboard-ports'
 import { DOCUMENT_ENGINE_TRAP_CODE, DocumentEngineTrapError } from '../document-io.js'
@@ -53,12 +109,6 @@ export interface RefusedIn {
 
 type BreachOf<S extends SyncTextBreach['shape']> = Extract<SyncTextBreach, { shape: S }>
 
-type UpdateBase = RefusalName extends infer N
-  ? N extends `${infer Base}Update`
-    ? Base
-    : never
-  : never
-
 /**
  * A text refusal in the words that fit who is told: what an update would do,
  * or — once the caller resolved the document — what that document holds,
@@ -66,17 +116,13 @@ type UpdateBase = RefusalName extends infer N
  * `…Update` and a `…Document` sentence in the contract; the document form
  * carries the same params and the path.
  */
-function textRefusalMessage<Base extends UpdateBase>(
-  base: Base,
+function textRefusalMessage<Args extends unknown[]>(
+  update: (...args: Args) => string,
+  inDocument: (path: string, ...args: Args) => string,
   at: RefusedIn | undefined,
-  params: RefusalParams[`${Base}Update`],
+  ...args: Args
 ): string {
-  // The two names share their params but for the path; the name decides which
-  // sentence says them, and no type relates a computed name to its params.
-  const say = refusalMessage as (name: RefusalName, params: unknown) => string
-  return at === undefined
-    ? say(`${base}Update`, params)
-    : say(`${base}Document`, { path: at.path, ...params })
+  return at === undefined ? update(...args) : inDocument(at.path, ...args)
 }
 
 function bodyRefusalMessage(breach: BreachOf<'run' | 'runs' | 'body'>, at?: RefusedIn): string {
@@ -84,25 +130,19 @@ function bodyRefusalMessage(breach: BreachOf<'run' | 'runs' | 'body'>, at?: Refu
   if (breach.shape === 'runs') {
     const { runs } = breach
     return at === undefined
-      ? refusalMessage('MarkdownRunsUpdate', { runs, chars, maxChars: MARKDOWN_MAX_CHARS })
-      : refusalMessage('MarkdownRunsDocument', {
-          path: at.path,
-          runs,
-          chars,
-          maxChars: MARKDOWN_MAX_CHARS,
-        })
+      ? MarkdownRunsUpdate(runs, chars, MARKDOWN_MAX_CHARS)
+      : MarkdownRunsDocument(at.path, runs, chars, MARKDOWN_MAX_CHARS)
   }
   const limit = MARKDOWN_LIMIT_PHRASE
   if (breach.shape === 'body') {
     return at === undefined
-      ? refusalMessage('MarkdownBodyUpdate', { chars, limit })
-      : refusalMessage('MarkdownBodyDocument', { path: at.path, chars, limit })
+      ? MarkdownBodyUpdate(chars, limit)
+      : MarkdownBodyDocument(at.path, chars, limit)
   }
-  if (at === undefined) return refusalMessage('MarkdownRunUpdate', { chars, limit })
-  const found = { path: at.path, chars, maxChars: MARKDOWN_MAX_CHARS }
+  if (at === undefined) return MarkdownRunUpdate(chars, limit)
   return at.bodyChars === undefined
-    ? refusalMessage('MarkdownRunDocument', found)
-    : refusalMessage('MarkdownRunDocumentWithBody', { ...found, bodyChars: at.bodyChars })
+    ? MarkdownRunDocument(at.path, chars, MARKDOWN_MAX_CHARS)
+    : MarkdownRunDocumentWithBody(at.path, chars, MARKDOWN_MAX_CHARS, at.bodyChars)
 }
 
 /**
@@ -153,11 +193,14 @@ class NodeTextTooLargeError extends TextBreachRefusalError {
     readonly at?: RefusedIn,
   ) {
     super(
-      textRefusalMessage('NodeTextTooLarge', at, {
-        nodeId: breach.nodeId,
-        chars: breach.chars,
-        limit: NODE_TEXT_LIMIT_PHRASE,
-      }),
+      textRefusalMessage(
+        NodeTextTooLargeUpdate,
+        NodeTextTooLargeDocument,
+        at,
+        breach.nodeId,
+        breach.chars,
+        NODE_TEXT_LIMIT_PHRASE,
+      ),
     )
     this.name = 'NodeTextTooLargeError'
   }
@@ -177,11 +220,14 @@ class NodeLocationTooLargeError extends TextBreachRefusalError {
     readonly at?: RefusedIn,
   ) {
     super(
-      textRefusalMessage('NodeLocationTooLarge', at, {
-        nodeId: breach.nodeId,
-        chars: breach.chars,
-        limit: NODE_LOCATION_LIMIT_PHRASE,
-      }),
+      textRefusalMessage(
+        NodeLocationTooLargeUpdate,
+        NodeLocationTooLargeDocument,
+        at,
+        breach.nodeId,
+        breach.chars,
+        NODE_LOCATION_LIMIT_PHRASE,
+      ),
     )
     this.name = 'NodeLocationTooLargeError'
   }
@@ -200,11 +246,14 @@ class LabelTooLargeError extends TextBreachRefusalError {
     readonly at?: RefusedIn,
   ) {
     super(
-      textRefusalMessage('LabelTooLarge', at, {
-        elementId: breach.elementId,
-        chars: breach.chars,
-        limit: LABEL_LIMIT_PHRASE,
-      }),
+      textRefusalMessage(
+        LabelTooLargeUpdate,
+        LabelTooLargeDocument,
+        at,
+        breach.elementId,
+        breach.chars,
+        LABEL_LIMIT_PHRASE,
+      ),
     )
     this.name = 'LabelTooLargeError'
   }
@@ -223,11 +272,14 @@ class CommentMessageTooLargeError extends TextBreachRefusalError {
     readonly at?: RefusedIn,
   ) {
     super(
-      textRefusalMessage('CommentMessageTooLarge', at, {
-        messageId: breach.messageId,
-        chars: breach.chars,
-        limit: COMMENT_MESSAGE_LIMIT_PHRASE,
-      }),
+      textRefusalMessage(
+        CommentMessageTooLargeUpdate,
+        CommentMessageTooLargeDocument,
+        at,
+        breach.messageId,
+        breach.chars,
+        COMMENT_MESSAGE_LIMIT_PHRASE,
+      ),
     )
     this.name = 'CommentMessageTooLargeError'
   }
@@ -238,13 +290,27 @@ function tagsRefusalMessage(breach: BreachOf<'tags'>, at: RefusedIn | undefined)
   if (breach.measure === 'count') {
     const limit = TAG_COUNT_LIMIT_PHRASE
     return breach.elementId === null
-      ? textRefusalMessage('TagsCountBoard', at, { amount, limit })
-      : textRefusalMessage('TagsCountElement', at, { elementId: breach.elementId, amount, limit })
+      ? textRefusalMessage(TagsCountBoardUpdate, TagsCountBoardDocument, at, amount, limit)
+      : textRefusalMessage(
+          TagsCountElementUpdate,
+          TagsCountElementDocument,
+          at,
+          breach.elementId,
+          amount,
+          limit,
+        )
   }
   const limit = TAG_LENGTH_LIMIT_PHRASE
   return breach.elementId === null
-    ? textRefusalMessage('TagsLengthBoard', at, { amount, limit })
-    : textRefusalMessage('TagsLengthElement', at, { elementId: breach.elementId, amount, limit })
+    ? textRefusalMessage(TagsLengthBoardUpdate, TagsLengthBoardDocument, at, amount, limit)
+    : textRefusalMessage(
+        TagsLengthElementUpdate,
+        TagsLengthElementDocument,
+        at,
+        breach.elementId,
+        amount,
+        limit,
+      )
 }
 
 /**
@@ -280,10 +346,13 @@ class ContainerNameTooLongError extends TextBreachRefusalError {
     readonly at?: RefusedIn,
   ) {
     super(
-      textRefusalMessage('ContainerNameTooLong', at, {
-        chars: breach.chars,
-        limit: CONTAINER_NAME_LIMIT_PHRASE,
-      }),
+      textRefusalMessage(
+        ContainerNameTooLongUpdate,
+        ContainerNameTooLongDocument,
+        at,
+        breach.chars,
+        CONTAINER_NAME_LIMIT_PHRASE,
+      ),
     )
     this.name = 'ContainerNameTooLongError'
   }
@@ -305,14 +374,20 @@ class CanvasTooLargeError extends TextBreachRefusalError {
   ) {
     super(
       breach.measure === 'nodes'
-        ? textRefusalMessage('CanvasTooLargeNodes', at, {
-            count: breach.count,
-            limit: CANVAS_NODES_LIMIT_PHRASE,
-          })
-        : textRefusalMessage('CanvasTooLargeEdgesAndLines', at, {
-            count: breach.count,
-            limit: CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
-          }),
+        ? textRefusalMessage(
+            CanvasTooLargeNodesUpdate,
+            CanvasTooLargeNodesDocument,
+            at,
+            breach.count,
+            CANVAS_NODES_LIMIT_PHRASE,
+          )
+        : textRefusalMessage(
+            CanvasTooLargeEdgesAndLinesUpdate,
+            CanvasTooLargeEdgesAndLinesDocument,
+            at,
+            breach.count,
+            CANVAS_EDGES_AND_LINES_LIMIT_PHRASE,
+          ),
     )
     this.name = 'CanvasTooLargeError'
   }
@@ -331,11 +406,14 @@ class CommentAnchorTooLargeError extends TextBreachRefusalError {
     readonly at?: RefusedIn,
   ) {
     super(
-      textRefusalMessage('CommentAnchorTooLarge', at, {
-        threadId: breach.threadId,
-        count: breach.count,
-        limit: ANCHOR_NODES_LIMIT_PHRASE,
-      }),
+      textRefusalMessage(
+        CommentAnchorTooLargeUpdate,
+        CommentAnchorTooLargeDocument,
+        at,
+        breach.threadId,
+        breach.count,
+        ANCHOR_NODES_LIMIT_PHRASE,
+      ),
     )
     this.name = 'CommentAnchorTooLargeError'
   }
@@ -355,11 +433,14 @@ class AnchorQuoteTooLongError extends TextBreachRefusalError {
     readonly at?: RefusedIn,
   ) {
     super(
-      textRefusalMessage('AnchorQuoteTooLong', at, {
-        elementId: breach.elementId,
-        chars: breach.chars,
-        limit: TEXT_ANCHOR_QUOTE_LIMIT_PHRASE,
-      }),
+      textRefusalMessage(
+        AnchorQuoteTooLongUpdate,
+        AnchorQuoteTooLongDocument,
+        at,
+        breach.elementId,
+        breach.chars,
+        TEXT_ANCHOR_QUOTE_LIMIT_PHRASE,
+      ),
     )
     this.name = 'AnchorQuoteTooLongError'
   }
@@ -378,10 +459,13 @@ class TooManyOpenThreadsError extends TextBreachRefusalError {
     readonly at?: RefusedIn,
   ) {
     super(
-      textRefusalMessage('TooManyOpenThreads', at, {
-        count: breach.count,
-        limit: OPEN_THREADS_LIMIT_PHRASE,
-      }),
+      textRefusalMessage(
+        TooManyOpenThreadsUpdate,
+        TooManyOpenThreadsDocument,
+        at,
+        breach.count,
+        OPEN_THREADS_LIMIT_PHRASE,
+      ),
     )
     this.name = 'TooManyOpenThreadsError'
   }
@@ -396,10 +480,13 @@ class TooManyOpenChangesError extends TextBreachRefusalError {
     readonly at?: RefusedIn,
   ) {
     super(
-      textRefusalMessage('TooManyOpenChanges', at, {
-        count: breach.count,
-        limit: OPEN_CHANGES_LIMIT_PHRASE,
-      }),
+      textRefusalMessage(
+        TooManyOpenChangesUpdate,
+        TooManyOpenChangesDocument,
+        at,
+        breach.count,
+        OPEN_CHANGES_LIMIT_PHRASE,
+      ),
     )
     this.name = 'TooManyOpenChangesError'
   }
@@ -418,10 +505,13 @@ class TooManyThreadMessagesError extends TextBreachRefusalError {
     readonly at?: RefusedIn,
   ) {
     super(
-      textRefusalMessage('TooManyThreadMessages', at, {
-        count: breach.count,
-        limit: THREAD_MESSAGES_LIMIT_PHRASE,
-      }),
+      textRefusalMessage(
+        TooManyThreadMessagesUpdate,
+        TooManyThreadMessagesDocument,
+        at,
+        breach.count,
+        THREAD_MESSAGES_LIMIT_PHRASE,
+      ),
     )
     this.name = 'TooManyThreadMessagesError'
   }
@@ -442,8 +532,8 @@ class ContentRootKindError extends TextBreachRefusalError {
   ) {
     super(
       at === undefined
-        ? refusalMessage('ContentRootKindUpdate', { key: breach.key })
-        : refusalMessage('ContentRootKindDocument', { path: at.path, key: breach.key }),
+        ? ContentRootKindUpdate(breach.key)
+        : ContentRootKindDocument(at.path, breach.key),
     )
     this.name = 'ContentRootKindError'
   }
@@ -465,11 +555,8 @@ class UnattachedContainerError extends TextBreachRefusalError {
   ) {
     super(
       at === undefined
-        ? refusalMessage('UnattachedContainerUpdate', { container: breach.container })
-        : refusalMessage('UnattachedContainerDocument', {
-            path: at.path,
-            container: breach.container,
-          }),
+        ? UnattachedContainerUpdate(breach.container)
+        : UnattachedContainerDocument(at.path, breach.container),
     )
     this.name = 'UnattachedContainerError'
   }
@@ -490,8 +577,8 @@ class ReservedMapKeyError extends TextBreachRefusalError {
   ) {
     super(
       at === undefined
-        ? refusalMessage('ReservedMapKeyUpdate', { container: breach.container })
-        : refusalMessage('ReservedMapKeyDocument', { path: at.path, container: breach.container }),
+        ? ReservedMapKeyUpdate(breach.container)
+        : ReservedMapKeyDocument(at.path, breach.container),
     )
     this.name = 'ReservedMapKeyError'
   }
@@ -512,8 +599,8 @@ class RetiredShapeWrittenError extends TextBreachRefusalError {
   ) {
     super(
       at === undefined
-        ? refusalMessage('RetiredShapeWrittenUpdate', { found: breach.found })
-        : refusalMessage('RetiredShapeWrittenDocument', { path: at.path, found: breach.found }),
+        ? RetiredShapeWrittenUpdate(breach.found)
+        : RetiredShapeWrittenDocument(at.path, breach.found),
     )
     this.name = 'RetiredShapeWrittenError'
   }
@@ -530,11 +617,8 @@ class RetiredCommentPlaneWrittenError extends TextBreachRefusalError {
   ) {
     super(
       at === undefined
-        ? refusalMessage('RetiredCommentPlaneWrittenUpdate', { rows: breach.rows })
-        : refusalMessage('RetiredCommentPlaneWrittenDocument', {
-            path: at.path,
-            rows: breach.rows,
-          }),
+        ? RetiredCommentPlaneWrittenUpdate(breach.rows)
+        : RetiredCommentPlaneWrittenDocument(at.path, breach.rows),
     )
     this.name = 'RetiredCommentPlaneWrittenError'
   }
@@ -612,11 +696,7 @@ export class OffGrammarPathError extends SyncWriteRefusalError {
     const named = paths.slice(0, REFUSED_PATHS_NAMED).map(shortened)
     const more = paths.length - named.length
     const maxLength = DOCUMENT_PATH_MAX_LENGTH
-    super(
-      more > 0
-        ? refusalMessage('OffGrammarPathMore', { paths: named, more, maxLength })
-        : refusalMessage('OffGrammarPath', { paths: named, maxLength }),
-    )
+    super(more > 0 ? OffGrammarPathMore(named, more, maxLength) : OffGrammarPath(named, maxLength))
     this.name = 'OffGrammarPathError'
   }
 }
@@ -634,7 +714,7 @@ export class UnreadableDocumentMetaError extends SyncWriteRefusalError {
   readonly status = 400
 
   constructor(public readonly nodes: readonly string[]) {
-    super(refusalMessage('UnreadableDocumentMeta', { nodes }))
+    super(UnreadableDocumentMeta(nodes))
     this.name = 'UnreadableDocumentMetaError'
   }
 }
@@ -646,12 +726,12 @@ function kindChangedMessage(
 ): string {
   if (documentId === undefined) {
     return kind === undefined
-      ? refusalMessage('DocumentKindChangedUnnamedNoKind', { recorded })
-      : refusalMessage('DocumentKindChangedUnnamedKind', { recorded, kind })
+      ? DocumentKindChangedUnnamedNoKind(recorded)
+      : DocumentKindChangedUnnamedKind(kind, recorded)
   }
   return kind === undefined
-    ? refusalMessage('DocumentKindChangedNamedNoKind', { recorded, documentId })
-    : refusalMessage('DocumentKindChangedNamedKind', { recorded, kind, documentId })
+    ? DocumentKindChangedNamedNoKind(documentId, recorded)
+    : DocumentKindChangedNamedKind(documentId, kind, recorded)
 }
 
 /**
@@ -686,7 +766,7 @@ export class DocumentNameTooLongError extends SyncWriteRefusalError {
   readonly status = 400
 
   constructor(public readonly paths: readonly string[]) {
-    super(refusalMessage('DocumentNameTooLong', { paths, maxLength: DOCUMENT_NAME_MAX_LENGTH }))
+    super(DocumentNameTooLong(paths, DOCUMENT_NAME_MAX_LENGTH))
     this.name = 'DocumentNameTooLongError'
   }
 }
@@ -705,7 +785,7 @@ export class FolderNameRefusedError extends SyncWriteRefusalError {
     public readonly paths: readonly string[],
     reason: string,
   ) {
-    super(refusalMessage('FolderNameRefused', { paths, reason }))
+    super(FolderNameRefused(paths, reason))
     this.name = 'FolderNameRefusedError'
   }
 }
@@ -724,7 +804,7 @@ export class CausalGapError extends SyncWriteRefusalError {
   readonly status = 409
 
   constructor() {
-    super(refusalMessage('CausalGap'))
+    super(CausalGap())
     this.name = 'CausalGapError'
   }
 }

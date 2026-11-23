@@ -1,4 +1,4 @@
-import { type DocumentKind, refusalMessage } from '@kamiazya/whiteboard-model'
+import { type DocumentKind, SearchNeedsQueryOrFilter } from '@kamiazya/whiteboard-model'
 import { emojiSearchText } from '@kamiazya/whiteboard-plugin-visual/emoji/searchable'
 import {
   compareDocumentPaths,
@@ -26,7 +26,7 @@ import type { ServerDeps } from '../server-deps.js'
 /** Neither words nor a filter names nothing to find; the list is wb_document_list's. */
 export class SearchNeedsQueryOrFilterError extends Error {
   constructor() {
-    super(refusalMessage('SearchNeedsQueryOrFilter'))
+    super(SearchNeedsQueryOrFilter())
     this.name = 'SearchNeedsQueryOrFilterError'
   }
 }

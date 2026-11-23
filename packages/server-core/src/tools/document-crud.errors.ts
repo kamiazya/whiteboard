@@ -1,4 +1,12 @@
-import { refusalMessage } from '@kamiazya/whiteboard-model'
+import {
+  DocumentNameConflict,
+  DocumentNotFound,
+  WorkspaceNotFoundForCallerCreate,
+  WorkspaceNotFoundForCallerCreateKnown,
+  WorkspaceNotFoundForCallerRead,
+  WorkspaceNotFoundForCallerReadKnown,
+  WorkspaceSegmentUnusable,
+} from '@kamiazya/whiteboard-model'
 
 /**
  * Typed error contract for canvas-CRUD handlers. `create-server.ts` maps
@@ -17,7 +25,7 @@ export class WorkspaceDocumentNotFoundError extends Error {
     readonly workspaceId: string,
     readonly documentId: string,
   ) {
-    super(refusalMessage('DocumentNotFound', { documentId, workspaceId }))
+    super(DocumentNotFound(documentId, workspaceId))
     this.name = 'WorkspaceDocumentNotFoundError'
   }
 }
@@ -37,12 +45,12 @@ function workspaceNotFoundMessage(
 ): string {
   if (intent === 'create') {
     return known.length === 0
-      ? refusalMessage('WorkspaceNotFoundForCallerCreate', { workspaceId })
-      : refusalMessage('WorkspaceNotFoundForCallerCreateKnown', { workspaceId, known })
+      ? WorkspaceNotFoundForCallerCreate(workspaceId)
+      : WorkspaceNotFoundForCallerCreateKnown(workspaceId, known)
   }
   return known.length === 0
-    ? refusalMessage('WorkspaceNotFoundForCallerRead', { workspaceId })
-    : refusalMessage('WorkspaceNotFoundForCallerReadKnown', { workspaceId, known })
+    ? WorkspaceNotFoundForCallerRead(workspaceId)
+    : WorkspaceNotFoundForCallerReadKnown(workspaceId, known)
 }
 
 export class WorkspaceNotFoundForCallerError extends Error {
@@ -67,7 +75,7 @@ export class WorkspaceNotFoundForCallerError extends Error {
  */
 export class WorkspaceSegmentUnusableError extends Error {
   constructor(readonly handle: string) {
-    super(refusalMessage('WorkspaceSegmentUnusable', { handle }))
+    super(WorkspaceSegmentUnusable(handle))
     this.name = 'WorkspaceSegmentUnusableError'
   }
 }
@@ -84,7 +92,7 @@ export class DocumentNameConflictError extends Error {
     readonly given: string,
     readonly title: string,
   ) {
-    super(refusalMessage('DocumentNameConflict', { given, title }))
+    super(DocumentNameConflict(given, title))
     this.name = 'DocumentNameConflictError'
   }
 }

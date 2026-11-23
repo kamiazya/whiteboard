@@ -1,8 +1,8 @@
 import {
-  REFUSAL_CODES,
-  REFUSALS,
-  refusalMessage,
+  SYNC_WORKSPACE_BREACH_CODES,
   type SyncWriteRefusalCode,
+  TooManyDocuments,
+  TooManyFolders,
   WORKSPACE_MAX_DOCUMENTS,
   WORKSPACE_MAX_FOLDERS,
 } from '@kamiazya/whiteboard-model'
@@ -28,11 +28,11 @@ export abstract class SyncWriteRefusalError extends Error {
  * deleting is how it shrinks. Nothing of the write was kept.
  */
 export class TooManyDocumentsError extends SyncWriteRefusalError {
-  readonly code = REFUSAL_CODES.tooManyDocuments
-  readonly status = REFUSALS.TooManyDocuments.status
+  readonly code = SYNC_WORKSPACE_BREACH_CODES['too-many-documents']
+  readonly status = 413
 
   constructor(public readonly documents: number) {
-    super(refusalMessage('TooManyDocuments', { documents, limit: WORKSPACE_MAX_DOCUMENTS }))
+    super(TooManyDocuments(documents, WORKSPACE_MAX_DOCUMENTS))
     this.name = 'TooManyDocumentsError'
   }
 }
@@ -55,11 +55,11 @@ export function refuseNewDocuments(held: number, adding = 1): void {
  * adds none. Nothing of the write was kept.
  */
 export class TooManyFoldersError extends SyncWriteRefusalError {
-  readonly code = REFUSAL_CODES.tooManyFolders
-  readonly status = REFUSALS.TooManyFolders.status
+  readonly code = SYNC_WORKSPACE_BREACH_CODES['too-many-folders']
+  readonly status = 413
 
   constructor(public readonly folders: number) {
-    super(refusalMessage('TooManyFolders', { folders, limit: WORKSPACE_MAX_FOLDERS }))
+    super(TooManyFolders(folders, WORKSPACE_MAX_FOLDERS))
     this.name = 'TooManyFoldersError'
   }
 }

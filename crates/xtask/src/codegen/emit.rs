@@ -438,9 +438,10 @@ pub(super) fn zod(checked: &Checked<'_>, source: &str) -> Result<String, Vec<Str
 /// long as the string is: there is nowhere in it to break.
 fn lone_string(line: &str) -> bool {
     let line = line.trim_start();
-    line.strip_prefix('\'').is_some_and(|rest| rest.ends_with("',"))
-        || line.strip_prefix('"').is_some_and(|rest| rest.ends_with("\","))
-        || line.strip_prefix('`').is_some_and(|rest| rest.ends_with("`,"))
+    let line = line.strip_suffix(',').unwrap_or(line);
+    ["'", "\"", "`"]
+        .iter()
+        .any(|quote| line.len() > 1 && line.starts_with(quote) && line.ends_with(quote))
 }
 
 /// `out` when every line after its header fits biome's width: a longer line
