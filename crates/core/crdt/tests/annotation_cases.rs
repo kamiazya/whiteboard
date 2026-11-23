@@ -111,10 +111,10 @@ fn every_stored_arrangement_is_answered_as_the_typescript_answered_it() {
 }
 
 #[cfg(test)]
-fn thread_anchored(anchor: Json) -> LoroDoc {
+fn thread_anchored(anchor: &Json) -> LoroDoc {
     let doc = LoroDoc::new();
     let thread = doc.get_map("threads").insert_container("t", LoroMap::new()).expect("thread");
-    thread.insert("anchor", lv(&anchor)).expect("anchor");
+    thread.insert("anchor", lv(anchor)).expect("anchor");
     thread.insert("status", "open").expect("status");
     let messages = thread.insert_container("messages", LoroMap::new()).expect("messages");
     messages.insert("m", lv(&serde_json::json!({ "id": "m", "body": "b" }))).expect("message");
@@ -122,7 +122,7 @@ fn thread_anchored(anchor: Json) -> LoroDoc {
 }
 
 #[cfg(test)]
-fn threads_read(anchor: Json) -> usize {
+fn threads_read(anchor: &Json) -> usize {
     let doc = thread_anchored(anchor);
     let query = Query { query: QueryName::CommentThreads, args: None };
     match answer_content_query(&doc, &query).expect("answered").value {
@@ -145,20 +145,20 @@ fn a_coordinate_stored_as_a_double_is_judged_as_the_number_it_is() {
         anchor
     };
     let none = || serde_json::json!({});
-    assert_eq!(threads_read(spatial(3.0, none())), 1, "a whole double is an integer");
-    assert_eq!(threads_read(spatial(-3.0, none())), 1, "a negative whole double");
-    assert_eq!(threads_read(spatial(3.5, none())), 0, "a fraction is not");
-    assert_eq!(threads_read(spatial(9_007_199_254_740_991.0, none())), 1, "the last safe integer");
-    assert_eq!(threads_read(spatial(9_007_199_254_740_992.0, none())), 0, "past it");
-    assert_eq!(threads_read(spatial(1e300, none())), 0, "far past it");
+    assert_eq!(threads_read(&spatial(3.0, none())), 1, "a whole double is an integer");
+    assert_eq!(threads_read(&spatial(-3.0, none())), 1, "a negative whole double");
+    assert_eq!(threads_read(&spatial(3.5, none())), 0, "a fraction is not");
+    assert_eq!(threads_read(&spatial(9_007_199_254_740_991.0, none())), 1, "the last safe integer");
+    assert_eq!(threads_read(&spatial(9_007_199_254_740_992.0, none())), 0, "past it");
+    assert_eq!(threads_read(&spatial(1e300, none())), 0, "far past it");
     let region = |w: f64| spatial(1.0, serde_json::json!({ "width": w, "height": 2.0 }));
-    assert_eq!(threads_read(region(0.0)), 1, "an empty width");
-    assert_eq!(threads_read(region(-0.0)), 1, "a negative zero width");
-    assert_eq!(threads_read(region(4.0)), 1, "a whole width");
-    assert_eq!(threads_read(region(-1.0)), 0, "a negative width");
+    assert_eq!(threads_read(&region(0.0)), 1, "an empty width");
+    assert_eq!(threads_read(&region(-0.0)), 1, "a negative zero width");
+    assert_eq!(threads_read(&region(4.0)), 1, "a whole width");
+    assert_eq!(threads_read(&region(-1.0)), 0, "a negative width");
     let passage = |start: f64, end: f64| serde_json::json!({ "kind": "text", "quote": { "exact": "q" }, "start": start, "end": end });
-    assert_eq!(threads_read(passage(2.0, 2.0)), 1, "a passage that ends where it starts");
-    assert_eq!(threads_read(passage(2.0, 3.0)), 1, "a passage that ends after it starts");
-    assert_eq!(threads_read(passage(3.0, 2.0)), 0, "ending before starting");
-    assert_eq!(threads_read(passage(-1.0, 2.0)), 0, "a negative offset");
+    assert_eq!(threads_read(&passage(2.0, 2.0)), 1, "a passage that ends where it starts");
+    assert_eq!(threads_read(&passage(2.0, 3.0)), 1, "a passage that ends after it starts");
+    assert_eq!(threads_read(&passage(3.0, 2.0)), 0, "ending before starting");
+    assert_eq!(threads_read(&passage(-1.0, 2.0)), 0, "a negative offset");
 }
