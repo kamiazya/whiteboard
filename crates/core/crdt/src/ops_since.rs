@@ -183,14 +183,15 @@ fn reorganises(
         return Some(true);
     }
     let Place::Below(path) = place_of(doc, root, &op.container)? else { return Some(true) };
-    let depth = path.as_ref().map_or(0, Vec::len);
+    // A key past the node's own map, so a container below the node.
     let meta_held = path
         .as_ref()
         .and_then(|path| path.get(2))
         .is_some_and(|key| keys.meta.contains(&key.as_str()));
-    if depth > 2 && meta_held {
+    if meta_held {
         return Some(true);
     }
+    let depth = path.as_ref().map_or(0, Vec::len);
     let JsonOpContent::Map(JsonMapOp::Insert { key, .. } | JsonMapOp::Delete { key }) = &op.content
     else {
         return Some(false);

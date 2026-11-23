@@ -3,9 +3,10 @@
 //! arguments), against the answers the TypeScript gave for them: a document
 //! named by its id or its path, shadowed, missing or below an unreadable node;
 //! a projection over a scalar or bytes held at a content key; containers
-//! inside, outside and above the tree, uncreated or malformed; images named
-//! by a body or by a node the readers refuse; and the since-readers after each
-//! kind of write, a delete that leaves a survivor below included.
+//! inside, outside and above the tree, under a tree of another name, uncreated
+//! or malformed; images named by a body or by a node the readers refuse; and
+//! the since-readers after each kind of write, a delete that leaves a survivor
+//! below included, and one peer's writes past a version that holds another's.
 //!
 //! `fixtures/record_read_cases.jsonl` holds each record's bytes (a row with a
 //! `snapshot`) and each read of it with the TypeScript's answer (`expect`). A

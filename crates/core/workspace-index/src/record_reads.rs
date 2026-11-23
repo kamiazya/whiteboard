@@ -101,7 +101,7 @@ fn file_references(doc: &LoroDoc) -> Option<ReadResponse> {
 /// The document of the record `container` belongs to, its path, and a text
 /// container's length; null for one the record lists no document for.
 fn container_place(doc: &LoroDoc, container: &str) -> Value {
-    let found = container_node(doc, WORKSPACE_TREE_KEY, container).and_then(|(node, length)| {
+    let found = container_node(doc, container).and_then(|(node, length)| {
         let held = tree(doc, WORKSPACE_TREE_KEY)?;
         let Some(whiteboard_crdt::Entry::Value(Value::String(id))) = held.entry(node, "documentId")
         else {
