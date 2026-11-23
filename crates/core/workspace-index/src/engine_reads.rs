@@ -166,7 +166,10 @@ fn answer_hosted(doc: &LoroDoc, query: &Query, document_id: &str, rest: Value) -
         matches!(&walked.read, NodeRead::Document(meta) if meta.document_id == document_id)
     });
     let missing = match query.query {
-        QueryName::StateSize | QueryName::ContentDigest => "RangeError",
+        QueryName::StateSize
+        | QueryName::ContentDigest
+        | QueryName::TextLimitBreach
+        | QueryName::DocumentJudgement => "RangeError",
         _ => "Error",
     };
     let Some(found) = found else { return refused(missing) };

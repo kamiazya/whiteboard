@@ -54,6 +54,8 @@ const REPLAYED: &[(&str, usize)] = &[
     ("imageRefIds", 178),
     ("stateSize", 178),
     ("contentDigest", 178),
+    ("textLimitBreach", 178),
+    ("documentJudgement", 178),
 ];
 
 /// The ops not replayed, with their rows: a query a document hosted on a
@@ -62,7 +64,6 @@ const REPLAYED: &[(&str, usize)] = &[
 /// record's rules are (`whiteboard-workspace-index`'s `tests/engine_oracle.rs`
 /// replays them against the same recording); the rest waits on a port.
 const DEFERRED: &[(&str, usize)] = &[
-    ("textLimitBreach", 178),
     ("documents", 178),
     ("nodes", 178),
     ("meta", 178),
@@ -77,7 +78,6 @@ const DEFERRED: &[(&str, usize)] = &[
     ("workspaceDocumentEntry", 178),
     ("workspaceDocumentProjection", 178),
     ("containerPlace", 178),
-    ("documentJudgement", 178),
     ("documentKind@node", 16),
     ("documentContent@node", 16),
     ("documentContentWithTags@node", 16),

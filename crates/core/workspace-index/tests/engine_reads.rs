@@ -302,6 +302,34 @@ fn a_document_the_record_does_not_hold_is_refused_as_the_typescript_refuses_it()
     assert_refuses(&doc, QueryName::DocumentKind, &[("documentId", "zzz")], "Error");
     assert_refuses(&doc, QueryName::StateSize, &[("documentId", "zzz")], "RangeError");
     assert_refuses(&doc, QueryName::ContentDigest, &[("documentId", "zzz")], "RangeError");
+    assert_refuses(&doc, QueryName::TextLimitBreach, &[("documentId", "zzz")], "RangeError");
+    assert_refuses(&doc, QueryName::DocumentJudgement, &[("documentId", "zzz")], "RangeError");
+}
+
+#[test]
+fn a_hosted_document_is_judged_as_its_separate_reads_answer() {
+    let doc = record();
+    let field = |value: Value, key: &str| match value {
+        Value::Map(entries) => entries.into_iter().find(|(k, _)| k == key).map(|(_, v)| v),
+        _ => None,
+    };
+    for id in [A, B, C] {
+        let args = [("documentId", id)];
+        let judged = field(answer(&doc, QueryName::DocumentJudgement, &args), "ok").expect("ok");
+        for (name, key) in [
+            (QueryName::StateSize, "stateSize"),
+            (QueryName::ContentDigest, "contentDigest"),
+            (QueryName::TextLimitBreach, "textLimitBreach"),
+            (QueryName::SpatialNodeCount, "spatialNodeCount"),
+        ] {
+            let alone = field(answer(&doc, name, &args), "ok");
+            assert_eq!(field(judged.clone(), key), alone, "{id} {key}");
+        }
+        let kind = field(answer(&doc, QueryName::DocumentKind, &args), "ok").expect("ok");
+        let stated = if matches!(kind, Value::String(_)) { kind } else { Value::Null };
+        assert_eq!(field(judged, "statedKind"), Some(stated), "{id} statedKind");
+    }
+    assert_answers(&doc, QueryName::TextLimitBreach, &[("documentId", A)], &Json::Null);
 }
 
 #[test]

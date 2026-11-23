@@ -374,8 +374,8 @@ fn a_query_this_crate_does_not_answer_or_a_hosted_read_is_left_to_the_caller() {
     let other = Value::Map(vec![("since".into(), Value::Seq(Vec::new()))]);
     let query = Query { query: QueryName::DocumentKind, args: Some(other) };
     assert!(answer_content_query(&doc, &query).is_some());
-    for name in [QueryName::Documents, QueryName::TextLimitBreach] {
+    for name in [QueryName::Documents, QueryName::ContainerPlace] {
         assert!(answer_content_query(&doc, &Query { query: name, args: None }).is_none());
     }
-    assert_eq!(CONTENT_QUERIES.len(), 22);
+    assert_eq!(CONTENT_QUERIES.len(), 24);
 }

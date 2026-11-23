@@ -35,6 +35,7 @@ mod proposals;
 mod read;
 mod stored;
 mod subtree;
+mod text_limits;
 mod tree;
 mod write;
 
@@ -58,6 +59,7 @@ pub use read::{
     ImportError, deep_value, frontier_pairs, import_bytes, loro_value_to_value, version_pairs,
 };
 pub use subtree::{SubtreeCopy, copy_subtree, export_subtree};
+pub use text_limits::{BreachShape, TextBreach, Unjudged, judge_state};
 pub use tree::{ContainerKind, Entry, NodeId, Tree, peek, tree};
 pub use write::{
     WriteError, commit, create_node, deep_value_with_id, delete_meta, delete_node,
