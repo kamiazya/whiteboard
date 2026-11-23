@@ -183,7 +183,7 @@
       "path": "crates/core/crdt",
       "layer": "core",
       "status": "present",
-      "description": "the loro bridge, workspace tree, file references, text-limit judge; today the reading of the bytes npm loro-crdt writes (deep value, version vector, frontiers) the tree and map writers the document index writes a workspace record with, and the document engine's content queries (kind, body and marks, locks, facets, the canvas with the records its schema refuses, core and trust facets, the annotation threads and their marks, proposals, image references, retired shapes, and the whole-document state size and content digest) over a document that is the root of its own LoroDoc, and the copy of a document hosted on a workspace tree node into one, native-only until the wasm export lands",
+      "description": "the loro bridge, workspace tree, file references, text-limit judge; today the reading of the bytes npm loro-crdt writes (deep value, version vector, frontiers) the tree and map writers the document index writes a workspace record with, and the document engine's content queries (kind, body and marks, locks, facets, the canvas with the records its schema refuses, core and trust facets, the annotation threads and their marks, proposals, image references, retired shapes, the whole-document state size and content digest, and the text-limit judge of a document's state with the judgement that bundles it) over a document that is the root of its own LoroDoc, and the copy of a document hosted on a workspace tree node into one, native-only until the wasm export lands",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det", "whiteboard-model", "whiteboard-codec"],
       "allowedThirdParty": {
