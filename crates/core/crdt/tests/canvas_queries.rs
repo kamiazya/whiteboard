@@ -431,6 +431,11 @@ fn a_kind_asked_for_decides_only_a_document_that_states_none() {
         &answer_content_query(&unstated, &empty).expect("answered").value,
         &model_of(&json!({ "ok": { "kind": "spatial", "canvas": { "nodes": [], "edges": [] } } })),
     );
+}
+
+#[test]
+fn a_content_read_reads_null_as_no_arguments_and_leaves_any_other_non_object_undecided() {
+    let unstated = LoroDoc::new();
     // `query.args ?? {}`: null reads as no arguments, while any other
     // non-object is refused by the reader's object schema.
     let null = Query { query: QueryName::DocumentContent, args: Some(Value::Null) };
