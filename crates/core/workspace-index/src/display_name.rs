@@ -164,6 +164,11 @@ mod tests {
         );
         let never = |_: &str| true;
         assert_eq!(first_distinct_unnamed_path("untitled", &siblings, never), None);
+        let nested = [Named { path: "f/untitled", name: None }];
+        assert_eq!(
+            first_distinct_unnamed_path("f/untitled", &nested, |_| false).as_deref(),
+            Some("f/untitled-2")
+        );
         let long = "a".repeat(1024);
         let held = [Named { path: &long, name: None }];
         assert_eq!(first_distinct_unnamed_path(&long, &held, |_| false), None);

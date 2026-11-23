@@ -184,4 +184,16 @@ mod tests {
         assert!(!is_named_by_another_row(&[row("a")], &row("a")));
         assert!(is_named_by_another_row(&[row("b")], &row("a")));
     }
+
+    #[test]
+    fn an_unnamed_path_with_no_free_suffix_keeps_the_address_asked_for() {
+        let long = "a".repeat(1024);
+        let held = Node {
+            kind: NodeKind::Document,
+            path: long.clone(),
+            name: None,
+            document_id: Some("01ARZ3NDEKTSV4RRFFQ69G5FAA".to_owned()),
+        };
+        assert_eq!(distinct_unnamed_path(&[held], &long), long);
+    }
 }

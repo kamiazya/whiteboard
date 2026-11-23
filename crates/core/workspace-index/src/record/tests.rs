@@ -234,3 +234,18 @@ fn a_placed_document_is_what_the_record_stores_of_it() {
     add_node(&doc, None, &document_meta(ID_C, "plain"));
     assert!(!open(&doc).placed_document(ID_C).expect("placed").meta.name_chosen);
 }
+
+#[test]
+fn a_record_without_a_tree_places_no_document() {
+    let record = open(&LoroDoc::new());
+    assert!(record.document_by_id(ID_A).is_none());
+    assert!(record.placed_document(ID_A).is_none());
+}
+
+#[test]
+fn a_node_carrying_an_id_but_no_kind_is_no_document() {
+    let doc = LoroDoc::new();
+    let meta = vec![("documentId", ID_A.to_owned()), ("segment", "plan".to_owned())];
+    add_node(&doc, None, &meta);
+    assert!(open(&doc).document_by_id(ID_A).is_none());
+}

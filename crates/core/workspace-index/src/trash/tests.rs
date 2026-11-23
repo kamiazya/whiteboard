@@ -81,6 +81,7 @@ fn a_damaged_row_is_skipped() {
         loro_value!({ "documentId": ID_A, "path": "a", "deletedAt": 0, "blob": 5 }),
         bad_blob(loro_value!({ "algorithm": "md5", "digestHex": DIGEST })),
         bad_blob(loro_value!({ "algorithm": "sha-256" })),
+        bad_blob(loro_value!({ "digestHex": DIGEST })),
         bad_blob(digest("00")),
         bad_blob(digest(&"A".repeat(64))),
         bad_blob(digest(&format!("{DIGEST}0"))),
@@ -94,6 +95,9 @@ fn a_damaged_row_is_skipped() {
         }),
         loro_value!({
             "documentId": ID_A, "path": "a", "deletedAt": 0, "blob": blob(), "folderNames": "x",
+        }),
+        loro_value!({
+            "documentId": ID_A, "path": "a", "deletedAt": 0, "blob": blob(), "folderNames": ["x"],
         }),
         loro_value!("not a map"),
     ];
