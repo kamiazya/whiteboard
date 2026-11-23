@@ -121,21 +121,27 @@ impl PortError {
         }
     }
 
-    /// The stable code a caller branches on: the TypeScript error's own where
-    /// it has one (`too_many_documents`, `malformed`, `MISSING_CHUNK`), and a
-    /// kebab-case name for the rest.
+    /// The stable code a caller branches on: the one the TypeScript answers
+    /// the same failure with, which `refusals.json` pins and
+    /// `whiteboard-api-contracts` holds this to. A clock no `Date` holds is
+    /// answered there as any uncaught throw.
     #[must_use]
     pub const fn code(&self) -> &'static str {
         match self {
-            Self::WorkspaceNotFound { .. } => "workspace-not-found",
-            Self::DocumentNotFound { .. } => "document-not-found",
-            Self::DatabaseBusy => "database-busy",
-            Self::StoredDocumentUnreadable { code, .. } => code.as_str(),
-            Self::SnapshotReassembly { code, .. } => code.as_str(),
+            Self::WorkspaceNotFound { .. } => "workspace_not_found",
+            Self::DocumentNotFound { .. } => "document_not_found",
+            Self::DatabaseBusy => "database_busy",
+            Self::StoredDocumentUnreadable {
+                code: StoredUnreadableCode::UnsupportedVersion,
+                ..
+            } => "stored_document_unsupported_version",
+            Self::StoredDocumentUnreadable { .. } | Self::SnapshotReassembly { .. } => {
+                "corrupt_stored_data"
+            }
             Self::TooManyWorkspaces { .. } => "too_many_workspaces",
             Self::TooManyDocuments { .. } => "too_many_documents",
             Self::TooManyFolders { .. } => "too_many_folders",
-            Self::InvalidTime => "invalid-time",
+            Self::InvalidTime => "internal_error",
         }
     }
 }
@@ -197,19 +203,19 @@ mod tests {
             (
                 PortError::WorkspaceNotFound { workspace_id: s("w") },
                 PortErrorKind::NotFound,
-                "workspace-not-found",
+                "workspace_not_found",
                 s("Workspace not found: \"w\". Create it before adding documents to it."),
             ),
             (
                 PortError::DocumentNotFound { workspace_id: s("w"), target: s("a/b") },
                 PortErrorKind::NotFound,
-                "document-not-found",
+                "document_not_found",
                 s("No document \"a/b\" in workspace \"w\""),
             ),
             (
                 PortError::DatabaseBusy,
                 PortErrorKind::DatabaseBusy,
-                "database-busy",
+                "database_busy",
                 s("The database is locked by another process"),
             ),
             (
@@ -218,7 +224,7 @@ mod tests {
                     message: s("does not parse"),
                 },
                 PortErrorKind::Unreadable,
-                "malformed",
+                "corrupt_stored_data",
                 s("does not parse"),
             ),
             (
@@ -227,7 +233,7 @@ mod tests {
                     message: s("chunk 2 of 3 is missing"),
                 },
                 PortErrorKind::Unreadable,
-                "MISSING_CHUNK",
+                "corrupt_stored_data",
                 s("chunk 2 of 3 is missing"),
             ),
         ]
@@ -263,7 +269,7 @@ mod tests {
             (
                 PortError::InvalidTime,
                 PortErrorKind::InvalidTime,
-                "invalid-time",
+                "internal_error",
                 s("The clock read a time no Date holds"),
             ),
         ]
@@ -290,7 +296,12 @@ mod tests {
         for (code, text) in stored {
             assert_eq!(code.as_str(), text);
             let error = PortError::StoredDocumentUnreadable { code, message: s("m") };
-            assert_eq!(error.code(), text);
+            let answered = if text == "unsupported-version" {
+                "stored_document_unsupported_version"
+            } else {
+                "corrupt_stored_data"
+            };
+            assert_eq!(error.code(), answered);
         }
         let snapshot = [
             (SnapshotReassemblyCode::MissingChunk, "MISSING_CHUNK"),
@@ -305,7 +316,7 @@ mod tests {
         for (code, text) in snapshot {
             assert_eq!(code.as_str(), text);
             let error = PortError::SnapshotReassembly { code, message: s("m") };
-            assert_eq!(error.code(), text);
+            assert_eq!(error.code(), "corrupt_stored_data");
         }
     }
 

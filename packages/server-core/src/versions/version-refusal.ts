@@ -1,3 +1,8 @@
+import {
+  REFUSAL_CODE_TOO_MANY_VERSIONS,
+  TooManyVersions,
+  VERSION_REFUSAL_CODES,
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 /**
@@ -6,7 +11,7 @@ import { z } from 'zod'
  * both the daemon that raises it and the client contract that parses it can
  * import, so the spelling lives in one place.
  */
-export const versionRefusalCodeSchema = z.enum(['too_many_versions'])
+export const versionRefusalCodeSchema = z.enum(VERSION_REFUSAL_CODES)
 export type VersionRefusalCode = z.infer<typeof versionRefusalCodeSchema>
 
 /**
@@ -17,13 +22,11 @@ export type VersionRefusalCode = z.infer<typeof versionRefusalCodeSchema>
  * oldest of those.
  */
 export class TooManyVersionsError extends Error {
-  readonly code: VersionRefusalCode = 'too_many_versions'
+  readonly code: VersionRefusalCode = REFUSAL_CODE_TOO_MANY_VERSIONS
   readonly status = 413
 
   constructor(public readonly limit: number) {
-    super(
-      `This document already keeps ${limit} saved versions, the most one document keeps; no further version can be saved for it`,
-    )
+    super(TooManyVersions(limit))
     this.name = 'TooManyVersionsError'
   }
 }

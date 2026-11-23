@@ -1,5 +1,15 @@
 import { isEngineTrap } from '@kamiazya/whiteboard-loro-adapter'
-import { type DocumentId, messageOf } from '@kamiazya/whiteboard-model'
+import {
+  DocumentEngineTrapImporting,
+  DocumentEngineTrapLoading,
+  DocumentEngineTrapRunningRecovered,
+  DocumentEngineTrapRunningUnrecoverable,
+  DocumentEngineTrapSaving,
+  type DocumentId,
+  DocumentSnapshotNotFound,
+  messageOf,
+  REFUSAL_CODE_DOCUMENT_ENGINE_TRAP,
+} from '@kamiazya/whiteboard-model'
 import { chunkSnapshot, DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES } from '@kamiazya/whiteboard-ports'
 import { getLogger } from './log.js'
 import type { ServerDeps } from './server-deps.js'
@@ -23,7 +33,7 @@ const log = getLogger('document-io')
  */
 export class SnapshotNotFoundError extends Error {
   constructor(readonly documentId: string) {
-    super(`document has no saved snapshot: ${documentId}`)
+    super(DocumentSnapshotNotFound(documentId))
     this.name = 'SnapshotNotFoundError'
   }
 }
@@ -62,43 +72,30 @@ function engineTrapMessage(
   doing: DocumentEngineTrapError['doing'],
   recovered: boolean,
 ): string {
-  if (doing !== 'running') {
-    return (
-      `The CRDT engine aborted while ${doing} ${subject}; nothing from this write was stored. ` +
-      `A very large document is the usual trigger. ${DOCUMENT_ENGINE_TRAP_ADVICE[doing]}`
-    )
-  }
-  const advice = recovered ? CORE_TRAP_RECOVERED : CORE_TRAP_UNRECOVERABLE
-  return `The Rust core aborted while running ${subject}; nothing from this request was stored. ${advice}`
+  if (doing !== 'running') return ENGINE_TRAP_MESSAGES[doing](subject)
+  return (recovered ? DocumentEngineTrapRunningRecovered : DocumentEngineTrapRunningUnrecoverable)(
+    subject,
+  )
 }
 
-const CORE_TRAP_RECOVERED =
-  'The core was reset, so the next request runs on a fresh instance; sending the same input again may abort the same way.'
-
-const CORE_TRAP_UNRECOVERABLE =
-  'The core could not be reset and answers every request with this until the daemon restarts.'
+// The importing advice does not promise a reload works: measured on loro-crdt
+// 1.13.6, fresh instances in the same process took a 64 Ki-character import
+// and trapped within a millisecond on 128 Ki and larger.
+const ENGINE_TRAP_MESSAGES = {
+  loading: DocumentEngineTrapLoading,
+  saving: DocumentEngineTrapSaving,
+  'importing an update into': DocumentEngineTrapImporting,
+} as const satisfies Record<
+  Exclude<DocumentEngineTrapError['doing'], 'running'>,
+  (subject: string) => string
+>
 
 /**
  * The code every surface answers `DocumentEngineTrapError` with — `/api/v1`'s
  * refusal table and the sync routes alike — with status 500: a server fault
  * the caller cannot fix by rewording.
  */
-export const DOCUMENT_ENGINE_TRAP_CODE = 'document_engine_trap'
-
-const STUCK_UNTIL_RESTART =
-  'If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted.'
-
-const DOCUMENT_ENGINE_TRAP_ADVICE: Readonly<
-  Record<Exclude<DocumentEngineTrapError['doing'], 'running'>, string>
-> = {
-  loading: STUCK_UNTIL_RESTART,
-  saving: STUCK_UNTIL_RESTART,
-  // Measured on loro-crdt 1.13.6: after one trap, fresh instances in the same
-  // process took a 64 Ki-character import and trapped within a millisecond
-  // on 128 Ki and larger, so the reload is not promised to work.
-  'importing an update into':
-    'The in-memory copy was dropped, so the next request reloads what was stored; sending the same update again aborts the same way. After a trap this process may abort on other large writes too, until the daemon restarts.',
-}
+export const DOCUMENT_ENGINE_TRAP_CODE = REFUSAL_CODE_DOCUMENT_ENGINE_TRAP
 
 /**
  * Runs one load or save of a document and answers an engine abort as

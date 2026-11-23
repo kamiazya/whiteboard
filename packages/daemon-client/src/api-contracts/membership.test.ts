@@ -4,6 +4,8 @@
  * `.strict()` shape declares.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-core/api-errors'
 import { describe, expect, it } from 'vitest'
 import { membershipRefusalSchema, workspaceNotFoundRefusal } from './membership.js'
@@ -65,5 +67,17 @@ describe('workspaceNotFoundRefusal', () => {
     expect(membershipRefusalSchema.safeParse(body).success).toBe(true)
     expect(apiErrorBodySchema.safeParse(body).success).toBe(true)
     expect(apiErrorReason(body)).toBe(body.message)
+  })
+
+  it('says what the refusal contract pins for it, which this browser-safe module cannot import', () => {
+    const { refusals } = JSON.parse(
+      readFileSync(join(import.meta.dirname, '../../../../contracts/api/refusals.json'), 'utf8'),
+    ) as {
+      refusals: { name: string; code: string; example: { handle: string }; exampleText: string }[]
+    }
+    const pinned = refusals.find((entry) => entry.name === 'WorkspaceNotFoundByHandle')
+    expect(pinned).toBeDefined()
+    const body = workspaceNotFoundRefusal(pinned?.example.handle ?? '')
+    expect(body).toEqual({ error: pinned?.code, message: pinned?.exampleText })
   })
 })
