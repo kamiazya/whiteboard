@@ -81,6 +81,58 @@ fn source(body: &str) -> Value {
     text(&bytes_to_base64(&doc.export(ExportMode::Snapshot).expect("a snapshot")))
 }
 
+/// The version `created` is at, as the `since` a stamp is handed.
+#[cfg(test)]
+fn since_of(created: &LoroDoc) -> Value {
+    Value::Seq(
+        version_pairs(created)
+            .into_iter()
+            .map(|(peer, counter)| {
+                Value::Seq(vec![
+                    text(&peer),
+                    Value::Number(counter.to_string().parse().expect("a counter")),
+                ])
+            })
+            .collect(),
+    )
+}
+
+/// A batch writing the content of each `(i, true)` step and renaming each
+/// `(i, false)` one, with the documents whose content it wrote.
+#[cfg(test)]
+fn batch_of(steps: &[(usize, bool)]) -> (Vec<Write>, Vec<String>) {
+    let mut written = Vec::new();
+    let batch = steps
+        .iter()
+        .map(|&(i, content)| {
+            if content {
+                written.push(id(i));
+                let args = map(vec![("documentId", text(&id(i))), ("source", source("edited"))]);
+                write(WriterName::WriteWorkspaceDocumentContent, args)
+            } else {
+                let args = map(vec![("documentId", text(&id(i))), ("name", text("Renamed"))]);
+                write(WriterName::SetWorkspaceDocumentName, args)
+            }
+        })
+        .collect();
+    written.sort();
+    written.dedup();
+    (batch, written)
+}
+
+/// The documents of `record` whose update time is `at`, sorted.
+#[cfg(test)]
+fn stamped_at(record: &LoroDoc, at: f64) -> Vec<String> {
+    let mut moved: Vec<String> = WorkspaceRecord::over(record)
+        .documents()
+        .into_iter()
+        .filter(|found| found.updated_at == Some(at))
+        .map(|found| found.document_id)
+        .collect();
+    moved.sort();
+    moved
+}
+
 #[test]
 fn a_stamp_moves_exactly_the_documents_whose_content_was_written() {
     const DOCUMENTS: usize = 5;
@@ -95,50 +147,17 @@ fn a_stamp_moves_exactly_the_documents_whose_content_was_written() {
     let empty = LoroDoc::new().export(ExportMode::Snapshot).expect("an empty snapshot");
     let created = applied(&empty, &(0..DOCUMENTS).map(create).collect::<Vec<_>>(), 1.0);
     let before = created.export(ExportMode::Snapshot).expect("a snapshot");
-    let since = Value::Seq(
-        version_pairs(&created)
-            .into_iter()
-            .map(|(peer, counter)| {
-                Value::Seq(vec![
-                    text(&peer),
-                    Value::Number(counter.to_string().parse().expect("a counter")),
-                ])
-            })
-            .collect(),
-    );
+    let since = since_of(&created);
     let floor = Floor::new("a batch writing one document's content and renaming another");
     let picks = prop::collection::vec((2..DOCUMENTS, prop::bool::ANY), 0..6);
     check(picks, None, |picks| {
-        let mut written = vec![0];
         let mut steps = vec![(0, true), (1, false)];
         steps.extend(picks);
-        let batch: Vec<Write> = steps
-            .iter()
-            .map(|&(i, content)| {
-                if content {
-                    written.push(i);
-                    let args =
-                        map(vec![("documentId", text(&id(i))), ("source", source("edited"))]);
-                    write(WriterName::WriteWorkspaceDocumentContent, args)
-                } else {
-                    let args = map(vec![("documentId", text(&id(i))), ("name", text("Renamed"))]);
-                    write(WriterName::SetWorkspaceDocumentName, args)
-                }
-            })
-            .collect();
+        let (batch, expected) = batch_of(&steps);
         let edited = applied(&before, &batch, 2.0).export(ExportMode::Snapshot).expect("bytes");
         let stamp = map(vec![("since", since.clone()), ("at", Value::Number(9.0))]);
         let stamped = applied(&edited, &[write(WriterName::StampEditedDocuments, stamp)], 3.0);
-        let mut moved: Vec<String> = WorkspaceRecord::over(&stamped)
-            .documents()
-            .into_iter()
-            .filter(|found| found.updated_at == Some(9.0))
-            .map(|found| found.document_id)
-            .collect();
-        moved.sort();
-        let mut expected: Vec<String> = written.iter().map(|&i| id(i)).collect();
-        expected.sort();
-        expected.dedup();
+        let moved = stamped_at(&stamped, 9.0);
         floor.draw(moved.contains(&id(0)) && !moved.contains(&id(1)));
         prop_assert_eq!(moved, expected);
         Ok(())
