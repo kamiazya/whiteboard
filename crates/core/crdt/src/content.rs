@@ -78,7 +78,7 @@ fn holds(map: &LoroMap, key: &str) -> bool {
 }
 
 /// The first entry of `map`, in the map's key order, that `shape_of` finds retired.
-fn first_retired(
+pub(crate) fn first_retired(
     map: &LoroMap,
     shape_of: impl Fn(&str, Option<&LoroValue>) -> Option<String>,
 ) -> Option<String> {
