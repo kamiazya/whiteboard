@@ -12,7 +12,7 @@ use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_crdt::{BreachShape, TextBreach, judge_state};
 use whiteboard_model::Value;
 use whiteboard_proptest::proptest::prelude::{
-    Just, Strategy, prop, prop_assert, prop_assert_eq, prop_oneof,
+    Strategy, prop, prop_assert, prop_assert_eq, prop_oneof,
 };
 use whiteboard_proptest::{Floor, check};
 
@@ -102,12 +102,12 @@ fn text_of(units: usize, wide: bool) -> String {
     if wide { "\u{1F600}".repeat(units / 2) + &"a".repeat(units % 2) } else { "a".repeat(units) }
 }
 
-/// A count at a ceiling or a few under it, or a few past it, as often one as
-/// the other: the two sides of the bound are what the properties are about.
+/// A count at a ceiling or a few under it, and one a few past it: every case
+/// judges both sides of the bound, so neither side's floor rests on how a
+/// coin landed.
 #[cfg(test)]
-fn around(max: usize) -> impl Strategy<Value = usize> {
-    (prop::bool::ANY, 0_usize..=2)
-        .prop_map(move |(over, by)| if over { max + 1 + by } else { max - by })
+fn around(max: usize) -> impl Strategy<Value = [usize; 2]> {
+    (0_usize..=2, 0_usize..=2).prop_map(move |(under, past)| [max - under, max + 1 + past])
 }
 
 #[test]
@@ -168,26 +168,28 @@ fn a_board_one_past_its_ceiling_is_named_and_one_at_it_is_kept() {
     let over = Floor::new("a board past its ceiling");
     let kept = Floor::new("a board at or under its ceiling");
     let strategy = (prop::bool::ANY, prop::bool::ANY, around(2000), 0_usize..=2002);
-    check(strategy, Some(24), |(edges, hosted, count, lines_share)| {
-        let doc = LoroDoc::new();
-        let names: &[&str] = if edges { &["edges", "lines"] } else { &["nodes"] };
-        let split = if edges { lines_share.min(count) } else { 0 };
-        let boards = maps(&doc, hosted, names);
-        for (i, map) in boards.iter().enumerate() {
-            let (from, to) = if i == 0 { (0, count - split) } else { (count - split, count) };
-            for at in from..to {
-                map.insert(&format!("e{at}"), loro_value!({ "id": "e" })).expect("an entry");
+    check(strategy, Some(24), |(edges, hosted, counts, lines_share)| {
+        for count in counts {
+            let doc = LoroDoc::new();
+            let names: &[&str] = if edges { &["edges", "lines"] } else { &["nodes"] };
+            let split = if edges { lines_share.min(count) } else { 0 };
+            let boards = maps(&doc, hosted, names);
+            for (i, map) in boards.iter().enumerate() {
+                let (from, to) = if i == 0 { (0, count - split) } else { (count - split, count) };
+                for at in from..to {
+                    map.insert(&format!("e{at}"), loro_value!({ "id": "e" })).expect("an entry");
+                }
             }
-        }
-        let judged = judge_state(&doc).expect("judged");
-        over.draw(count > 2000);
-        kept.draw(count <= 2000);
-        if count > 2000 {
-            let breach = judged.expect("a breach");
-            prop_assert_eq!(breach.shape, BreachShape::CanvasSize);
-            prop_assert_eq!(amount_of(&breach, "count"), Some(number(count)));
-        } else {
-            prop_assert!(judged.is_none(), "{judged:?}");
+            let judged = judge_state(&doc).expect("judged");
+            over.draw(count > 2000);
+            kept.draw(count <= 2000);
+            if count > 2000 {
+                let breach = judged.expect("a breach");
+                prop_assert_eq!(breach.shape, BreachShape::CanvasSize);
+                prop_assert_eq!(amount_of(&breach, "count"), Some(number(count)));
+            } else {
+                prop_assert!(judged.is_none(), "{judged:?}");
+            }
         }
         Ok(())
     });
@@ -198,10 +200,16 @@ fn a_board_one_past_its_ceiling_is_named_and_one_at_it_is_kept() {
 /// What a document's annotation layer is drawn as: how many threads are
 /// open, how many resolved, and how many messages the first one holds.
 #[cfg(test)]
-fn annotation_layer() -> impl Strategy<Value = (usize, usize, usize, bool)> {
+fn annotation_layer() -> impl Strategy<Value = ([(usize, usize); 2], usize, bool)> {
     prop_oneof![
-        (around(500), 0_usize..=2, Just(1_usize), prop::bool::ANY),
-        (Just(1_usize), Just(0_usize), around(1000), prop::bool::ANY),
+        (around(500), 0_usize..=2, prop::bool::ANY).prop_map(
+            |([under, past], resolved, hosted)| ([(under, 1), (past, 1)], resolved, hosted)
+        ),
+        (around(1000), prop::bool::ANY).prop_map(|([under, past], hosted)| (
+            [(1, under), (1, past)],
+            0,
+            hosted
+        )),
     ]
 }
 
@@ -209,33 +217,38 @@ fn annotation_layer() -> impl Strategy<Value = (usize, usize, usize, bool)> {
 fn a_document_one_past_an_annotation_ceiling_is_named_and_one_at_it_is_kept() {
     let over = Floor::new("an annotation count past its ceiling");
     let kept = Floor::new("annotation counts at or under their ceilings");
-    check(annotation_layer(), Some(24), |(open, resolved, messages, hosted)| {
-        let doc = LoroDoc::new();
-        let threads = entries(&doc, hosted, "threads");
-        for i in 0..open + resolved {
-            let thread =
-                threads.insert_container(&format!("t{i}"), LoroMap::new()).expect("a thread");
-            thread.insert("status", if i < open { "open" } else { "resolved" }).expect("status");
-            if i == 0 {
-                let held = thread.insert_container("messages", LoroMap::new()).expect("messages");
-                for m in 0..messages {
-                    held.insert(&format!("m{m}"), loro_value!({ "id": "m", "body": "x" }))
-                        .expect("a message");
+    check(annotation_layer(), Some(24), |(layers, resolved, hosted)| {
+        for (open, messages) in layers {
+            let doc = LoroDoc::new();
+            let threads = entries(&doc, hosted, "threads");
+            for i in 0..open + resolved {
+                let thread =
+                    threads.insert_container(&format!("t{i}"), LoroMap::new()).expect("a thread");
+                thread
+                    .insert("status", if i < open { "open" } else { "resolved" })
+                    .expect("status");
+                if i == 0 {
+                    let held =
+                        thread.insert_container("messages", LoroMap::new()).expect("messages");
+                    for m in 0..messages {
+                        held.insert(&format!("m{m}"), loro_value!({ "id": "m", "body": "x" }))
+                            .expect("a message");
+                    }
                 }
             }
+            let judged = judge_state(&doc).expect("judged");
+            let expected = if open > 500 {
+                Some((BreachShape::OpenThreads, Some(number(open))))
+            } else if messages > 1000 {
+                Some((BreachShape::ThreadMessages, Some(number(messages))))
+            } else {
+                None
+            };
+            over.draw(expected.is_some());
+            kept.draw(expected.is_none());
+            let got = judged.map(|breach| (breach.shape, amount_of(&breach, "count")));
+            prop_assert_eq!(got, expected);
         }
-        let judged = judge_state(&doc).expect("judged");
-        let expected = if open > 500 {
-            Some((BreachShape::OpenThreads, Some(number(open))))
-        } else if messages > 1000 {
-            Some((BreachShape::ThreadMessages, Some(number(messages))))
-        } else {
-            None
-        };
-        over.draw(expected.is_some());
-        kept.draw(expected.is_none());
-        let got = judged.map(|breach| (breach.shape, amount_of(&breach, "count")));
-        prop_assert_eq!(got, expected);
         Ok(())
     });
     over.assert(4);
@@ -247,23 +260,25 @@ fn a_body_one_past_its_ceiling_is_named_and_one_at_it_is_kept() {
     let over = Floor::new("a body past its ceiling");
     let kept = Floor::new("a body at or under its ceiling");
     let strategy = (around(262_144), prop::bool::ANY, 0_usize..=3);
-    check(strategy, Some(24), |(units, wide, trimmed)| {
-        let doc = LoroDoc::new();
-        let body = doc.get_text("body");
-        body.insert(0, &text_of(units + trimmed * 2, wide)).expect("inserted");
-        doc.commit();
-        if trimmed > 0 {
-            body.delete_utf16(0, trimmed * 2).expect("trimmed");
-        }
-        let judged = judge_state(&doc).expect("judged");
-        over.draw(units > 262_144);
-        kept.draw(units <= 262_144);
-        if units > 262_144 {
-            let breach = judged.expect("a breach");
-            prop_assert_eq!(breach.shape, BreachShape::Body);
-            prop_assert_eq!(amount_of(&breach, "chars"), Some(number(units)));
-        } else {
-            prop_assert!(judged.is_none(), "{judged:?}");
+    check(strategy, Some(24), |(lengths, wide, trimmed)| {
+        for units in lengths {
+            let doc = LoroDoc::new();
+            let body = doc.get_text("body");
+            body.insert(0, &text_of(units + trimmed * 2, wide)).expect("inserted");
+            doc.commit();
+            if trimmed > 0 {
+                body.delete_utf16(0, trimmed * 2).expect("trimmed");
+            }
+            let judged = judge_state(&doc).expect("judged");
+            over.draw(units > 262_144);
+            kept.draw(units <= 262_144);
+            if units > 262_144 {
+                let breach = judged.expect("a breach");
+                prop_assert_eq!(breach.shape, BreachShape::Body);
+                prop_assert_eq!(amount_of(&breach, "chars"), Some(number(units)));
+            } else {
+                prop_assert!(judged.is_none(), "{judged:?}");
+            }
         }
         Ok(())
     });
