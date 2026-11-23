@@ -87,6 +87,11 @@
       "regions": 97,
       "reason": "first measured 2026-11-21 at 98.94% lines and 99.06% regions, with the recorded index-rules.jsonl replayed natively (tests/index_rules_oracle.rs: every row whose input is plain values) beside the unit tests of the path grammar, the display-name key and the ISO date; what is left are the arms of a node a recorded row never builds (an exhausted unnamed-address series, an entry with no time). Regions lowered from 99 to 97 when the index's writes joined, every recorded write row replayed (tests/index_rules_oracle.rs) beside the unit tests of the ceilings, copy derivation and refusals, and tests/large_record.rs: 97.46% regions measured, lines unmoved; each `?` after a loro call is a region whose error arm a valid record never reaches, and a test cannot make loro refuse an operation on a record the index just read"
     },
+    "ops/api-contracts": {
+      "lines": 100,
+      "regions": 99,
+      "reason": "first measured 2026-11-22 at 100.00% lines and 99.82% regions, the floors the measurement rounds down to: the generated Refusal is held to every entry of contracts/api/refusals.json (code, status and exampleText), the port mapping to PortError's own code and text, and each template filter to JavaScript's own answer (JSON.stringify against serde_json on every character below U+0100, String.prototype.trim's whitespace); the two regions left are the unreachable halves of a test's own unwrap"
+    },
     "ports/ports": {
       "lines": 99,
       "regions": 99,
@@ -103,9 +108,9 @@
       "reason": "first measured 2026-11-08 at 98.63% lines and 96.90% regions"
     },
     "xtask": {
-      "lines": 78,
-      "regions": 77,
-      "reason": "first measured 2026-11-08 at 57.43% lines and 55.14% regions; raised to 60.48% and 58.05% once the coverage command's logic was split out and tested (the mutation gate's first catch), and to 65.53% and 63.55% once a test ran the whole codegen over the repository (the mutation gate's catch on the input-caps generator).  Raised to 71 and 69 with the dialect's optional fields, references, strings and plain Rust types (71.23% and 69.76%), and to 75 and 74 with the dialect's booleans, integers, constants, unions, object checks, extension and external definitions (75.66% and 74.23%), and lines to 78 with `dist`'s argument, directory and feature choices tested (78.19%). The commands that build, run tools or need a release toolchain are exercised by running them in rust:check, not by unit tests"
+      "lines": 81,
+      "regions": 80,
+      "reason": "first measured 2026-11-08 at 57.43% lines and 55.14% regions; raised to 60.48% and 58.05% once the coverage command's logic was split out and tested (the mutation gate's first catch), and to 65.53% and 63.55% once a test ran the whole codegen over the repository (the mutation gate's catch on the input-caps generator).  Raised to 71 and 69 with the dialect's optional fields, references, strings and plain Rust types (71.23% and 69.76%), and to 75 and 74 with the dialect's booleans, integers, constants, unions, object checks, extension and external definitions (75.66% and 74.23%), and lines to 78 with `dist`'s argument, directory and feature choices tested (78.19%). The commands that build, run tools or need a release toolchain are exercised by running them in rust:check, not by unit tests. Raised to 81 lines and 80 regions with the refusals generator (codegen/refusals.rs, its tests beside it): 81.92% lines and 80.69% regions"
     }
   }
 }

@@ -8,9 +8,10 @@
  * never mentions a canvas.
  */
 
-import type { CommentThread } from '@kamiazya/whiteboard-model'
+import { type CommentThread, SYNC_TEXT_BREACH_CODES } from '@kamiazya/whiteboard-model'
 import { readCommentThreads } from './comment-threads.js'
 import { type DocumentContainers, RETIRED_COMMENTS_KEY } from './containers.js'
+import { RetiredCommentPlane } from './generated/refusals.js'
 
 /**
  * A document that still holds comments in the plane before threads
@@ -21,12 +22,10 @@ import { type DocumentContainers, RETIRED_COMMENTS_KEY } from './containers.js'
  * them with no word said. The bytes stay where they are; the caller says so.
  */
 export class RetiredCommentPlaneError extends Error {
-  readonly code = 'retired_comment_plane'
+  readonly code = SYNC_TEXT_BREACH_CODES['retired-comment-plane']
 
   constructor(readonly rows: number) {
-    super(
-      `this document holds ${rows} comment${rows === 1 ? '' : 's'} saved by an older version in a form this version no longer reads (the flat comments plane before threads); its data has not been changed`,
-    )
+    super(RetiredCommentPlane(rows))
     this.name = 'RetiredCommentPlaneError'
   }
 }

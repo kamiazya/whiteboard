@@ -200,6 +200,12 @@
       "reason": "the same count read as cast_possible_truncation: checked non-negative first"
     },
     {
+      "crate": "crates/ops/api-contracts",
+      "lint": "clippy::too_many_lines",
+      "count": 4,
+      "reason": "the generated Refusal's code, status and message matches and its test-only examples list, one arm per refusal in contracts/api/refusals.json; a split would only hide the table"
+    },
+    {
       "crate": "crates/testing/proptest",
       "lint": "clippy::panic",
       "count": 1,

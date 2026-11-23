@@ -10,6 +10,7 @@ import {
   EXTENSION_FACET_KEY_PATTERN,
   type ExtensionFacets,
   markdownInputSchema,
+  OkfParseFailed,
   okfActorInputSchema,
   tagListWriteSchema,
   type documentEngine as wire,
@@ -113,7 +114,7 @@ export class OkfParseError extends Error {
     message: string,
     issues: readonly { path: PropertyKey[]; message: string }[] = [],
   ) {
-    super(`OKF parse failed at ${stage}: ${message}${detail(issues)}`)
+    super(OkfParseFailed(stage, message, detail(issues)))
     this.name = 'OkfParseError'
   }
 }

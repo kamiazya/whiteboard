@@ -19,6 +19,8 @@ mod caps;
 mod dialect;
 mod emit;
 mod parse;
+mod refusal_template;
+mod refusals;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write as _;
@@ -264,6 +266,13 @@ fn generate_all(root: &Path) -> Result<BTreeMap<String, String>, Vec<String>> {
             Vec::new()
         });
         collect(root, &source, files, &mut outputs, &mut v);
+    }
+    let refusals_path = root.join(refusals::SOURCE);
+    let refusals_text = std::fs::read_to_string(&refusals_path)
+        .map_err(|e| vec![format!("cannot read {}: {e}", refusals::SOURCE)])?;
+    match refusals::generate(&refusals_text) {
+        Ok(files) => collect(root, refusals::SOURCE, files, &mut outputs, &mut v),
+        Err(errors) => v.extend(errors),
     }
     let ledger: inputs::Ledger = metadata::read_json(&root.join(inputs::LEDGER_PATH))?;
     match caps::generate(&ledger.entries) {

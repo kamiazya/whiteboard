@@ -1,3 +1,5 @@
+import { REFUSAL_CODE_TOO_MANY_WORKSPACES, TooManyWorkspaces } from '@kamiazya/whiteboard-model'
+
 /**
  * The most workspaces one NAMESPACE may hold on a keeper shared by several
  * people (server mode). Every member of a tenant shares one registry, and the
@@ -16,13 +18,11 @@ export const NAMESPACE_MAX_WORKSPACES = 1000
 
 /** A create refused because its namespace already holds `NAMESPACE_MAX_WORKSPACES`. Nothing was written. */
 export class TooManyWorkspacesError extends Error {
-  readonly code = 'too_many_workspaces'
+  readonly code = REFUSAL_CODE_TOO_MANY_WORKSPACES
   readonly status = 413
 
   constructor(public readonly namespace: string) {
-    super(
-      `"${namespace}" already holds ${NAMESPACE_MAX_WORKSPACES} workspaces, the most one person may hold on this server`,
-    )
+    super(TooManyWorkspaces(namespace, NAMESPACE_MAX_WORKSPACES))
     this.name = 'TooManyWorkspacesError'
   }
 }

@@ -1,5 +1,11 @@
 import {
+  CannotPlaceCopyContested,
   compareCodeUnit,
+  DisplayNameTaken,
+  DocumentHasDescendants,
+  DocumentMoveIntoSelf,
+  DocumentNotFoundInIndex,
+  DocumentPathTaken,
   documentIdSchema,
   documentKindSchema,
   documentNameSchema,
@@ -7,6 +13,9 @@ import {
   namespaceHandleSchema,
   parseWorkspaceAddress,
   SINGLE_PERSON_NAMESPACE,
+  WorkspaceNotFoundInIndex,
+  WorkspaceSegmentTaken,
+  WorkspaceSegmentTakenInNamespace,
   workspaceCanonicalIdSchema,
   workspaceDisplayNameSchema,
   workspaceSegmentSchema,
@@ -407,7 +416,7 @@ export function isWorkspaceNotFoundError(error: unknown): error is WorkspaceNotF
  */
 export class WorkspaceNotFoundError extends Error {
   constructor(readonly workspaceId: string) {
-    super(`Workspace not found: "${workspaceId}". Create it before adding documents to it.`)
+    super(WorkspaceNotFoundInIndex(workspaceId))
     this.name = 'WorkspaceNotFoundError'
   }
 }
@@ -426,7 +435,7 @@ export class DocumentPathTakenError extends Error {
     readonly workspaceId: string,
     readonly path: string,
   ) {
-    super(`Document path "${path}" already exists in workspace "${workspaceId}"`)
+    super(DocumentPathTaken(path, workspaceId))
     this.name = 'DocumentPathTakenError'
   }
 }
@@ -463,8 +472,8 @@ export class WorkspaceSegmentTakenError extends Error {
   ) {
     super(
       namespace === undefined
-        ? `Workspace segment "${segment}" is already taken`
-        : `Workspace segment "${segment}" is already taken in namespace "${namespace}"`,
+        ? WorkspaceSegmentTaken(segment)
+        : WorkspaceSegmentTakenInNamespace(segment, namespace),
     )
     this.name = 'WorkspaceSegmentTakenError'
   }
@@ -508,10 +517,7 @@ export class DocumentPathContestedError extends Error {
     readonly workspaceId: string,
     readonly path: string,
   ) {
-    super(
-      `More than one document carries "${path}" in workspace "${workspaceId}". ` +
-        'Resolve by documentId, or rename one of them.',
-    )
+    super(CannotPlaceCopyContested(path, workspaceId))
     this.name = 'DocumentPathContestedError'
   }
 }
@@ -528,7 +534,7 @@ export class DocumentNotFoundError extends Error {
     /** The path or the id the caller named — whichever the operation takes. */
     readonly target: string,
   ) {
-    super(`No document "${target}" in workspace "${workspaceId}"`)
+    super(DocumentNotFoundInIndex(target, workspaceId))
     this.name = 'DocumentNotFoundError'
   }
 }
@@ -565,10 +571,7 @@ export class DisplayNameTakenError extends Error {
     // The folder is named by where the person already is, not by its
     // address: a parent's address ("class") is not what its name ("Class")
     // reads, and the keeper does not hold the name to say it.
-    super(
-      `Another ${kind} here is already called "${displayName.trim()}". ` +
-        `Choose a name no other ${kind} here has.`,
-    )
+    super(DisplayNameTaken(kind, displayName))
     this.name = 'DisplayNameTakenError'
   }
 }
@@ -587,7 +590,7 @@ export class DocumentHasDescendantsError extends Error {
     readonly path: string,
     detail: string,
   ) {
-    super(`Document "${path}" has descendants. ${detail}`)
+    super(DocumentHasDescendants(path, detail))
     this.name = 'DocumentHasDescendantsError'
   }
 }
@@ -598,7 +601,7 @@ export class DocumentMoveIntoSelfError extends Error {
     readonly from: string,
     readonly to: string,
   ) {
-    super(`Cannot move "${from}" to "${to}": the destination is inside the subtree being moved`)
+    super(DocumentMoveIntoSelf(from, to))
     this.name = 'DocumentMoveIntoSelfError'
   }
 }

@@ -11,7 +11,7 @@ import {
   type DocumentKind,
   documentPathSchema,
   folderNameRefusal,
-  type SyncWriteRefusalCode,
+  SYNC_WORKSPACE_BREACH_CODES,
   WORKSPACE_MAX_DOCUMENTS,
   WORKSPACE_MAX_FOLDERS,
 } from '@kamiazya/whiteboard-model'
@@ -53,16 +53,7 @@ export type WorkspaceSyncBreach =
     }
 
 /** The code each workspace-sync refusal is answered with, beside `SYNC_TEXT_BREACH_CODES`. */
-export const SYNC_WORKSPACE_BREACH_CODES = {
-  'causal-gap': 'causal_gap',
-  'too-many-documents': 'too_many_documents',
-  'too-many-folders': 'too_many_folders',
-  'unreadable-document-meta': 'unreadable_document_meta',
-  'invalid-path': 'invalid_path',
-  'document-name-too-long': 'document_name_too_long',
-  'folder-name-refused': 'folder_name_refused',
-  'document-kind-changed': 'document_kind_changed',
-} as const satisfies Record<WorkspaceSyncBreach['shape'], SyncWriteRefusalCode>
+export { SYNC_WORKSPACE_BREACH_CODES }
 
 export function isWorkspaceSyncBreach(
   breach: SyncTextBreach | WorkspaceSyncBreach,
