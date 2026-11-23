@@ -29,7 +29,7 @@ fn placed(path: &str, counter: i32) -> Placed {
 }
 
 #[test]
-fn a_survivor_is_filed_under_the_first_evacuee_at_the_deepest_path_above_it() {
+fn a_survivor_is_filed_under_the_deepest_evacuee_path_above_it() {
     let (top, deep, twin, aside) =
         (placed("a", 0), placed("a/b", 1), placed("a/b", 2), placed("c", 3));
     let evacuees = [&top, &deep, &twin, &aside];

@@ -82,17 +82,15 @@ fn depth(path: &str) -> usize {
     path.split('/').count()
 }
 
-/// The path of the deepest evacuee above `path`, the first in `evacuees`'
-/// order among those at that path: the first export to reach a survivor there.
+/// The path of the deepest evacuee above `path`: the first export to reach a
+/// survivor there. Every evacuee at that path shares it, and the survivors
+/// filed under it are cut before the first of them is exported.
 fn deepest_evacuee_above<'a>(evacuees: &[&'a Placed], path: &str) -> Option<&'a str> {
-    let mut found: Option<&'a str> = None;
-    for evacuee in evacuees {
-        let deeper = found.is_none_or(|held| depth(&evacuee.path) > depth(held));
-        if is_above(&evacuee.path, path) && deeper {
-            found = Some(&evacuee.path);
-        }
-    }
-    found
+    evacuees
+        .iter()
+        .map(|evacuee| evacuee.path.as_str())
+        .filter(|above| is_above(above, path))
+        .max_by_key(|above| depth(above))
 }
 
 /// `value` with every `counter@peer` string written `counter@*`.

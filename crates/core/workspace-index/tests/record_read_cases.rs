@@ -6,7 +6,8 @@
 //! inside, outside and above the tree, under a tree of another name, uncreated
 //! or malformed; images named by a body or by a node the readers refuse; and
 //! the since-readers after each kind of write, a delete that leaves a survivor
-//! below included, and one peer's writes past a version that holds another's.
+//! below included, one peer's writes past a version that holds another's, and
+//! two peers' writes touching one document.
 //!
 //! `fixtures/record_read_cases.jsonl` holds each record's bytes (a row with a
 //! `snapshot`) and each read of it with the TypeScript's answer (`expect`). A
@@ -39,7 +40,7 @@ const CASES: &str = include_str!("fixtures/record_read_cases.jsonl");
 /// reorganised by an edit under a node a delete took, whose creation the
 /// compaction dropped: loro's arena still knows the node's container sits under
 /// the tree, but no public call of the `loro` crate names a container's parent,
-/// so the edit cannot be placed. The 32 `touchedSince` rows name every
+/// so the edit cannot be placed. The 33 `touchedSince` rows name every
 /// operation of a record two peers wrote, touching more than one document:
 /// the TypeScript lists them peer by peer in the order wasm32's hash map holds
 /// the peers, and natively the same map listed peer 9 before peer 7 where the
@@ -49,7 +50,7 @@ const UNDECIDED: &[(&str, usize)] = &[
     ("fileReferences", 1),
     ("organisationChangedSince", 3 + 1),
     ("removedSince", 2),
-    ("touchedSince", 32),
+    ("touchedSince", 33),
     ("workspaceDocumentEntry", 4),
     ("workspaceDocumentProjection", 2),
 ];
