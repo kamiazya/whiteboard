@@ -14,17 +14,17 @@
 
 #[cfg(test)]
 mod support;
+#[cfg(test)]
+mod write_replay;
 
 use serde_json::Value as Json;
 use std::collections::BTreeMap;
-use support::{assert_same, base64_decode, model_of, pairs_of, rows_of, without_proto};
+use support::{assert_same, base64_decode, model_of, rows_of};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
-use whiteboard_crdt::{
-    CONTENT_QUERIES, answer_content_query, deep_value, deep_value_with_id, frontier_pairs,
-    import_bytes, version_pairs,
-};
-use whiteboard_model::crdt::{Query, QueryName};
+use whiteboard_crdt::{CONTENT_QUERIES, ENGINE_WRITERS, answer_content_query, import_bytes};
+use whiteboard_model::crdt::{Query, QueryName, WriterName};
+use write_replay::{check_state, check_write};
 
 const RECORDING: &str =
     include_str!("../../../../packages/loro-adapter/src/oracle/crdt-engine.jsonl");
@@ -56,13 +56,25 @@ const REPLAYED: &[(&str, usize)] = &[
     ("contentDigest", 178),
     ("textLimitBreach", 178),
     ("documentJudgement", 178),
+    ("writeSpatialCanvas", 4),
+    ("writeSpatialNode", 4),
+    ("writeSpatialEdge", 4),
+    ("deleteSpatialNode", 4),
+    ("deleteSpatialEdge", 4),
+    ("reconcileSpatialCanvas", 4),
+    ("setNodeLock", 4),
+    ("setEdgeLock", 4),
+    ("withSpatialBatch", 4),
 ];
 
 /// The ops not replayed, with their rows: a query a document hosted on a
 /// workspace tree node asks is listed as `<query>@node`. What a workspace
 /// record lists and the hosted reads are answered one layer up, where the
 /// record's rules are (`whiteboard-workspace-index`'s `tests/engine_oracle.rs`
-/// replays them against the same recording); the rest waits on a port.
+/// replays them against the same recording). A writer this crate answers is
+/// listed as `<writer>@node` when it names a hosted document: its `changed`
+/// is the record's `documentsTouchedSince`, the `touchedSince` read that waits
+/// on a port with the rest.
 const DEFERRED: &[(&str, usize)] = &[
     ("documents", 178),
     ("nodes", 178),
@@ -98,15 +110,15 @@ const DEFERRED: &[(&str, usize)] = &[
     ("imageRefIds@node", 16),
     ("retiredStoredShape@node", 16),
     ("retiredCommentRows@node", 16),
-    ("writeSpatialCanvas", 6),
-    ("writeSpatialNode", 6),
-    ("writeSpatialEdge", 6),
-    ("deleteSpatialNode", 6),
-    ("deleteSpatialEdge", 6),
-    ("reconcileSpatialCanvas", 6),
-    ("setNodeLock", 6),
-    ("setEdgeLock", 6),
-    ("withSpatialBatch", 6),
+    ("writeSpatialCanvas@node", 2),
+    ("writeSpatialNode@node", 2),
+    ("writeSpatialEdge@node", 2),
+    ("deleteSpatialNode@node", 2),
+    ("deleteSpatialEdge@node", 2),
+    ("reconcileSpatialCanvas@node", 2),
+    ("setNodeLock@node", 2),
+    ("setEdgeLock@node", 2),
+    ("withSpatialBatch@node", 2),
     ("writeMarkdownBody", 6),
     ("writeDocumentKind", 6),
     ("writeFacets", 6),
@@ -161,18 +173,15 @@ fn check_open(row: &Json) {
     let id = row["id"].as_str().expect("an id");
     let doc = import_bytes(&base64_decode(row["snapshot"].as_str().expect("bytes")))
         .unwrap_or_else(|e| panic!("{id}: {e}"));
-    assert_same(
-        &format!("{id} deep value"),
-        &without_proto(&deep_value(&doc)).0,
-        &model_of(&row["deep"]),
-    );
-    assert_same(
-        &format!("{id} container ids"),
-        &without_proto(&deep_value_with_id(&doc)).0,
-        &model_of(&row["ids"]),
-    );
-    assert_eq!(version_pairs(&doc), pairs_of(&row["vv"]), "{id} version vector");
-    assert_eq!(frontier_pairs(&doc), pairs_of(&row["frontiers"]), "{id} frontiers");
+    check_state(id, &doc, row);
+}
+
+/// A writer this crate answers, naming a document hosted on a tree node.
+#[cfg(test)]
+fn hosted_writer(row: &Json) -> bool {
+    let answered = WriterName::from_wire(row["op"].as_str().expect("an op"))
+        .is_some_and(|op| ENGINE_WRITERS.contains(&op));
+    answered && row["batch"][0]["args"].get("documentId").is_some()
 }
 
 /// Replays a query row; `false` when the Rust engine does not answer it.
@@ -203,7 +212,7 @@ fn every_recorded_row_is_answered_as_the_typescript_answered_it() {
         .collect();
     let mut replayed: BTreeMap<String, usize> = BTreeMap::new();
     let mut deferred: BTreeMap<String, usize> = BTreeMap::new();
-    for row in &rows {
+    for (row, line) in rows.iter().zip(RECORDING.lines().filter(|line| !line.is_empty())) {
         let mut op = row["op"].as_str().expect("an op").to_owned();
         let held = if op == "open" {
             check_open(row);
@@ -215,6 +224,11 @@ fn every_recorded_row_is_answered_as_the_typescript_answered_it() {
                 op.push_str("@node");
             }
             held
+        } else if hosted_writer(row) {
+            op.push_str("@node");
+            false
+        } else if row.get("batch").is_some() {
+            check_write(row["id"].as_str().expect("an id"), row, line)
         } else {
             false
         };

@@ -2,7 +2,8 @@
 //! lands. Today it reads the bytes npm `loro-crdt` writes: a deep value, a
 //! version vector and frontiers, answered as the TypeScript records them, and
 //! a tree container's nodes and the roots beside it, read without writing,
-//! and writes a tree and its containers one loro call at a time.
+//! writes a tree and its containers one loro call at a time, and answers the
+//! document engine's spatial-canvas writers over a document of its own.
 //!
 //! The `loro` crate is pinned `=` to the version of the npm package
 //! (ADR-0054 decision 13). One `LoroDoc` is never split across two engines:
@@ -24,6 +25,7 @@ mod canvas;
 mod content;
 mod content_digest;
 mod copy;
+mod engine_write;
 mod envelope;
 mod frontiers;
 mod image_refs;
@@ -33,6 +35,8 @@ mod plain;
 mod projection;
 mod proposals;
 mod read;
+mod spatial_batch;
+mod spatial_write;
 mod stored;
 mod subtree;
 mod text_limits;
@@ -45,6 +49,7 @@ pub use content::{
 };
 pub use content_digest::{content_digest_of, stable_stringify};
 pub use copy::{NodeAt, copy_meta, fill_meta};
+pub use engine_write::{ENGINE_WRITERS, WriteAnswer, Written, write_batch};
 pub use frontiers::{
     FrontiersError, decode_frontiers, encode_frontiers, frontiers_version, shallow_root_version,
     version_frontiers,

@@ -54,7 +54,7 @@ pub fn set_peer_id(doc: &LoroDoc, peer: u64) -> Result<(), WriteError> {
 
 /// A plain value as loro stores it: a whole number is an integer, as npm
 /// loro-crdt stores one, and anything else a double.
-fn plain(value: &Value) -> Result<LoroValue, WriteError> {
+pub(crate) fn plain(value: &Value) -> Result<LoroValue, WriteError> {
     Ok(match value {
         Value::Null => LoroValue::Null,
         Value::Bool(b) => LoroValue::Bool(*b),
