@@ -339,7 +339,85 @@ fn a_restore_the_typescript_would_misread_is_not_answered() {
     assert!(restore_facets(scalar, bytes).is_none(), "bytes reach JavaScript as a typed array");
     assert!(restore_facets(bytes, scalar).is_none(), "and are compared there by index");
     let proto = |doc: &LoroDoc| {
+        scalar(doc);
         doc.get_map("__proto__").insert("k", 1).expect("a root");
     };
     assert!(restore_facets(scalar, proto).is_none(), "a root JavaScript cannot name");
+    let other = |doc: &LoroDoc| {
+        scalar(doc);
+        doc.get_map("other").insert("k", 1).expect("a root");
+    };
+    assert!(restore_facets(scalar, other).is_some(), "the same restore under another name");
+}
+
+/// Whether a write wrote anything.
+#[cfg(test)]
+fn wrote(answer: Option<WriteAnswer>) -> bool {
+    let Some(WriteAnswer::Applied(applied)) = answer else { panic!("applied: {answer:?}") };
+    applied.local_update.is_some()
+}
+
+#[test]
+#[cfg(test)]
+fn values_compare_as_javascript_reads_them() {
+    // `held`'s anchor stores its point as doubles; JavaScript reads `1.0` as
+    // the `1` a drop names, so the pin stays and nothing is written.
+    let drop = object(&[("x", number(1.0)), ("y", number(2.0))]);
+    let stays = object(&[("threadId", text("t")), ("drop", drop)]);
+    assert!(!wrote(answered(WriterName::MoveCommentThread, stays)), "a pin dropped where it is");
+    let facets = |value: f64| {
+        move |doc: &LoroDoc| {
+            doc.get_map("facets").insert("k", value).expect("a value");
+        }
+    };
+    assert!(wrote(restore_facets(facets(f64::NAN), facets(1.0))), "NaN against a number");
+    assert!(!wrote(restore_facets(facets(f64::NAN), facets(f64::NAN))), "NaN against itself");
+    assert!(wrote(restore_facets(facets(0.0), facets(-0.0))), "Object.is tells the zeros apart");
+    let listed = |doc: &LoroDoc| {
+        facets(1.0)(doc);
+        doc.get_list("legacy").push(1).expect("a list");
+    };
+    assert!(restore_facets(facets(1.0), listed).is_none(), "a sequence root in the past");
+    assert!(restore_facets(listed, facets(1.0)).is_none(), "a sequence root held");
+}
+
+#[test]
+#[cfg(test)]
+fn numbers_equal_to_javascript_are_not_rewritten() {
+    use whiteboard_crdt::{LoroValue, loro_value};
+    let at = |value: LoroValue| {
+        move |doc: &LoroDoc| {
+            doc.get_map("facets").insert("k", value.clone()).expect("a value");
+        }
+    };
+    // A double and an integer JavaScript reads as one number, alone, in a
+    // list and in an object.
+    for (held, past) in [
+        (loro_value!(1.0), loro_value!(1)),
+        (loro_value!([1.0, "a"]), loro_value!([1, "a"])),
+        (loro_value!({ "a": [1.0] }), loro_value!({ "a": [1] })),
+    ] {
+        assert!(!wrote(restore_facets(at(held.clone()), at(past.clone()))), "{held:?}");
+    }
+    assert!(wrote(restore_facets(at(loro_value!([1.0])), at(loro_value!([1, 2])))), "lengths");
+    let proto = loro_value!({ "__proto__": 1 });
+    assert!(restore_facets(at(proto.clone()), at(loro_value!({ "a": 1 }))).is_none(), "held");
+    assert!(restore_facets(at(loro_value!({ "a": 1 })), at(proto)).is_none(), "past");
+}
+
+#[test]
+#[cfg(test)]
+fn a_text_root_counts_as_changed_only_when_it_held_text() {
+    let notes = |held: &'static str| {
+        move |doc: &LoroDoc| {
+            doc.get_text("notes").insert(0, held).expect("notes");
+            doc.get_text("notes").delete(0, 1).expect("one unit fewer");
+        }
+    };
+    let body = |doc: &LoroDoc| {
+        doc.get_text("body").insert(2, "c").expect("a longer body");
+    };
+    // The past changes the body; the held notes root is emptied too.
+    assert!(wrote(restore_facets(notes("x"), body)), "an empty root is no second change");
+    assert!(restore_facets(notes("xy"), body).is_none(), "a held text is a second change");
 }

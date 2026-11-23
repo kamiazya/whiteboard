@@ -98,9 +98,10 @@ fn set_status_into(doc: &LoroDoc, args: &Value) -> Step {
 
 /// `withDocumentBatch` over the engine's steps: a body write, a canvas
 /// reconcile, and any other op read as a verdict, as the TypeScript's dispatch
-/// reads it. One commit, and none when nothing was written.
+/// reads it, in one commit. The TypeScript commits only when a step wrote;
+/// a commit with nothing pending is no operation in loro, so this one need
+/// not ask.
 fn with_document_batch(doc: &LoroDoc, steps: &[Value]) -> Step {
-    let mut wrote = false;
     for step in steps {
         if !matches!(step, Value::Map(_)) {
             return Err(Fault::Declined);
@@ -108,21 +109,15 @@ fn with_document_batch(doc: &LoroDoc, steps: &[Value]) -> Step {
         match field(step, "op") {
             Some(Value::String(op)) if op == "writeMarkdownBody" => {
                 splice_minimal(&doc.get_text(BODY), text(field(step, "body"))?)?;
-                wrote = true;
             }
             Some(Value::String(op)) if op == "reconcileSpatialCanvas" => {
                 let side = |key: &str| field(step, key).ok_or(Fault::Declined);
-                wrote |= reconcile_into(doc, side("prev")?, side("next")?)?;
+                reconcile_into(doc, side("prev")?, side("next")?)?;
             }
-            _ => {
-                set_status_into(doc, step)?;
-                wrote = true;
-            }
+            _ => set_status_into(doc, step)?,
         }
     }
-    if wrote {
-        doc.commit();
-    }
+    doc.commit();
     Ok(())
 }
 

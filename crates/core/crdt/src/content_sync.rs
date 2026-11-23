@@ -51,13 +51,15 @@ fn same_number(a: f64, b: f64) -> bool {
     (a.is_nan() && b.is_nan()) || a.to_bits() == b.to_bits()
 }
 
-/// A number as JavaScript holds it: an integer rounded as npm loro-crdt rounds it.
+/// A number as JavaScript holds it.
 fn number(value: &LoroValue) -> Option<f64> {
     match value {
-        LoroValue::I64(_) | LoroValue::Double(_) => match crate::read::loro_value_to_value(value) {
-            whiteboard_model::Value::Number(n) => Some(n),
-            _ => None,
-        },
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "npm loro-crdt hands every i64 to JavaScript as a number, so equality is asked of the rounded one"
+        )]
+        LoroValue::I64(n) => Some(*n as f64),
+        LoroValue::Double(d) => Some(*d),
         _ => None,
     }
 }
@@ -219,9 +221,9 @@ fn clear_root(doc: &LoroDoc, key: &str, root: &Root) -> Result<bool, Fault> {
         Root::Text(_) => {
             let text = doc.get_text(key);
             let length = text.len_utf16();
-            if length > 0 {
-                text.delete_utf16(0, length).map_err(|_| Fault::Declined)?;
-            }
+            // A delete of nothing is no operation in loro, as the TypeScript's
+            // guard around it makes it.
+            text.delete_utf16(0, length).map_err(|_| Fault::Declined)?;
             Ok(length > 0)
         }
     }
