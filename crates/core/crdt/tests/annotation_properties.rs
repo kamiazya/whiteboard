@@ -100,7 +100,7 @@ fn a_thread_reads_back_ordered_and_counted_from_what_was_stored() {
         prop::collection::btree_map(
             "[a-c\u{ff5e}\u{1F600}]{1,2}",
             prop::collection::vec(message(), 1..6),
-            1..4,
+            1..7,
         ),
         None,
         |held| {
