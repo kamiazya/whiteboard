@@ -16,7 +16,7 @@ use whiteboard_model::Value;
 use whiteboard_model::checks::{okf_actor, okf_timestamp};
 
 pub(crate) const THREADS_KEY: &str = "threads";
-const MESSAGES_KEY: &str = "messages";
+pub(crate) const MESSAGES_KEY: &str = "messages";
 const RETIRED_COMMENTS_KEY: &str = "comments";
 const RETIRED_PLANE_REFUSAL: &str = "RetiredCommentPlaneError";
 /// The prefix of the style key a thread's passage is marked with.
@@ -104,7 +104,7 @@ fn compare_messages(a: &LoroValue, b: &LoroValue) -> std::cmp::Ordering {
 }
 
 /// One thread by id, `None` when it is absent or the schema refuses it.
-fn read_thread(threads: &LoroMap, id: &str) -> Option<Value> {
+pub(crate) fn read_thread(threads: &LoroMap, id: &str) -> Option<Value> {
     let container = child_map(threads.get(id))?;
     let Stored::Plain(anchor) = stored(&container, "anchor") else { return None };
     let Stored::Plain(status) = stored(&container, "status") else { return None };

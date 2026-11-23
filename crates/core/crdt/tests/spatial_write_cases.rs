@@ -116,7 +116,6 @@ fn a_text_judged_hosted_or_unported_write_is_not_answered() {
     assert_eq!(answered(WriterName::DeleteSpatialNode, id, WriteJudge::Text), None);
     let hosted = object(&[("id", text("a")), ("documentId", text("D"))]);
     assert_eq!(answered(WriterName::DeleteSpatialNode, hosted, WriteJudge::None), None);
-    let thread = object(&[("thread", text("x"))]);
-    assert_eq!(answered(WriterName::WriteCommentThread, thread, WriteJudge::None), None);
+    assert_eq!(answered(WriterName::PruneEmptyFolders, object(&[]), WriteJudge::None), None);
     assert!(write_batch(&base64_decode("AAAA"), 3, &[], WriteJudge::None).is_none());
 }

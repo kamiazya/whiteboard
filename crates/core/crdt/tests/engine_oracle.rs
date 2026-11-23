@@ -74,6 +74,15 @@ const REPLAYED: &[(&str, usize)] = &[
     ("reconcileCoreFacets", 4),
     ("writeCanvasFacetsField", 4),
     ("spliceText", 4),
+    ("writeCommentThread", 3),
+    ("writeThreadMessage", 4),
+    ("setCommentThreadStatus", 4),
+    ("moveCommentThread", 4),
+    ("markThreadPassages", 3),
+    ("writeProposal", 3),
+    ("setProposedChangeStatus", 4),
+    ("withDocumentBatch", 4),
+    ("reconcileDocContent", 3),
 ];
 
 /// The ops not replayed, with their rows: a query a document hosted on a
@@ -83,7 +92,9 @@ const REPLAYED: &[(&str, usize)] = &[
 /// replays them against the same recording). A writer this crate answers is
 /// listed as `<writer>@node` when it names a hosted document: its `changed`
 /// is the record's `documentsTouchedSince`, the `touchedSince` read that waits
-/// on a port with the rest.
+/// on a port with the rest. `reconcileDocContent` is split: a restore that
+/// changes more than one root writes them in the order wasm32's hash map holds
+/// the roots, which a native build cannot know, so those rows are not answered.
 const DEFERRED: &[(&str, usize)] = &[
     ("documents", 178),
     ("nodes", 178),
@@ -137,15 +148,15 @@ const DEFERRED: &[(&str, usize)] = &[
     ("reconcileCoreFacets@node", 2),
     ("writeCanvasFacetsField@node", 2),
     ("spliceText@node", 2),
-    ("writeCommentThread", 6),
-    ("writeThreadMessage", 6),
-    ("setCommentThreadStatus", 6),
-    ("moveCommentThread", 6),
-    ("markThreadPassages", 6),
-    ("writeProposal", 6),
-    ("setProposedChangeStatus", 6),
-    ("withDocumentBatch", 6),
-    ("reconcileDocContent", 6),
+    ("writeCommentThread@node", 3),
+    ("writeThreadMessage@node", 2),
+    ("setCommentThreadStatus@node", 2),
+    ("moveCommentThread@node", 2),
+    ("markThreadPassages@node", 3),
+    ("writeProposal@node", 3),
+    ("setProposedChangeStatus@node", 2),
+    ("withDocumentBatch@node", 2),
+    ("reconcileDocContent", 3),
     ("writeWorkspaceDocumentContent", 6),
     ("writeDocumentContentAndName", 6),
     ("seedNameFromTitle", 6),

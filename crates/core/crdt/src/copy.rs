@@ -228,7 +228,7 @@ fn fill_text(into: &LoroText, source: &LoroText) -> Result<bool, WriteError> {
 
 /// The child map a copy opens at `key`: mergeable, so two peers creating one
 /// thread at once converge, unless its name would pass the bound.
-fn copied_map(target: &LoroMap, key: &str) -> Result<LoroMap, WriteError> {
+pub(crate) fn copied_map(target: &LoroMap, key: &str) -> Result<LoroMap, WriteError> {
     let name_chars = utf16::len(&target.id().to_string()).saturating_add(utf16::len(key));
     if name_chars > CONTAINER_NAME_MAX_CHARS {
         target.insert_container(key, LoroMap::new()).map_err(refused)
