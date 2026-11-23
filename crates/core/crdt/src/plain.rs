@@ -22,6 +22,10 @@ const MARKERS: [&str; 8] = [
     "$unrepresentable",
 ];
 
+/// An answer the TypeScript gives and this crate does not: the caller asks it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Undecided;
+
 /// `{ "$undefined": true }`: what the wire writes for no value.
 pub(crate) fn undefined() -> Value {
     Value::Map(vec![("$undefined".to_owned(), Value::Bool(true))])

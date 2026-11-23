@@ -1760,8 +1760,10 @@ dependencies = [
  "loro",
  "serde_json",
  "wasm-bindgen-test",
+ "whiteboard-codec",
  "whiteboard-det",
  "whiteboard-model",
+ "whiteboard-proptest",
 ]
 
 [[package]]

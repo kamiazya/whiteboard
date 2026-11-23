@@ -40,17 +40,17 @@ const REPLAYED: &[(&str, usize)] = &[
     ("facets", 178),
     ("retiredStoredShape", 178),
     ("retiredCommentRows", 178),
-];
-
-/// The ops not replayed, with their rows: a query a document hosted on a
-/// workspace tree node asks is listed as `<query>@node`.
-const DEFERRED: &[(&str, usize)] = &[
     ("documentContent", 178),
     ("documentContentWithTags", 178),
     ("spatialCanvas", 178),
     ("spatialNodeCount", 178),
     ("coreFacets", 178),
     ("trustFacets", 178),
+];
+
+/// The ops not replayed, with their rows: a query a document hosted on a
+/// workspace tree node asks is listed as `<query>@node`.
+const DEFERRED: &[(&str, usize)] = &[
     ("annotations", 178),
     ("commentThreads", 178),
     ("threadMessageCounts", 178),
