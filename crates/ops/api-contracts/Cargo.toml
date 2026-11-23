@@ -1,0 +1,22 @@
+[package]
+name = "whiteboard-api-contracts"
+description = "The refusals every surface answers with: one code, status and sentence each, generated from contracts/api/refusals.json."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+whiteboard-ports = { path = "../../ports/ports" }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+# QR-21 layer 3: the same tests run natively and on wasm32 under Node.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[lints]
+workspace = true

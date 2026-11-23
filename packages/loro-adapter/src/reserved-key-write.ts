@@ -1,8 +1,5 @@
-import {
-  holdsReservedKey,
-  RESERVED_MAP_KEY,
-  type SyncWriteRefusalCode,
-} from '@kamiazya/whiteboard-model'
+import { holdsReservedKey, SYNC_TEXT_BREACH_CODES } from '@kamiazya/whiteboard-model'
+import { ReservedKeyWrite } from './generated/refusals.js'
 
 /**
  * A value write refused because the value holds a key named `__proto__` —
@@ -11,12 +8,10 @@ import {
  * Thrown before the first op, so nothing of the write was kept.
  */
 export class ReservedKeyWriteError extends Error {
-  readonly code = 'reserved_map_key' satisfies SyncWriteRefusalCode
+  readonly code = SYNC_TEXT_BREACH_CODES['reserved-map-key']
 
   constructor(readonly container: string) {
-    super(
-      `This write holds a key named "${RESERVED_MAP_KEY}" (in ${container}), which no document may hold, so nothing of it was kept`,
-    )
+    super(ReservedKeyWrite(container))
     this.name = 'ReservedKeyWriteError'
   }
 }

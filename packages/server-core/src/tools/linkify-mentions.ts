@@ -1,4 +1,5 @@
 import { documentEditWrites } from '@kamiazya/whiteboard-loro-adapter'
+import { NamelessLinkifyTarget } from '@kamiazya/whiteboard-model'
 import { planLinkifyMentions } from '@kamiazya/whiteboard-reference-graph'
 import { withDocument } from '../document-session.js'
 import { documentContentOf } from '../document-session-reads.js'
@@ -19,9 +20,7 @@ import { withWorkspaceWrite } from './write-lock.js'
 /** The target carries no display name, so there is no prose to find. */
 export class NamelessLinkifyTargetError extends Error {
   constructor(readonly targetDocumentId: string) {
-    super(
-      `Document ${targetDocumentId} has no display name — nothing names it in prose, so there is nothing to linkify.`,
-    )
+    super(NamelessLinkifyTarget(targetDocumentId))
     this.name = 'NamelessLinkifyTargetError'
   }
 }

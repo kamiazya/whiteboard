@@ -11,7 +11,7 @@ import {
   growsPast,
   MARKDOWN_MAX_CHARS,
   RESERVED_MAP_KEY,
-  type SyncWriteRefusalCode,
+  SYNC_TEXT_BREACH_CODES,
 } from '@kamiazya/whiteboard-model'
 import {
   type ContainerID,
@@ -139,29 +139,7 @@ export type SyncTextBreach =
  * so the daemon's refusal and the browser keeper's cannot name the same
  * breach differently: a run and a body are both a markdown body too large.
  */
-export const SYNC_TEXT_BREACH_CODES = {
-  run: 'markdown_too_large',
-  runs: 'markdown_too_large',
-  body: 'markdown_too_large',
-  'node-text': 'node_text_too_large',
-  'node-location': 'node_location_too_large',
-  label: 'label_too_large',
-  'comment-message': 'comment_too_large',
-  tags: 'tags_too_large',
-  'container-name': 'container_name_too_long',
-  'canvas-size': 'too_many_nodes_or_edges',
-  'thread-anchor': 'comment_anchor_too_large',
-  'anchor-quote': 'anchor_quote_too_long',
-  'open-threads': 'too_many_open_threads',
-  'open-changes': 'too_many_open_changes',
-  'thread-messages': 'too_many_thread_messages',
-  'content-root': 'invalid_document_root',
-  'reserved-map-key': 'reserved_map_key',
-  'retired-shape': 'retired_stored_shape',
-  'retired-comment-plane': 'retired_comment_plane',
-  // Sent built on the change that creates the container, it is an ordinary write.
-  'unattached-container': 'causal_gap',
-} as const satisfies Record<SyncTextBreach['shape'], SyncWriteRefusalCode>
+export { SYNC_TEXT_BREACH_CODES }
 
 export interface SyncTextJudgement {
   /** The first limit the update breaks, or `null` when it may be kept. */
