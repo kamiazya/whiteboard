@@ -20,6 +20,7 @@
 //! A document that is the root of its own `LoroDoc` holds no workspace tree
 //! the canvas writers write under, so the documents a write touched are none.
 
+use crate::content_write::apply_content;
 use crate::spatial_batch::{reconcile, with_spatial_batch};
 use crate::spatial_write::{
     EDGE_LOCKS, EDGE_PLANE, Fault, NODE_LOCKS, NODE_PLANE, Step, delete_element, delete_node,
@@ -41,6 +42,15 @@ pub const ENGINE_WRITERS: &[WriterName] = &[
     WriterName::SetNodeLock,
     WriterName::SetEdgeLock,
     WriterName::WithSpatialBatch,
+    WriterName::WriteMarkdownBody,
+    WriterName::SpliceText,
+    WriterName::WriteDocumentKind,
+    WriterName::WriteFacets,
+    WriterName::WriteCoreFacets,
+    WriterName::WriteTrustFacets,
+    WriterName::ReconcileFacets,
+    WriterName::ReconcileCoreFacets,
+    WriterName::WriteCanvasFacetsField,
 ];
 
 /// What a batch answered.
@@ -109,7 +119,7 @@ fn apply(doc: &LoroDoc, op: WriterName, args: &Value) -> Step {
             id_writer(doc, args, |doc, id| set_lock(doc, EDGE_LOCKS, id, field(args, "locked")))
         }
         WriterName::WithSpatialBatch => with_spatial_batch(doc, items(field(args, "steps"))?),
-        _ => Err(Fault::Declined),
+        _ => apply_content(doc, op, args).unwrap_or(Err(Fault::Declined)),
     }
 }
 
