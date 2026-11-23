@@ -3,9 +3,11 @@
 //! that names its content. Both are functions of the merged state alone, so
 //! every keeper that lists a document names the same size and the same key.
 
-use crate::content::ok;
+use crate::canvas::spatial_node_count;
+use crate::content::{DocumentKind, document_kind, ok};
 use crate::content_digest::content_digest_of;
 use crate::read::deep_value;
+use crate::text_limits::judge_state;
 use loro::LoroDoc;
 use whiteboard_model::Value;
 use whiteboard_model::crdt::{Query, QueryName, ReadResponse};
@@ -88,16 +90,54 @@ pub fn content_digest_of_document(doc: &LoroDoc) -> String {
     content_digest_of(&content)
 }
 
+/// The text-limit verdict as the read answers it: the breach, or null.
+fn breach_value(doc: &LoroDoc) -> Option<Value> {
+    let found = judge_state(doc).ok()?;
+    Some(found.map_or(Value::Null, |breach| breach.value()))
+}
+
+#[expect(
+    clippy::cast_precision_loss,
+    reason = "a state size past 2^53 units is past what a document can hold, and the TypeScript counts in doubles"
+)]
+fn size_value(doc: &LoroDoc) -> Value {
+    Value::Number(state_size(doc) as f64)
+}
+
+/// What judging a document asks of its state, in one answer, read in the
+/// order the TypeScript reads it: the size and digest before anything that
+/// could open a root.
+fn document_judgement(doc: &LoroDoc) -> Option<Value> {
+    let size = size_value(doc);
+    let digest = Value::String(content_digest_of_document(doc));
+    let breach = breach_value(doc)?;
+    let nodes = spatial_node_count(doc);
+    let kind = document_kind(doc).map_or(Value::Null, |kind| {
+        Value::String(
+            match kind {
+                DocumentKind::Spatial => "spatial",
+                DocumentKind::Markdown => "markdown",
+            }
+            .to_owned(),
+        )
+    });
+    Some(Value::Map(vec![
+        ("stateSize".to_owned(), size),
+        ("contentDigest".to_owned(), digest),
+        ("textLimitBreach".to_owned(), breach),
+        ("spatialNodeCount".to_owned(), nodes),
+        ("statedKind".to_owned(), kind),
+    ]))
+}
+
 /// The whole-document reads over a document that is the root of its own
 /// `LoroDoc`, `None` for another query.
 pub(crate) fn answer(doc: &LoroDoc, query: &Query) -> Option<ReadResponse> {
     Some(match query.query {
-        #[expect(
-            clippy::cast_precision_loss,
-            reason = "a state size past 2^53 units is past what a document can hold, and the TypeScript counts in doubles"
-        )]
-        QueryName::StateSize => ok(Value::Number(state_size(doc) as f64)),
+        QueryName::StateSize => ok(size_value(doc)),
         QueryName::ContentDigest => ok(Value::String(content_digest_of_document(doc))),
+        QueryName::TextLimitBreach => ok(breach_value(doc)?),
+        QueryName::DocumentJudgement => ok(document_judgement(doc)?),
         _ => return None,
     })
 }

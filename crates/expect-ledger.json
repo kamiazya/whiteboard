@@ -64,8 +64,8 @@
     {
       "crate": "crates/core/crdt",
       "lint": "dead_code",
-      "count": 1,
-      "reason": "tests/support is shared by the recordings' tests and each test binary uses some of it; the expectation sits on the module in the binary that uses the least"
+      "count": 2,
+      "reason": "tests/support is shared by the recordings' tests and each test binary uses some of it; the expectation sits on the module in each binary that leaves some of it unused (annotation_cases.rs, text_limit_cases.rs)"
     },
     {
       "crate": "crates/core/crdt",

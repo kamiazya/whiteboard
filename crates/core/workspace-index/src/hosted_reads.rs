@@ -166,7 +166,10 @@ pub(crate) fn answer_hosted(
     }
     let kind = kind_asked(rest).ok()?;
     let missing = match query.query {
-        QueryName::StateSize | QueryName::ContentDigest => "RangeError",
+        QueryName::StateSize
+        | QueryName::ContentDigest
+        | QueryName::TextLimitBreach
+        | QueryName::DocumentJudgement => "RangeError",
         _ => "Error",
     };
     let found = walk(doc).0.into_iter().find(|walked| {

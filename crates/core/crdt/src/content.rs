@@ -93,7 +93,7 @@ fn record_key<'a>(value: Option<&'a LoroValue>, key: &str) -> Option<&'a LoroVal
 }
 
 /// What retired shape one stored node value is in.
-fn retired_node_shape(id: &str, raw: Option<&LoroValue>) -> Option<String> {
+pub(crate) fn retired_node_shape(id: &str, raw: Option<&LoroValue>) -> Option<String> {
     if record_key(raw, PRE_ADR_0037_EXTENSION_KEY).is_some() {
         return Some(format!(
             "node \"{id}\" stored under the pre-ADR-0037 `{PRE_ADR_0037_EXTENSION_KEY}` key"
@@ -113,7 +113,7 @@ fn retired_node_shape(id: &str, raw: Option<&LoroValue>) -> Option<String> {
 }
 
 /// What retired shape one stored edge value is in.
-fn retired_edge_shape(id: &str, raw: Option<&LoroValue>) -> Option<String> {
+pub(crate) fn retired_edge_shape(id: &str, raw: Option<&LoroValue>) -> Option<String> {
     record_key(raw, PRE_ADR_0037_EXTENSION_KEY).map(|_| {
         format!("edge \"{id}\" stored under the pre-ADR-0037 `{PRE_ADR_0037_EXTENSION_KEY}` key")
     })
@@ -255,7 +255,7 @@ fn refused(Refusal(class): Refusal) -> ReadResponse {
 }
 
 /// The content queries this crate answers, by the contract's name.
-pub const CONTENT_QUERIES: [QueryName; 22] = [
+pub const CONTENT_QUERIES: [QueryName; 24] = [
     QueryName::DocumentKind,
     QueryName::NodeLocks,
     QueryName::EdgeLocks,
@@ -278,6 +278,8 @@ pub const CONTENT_QUERIES: [QueryName; 22] = [
     QueryName::ImageRefIds,
     QueryName::StateSize,
     QueryName::ContentDigest,
+    QueryName::TextLimitBreach,
+    QueryName::DocumentJudgement,
 ];
 
 /// Answers `query` over a document that is the root of its own `LoroDoc`, or
