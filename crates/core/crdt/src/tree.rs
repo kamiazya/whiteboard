@@ -13,6 +13,13 @@ use whiteboard_model::Value;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NodeId(pub(crate) TreeID);
 
+impl std::fmt::Display for NodeId {
+    /// `counter@peer`, as the tree names its nodes.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}@{}", self.0.counter, self.0.peer)
+    }
+}
+
 /// What kind of container a map's entry is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ContainerKind {

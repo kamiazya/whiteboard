@@ -52,13 +52,24 @@ pub fn walk_in(tree: &Tree) -> (Vec<Walked>, usize) {
 /// (empty for the workspace root).
 #[must_use]
 pub fn walk_under(tree: &Tree, starts: Vec<NodeId>, prefix: &str) -> (Vec<Walked>, usize) {
+    let (walked, unreadable) = walk_naming_unreadable(tree, starts, prefix);
+    (walked, unreadable.len())
+}
+
+/// The same walk, naming each node it skipped, in the order it met them.
+#[must_use]
+pub fn walk_naming_unreadable(
+    tree: &Tree,
+    starts: Vec<NodeId>,
+    prefix: &str,
+) -> (Vec<Walked>, Vec<NodeId>) {
     let mut out = Vec::new();
-    let mut skipped = 0_usize;
+    let mut skipped = Vec::new();
     let mut stack: Vec<(NodeId, String)> =
         starts.into_iter().rev().map(|n| (n, prefix.to_owned())).collect();
     while let Some((node, prefix)) = stack.pop() {
         let Some(read) = read_node(tree, node) else {
-            skipped = skipped.saturating_add(1);
+            skipped.push(node);
             continue;
         };
         let path = if prefix.is_empty() {

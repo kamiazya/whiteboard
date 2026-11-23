@@ -17,6 +17,7 @@ pub mod ceiling;
 pub mod derive_copy;
 pub mod display_name;
 pub mod document_path;
+pub mod engine_reads;
 pub mod entry;
 pub mod first_free_segment;
 pub mod index_duplicate;
@@ -40,6 +41,7 @@ pub use display_name::{
     Named, NamedKind, display_name_key, first_distinct_unnamed_path, moved_display_name_taken,
     shown_name, sibling_display_name_taken,
 };
+pub use engine_reads::answer_workspace_query;
 pub use entry::{DocumentEntry, EntryError, Found, entry_of};
 pub use first_free_segment::first_free_segment;
 pub use index_duplicate::{DuplicateDocument, duplicate_document};

@@ -30,6 +30,7 @@ mod image_refs;
 mod judgement;
 mod patch;
 mod plain;
+mod projection;
 mod proposals;
 mod read;
 mod stored;
@@ -49,9 +50,10 @@ pub use frontiers::{
 };
 pub use judgement::{CONTENT_KEYS, content_digest_of_document, state_size};
 pub use loro::{
-    ExportMode, LoroDoc, LoroList, LoroMap, LoroMovableList, LoroText, LoroValue, TreeID,
-    loro_value,
+    ExpandType, ExportMode, LoroDoc, LoroList, LoroMap, LoroMovableList, LoroText, LoroValue,
+    StyleConfig, StyleConfigMap, TreeID, loro_value,
 };
+pub use projection::project_node;
 pub use read::{
     ImportError, deep_value, frontier_pairs, import_bytes, loro_value_to_value, version_pairs,
 };
