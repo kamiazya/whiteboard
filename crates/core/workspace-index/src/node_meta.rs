@@ -118,6 +118,22 @@ fn as_folder(raw: &[(String, Value)]) -> Option<NodeRead> {
     })
 }
 
+/// A document node's meta with its name left out, for a reader that takes the
+/// name as it stands: a name of any shape, a container included, is no reason
+/// to stop reading the document.
+#[must_use]
+pub(crate) fn read_document_unnamed(tree: &Tree, node: NodeId) -> Option<DocumentMeta> {
+    let mut raw = Vec::new();
+    for key in META_KEYS.into_iter().filter(|&key| key != "name") {
+        match tree.entry(node, key) {
+            Some(Entry::Container { .. }) => return None,
+            Some(Entry::Value(value)) => raw.push((key.to_owned(), value)),
+            None => {}
+        }
+    }
+    as_document(&raw)
+}
+
 /// What `node` records about itself, or `None` for a node this build cannot read.
 #[must_use]
 pub fn read_node(tree: &Tree, node: NodeId) -> Option<NodeRead> {

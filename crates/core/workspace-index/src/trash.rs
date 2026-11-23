@@ -10,7 +10,7 @@ use whiteboard_model::checks::canonical_ulid;
 pub(crate) const WORKSPACE_TRASH_KEY: &str = "trash";
 
 /// The most folder names one trash row keeps.
-const TRASH_FOLDER_NAMES_MAX: usize = 256;
+pub(crate) const TRASH_FOLDER_NAMES_MAX: usize = 256;
 
 /// What the trash records about a document that was deleted.
 #[derive(Debug, Clone, PartialEq)]
@@ -53,7 +53,7 @@ fn folder_names(value: &Value) -> Option<Vec<(String, String)>> {
     items.iter().map(folder_name).collect()
 }
 
-fn is_digest(text: &str) -> bool {
+pub(crate) fn is_digest(text: &str) -> bool {
     text.len() == 64 && text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
