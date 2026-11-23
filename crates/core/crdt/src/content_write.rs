@@ -64,10 +64,9 @@ fn splice_minimal(target: &LoroText, next: &str) -> Step {
     let current: Vec<u16> = target.to_string().encode_utf16().collect();
     let next: Vec<u16> = next.encode_utf16().collect();
     let (from, to, insert) = minimal_change(&current, &next);
-    let removed = to.saturating_sub(from);
-    if removed > 0 {
-        target.delete_utf16(from, removed).map_err(|_| Fault::Declined)?;
-    }
+    // A delete of nothing is no operation in loro, as the TypeScript's guard
+    // around it makes it.
+    target.delete_utf16(from, to.saturating_sub(from)).map_err(|_| Fault::Declined)?;
     if !insert.is_empty() {
         let insert = String::from_utf16(insert).map_err(|_| Fault::Declined)?;
         target.insert_utf16(from, &insert).map_err(|_| Fault::Declined)?;
