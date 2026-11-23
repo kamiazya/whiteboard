@@ -222,7 +222,8 @@ fn passage_map(passages: &[Value]) -> Result<Vec<(&str, &Value)>, Fault> {
 fn clamped(range: &Value, key: &str, length: usize) -> Result<usize, Fault> {
     match field(range, key) {
         Some(Value::Number(n)) if *n >= 0.0 && n.fract() == 0.0 => {
-            let at: usize = n.to_string().parse().unwrap_or(usize::MAX);
+            // `abs` folds `-0`, which prints as "-0" and would not parse.
+            let at: usize = n.abs().to_string().parse().unwrap_or(usize::MAX);
             Ok(at.min(length))
         }
         _ => Err(Fault::Declined),
