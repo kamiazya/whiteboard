@@ -40,7 +40,8 @@ fn destination_at(body: &str, open: usize) -> Option<(&str, usize)> {
 fn inline_refs(body: &str) -> Vec<&str> {
     let mut refs = Vec::new();
     let mut at = 0_usize;
-    while let Some(bang) = find_from(body, "![", at) {
+    while at < body.len() {
+        let Some(bang) = find_from(body, "![", at) else { break };
         let Some(close) = bang.checked_add(2).and_then(|from| find_from(body, "](", from)) else {
             break;
         };
@@ -51,7 +52,8 @@ fn inline_refs(body: &str) -> Vec<&str> {
         if is_image_ref(url) {
             refs.push(url);
         }
-        at = end;
+        // Every destination ends past where the scan stood; the floor keeps a scan that cannot move from spinning.
+        at = end.max(at.saturating_add(1));
     }
     refs
 }

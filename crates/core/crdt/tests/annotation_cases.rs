@@ -162,3 +162,26 @@ fn a_coordinate_stored_as_a_double_is_judged_as_the_number_it_is() {
     assert_eq!(threads_read(&passage(3.0, 2.0)), 0, "ending before starting");
     assert_eq!(threads_read(&passage(-1.0, 2.0)), 0, "a negative offset");
 }
+
+/// These reads answer a query that names no argument; one that names any is
+/// left to the caller, since the TypeScript's own reading of it is not ported.
+#[test]
+fn a_query_naming_an_argument_is_left_to_the_caller() {
+    use whiteboard_model::Value;
+    let doc = LoroDoc::new();
+    let named = Value::Map(vec![("kind".into(), Value::String("spatial".into()))]);
+    for query in [
+        QueryName::Annotations,
+        QueryName::CommentThreads,
+        QueryName::ThreadMessageCounts,
+        QueryName::ThreadMarks,
+        QueryName::Proposals,
+        QueryName::ImageRefIds,
+    ] {
+        let asked = |args| answer_content_query(&doc, &Query { query, args }).is_some();
+        assert!(asked(None), "{query:?} with none");
+        assert!(asked(Some(Value::Map(Vec::new()))), "{query:?} with an empty map");
+        assert!(!asked(Some(named.clone())), "{query:?} with a named argument");
+        assert!(!asked(Some(Value::Seq(Vec::new()))), "{query:?} with a list");
+    }
+}
