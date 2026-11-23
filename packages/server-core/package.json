@@ -76,7 +76,7 @@
     "@kamiazya/whiteboard-ports": "workspace:*",
     "@kamiazya/whiteboard-reference-graph": "workspace:*",
     "@kamiazya/whiteboard-search": "workspace:*",
-    "hono": "^4.13.7",
+    "hono": "^4.13.16",
     "loro-crdt": "catalog:",
     "zod": "catalog:"
   },
