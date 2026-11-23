@@ -88,7 +88,7 @@ fn copy_container(target: &LoroMap, key: &str, container: &Container) -> Result<
 
 /// A sequence's entries as plain values: a container inside one is flattened
 /// to the value it holds, which is what a copy of a sequence carries.
-fn push_all(child: &LoroMovableList, container: &Container) -> Result<(), WriteError> {
+pub(crate) fn push_all(child: &LoroMovableList, container: &Container) -> Result<(), WriteError> {
     let held = ValueOrContainer::Container(container.clone());
     let LoroValue::List(items) = held.get_deep_value() else { return Ok(()) };
     for item in items.iter() {
@@ -101,7 +101,7 @@ fn push_all(child: &LoroMovableList, container: &Container) -> Result<(), WriteE
 /// anything changed: a container the source holds is synced into one of the same
 /// kind, an equal plain value appends nothing, and a key the source lacks is
 /// deleted.
-fn fill_map(target: &LoroMap, source: &LoroMap) -> Result<bool, WriteError> {
+pub(crate) fn fill_map(target: &LoroMap, source: &LoroMap) -> Result<bool, WriteError> {
     let mut changed = false;
     for key in source.keys() {
         let key = key.to_string();

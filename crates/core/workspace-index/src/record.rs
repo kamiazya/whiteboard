@@ -1,7 +1,6 @@
 //! A workspace record, opened from the bytes a keeper stores, and what the
 //! document index reads from it.
 
-use crate::content_digest::content_digest_of;
 use crate::entry::Found;
 use crate::index_rules::Node;
 use crate::node_meta::{DocumentMeta, NodeRead, WORKSPACE_TREE_KEY};
@@ -9,26 +8,10 @@ use crate::trash::{TrashRow, read_trash_rows};
 use crate::walk::{Walked, walk, walk_in};
 use std::collections::BTreeSet;
 use whiteboard_crdt::{
-    ContainerKind, Entry, ImportError, LoroDoc, Tree, import_bytes, peek, set_peer_id, tree,
+    CONTENT_KEYS, ContainerKind, Entry, ImportError, LoroDoc, Tree, content_digest_of,
+    import_bytes, peek, set_peer_id, tree,
 };
 use whiteboard_model::Value;
-
-/// The containers a document's content lives in, which its digest names.
-const CONTENT_KEYS: [&str; 13] = [
-    "nodes",
-    "edges",
-    "lines",
-    "canvas",
-    "threads",
-    "proposals",
-    "facets",
-    "nodeLocks",
-    "edgeLocks",
-    "core",
-    "trust",
-    "document",
-    "body",
-];
 
 pub(crate) const WORKSPACE_META_KEY: &str = "workspaceMeta";
 pub(crate) const PINNED_KEY: &str = "pinned";
@@ -57,6 +40,13 @@ impl WorkspaceRecord {
         let doc = import_bytes(bytes)?;
         set_peer_id(&doc, peer).map_err(|refused| ImportError(refused.0))?;
         Ok(Self { doc })
+    }
+
+    /// A record read over a document a caller holds. A `LoroDoc` is a handle, so
+    /// the record sees every change made through the one it was made from.
+    #[must_use]
+    pub fn over(doc: &LoroDoc) -> Self {
+        Self { doc: doc.clone() }
     }
 
     /// The loro document the record is, for a keeper to export and store.
@@ -103,33 +93,51 @@ impl WorkspaceRecord {
             .collect()
     }
 
-    fn found_of(tree: &Tree, walked: &Walked, meta: &DocumentMeta, shadowed: bool) -> Found {
-        Found {
-            document_id: meta.document_id.clone(),
+    fn placed_of(tree: &Tree, walked: &Walked, meta: &DocumentMeta) -> PlacedDocument {
+        PlacedDocument {
+            meta: meta.clone(),
             path: walked.path.clone(),
-            kind: Some(meta.kind.clone()),
-            name: meta.name.clone(),
-            shadowed: shadowed.then_some(true),
-            created_at: meta.created_at,
-            updated_at: meta.updated_at,
             content_digest: content_digest_of(&Self::content_of(tree, walked)),
         }
     }
 
-    /// Every document in tree order. One that follows an earlier document at
-    /// its path is marked shadowed: shown rather than hidden, since the data
-    /// converged and a listing that dropped half of it would look like loss.
+    fn found_of(placed: PlacedDocument, shadowed: bool) -> Found {
+        Found {
+            document_id: placed.meta.document_id,
+            path: placed.path,
+            kind: Some(placed.meta.kind),
+            name: placed.meta.name,
+            shadowed: shadowed.then_some(true),
+            created_at: placed.meta.created_at,
+            updated_at: placed.meta.updated_at,
+            content_digest: placed.content_digest,
+        }
+    }
+
+    /// Every document in tree order, as the record stores it. One that follows
+    /// an earlier document at its path is marked shadowed: shown rather than
+    /// hidden, since the data converged and a listing that dropped half of it
+    /// would look like loss.
     #[must_use]
-    pub fn documents(&self) -> Vec<Found> {
+    pub fn placed_documents(&self) -> Vec<(PlacedDocument, bool)> {
         let Some(held) = tree(&self.doc, WORKSPACE_TREE_KEY) else { return Vec::new() };
         let mut seen: BTreeSet<String> = BTreeSet::new();
         let mut out = Vec::new();
         for walked in walk_in(&held).0 {
             let NodeRead::Document(meta) = &walked.read else { continue };
             let shadowed = !seen.insert(walked.path.clone());
-            out.push(Self::found_of(&held, &walked, meta, shadowed));
+            out.push((Self::placed_of(&held, &walked, meta), shadowed));
         }
         out
+    }
+
+    /// Every document in tree order, shadowed ones marked.
+    #[must_use]
+    pub fn documents(&self) -> Vec<Found> {
+        self.placed_documents()
+            .into_iter()
+            .map(|(placed, shadowed)| Self::found_of(placed, shadowed))
+            .collect()
     }
 
     /// The first document in tree order that carries `document_id`.
@@ -138,7 +146,7 @@ impl WorkspaceRecord {
         let held = tree(&self.doc, WORKSPACE_TREE_KEY)?;
         walk_in(&held).0.into_iter().find_map(|walked| match &walked.read {
             NodeRead::Document(meta) if meta.document_id == document_id => {
-                Some(Self::found_of(&held, &walked, meta, false))
+                Some(Self::found_of(Self::placed_of(&held, &walked, meta), false))
             }
             _ => None,
         })
@@ -153,11 +161,7 @@ impl WorkspaceRecord {
             matches!(&walked.read, NodeRead::Document(meta) if meta.document_id == document_id)
         })?;
         let NodeRead::Document(meta) = &walked.read else { return None };
-        Some(PlacedDocument {
-            meta: meta.clone(),
-            path: walked.path.clone(),
-            content_digest: content_digest_of(&Self::content_of(&held, &walked)),
-        })
+        Some(Self::placed_of(&held, &walked, meta))
     }
 
     /// Every named folder path once, with the first name in tree order: either

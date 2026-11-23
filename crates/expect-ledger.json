@@ -58,8 +58,8 @@
     {
       "crate": "crates/core/crdt",
       "lint": "clippy::cast_precision_loss",
-      "count": 2,
-      "reason": "a loro integer read as the f64 a JavaScript number holds: npm loro-crdt hands every i64 to JavaScript as a number, so one past +-2^53 rounds the same way there (tests/value_conversion.rs pins 2^53 + 1 and 2^62); the second compares two anchor offsets on the rounded value, which the schema's safe-integer check has already bounded"
+      "count": 3,
+      "reason": "a loro integer read as the f64 a JavaScript number holds: npm loro-crdt hands every i64 to JavaScript as a number, so one past +-2^53 rounds the same way there (tests/value_conversion.rs pins 2^53 + 1 and 2^62); the second compares two anchor offsets on the rounded value, which the schema's safe-integer check has already bounded; the third answers a document's state size as the double the TypeScript counts in, a size past 2^53 units being past what a document can hold"
     },
     {
       "crate": "crates/core/crdt",
@@ -72,6 +72,18 @@
       "lint": "clippy::disallowed_methods",
       "count": 1,
       "reason": "tests/rust_to_js.rs regenerates the committed Rust-written corpus when a developer sets WHITEBOARD_RECORD_RUST_CRDT_CORPUS: the one environment read and the one file write, in a test only, since core has no port for either"
+    },
+    {
+      "crate": "crates/core/workspace-index",
+      "lint": "clippy::cast_precision_loss",
+      "count": 1,
+      "reason": "a trash row's stored time answered as the double a JavaScript number holds; a stored time is a safe integer, which a double holds exactly"
+    },
+    {
+      "crate": "crates/core/workspace-index",
+      "lint": "dead_code",
+      "count": 2,
+      "reason": "tests/engine_oracle.rs and tests/hosted_cases.rs borrow whiteboard-crdt's shared recording helpers (tests/support) and each uses some of them"
     },
     {
       "crate": "crates/core/edge-routing",

@@ -52,13 +52,16 @@ const REPLAYED: &[(&str, usize)] = &[
     ("threadMarks", 178),
     ("proposals", 178),
     ("imageRefIds", 178),
+    ("stateSize", 178),
+    ("contentDigest", 178),
 ];
 
 /// The ops not replayed, with their rows: a query a document hosted on a
-/// workspace tree node asks is listed as `<query>@node`.
+/// workspace tree node asks is listed as `<query>@node`. What a workspace
+/// record lists and the hosted reads are answered one layer up, where the
+/// record's rules are (`whiteboard-workspace-index`'s `tests/engine_oracle.rs`
+/// replays them against the same recording); the rest waits on a port.
 const DEFERRED: &[(&str, usize)] = &[
-    ("stateSize", 178),
-    ("contentDigest", 178),
     ("textLimitBreach", 178),
     ("documents", 178),
     ("nodes", 178),

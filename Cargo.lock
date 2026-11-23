@@ -1938,6 +1938,7 @@ dependencies = [
  "whiteboard-crdt",
  "whiteboard-det",
  "whiteboard-model",
+ "whiteboard-proptest",
 ]
 
 [[package]]
