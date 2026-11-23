@@ -24,76 +24,60 @@ struct Site {
     max: usize,
     shape: BreachShape,
     amount: &'static str,
-    value: fn(String, usize) -> LoroValue,
+    value: Build,
+}
+
+/// How a site's value is built from a string of the drawn length, or a count.
+type Build = fn(String, usize) -> LoroValue;
+
+#[cfg(test)]
+const fn site(map: &'static str, max: usize, shape: BreachShape, value: Build) -> Site {
+    let amount = if matches!(shape, BreachShape::Tags) { "amount" } else { "chars" };
+    Site { map, max, shape, amount, value }
 }
 
 #[cfg(test)]
-fn sites() -> [Site; 8] {
-    [
-        Site {
-            map: "nodes",
-            max: 8192,
-            shape: BreachShape::NodeText,
-            amount: "chars",
-            value: |s, _| loro_value!({ "id": "x", "resource": { "content": s } }),
-        },
-        Site {
-            map: "nodes",
-            max: 8192,
-            shape: BreachShape::NodeLocation,
-            amount: "chars",
-            value: |s, _| loro_value!({ "id": "x", "resource": { "location": s } }),
-        },
-        Site {
-            map: "nodes",
-            max: 1024,
-            shape: BreachShape::Label,
-            amount: "chars",
-            value: |s, _| loro_value!({ "id": "x", "label": s }),
-        },
-        Site {
-            map: "edges",
-            max: 1024,
-            shape: BreachShape::Label,
-            amount: "chars",
-            value: |s, _| loro_value!({ "id": "x", "label": s }),
-        },
-        Site {
-            map: "lines",
-            max: 1024,
-            shape: BreachShape::Label,
-            amount: "chars",
-            value: |s, _| loro_value!({ "id": "x", "label": s }),
-        },
-        Site {
-            map: "edges",
-            max: 1024,
-            shape: BreachShape::Tags,
-            amount: "amount",
-            value: |_, n| LoroValue::Map(vec![("tags".to_owned(), tags(n))].into_iter().collect()),
-        },
-        Site {
-            map: "nodes",
-            max: 1024,
-            shape: BreachShape::Tags,
-            amount: "amount",
-            value: |s, _| {
-                LoroValue::Map(
-                    vec![("tags".to_owned(), LoroValue::List(vec![LoroValue::from(s)].into()))]
-                        .into_iter()
-                        .collect(),
-                )
-            },
-        },
-        Site {
-            map: "canvas",
-            max: 1024,
-            shape: BreachShape::Tags,
-            amount: "amount",
-            value: |_, n| tags(n),
-        },
-    ]
+fn node_text(s: String, _: usize) -> LoroValue {
+    loro_value!({ "id": "x", "resource": { "content": s } })
 }
+
+#[cfg(test)]
+fn node_location(s: String, _: usize) -> LoroValue {
+    loro_value!({ "id": "x", "resource": { "location": s } })
+}
+
+#[cfg(test)]
+fn labelled(s: String, _: usize) -> LoroValue {
+    loro_value!({ "id": "x", "label": s })
+}
+
+#[cfg(test)]
+fn tagged(_: String, n: usize) -> LoroValue {
+    LoroValue::Map(vec![("tags".to_owned(), tags(n))].into_iter().collect())
+}
+
+#[cfg(test)]
+fn one_long_tag(s: String, _: usize) -> LoroValue {
+    let held = LoroValue::List(vec![LoroValue::from(s)].into());
+    LoroValue::Map(vec![("tags".to_owned(), held)].into_iter().collect())
+}
+
+#[cfg(test)]
+fn board_tags(_: String, n: usize) -> LoroValue {
+    tags(n)
+}
+
+#[cfg(test)]
+const SITES: [Site; 8] = [
+    site("nodes", 8192, BreachShape::NodeText, node_text),
+    site("nodes", 8192, BreachShape::NodeLocation, node_location),
+    site("nodes", 1024, BreachShape::Label, labelled),
+    site("edges", 1024, BreachShape::Label, labelled),
+    site("lines", 1024, BreachShape::Label, labelled),
+    site("edges", 1024, BreachShape::Tags, tagged),
+    site("nodes", 1024, BreachShape::Tags, one_long_tag),
+    site("canvas", 1024, BreachShape::Tags, board_tags),
+];
 
 #[cfg(test)]
 fn tags(n: usize) -> LoroValue {
@@ -131,10 +115,9 @@ fn a_value_one_past_its_ceiling_is_named_and_one_at_it_is_kept() {
     let over = Floor::new("a value past its ceiling");
     let at_or_under = Floor::new("a value at or under its ceiling");
     let shortened = Floor::new("a value written past its ceiling, then to at or under it");
-    let strategy =
-        (0..sites().len(), 0_usize..=3, prop::bool::ANY, prop::bool::ANY, prop::bool::ANY);
+    let strategy = (0..SITES.len(), 0_usize..=3, prop::bool::ANY, prop::bool::ANY, prop::bool::ANY);
     check(strategy, Some(96), |(site, off, up, wide, rewritten)| {
-        let site = sites()[site];
+        let site = SITES[site];
         let units = if up { site.max + off } else { site.max - off };
         let doc = LoroDoc::new();
         let key = if site.map == "canvas" { "tags" } else { "x" };
