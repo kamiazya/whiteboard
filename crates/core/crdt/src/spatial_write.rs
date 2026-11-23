@@ -197,17 +197,13 @@ pub(crate) fn refuse_retired_edges(doc: &LoroDoc) -> Step {
     }
 }
 
-/// The node an end sits on: an edge's end always, a line's only when its
-/// kind says so.
+/// The node an end of a record its schema accepted sits on (`endNode`). The
+/// schema admits `node` on an edge's end and a line's node arm alone, and
+/// refuses a point end or an unknown kind that carries one, so an accepted
+/// end names a node exactly when it holds the key.
 fn end_node(end: Option<&LoroValue>) -> Option<&str> {
     let LoroValue::Map(end) = end? else { return None };
-    let kind = end.get("kind");
-    let node = match kind {
-        None => end.get("node"),
-        Some(LoroValue::String(k)) if k.as_str() == "node" => end.get("node"),
-        Some(_) => None,
-    };
-    match node? {
+    match end.get("node")? {
         LoroValue::String(id) => Some(id.as_str()),
         _ => None,
     }

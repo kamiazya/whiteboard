@@ -3,14 +3,16 @@
 //! node and their locks, a retired edge refusing a removal, geometry the
 //! writer refuses, locks set to what they hold, a resync over stale elements,
 //! a batch's deferred sweep and its dispatch of an unknown step, a reconcile
-//! of canvas facets this build cannot read, repeated ids, and a batch whose
-//! second writer throws.
+//! of canvas facets this build cannot read, repeated ids, a batch whose
+//! second writer throws, a lock set to a number or an empty text, and a line
+//! end of a kind other than a node's that still names one (the schema refuses
+//! the line, so a removal leaves it).
 //!
 //! `fixtures/spatial_write_cases.jsonl` holds each case as the engine's
 //! recorder writes a writer row: the bytes before, the peer, the batch, what
 //! the TypeScript's engine answered with `judge: "none"`, and the document
-//! after. Then the writes the TypeScript's types refuse, which are not
-//! answered here at all.
+//! after. Then geometry JSON cannot carry, and the writes the TypeScript's
+//! types refuse, which are not answered here at all.
 
 #[cfg(test)]
 mod support;
@@ -38,7 +40,7 @@ fn every_case_is_answered_as_the_typescript_answered_it() {
         assert!(check_write(name, row, line), "{name} was not answered");
         thrown += usize::from(row["result"].get("err").is_some());
     }
-    assert_eq!(rows.len(), 25, "the cases held");
+    assert_eq!(rows.len(), 28, "the cases held");
     assert_eq!(thrown, 8, "the cases a writer threw in");
 }
 
@@ -59,6 +61,24 @@ fn one_node() -> Vec<u8> {
     doc.get_map("nodes").insert("a", "held").expect("a node");
     doc.commit();
     doc.export(whiteboard_crdt::ExportMode::Snapshot).expect("a snapshot")
+}
+
+#[test]
+fn geometry_that_is_not_finite_is_a_type_error() {
+    // The TypeScript's engine, handed NaN and either infinity as `x` directly,
+    // throws `TypeError` from `nodeToFields` for each.
+    for x in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let node = object(&[
+            ("id", text("n")),
+            ("x", Value::Number(x)),
+            ("y", Value::Number(0.0)),
+            ("width", Value::Number(1.0)),
+            ("height", Value::Number(1.0)),
+        ]);
+        let args = object(&[("node", node)]);
+        let answer = answered(WriterName::WriteSpatialNode, args, WriteJudge::None);
+        assert_eq!(answer, Some(WriteAnswer::Thrown("TypeError")), "x = {x}");
+    }
 }
 
 #[cfg(test)]
