@@ -177,7 +177,7 @@ pub(crate) fn thread_id_of_style_key(key: &str) -> Option<String> {
 }
 
 /// `decodeURIComponent`: every `%XX` is a byte of a UTF-8 sequence that must
-/// be whole and well formed, and anything else stands for itself.
+/// be whole and well formed (the final decode refuses a stray continuation), and anything else stands for itself.
 fn percent_decode(encoded: &str) -> Option<String> {
     let bytes = encoded.as_bytes();
     let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
@@ -198,11 +198,7 @@ fn percent_decode(encoded: &str) -> Option<String> {
         };
         out.push(lead);
         for step in 1..length {
-            let next = escaped_byte(bytes, at.saturating_add(step.saturating_mul(3)))?;
-            if next & 0xc0 != 0x80 {
-                return None;
-            }
-            out.push(next);
+            out.push(escaped_byte(bytes, at.saturating_add(step.saturating_mul(3)))?);
         }
         at = at.saturating_add(length.saturating_mul(3));
     }
