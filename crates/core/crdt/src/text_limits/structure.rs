@@ -99,6 +99,12 @@ pub(super) struct NameSuspect {
     pub key: Option<String>,
 }
 
+/// Whether a name of `chars` units is past the bound. The one comparison the
+/// history's filter and the state's judgement both make.
+const fn name_past(chars: usize) -> bool {
+    chars > CONTAINER_NAME_MAX_CHARS
+}
+
 /// The length of the name a root container's id carries; 0 for any other.
 fn name_length(id: &str) -> usize {
     let Some(rest) = id.strip_prefix(ROOT_PREFIX) else { return 0 };
@@ -109,11 +115,11 @@ fn name_length(id: &str) -> usize {
 /// rewritten plus its key, so a map insert whose two fit cannot open one past it.
 pub(super) fn name_suspects(op: &JsonOp, into: &mut Vec<NameSuspect>) {
     let id = op.container.to_string();
-    if name_length(&id) > CONTAINER_NAME_MAX_CHARS {
+    if name_past(name_length(&id)) {
         into.push(NameSuspect { container: op.container.clone(), key: None });
     }
     if let JsonOpContent::Map(JsonMapOp::Insert { key, .. }) = &op.content
-        && units(&id).saturating_add(units(key)) > CONTAINER_NAME_MAX_CHARS
+        && name_past(units(&id).saturating_add(units(key)))
     {
         into.push(NameSuspect { container: op.container.clone(), key: Some(key.clone()) });
     }
@@ -145,7 +151,7 @@ pub(super) fn long_name_breach(doc: &LoroDoc, suspects: &[NameSuspect]) -> Optio
             Some(key) if own == 0 => units(key),
             _ => own,
         };
-        (chars > CONTAINER_NAME_MAX_CHARS).then(|| {
+        name_past(chars).then(|| {
             TextBreach::new(
                 BreachShape::ContainerName,
                 vec![("chars", count(chars)), ("container", text(&id))],

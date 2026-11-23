@@ -5,7 +5,7 @@
 //! is the root of its own record or a workspace tree node.
 
 use super::breach::{BreachShape, TextBreach, count, text};
-use super::place::{Place, has_root, map_at, place_of, roots, value_at};
+use super::place::{Place, map_at, place_of, roots, value_at};
 use crate::content::{retired_edge_shape, retired_node_shape};
 use loro::{Container, ContainerID, LoroDoc, LoroMap, LoroValue, ValueOrContainer};
 
@@ -96,34 +96,6 @@ fn is_spatial(doc: &LoroDoc, host: &Host) -> bool {
     }
 }
 
-/// The body checks by the envelope's kind: none of a spatial document, the
-/// `okf-body` node of an unkinded one, and a text node too of a markdown one.
-fn retired_markdown(doc: &LoroDoc, host: &Host) -> Option<String> {
-    let kind = host.stated_kind(doc);
-    if kind.as_deref() == Some("spatial") || host.body_len(doc) > 0 {
-        return None;
-    }
-    let nodes = host.peek_map(doc, "nodes");
-    if nodes.as_ref().is_some_and(|nodes| nodes.get(RETIRED_BODY_NODE_ID).is_some()) {
-        return Some(format!(
-            "a markdown body stored as the `{RETIRED_BODY_NODE_ID}` canvas text node"
-        ));
-    }
-    let holds_text = nodes.is_some_and(|nodes| {
-        nodes.keys().any(|id| match value_at(&nodes, &id) {
-            Some(LoroValue::Map(node)) => match node.get("resource") {
-                Some(LoroValue::Map(resource)) => {
-                    matches!(resource.get("content"), Some(LoroValue::String(_)))
-                }
-                _ => false,
-            },
-            _ => false,
-        })
-    });
-    (kind.as_deref() == Some("markdown") && holds_text)
-        .then(|| "a markdown body stored as a canvas text node".to_owned())
-}
-
 /// What the map key `key` of the content map `family` holds that is retired.
 fn read_key(
     doc: &LoroDoc,
@@ -145,8 +117,12 @@ fn read_key(
             if key != RETIRED_BODY_NODE_ID || held.is_none() {
                 return None;
             }
+            // The `okf-body` node a markdown body was stored as: only an empty
+            // body can hide one, and on a spatial document it is content.
             let host = Host::of(doc, place)?;
-            if is_spatial(doc, &host) { None } else { retired_markdown(doc, &host) }
+            (!is_spatial(doc, &host) && host.body_len(doc) == 0).then(|| {
+                format!("a markdown body stored as the `{RETIRED_BODY_NODE_ID}` canvas text node")
+            })
         }
         "edges" => retired_edge_shape(key, value.as_ref()),
         "canvas" => (key == EXTENSION_KEY && held.is_some()).then(|| {
@@ -172,16 +148,13 @@ fn retired_elements(doc: &LoroDoc, place: &Place) -> Option<String> {
 /// What `suspect` holds that is retired, with the rows of the map it is in.
 fn read(doc: &LoroDoc, suspect: &Suspect) -> Option<(String, usize, Place)> {
     let place = place_of(doc, &suspect.container)?;
-    if !place.is_content() || (place.len() == 1 && !has_root(doc, place.key(0)?)) {
+    if !place.is_content() {
         return None;
     }
     let family = place.key_back(1)?.to_owned();
+    // A suspect with no key is a list an op inserted into.
     let Some(key) = &suspect.key else {
-        let is_list = matches!(
-            doc.get_container(suspect.container.clone())?,
-            Container::List(_) | Container::MovableList(_)
-        );
-        return if family == "elements" && is_list {
+        return if family == "elements" {
             Some((retired_elements(doc, &place)?, 0, place))
         } else {
             None

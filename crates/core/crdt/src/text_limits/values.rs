@@ -44,6 +44,13 @@ pub(super) const BOUNDS: [(Measure, usize); 11] = [
     (Measure::BoardTagChars, 1024),
 ];
 
+/// Whether `amount` is past a ceiling of `max`. The one comparison both the
+/// history's filter and the state's judgement make, so they cannot disagree
+/// about a value exactly at its ceiling.
+pub(super) const fn past(amount: usize, max: usize) -> bool {
+    amount > max
+}
+
 /// An object's field, `None` for anything that is not an object.
 fn field<'a>(value: Option<&'a LoroValue>, key: &str) -> Option<&'a LoroValue> {
     match value? {
@@ -216,6 +223,7 @@ pub(super) fn value_breach(doc: &LoroDoc, long: &[LongValue]) -> Option<TextBrea
         let held = map_at(doc, &value.container).and_then(|map| value_at(&map, &value.key));
         let amount = held.map_or(0, |held| length(value.measure, &held));
         let container = text(&value.container.to_string());
-        (amount > value.max).then(|| breach(value.measure, amount, &value.key, container, &place))
+        past(amount, value.max)
+            .then(|| breach(value.measure, amount, &value.key, container, &place))
     })
 }

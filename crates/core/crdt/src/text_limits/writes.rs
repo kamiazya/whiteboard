@@ -4,7 +4,7 @@
 
 use super::retired::Suspect;
 use super::structure::{NameSuspect, content_kind, name_suspects};
-use super::values::{BOUNDS, LongValue, length};
+use super::values::{BOUNDS, LongValue, length, past};
 use loro::json::{JsonOp, JsonSchema};
 use loro::{ContainerID, JsonListOp, JsonMapOp, JsonMovableListOp, JsonOpContent, JsonTextOp};
 use std::collections::{BTreeMap, BTreeSet};
@@ -107,15 +107,12 @@ fn read_map_write(
     let JsonMapOp::Insert { value, .. } = map_op else { return };
     writes.set_into.entry(&op.container);
     for (index, (measure, max)) in BOUNDS.into_iter().enumerate() {
-        if length(measure, value) > max
-            && seen.insert((op.container.to_string(), key.clone(), index))
-        {
-            writes.long_values.push(LongValue {
-                container: op.container.clone(),
-                key: key.clone(),
-                measure,
-                max,
-            });
+        if !past(length(measure, value), max) {
+            continue;
+        }
+        if seen.insert((op.container.to_string(), key.clone(), index)) {
+            let container = op.container.clone();
+            writes.long_values.push(LongValue { container, key: key.clone(), measure, max });
         }
     }
 }

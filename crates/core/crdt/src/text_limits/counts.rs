@@ -6,7 +6,7 @@
 //! bound is a breach whatever it was.
 
 use super::breach::{BreachShape, TextBreach, count, text};
-use super::place::{Place, child_map, has_root, map_at, place_of, value_at};
+use super::place::{Place, child_map, map_at, place_of, value_at};
 use loro::{Container, ContainerID, LoroDoc, LoroMap, LoroValue};
 use std::collections::BTreeSet;
 
@@ -41,14 +41,15 @@ const CANVAS_BOUNDS: [(&[&str], &str, usize); 2] = [
 ];
 
 /// How many entries the board holding the map at `place` has across `keys`:
-/// its siblings under the same tree node, or the roots the state lists.
+/// its siblings under the same tree node, or the roots of the record. A root
+/// the state lacks is opened empty, which costs nothing: the state judged is
+/// a copy the judge discards.
 fn board_size(doc: &LoroDoc, place: &Place, keys: &[&str]) -> usize {
-    let parent = if place.len() > 1 { place.id(1).and_then(|id| map_at(doc, id)) } else { None };
+    let parent = place.id(1).and_then(|id| map_at(doc, id));
     keys.iter()
         .map(|key| match &parent {
             Some(node) => child_map(node, key).map_or(0, |map| map.len()),
-            None if place.len() == 1 && has_root(doc, key) => doc.get_map(*key).len(),
-            None => 0,
+            None => doc.get_map(*key).len(),
         })
         .fold(0, usize::saturating_add)
 }

@@ -124,11 +124,6 @@ pub(super) fn roots(doc: &LoroDoc) -> Vec<(String, ContainerID)> {
         .collect()
 }
 
-/// Whether the state lists a root named `name`.
-pub(super) fn has_root(doc: &LoroDoc, name: &str) -> bool {
-    roots(doc).iter().any(|(held, _)| held == name)
-}
-
 /// `text`'s length in UTF-16 units, the unit every bound counts.
 pub(super) fn units(text: &str) -> usize {
     text.encode_utf16().count()

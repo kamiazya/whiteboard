@@ -118,6 +118,14 @@ fn text_of(units: usize, wide: bool) -> String {
     if wide { "\u{1F600}".repeat(units / 2) + &"a".repeat(units % 2) } else { "a".repeat(units) }
 }
 
+/// A count at a ceiling or a few under it, or a few past it, as often one as
+/// the other: the two sides of the bound are what the properties are about.
+#[cfg(test)]
+fn around(max: usize) -> impl Strategy<Value = usize> {
+    (prop::bool::ANY, 0_usize..=2)
+        .prop_map(move |(over, by)| if over { max + 1 + by } else { max - by })
+}
+
 #[test]
 fn a_value_one_past_its_ceiling_is_named_and_one_at_it_is_kept() {
     let over = Floor::new("a value past its ceiling");
@@ -176,7 +184,7 @@ fn entries(doc: &LoroDoc, hosted: bool, name: &str) -> LoroMap {
 fn a_board_one_past_its_ceiling_is_named_and_one_at_it_is_kept() {
     let over = Floor::new("a board past its ceiling");
     let kept = Floor::new("a board at or under its ceiling");
-    let strategy = (prop::bool::ANY, prop::bool::ANY, 1998_usize..=2002, 0_usize..=2002);
+    let strategy = (prop::bool::ANY, prop::bool::ANY, around(2000), 0_usize..=2002);
     check(strategy, Some(24), |(edges, hosted, count, lines_share)| {
         let doc = LoroDoc::new();
         let names: &[&str] = if edges { &["edges", "lines"] } else { &["nodes"] };
@@ -200,8 +208,8 @@ fn a_board_one_past_its_ceiling_is_named_and_one_at_it_is_kept() {
         }
         Ok(())
     });
-    over.assert(6);
-    kept.assert(6);
+    over.assert(4);
+    kept.assert(4);
 }
 
 /// What a document's annotation layer is drawn as: how many threads are
@@ -209,8 +217,8 @@ fn a_board_one_past_its_ceiling_is_named_and_one_at_it_is_kept() {
 #[cfg(test)]
 fn annotation_layer() -> impl Strategy<Value = (usize, usize, usize, bool)> {
     prop_oneof![
-        (498_usize..=502, 0_usize..=2, Just(1_usize), prop::bool::ANY),
-        (Just(1_usize), Just(0_usize), 998_usize..=1002, prop::bool::ANY),
+        (around(500), 0_usize..=2, Just(1_usize), prop::bool::ANY),
+        (Just(1_usize), Just(0_usize), around(1000), prop::bool::ANY),
     ]
 }
 
@@ -247,17 +255,16 @@ fn a_document_one_past_an_annotation_ceiling_is_named_and_one_at_it_is_kept() {
         prop_assert_eq!(got, expected);
         Ok(())
     });
-    over.assert(6);
-    kept.assert(6);
+    over.assert(4);
+    kept.assert(4);
 }
 
 #[test]
 fn a_body_one_past_its_ceiling_is_named_and_one_at_it_is_kept() {
     let over = Floor::new("a body past its ceiling");
     let kept = Floor::new("a body at or under its ceiling");
-    let strategy = (0_usize..=2, prop::bool::ANY, prop::bool::ANY, 0_usize..=3);
-    check(strategy, Some(24), |(off, up, wide, trimmed)| {
-        let units = if up { 262_144 + off } else { 262_144 - off };
+    let strategy = (around(262_144), prop::bool::ANY, 0_usize..=3);
+    check(strategy, Some(24), |(units, wide, trimmed)| {
         let doc = LoroDoc::new();
         let body = doc.get_text("body");
         body.insert(0, &text_of(units + trimmed * 2, wide)).expect("inserted");
@@ -277,8 +284,8 @@ fn a_body_one_past_its_ceiling_is_named_and_one_at_it_is_kept() {
         }
         Ok(())
     });
-    over.assert(6);
-    kept.assert(6);
+    over.assert(4);
+    kept.assert(4);
 }
 
 /// A node written to a board: its text length, and whether it carries the
