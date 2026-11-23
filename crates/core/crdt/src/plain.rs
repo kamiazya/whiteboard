@@ -88,3 +88,10 @@ fn number(d: f64) -> Value {
         Value::Map(vec![("$number".to_owned(), Value::String(text.to_owned()))])
     }
 }
+
+/// A document's `toJSON` as the wire writes it; `None` when it holds bytes,
+/// which the TypeScript writes as the state they import to.
+#[must_use]
+pub fn plain_value(doc: &loro::LoroDoc) -> Option<Value> {
+    plain(&doc.get_deep_value())
+}
