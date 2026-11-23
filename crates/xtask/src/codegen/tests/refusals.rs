@@ -1,6 +1,7 @@
 //! The refusals generator: what the contract's template language means, every
 //! rule that refuses an entry, and what each language is given.
 
+use super::super::refusal_template::apply;
 use super::*;
 
 const CONTRACT: &str = r#"{
@@ -133,6 +134,14 @@ fn every_rule_that_refuses_an_entry_names_it() {
         (r#""code": "plain_thing""#, r#""code": "plain__thing""#, "is not lowercase snake_case"),
         (r#""code": "plain_thing""#, r#""code": "plain-thing""#, "is not lowercase snake_case"),
         (r#""code": "plain_thing""#, r#""code": "9plain""#, "is not lowercase snake_case"),
+    ] {
+        refused(from, to, expect);
+    }
+}
+
+#[test]
+fn every_rule_that_refuses_a_status_surface_or_param_names_it() {
+    for (from, to, expect) in [
         (r#""status": 500"#, r#""status": 418"#, "status 418"),
         (r#""source": "S""#, r#""source": " ""#, "description and source"),
         (r#""description": "Plain.""#, r#""description": "  ""#, "description and source"),
@@ -172,6 +181,14 @@ fn every_rule_that_refuses_an_entry_names_it() {
             r#""count": "integer", "Bad": "string", "#,
             "not a name both languages take",
         ),
+    ] {
+        refused(from, to, expect);
+    }
+}
+
+#[test]
+fn every_rule_that_refuses_a_template_or_an_example_names_it() {
+    for (from, to, expect) in [
         (r"{items|list}", r"{items}", "`items` is a readonly string[], which `no filter`"),
         (r"{name|json}", r"{name|s}", "which `s` does not take"),
         (r"{name|json}", r"{name|nope}", "`nope` is not a filter"),

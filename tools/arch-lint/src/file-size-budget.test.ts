@@ -137,6 +137,9 @@ function scanFiles(): string[] {
  * it is not.
  */
 const FILE_SIZE_GRANDFATHER: Record<string, number> = {
+  // Generated from contracts/api/refusals.json: a doc comment, a table row and a
+  // params type per refusal, so it grows with the contract.
+  'packages/model/src/generated/refusals.ts': 1401,
   // The editor's command union — one arm per thing a person can change, with
   // the write each arm makes — and the canonical-emptiness rules those writes
   // share (`withCanvasFacet`). It is wide because the matrix in
@@ -576,6 +579,9 @@ describe('file-size budget: scripts, same 800-line budget, same shrink-only cont
  * the construct constants) leaving as it is read less.
  */
 const RUST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
+  // Generated from contracts/api/refusals.json: a variant, its doc comment and
+  // one arm in each of four matches per refusal, so it grows with the contract.
+  'crates/ops/api-contracts/src/generated/refusals.rs': 908,
   // The GFM literal autolink tokenizer and its resolver: the protocol, www and
   // email forms are three state machines in one module, as upstream.
   'crates/core/markdown/src/vendored/construct/gfm_autolink_literal.rs': 830,

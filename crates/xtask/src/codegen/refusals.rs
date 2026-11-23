@@ -21,6 +21,7 @@ use serde_json::Value;
 
 use super::caps::rust_int;
 use super::emit::{header, within_width};
+use super::refusal_template::{Filter, Piece, Ty, is_camel, parse_template, render, strings};
 
 pub(super) const SOURCE: &str = "contracts/api/refusals.json";
 const TS_TARGET: &str = "packages/model/src/generated/refusals.ts";
@@ -70,94 +71,6 @@ struct Entry {
     source: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Ty {
-    Str,
-    Int,
-    List,
-}
-
-impl Ty {
-    fn parse(text: &str) -> Option<Self> {
-        match text {
-            "string" => Some(Self::Str),
-            "integer" => Some(Self::Int),
-            "string[]" => Some(Self::List),
-            _ => None,
-        }
-    }
-
-    fn rust(self) -> &'static str {
-        match self {
-            Self::Str => "String",
-            Self::Int => "u64",
-            Self::List => "Vec<String>",
-        }
-    }
-
-    fn ts(self) -> &'static str {
-        match self {
-            Self::Str => "string",
-            Self::Int => "number",
-            Self::List => "readonly string[]",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Filter {
-    Json,
-    Trim,
-    S,
-    List,
-    AndList,
-    JsonList,
-    QuotedList,
-}
-
-impl Filter {
-    const ALL: &'static [(&'static str, Self)] = &[
-        ("json", Self::Json),
-        ("trim", Self::Trim),
-        ("s", Self::S),
-        ("list", Self::List),
-        ("and_list", Self::AndList),
-        ("json_list", Self::JsonList),
-        ("quoted_list", Self::QuotedList),
-    ];
-
-    fn parse(text: &str) -> Result<Self, String> {
-        Self::ALL
-            .iter()
-            .find(|(name, _)| *name == text)
-            .map(|(_, filter)| *filter)
-            .ok_or_else(|| format!("`{text}` is not a filter"))
-    }
-
-    fn name(self) -> &'static str {
-        Self::ALL.iter().find(|(_, filter)| *filter == self).map_or("", |(name, _)| name)
-    }
-
-    fn takes(self) -> Ty {
-        match self {
-            Self::Json | Self::Trim => Ty::Str,
-            Self::S => Ty::Int,
-            Self::List | Self::AndList | Self::JsonList | Self::QuotedList => Ty::List,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum Piece {
-    Text(String),
-    Param { name: String, filter: Option<Filter> },
-}
-
-fn is_camel(name: &str) -> bool {
-    name.starts_with(|c: char| c.is_ascii_lowercase())
-        && name.chars().all(|c| c.is_ascii_alphanumeric())
-}
-
 fn is_pascal(name: &str) -> bool {
     name.starts_with(|c: char| c.is_ascii_uppercase())
         && name.chars().all(|c| c.is_ascii_alphanumeric())
@@ -168,120 +81,6 @@ fn is_code(code: &str) -> bool {
         && !code.ends_with('_')
         && !code.contains("__")
         && code.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
-}
-
-fn parse_template(message: &str) -> Result<Vec<Piece>, String> {
-    let mut pieces = Vec::new();
-    let mut text = String::new();
-    let mut chars = message.chars().peekable();
-    while let Some(c) = chars.next() {
-        match c {
-            '{' if chars.peek() == Some(&'{') => {
-                chars.next();
-                text.push('{');
-            }
-            '}' if chars.peek() == Some(&'}') => {
-                chars.next();
-                text.push('}');
-            }
-            '}' => return Err("a `}` closes nothing; write `}}` for a brace".to_owned()),
-            '{' => {
-                let mut inner = String::new();
-                loop {
-                    match chars.next() {
-                        Some('}') => break,
-                        Some(c) => inner.push(c),
-                        None => return Err("a `{` is never closed".to_owned()),
-                    }
-                }
-                let (name, filter) = match inner.split_once('|') {
-                    Some((name, filter)) => (name, Some(Filter::parse(filter)?)),
-                    None => (inner.as_str(), None),
-                };
-                if !is_camel(name) {
-                    return Err(format!("`{name}` is not a param name"));
-                }
-                if !text.is_empty() {
-                    pieces.push(Piece::Text(std::mem::take(&mut text)));
-                }
-                pieces.push(Piece::Param { name: name.to_owned(), filter });
-            }
-            other => text.push(other),
-        }
-    }
-    if !text.is_empty() {
-        pieces.push(Piece::Text(text));
-    }
-    Ok(pieces)
-}
-
-/// `String.prototype.trim`'s whitespace: not Rust's, which trims U+0085 and
-/// keeps U+FEFF.
-fn is_js_space(c: char) -> bool {
-    matches!(
-        c,
-        '\u{9}'..='\u{d}'
-            | ' '
-            | '\u{a0}'
-            | '\u{1680}'
-            | '\u{2000}'..='\u{200a}'
-            | '\u{2028}'
-            | '\u{2029}'
-            | '\u{202f}'
-            | '\u{205f}'
-            | '\u{3000}'
-            | '\u{feff}'
-    )
-}
-
-fn strings(value: &Value) -> Result<Vec<&str>, String> {
-    let items = value.as_array().ok_or("not a list of strings")?;
-    items.iter().map(|item| item.as_str().ok_or("not a list of strings".to_owned())).collect()
-}
-
-fn apply(filter: Filter, value: &Value) -> Result<String, String> {
-    let text = || value.as_str().ok_or_else(|| "not a string".to_owned());
-    Ok(match filter {
-        Filter::Json => serde_json::to_string(text()?).map_err(|e| e.to_string())?,
-        Filter::Trim => text()?.trim_matches(is_js_space).to_owned(),
-        Filter::S => {
-            if value.as_u64() == Some(1) {
-                String::new()
-            } else {
-                "s".to_owned()
-            }
-        }
-        Filter::List => strings(value)?.join(", "),
-        Filter::AndList => strings(value)?.join(" and "),
-        Filter::JsonList => strings(value)?
-            .into_iter()
-            .map(|s| serde_json::to_string(s).map_err(|e| e.to_string()))
-            .collect::<Result<Vec<_>, _>>()?
-            .join(", "),
-        Filter::QuotedList => {
-            strings(value)?.into_iter().map(|s| format!("\"{s}\"")).collect::<Vec<_>>().join(", ")
-        }
-    })
-}
-
-fn render(pieces: &[Piece], example: &BTreeMap<String, Value>) -> Result<String, String> {
-    let mut out = String::new();
-    for piece in pieces {
-        match piece {
-            Piece::Text(text) => out.push_str(text),
-            Piece::Param { name, filter } => {
-                let value = example.get(name).ok_or_else(|| format!("no example for `{name}`"))?;
-                match filter {
-                    Some(filter) => out.push_str(&apply(*filter, value)?),
-                    None => match value {
-                        Value::String(text) => out.push_str(text),
-                        other => out.push_str(&other.to_string()),
-                    },
-                }
-            }
-        }
-    }
-    Ok(out)
 }
 
 struct Checked<'a> {
@@ -726,7 +525,7 @@ fn rust_codes(out: &mut String, entries: &[Checked<'_>]) {
 }
 
 /// Match arms with the same body written as one arm over their patterns, in the
-/// order each body first appears: clippy's `match_same_arms` refuses a repeat.
+/// order each body first appears: clippy's the lint against repeated arms refuses a repeat.
 fn rust_arms(out: &mut String, arms: &[(String, String)]) {
     let mut order: Vec<&str> = Vec::new();
     let mut by_body: BTreeMap<&str, Vec<&str>> = BTreeMap::new();

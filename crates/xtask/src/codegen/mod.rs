@@ -19,6 +19,7 @@ mod caps;
 mod dialect;
 mod emit;
 mod parse;
+mod refusal_template;
 mod refusals;
 
 use std::collections::{BTreeMap, BTreeSet};

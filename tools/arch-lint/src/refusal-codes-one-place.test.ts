@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
-import { parseSource } from './ast-helpers.js'
+import { parseSource, unwrapExpression } from './ast-helpers.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
 
@@ -81,16 +81,17 @@ function literalsOf(path: string, source: string): Literal[] {
   return found
 }
 
-function inCodePosition(node: ts.Node): boolean {
-  let child: ts.Node = node
-  while (
-    child.parent !== undefined &&
-    (ts.isAsExpression(child.parent) ||
-      ts.isSatisfiesExpression(child.parent) ||
-      ts.isParenthesizedExpression(child.parent))
-  ) {
-    child = child.parent
+/** The `as`, `satisfies` or parenthesised expression a literal is the operand of, outermost. */
+function outermostWrapped(node: ts.Expression): ts.Node {
+  let outer: ts.Node = node
+  while (outer.parent !== undefined && unwrapExpression(outer.parent as ts.Expression) === node) {
+    outer = outer.parent
   }
+  return outer
+}
+
+function inCodePosition(node: ts.Node): boolean {
+  const child = ts.isExpression(node) ? outermostWrapped(node) : node
   const parent = child.parent
   if (parent === undefined) return false
   if (ts.isCallExpression(parent)) {
