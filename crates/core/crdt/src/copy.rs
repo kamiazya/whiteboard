@@ -1,14 +1,29 @@
 //! Copying a node's meta map into another node, container by container, as
 //! the TypeScript's node copy does: a plain value is set and a container is
 //! made fresh at its key and filled with what the source holds.
+//!
+//! A value the TypeScript syncs (`syncMapEntries`, and the sequence copies
+//! beside it) is read into JavaScript and written back, so what lands is what
+//! npm loro-crdt stores for the JavaScript value, compared as JavaScript
+//! compares: a whole double within 2^53 lands as an integer, a negative zero
+//! as the integer zero, an integer past 2^53 as the double it rounds to.
 
+use crate::content_sync::json_equal;
+use crate::proposal_write::as_js;
 use crate::tree::{ContainerKind, Entry, NodeId, Tree, kind_of};
-use crate::write::{WriteError, refused};
+use crate::write::{WriteError, plain, refused};
 use loro::{
     Container, ContainerTrait, LoroDoc, LoroMap, LoroMovableList, LoroText, LoroValue,
     ValueOrContainer,
 };
 use whiteboard_det::utf16;
+use whiteboard_model::enumeration_order;
+
+/// `value` read into JavaScript and stored back. Bytes, which reach JavaScript
+/// as a typed array this crate does not spread, are kept as they are.
+fn as_js_stored(value: &LoroValue) -> LoroValue {
+    as_js(value).and_then(|js| plain(&enumeration_order(js)).ok()).unwrap_or_else(|| value.clone())
+}
 
 /// The longest a mergeable child container's name may be (`CONTAINER_NAME_MAX_CHARS`):
 /// its parent's id and its key together, in UTF-16 units. A child that would
@@ -51,7 +66,7 @@ pub fn copy_meta(
         match source.get(&key) {
             Some(ValueOrContainer::Value(value)) => {
                 if wanted(&key, None) {
-                    target.insert(&key, value).map_err(refused)?;
+                    target.insert(&key, as_js_stored(&value)).map_err(refused)?;
                 }
             }
             Some(ValueOrContainer::Container(container))
@@ -92,7 +107,7 @@ pub(crate) fn push_all(child: &LoroMovableList, container: &Container) -> Result
     let held = ValueOrContainer::Container(container.clone());
     let LoroValue::List(items) = held.get_deep_value() else { return Ok(()) };
     for item in items.iter() {
-        child.push(item.clone()).map_err(refused)?;
+        child.push(as_js_stored(item)).map_err(refused)?;
     }
     Ok(())
 }
@@ -106,7 +121,7 @@ pub(crate) fn fill_map(target: &LoroMap, source: &LoroMap) -> Result<bool, Write
     for key in source.keys() {
         let key = key.to_string();
         changed |= match source.get(&key) {
-            Some(ValueOrContainer::Value(value)) => set_plain(target, &key, value)?,
+            Some(ValueOrContainer::Value(value)) => set_plain(target, &key, &value)?,
             Some(ValueOrContainer::Container(container)) => sync_entry(target, &key, &container)?,
             None => false,
         };
@@ -119,15 +134,22 @@ pub(crate) fn fill_map(target: &LoroMap, source: &LoroMap) -> Result<bool, Write
     Ok(changed || !stale.is_empty())
 }
 
-/// A plain value at `key`, replacing a container that stands there; `false`
-/// when the key already holds an equal one.
-fn set_plain(target: &LoroMap, key: &str, value: LoroValue) -> Result<bool, WriteError> {
+/// A plain value at `key`, as JavaScript stores it; `false` when the key
+/// already holds one JavaScript reads as equal. A map standing there is
+/// deleted first and any other container written over, as `syncMapEntry` does.
+fn set_plain(target: &LoroMap, key: &str, value: &LoroValue) -> Result<bool, WriteError> {
     match target.get(key) {
-        Some(ValueOrContainer::Value(held)) if held == value => return Ok(false),
-        Some(ValueOrContainer::Container(_)) => target.delete(key).map_err(refused)?,
+        Some(ValueOrContainer::Value(held))
+            if json_equal(&held, value).unwrap_or(held == *value) =>
+        {
+            return Ok(false);
+        }
+        Some(ValueOrContainer::Container(Container::Map(_))) => {
+            target.delete(key).map_err(refused)?;
+        }
         _ => {}
     }
-    target.insert(key, value).map_err(refused)?;
+    target.insert(key, as_js_stored(value)).map_err(refused)?;
     Ok(true)
 }
 

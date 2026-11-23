@@ -419,6 +419,48 @@ mod cases {
         assert!(!again, "nothing was admitted");
     }
 
+    /// A node holding numbers npm loro-crdt never stores: a whole double, a
+    /// negative zero, an integer past 2^53, in a scalar, a map's value and a list.
+    fn foreign_numbers(doc: &LoroDoc) -> NodeId {
+        let id = node(doc, None);
+        let meta = doc.get_tree(T).get_meta(doc.get_tree(T).roots()[0]).expect("meta");
+        meta.insert("stamp", 2.0).expect("a scalar");
+        let map = meta.insert_container("map", LoroMap::new()).expect("a map");
+        map.insert(
+            "v",
+            loro::loro_value!({ "x": 1.0, "y": -0.0, "z": 1_152_921_504_606_846_977_i64 }),
+        )
+        .expect("a value");
+        let list = meta.insert_container("moves", LoroMovableList::new()).expect("a list");
+        list.push(3.0).expect("an item");
+        id
+    }
+
+    /// What JavaScript stores back for [`foreign_numbers`]'s map and list.
+    fn stored_by_javascript() -> (LoroValue, LoroValue) {
+        let map = loro::loro_value!({ "v": { "x": 1_i64, "y": 0_i64, "z": 1_152_921_504_606_846_976.0 } });
+        (map, loro::loro_value!([3_i64]))
+    }
+
+    #[test]
+    fn a_copy_stores_each_number_as_javascript_would() {
+        let source = LoroDoc::new();
+        let from = foreign_numbers(&source);
+        let (map, list) = stored_by_javascript();
+        let target = LoroDoc::new();
+        let to = node(&target, None);
+        copy_meta(at(&source, from), at(&target, to), &copy_all).expect("copied");
+        assert_eq!(held(&target, "stamp"), Some(LoroValue::I64(2)));
+        assert_eq!(held(&target, "map"), Some(map.clone()));
+        assert_eq!(held(&target, "moves"), Some(list.clone()));
+        let filled = LoroDoc::new();
+        let to = node(&filled, None);
+        assert!(fill_meta(at(&source, from), at(&filled, to), &|_, _| true).expect("filled"));
+        assert_eq!(held(&filled, "map"), Some(map));
+        assert_eq!(held(&filled, "moves"), Some(list));
+        assert_eq!(held(&filled, "stamp"), None, "a fill leaves the scalars behind");
+    }
+
     #[test]
     fn filling_leaves_a_key_held_as_another_kind_alone_and_reports_no_change_for_empty_content() {
         let source = LoroDoc::new();
