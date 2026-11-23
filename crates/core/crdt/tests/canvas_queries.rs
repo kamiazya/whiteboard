@@ -431,6 +431,18 @@ fn a_kind_asked_for_decides_only_a_document_that_states_none() {
         &answer_content_query(&unstated, &empty).expect("answered").value,
         &model_of(&json!({ "ok": { "kind": "spatial", "canvas": { "nodes": [], "edges": [] } } })),
     );
+    // `query.args ?? {}`: null reads as no arguments, while any other
+    // non-object is refused by the reader's object schema.
+    let null = Query { query: QueryName::DocumentContent, args: Some(Value::Null) };
+    assert_same(
+        "null arguments",
+        &answer_content_query(&unstated, &null).expect("answered").value,
+        &model_of(&json!({ "ok": { "kind": "spatial", "canvas": { "nodes": [], "edges": [] } } })),
+    );
+    for args in [Value::String("markdown".to_owned()), Value::Number(1.0), Value::Seq(Vec::new())] {
+        let not_an_object = Query { query: QueryName::DocumentContent, args: Some(args) };
+        assert!(answer_content_query(&unstated, &not_an_object).is_none(), "{not_an_object:?}");
+    }
 }
 
 #[test]

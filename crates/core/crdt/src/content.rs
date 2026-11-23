@@ -341,7 +341,13 @@ fn answer_document_query(doc: &LoroDoc, query: &Query) -> Option<ReadResponse> {
 /// The kind a content read is asked to fall back to, `None` for none; an
 /// argument the contract's reader refuses is undecided, its refusal being its own.
 fn kind_asked_by(query: &Query) -> Result<Option<DocumentKind>, Undecided> {
-    let Some(Value::Map(args)) = &query.args else { return Ok(None) };
+    // The reader parses `query.args ?? {}`, so null is no arguments and any
+    // other non-object is refused by its object schema.
+    let args = match &query.args {
+        None | Some(Value::Null) => return Ok(None),
+        Some(Value::Map(args)) => args,
+        Some(_) => return Err(Undecided),
+    };
     match args.as_slice() {
         [] => Ok(None),
         [(key, Value::String(kind))] if key == "kind" => match kind.as_str() {
