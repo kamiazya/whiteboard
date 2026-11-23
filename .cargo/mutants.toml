@@ -38,12 +38,14 @@ exclude_re = [
   # `web-rust` project, whose editor and reference oracles read every tree
   # it answers.
   '^crates/bindings/wasm/src/markdown_model\.rs:',
-  # `cargo xtask wasm-imports`' process plumbing: `run` builds every core
-  # crate and the bindings to wasm32 and scans each artifact. Its decisions
-  # are the tested `scan`, `disallowed_imports` and `host_import_drift`; the
-  # rest is judged by running it in `pnpm rust:check`, and emptying
-  # HOST_IMPORTS there fails it against the real artifact.
-  '^crates/xtask/src/wasm_imports\.rs:\d+:\d+: (replace run -> |.* in run$)',
+  # `cargo xtask wasm-imports`' and `cargo xtask cross-target`'s process
+  # plumbing: `run` builds or tests every crate of the layers proven on wasm32
+  # and judges each result. Their decisions are the tested `wasm_proven_crates`,
+  # `scan`, `disallowed_imports`, `host_import_drift`, `passed`,
+  # `parity_error` and `empty_selection_error`; the rest is
+  # judged by running both in `pnpm rust:check`, and emptying HOST_IMPORTS
+  # there fails wasm-imports against the real artifact.
+  '^crates/xtask/src/(wasm_imports|cross_target)\.rs:\d+:\d+: (replace run -> |.* in run$)',
   # config_score: `j` is filtered to `j != i` before these comparisons, so
   # `i <= j` is `i < j` (both `<` in apply_pair_costs and the one in
   # contribution).

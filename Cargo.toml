@@ -19,10 +19,12 @@ members = [
   "crates/core/workspace-index",
   "crates/core/reference-graph",
   "crates/core/history",
+  "crates/ports/ports",
   "crates/bindings/wasm",
   "crates/bindings/native-fixture",
   "crates/xtask",
   "crates/testing/proptest",
+  "crates/testing/port-fakes",
 ]
 # A workspace of its own: it builds only on the pinned nightly (see its
 # Cargo.toml).
