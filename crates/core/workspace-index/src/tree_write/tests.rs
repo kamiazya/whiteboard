@@ -161,9 +161,10 @@ fn a_document_promotes_the_folder_standing_at_its_path_and_a_document_owning_it_
         document_id,
         kind: "spatial",
         name,
-        now_ms: 5.0,
+        created_at: 5.0,
+        updated_at: 6.0,
     };
-    create_document_at_path(record.doc(), "f", &new(ID_A, None)).expect("promoted");
+    assert_eq!(create_document_at_path(record.doc(), "f", &new(ID_A, None)), Ok(true));
     let promoted = record.placed_document(ID_A).expect("the document");
     assert_eq!(promoted.path, "f");
     assert_eq!(promoted.meta.name, None, "the folder's name was not chosen for the document");
@@ -174,20 +175,33 @@ fn a_document_promotes_the_folder_standing_at_its_path_and_a_document_owning_it_
         "its children stay"
     );
     let before = ops(record.doc());
-    create_document_at_path(record.doc(), "owned", &new("01ARZ3NDEKTSV4RRFFQ69G5FAZ", Some("x")))
-        .expect("nothing written");
+    assert_eq!(
+        create_document_at_path(
+            record.doc(),
+            "owned",
+            &new("01ARZ3NDEKTSV4RRFFQ69G5FAZ", Some("x"))
+        ),
+        Ok(false),
+        "nothing written"
+    );
     assert_eq!(ops(record.doc()), before);
     create_document_at_path(record.doc(), "g", &new("01ARZ3NDEKTSV4RRFFQ69G5FAY", Some("Mine")))
         .expect("promoted");
     let mine = record.placed_document("01ARZ3NDEKTSV4RRFFQ69G5FAY").expect("the document");
     assert_eq!((mine.meta.name, mine.meta.name_chosen), (Some("Mine".to_owned()), true));
-    assert_eq!((mine.meta.created_at, mine.meta.updated_at), (Some(5.0), Some(5.0)));
+    assert_eq!((mine.meta.created_at, mine.meta.updated_at), (Some(5.0), Some(6.0)));
 }
 
 #[test]
 fn a_new_document_holds_every_content_container_from_its_creation() {
     let record = writable(&LoroDoc::new());
-    let new = NewDocument { document_id: ID_A, kind: "markdown", name: None, now_ms: 1.0 };
+    let new = NewDocument {
+        document_id: ID_A,
+        kind: "markdown",
+        name: None,
+        created_at: 1.0,
+        updated_at: 1.0,
+    };
     create_document_at_path(record.doc(), "x", &new).expect("created");
     let id = record.document_node(ID_A).expect("the document").id;
     let keys = crate::test_record::tree_of(record.doc()).keys(id);

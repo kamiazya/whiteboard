@@ -89,10 +89,10 @@ const REPLAYED: &[(&str, usize)] = &[
 /// workspace tree node asks is listed as `<query>@node`. What a workspace
 /// record lists and the hosted reads are answered one layer up, where the
 /// record's rules are (`whiteboard-workspace-index`'s `tests/engine_oracle.rs`
-/// replays them against the same recording). A writer this crate answers is
-/// listed as `<writer>@node` when it names a hosted document: its `changed`
-/// is the record's `documentsTouchedSince`, the `touchedSince` read that waits
-/// on a port with the rest. `reconcileDocContent` is split: a restore that
+/// replays them against the same recording, with the workspace tree writers
+/// it answers). A writer this crate answers is listed as `<writer>@node` when
+/// it names a hosted document: answering it needs the hosted document's
+/// containers, which no writer here opens. `reconcileDocContent` is split: a restore that
 /// changes more than one root writes them in the order wasm32's hash map holds
 /// the roots, which a native build cannot know, so those rows are not answered.
 const DEFERRED: &[(&str, usize)] = &[

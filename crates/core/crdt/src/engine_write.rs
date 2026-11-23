@@ -5,7 +5,10 @@
 //! with the document left as it was.
 //!
 //! Each writer is looked up by name in [`apply`], so the writers still to be
-//! ported join there; until then a batch naming one is not answered.
+//! ported join there; until then a batch naming one is not answered. A
+//! writer whose rules live in a crate above this one (the workspace record's)
+//! is answered through [`MoreWriters`], which also answers which documents
+//! the batch touched.
 //!
 //! What is not answered here, so the caller answers it:
 //! - a batch judged by the text limits (`judge: "text"`, the default). The
@@ -29,7 +32,7 @@ use crate::spatial_write::{
     EDGE_LOCKS, EDGE_PLANE, Fault, NODE_LOCKS, NODE_PLANE, Step, delete_element, delete_node,
     field, items, set_lock, text, write_canvas, write_element,
 };
-use loro::{ExportMode, LoroDoc};
+use loro::{ExportMode, LoroDoc, VersionVector};
 use whiteboard_model::Value;
 use whiteboard_model::crdt::{MutationApplied, Write, WriteJudge, WriterName};
 use whiteboard_model::encoding::bytes_to_base64;
@@ -139,10 +142,33 @@ fn apply(doc: &LoroDoc, op: WriterName, args: &Value) -> Step {
     }
 }
 
+/// Writers a crate above this one answers in the same batch, beside the ones
+/// [`ENGINE_WRITERS`] lists.
+pub trait MoreWriters {
+    /// The writer applied, or `None` for one this does not answer.
+    fn apply(&self, doc: &LoroDoc, op: WriterName, args: &Value) -> Option<Step>;
+    /// The documents the operations after `from` wrote to, for a batch that
+    /// wrote any.
+    fn changed(&self, doc: &LoroDoc, from: &VersionVector) -> Vec<String>;
+}
+
+/// No writer beyond this crate's: a document that is the root of its own
+/// `LoroDoc` holds no workspace tree, so a write touches no document.
+struct NoMore;
+
+impl MoreWriters for NoMore {
+    fn apply(&self, _: &LoroDoc, _: WriterName, _: &Value) -> Option<Step> {
+        None
+    }
+
+    fn changed(&self, _: &LoroDoc, _: &VersionVector) -> Vec<String> {
+        Vec::new()
+    }
+}
+
+/// A writer this crate answers: one it ports, over a document of its own.
 fn answerable(write: &Write) -> bool {
-    ENGINE_WRITERS.contains(&write.op)
-        && matches!(write.args, Value::Map(_))
-        && field(&write.args, "documentId").is_none()
+    ENGINE_WRITERS.contains(&write.op) && field(&write.args, "documentId").is_none()
 }
 
 /// The batch applied to the document `before` holds, written as `peer`: the
@@ -156,14 +182,32 @@ pub fn write_batch(
     batch: &[Write],
     judge: WriteJudge,
 ) -> Option<Written> {
-    if judge != WriteJudge::None || !batch.iter().all(answerable) {
+    write_batch_with(before, peer, batch, judge, &NoMore)
+}
+
+/// [`write_batch`], with the writers `more` answers beside this crate's.
+#[must_use]
+pub fn write_batch_with(
+    before: &[u8],
+    peer: u64,
+    batch: &[Write],
+    judge: WriteJudge,
+    more: &dyn MoreWriters,
+) -> Option<Written> {
+    if judge != WriteJudge::None || !batch.iter().all(|write| matches!(write.args, Value::Map(_))) {
         return None;
     }
     let doc = crate::import_bytes(before).ok()?;
     doc.set_peer_id(peer).ok()?;
     let from = doc.oplog_vv();
     for write in batch {
-        match apply(&doc, write.op, &as_parsed(&write.args).ok()?) {
+        let args = as_parsed(&write.args).ok()?;
+        let step = if answerable(write) {
+            apply(&doc, write.op, &args)
+        } else {
+            more.apply(&doc, write.op, &args)?
+        };
+        match step {
             Ok(()) => {}
             Err(Fault::Thrown(class)) => {
                 let doc = crate::import_bytes(before).ok()?;
@@ -177,6 +221,7 @@ pub fn write_batch(
     if doc.oplog_vv() != from {
         let update = doc.export(ExportMode::updates(&from)).ok()?;
         applied.local_update = Some(bytes_to_base64(&update));
+        applied.changed = more.changed(&doc, &from);
     }
     Some(Written { answer: WriteAnswer::Applied(applied), doc })
 }

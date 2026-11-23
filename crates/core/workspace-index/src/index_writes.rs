@@ -82,8 +82,13 @@ pub fn create_document(
     };
     require_time(now_ms)?;
     let document_id = mint();
-    let document =
-        NewDocument { document_id: &document_id, kind: input.kind, name: input.name, now_ms };
+    let document = NewDocument {
+        document_id: &document_id,
+        kind: input.kind,
+        name: input.name,
+        created_at: now_ms,
+        updated_at: now_ms,
+    };
     create_document_at_path(record.doc(), &path, &document)?;
     created_entry(record, input.workspace_id, &document_id, &path)
 }

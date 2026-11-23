@@ -29,14 +29,15 @@ const RESERVED_MAP_KEY: &str = "__proto__";
 
 /// Why a writer did not apply.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Fault {
+pub enum Fault {
     /// The TypeScript throws this class: the document is left as it was.
     Thrown(&'static str),
     /// An argument the TypeScript's types refuse: not answered here.
     Declined,
 }
 
-pub(crate) type Step = Result<(), Fault>;
+/// What one writer answered.
+pub type Step = Result<(), Fault>;
 
 const TYPE_ERROR: Fault = Fault::Thrown("TypeError");
 const RESERVED_KEY: Fault = Fault::Thrown("ReservedKeyWriteError");

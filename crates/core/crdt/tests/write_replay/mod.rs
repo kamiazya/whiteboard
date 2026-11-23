@@ -93,12 +93,22 @@ fn result_of(id: &str, before: &[u8], written: &Written, recorded: &Json) {
 /// row was judged by the text limits; one the judge refused is not replayed,
 /// and for every other the judge passed, so the unjudged write answers it.
 pub(crate) fn check_write(id: &str, row: &Json, line: &str) -> bool {
+    check_write_with(id, row, line, &|before, peer, batch| {
+        write_batch(before, peer, batch, WriteJudge::None)
+    })
+}
+
+/// A batch written as a writer row asks: the bytes before it, the peer, the writes.
+pub(crate) type WriteWith<'a> = &'a dyn Fn(&[u8], u64, &[Write]) -> Option<Written>;
+
+/// [`check_write`] through `write`, the entry point a crate above this one answers by.
+pub(crate) fn check_write_with(id: &str, row: &Json, line: &str, write: WriteWith<'_>) -> bool {
     if row["result"]["ok"]["outcome"] == "refused" {
         return false;
     }
     let before = base64_decode(row["before"].as_str().expect("bytes"));
     let peer = row["peer"].as_str().and_then(|p| p.parse().ok()).expect("a peer");
-    let Some(written) = write_batch(&before, peer, &batch_of(line), WriteJudge::None) else {
+    let Some(written) = write(&before, peer, &batch_of(line)) else {
         return false;
     };
     result_of(id, &before, &written, &row["result"]);

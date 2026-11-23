@@ -83,6 +83,12 @@ fn meta_of(doc: &LoroDoc, tree: &str, node: NodeId) -> Result<LoroMap, WriteErro
     doc.get_tree(tree).get_meta(node.0).map_err(refused)
 }
 
+/// Opens the tree root `name`, registering it when the document lacks one, as
+/// every npm loro-crdt `getTree` does: a snapshot then carries the empty root.
+pub fn open_tree(doc: &LoroDoc, name: &str) {
+    doc.get_tree(name);
+}
+
 /// A new node under `parent` (a root when `None`), after its siblings.
 pub fn create_node(
     doc: &LoroDoc,

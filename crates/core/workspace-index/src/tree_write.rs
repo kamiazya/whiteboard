@@ -170,24 +170,51 @@ pub struct NewDocument<'a> {
     pub document_id: &'a str,
     pub kind: &'a str,
     pub name: Option<&'a str>,
-    pub now_ms: f64,
+    pub created_at: f64,
+    pub updated_at: f64,
+}
+
+/// Writes what `node` records as the document `document` with its own path
+/// part `segment`, opens its content containers and commits. With no name, a
+/// name the node held as a folder is cleared when `clear_name` says so.
+pub fn stamp_document(
+    doc: &LoroDoc,
+    node: NodeId,
+    segment: &str,
+    document: &NewDocument<'_>,
+    clear_name: bool,
+) -> Result<(), WriteError> {
+    let tree = WORKSPACE_TREE_KEY;
+    set_meta(doc, tree, node, "documentId", &text(document.document_id))?;
+    set_meta(doc, tree, node, "segment", &text(segment))?;
+    set_meta(doc, tree, node, "kind", &text(document.kind))?;
+    match document.name {
+        Some(name) => set_chosen_name(doc, node, Some(name))?,
+        None if clear_name => delete_meta(doc, tree, node, "name")?,
+        None => {}
+    }
+    set_meta(doc, tree, node, "createdAt", &Value::Number(document.created_at))?;
+    set_meta(doc, tree, node, "updatedAt", &Value::Number(document.updated_at))?;
+    attach_content_containers(doc, node)?;
+    commit(doc);
+    Ok(())
 }
 
 /// Creates a document at `path`, making the folders above it. A folder already
 /// standing there is promoted to the document; nothing is written when a
-/// document already owns the path, which the caller finds by looking for the
-/// document it asked for.
+/// document already owns the path, which answers `false`.
 pub fn create_document_at_path(
     doc: &LoroDoc,
     path: &str,
     document: &NewDocument<'_>,
-) -> Result<(), WriteError> {
+) -> Result<bool, WriteError> {
     let segments: Vec<&str> = path.split('/').collect();
     let own = segments.last().copied().unwrap_or(path);
     let existing = walk(doc).0.into_iter().find(|walked| walked.path == path);
     if matches!(existing, Some(Walked { read: NodeRead::Document(_), .. })) {
-        return Ok(());
+        return Ok(false);
     }
+    // A promoted folder's name was the folder's, not one chosen for the document.
     let named_folder =
         matches!(&existing, Some(Walked { read: NodeRead::Folder { name: Some(_), .. }, .. }));
     let node = if let Some(walked) = existing {
@@ -196,21 +223,8 @@ pub fn create_document_at_path(
         let above = segments.get(..segments.len().saturating_sub(1)).unwrap_or_default();
         create_node(doc, WORKSPACE_TREE_KEY, ensure_folder_path(doc, above)?)?
     };
-    let tree = WORKSPACE_TREE_KEY;
-    set_meta(doc, tree, node, "documentId", &text(document.document_id))?;
-    set_meta(doc, tree, node, "segment", &text(own))?;
-    set_meta(doc, tree, node, "kind", &text(document.kind))?;
-    match document.name {
-        Some(name) => set_chosen_name(doc, node, Some(name))?,
-        // A promoted folder's name was the folder's, not one chosen for the document.
-        None if named_folder => delete_meta(doc, tree, node, "name")?,
-        None => {}
-    }
-    set_meta(doc, tree, node, "createdAt", &Value::Number(document.now_ms))?;
-    set_meta(doc, tree, node, "updatedAt", &Value::Number(document.now_ms))?;
-    attach_content_containers(doc, node)?;
-    commit(doc);
-    Ok(())
+    stamp_document(doc, node, own, document, named_folder)?;
+    Ok(true)
 }
 
 /// Re-parents the node at `from` to sit at `to`, renaming its own segment; its

@@ -6,12 +6,23 @@
 //! or an empty list for what is not.
 
 use crate::read::loro_value_to_value;
-use loro::{Container, ContainerType, LoroDoc, LoroTree, LoroValue, TreeID, ValueOrContainer};
+use loro::{
+    Container, ContainerType, LoroDoc, LoroTree, LoroValue, TreeID, TreeParentId, ValueOrContainer,
+};
 use whiteboard_model::Value;
 
 /// A node of a tree container, named by the tree's own id for it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NodeId(pub(crate) TreeID);
+
+impl NodeId {
+    /// The node `counter@peer` names, as npm loro-crdt reads a `TreeID`;
+    /// `None` for text that names none.
+    #[must_use]
+    pub fn parse(text: &str) -> Option<Self> {
+        TreeID::try_from(text).ok().map(Self)
+    }
+}
 
 impl std::fmt::Display for NodeId {
     /// `counter@peer`, as the tree names its nodes.
@@ -69,6 +80,22 @@ impl Tree {
     #[must_use]
     pub fn children(&self, node: NodeId) -> Vec<NodeId> {
         self.0.children(node.0).unwrap_or_default().into_iter().map(NodeId).collect()
+    }
+
+    /// Whether the tree holds `node` and no delete has taken it or a node above it.
+    #[must_use]
+    pub fn is_live(&self, node: NodeId) -> bool {
+        self.0.contains(node.0) && self.0.is_node_deleted(&node.0) == Ok(false)
+    }
+
+    /// The node `node` hangs off, or `None` at the root (and for a node the
+    /// tree does not hold).
+    #[must_use]
+    pub fn parent(&self, node: NodeId) -> Option<NodeId> {
+        match self.0.parent(node.0)? {
+            TreeParentId::Node(parent) => Some(NodeId(parent)),
+            _ => None,
+        }
     }
 
     /// The keys of `node`'s meta map, ascending.
