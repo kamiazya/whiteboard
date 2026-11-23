@@ -156,12 +156,26 @@ impl WorkspaceRecord {
     /// stands: every stored field, its path and the digest of its content.
     #[must_use]
     pub fn placed_document(&self, document_id: &str) -> Option<PlacedDocument> {
+        self.placed_where(|_, meta| meta.document_id == document_id)
+    }
+
+    /// The document that owns `path`: the first in tree order there.
+    #[must_use]
+    pub fn placed_document_at(&self, path: &str) -> Option<PlacedDocument> {
+        self.placed_where(|walked, _| walked.path == path)
+    }
+
+    fn placed_where(
+        &self,
+        pick: impl Fn(&Walked, &DocumentMeta) -> bool,
+    ) -> Option<PlacedDocument> {
         let held = tree(&self.doc, WORKSPACE_TREE_KEY)?;
-        let walked = walk_in(&held).0.into_iter().find(|walked| {
-            matches!(&walked.read, NodeRead::Document(meta) if meta.document_id == document_id)
-        })?;
-        let NodeRead::Document(meta) = &walked.read else { return None };
-        Some(Self::placed_of(&held, &walked, meta))
+        walk_in(&held).0.iter().find_map(|walked| match &walked.read {
+            NodeRead::Document(meta) if pick(walked, meta) => {
+                Some(Self::placed_of(&held, walked, meta))
+            }
+            _ => None,
+        })
     }
 
     /// Every named folder path once, with the first name in tree order: either

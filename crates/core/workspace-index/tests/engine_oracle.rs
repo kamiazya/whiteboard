@@ -4,7 +4,11 @@
 //! `packages/loro-adapter/src/oracle/crdt-engine.jsonl` is the recording; its
 //! content queries over a document of its own are replayed by `whiteboard-crdt`.
 //! This replays what only a workspace record answers: what the record lists,
-//! and the content queries of a document hosted on one of its tree nodes (listed
+//! what the operations after a version touched, removed or reorganised (each
+//! row asks with no version, so of every operation the record kept), the images
+//! it names, where a container sits, one document's entry and projection (each
+//! row names no document or container, which the TypeScript refuses), and the
+//! content queries of a document hosted on one of its tree nodes (listed
 //! as `<query>@node`). Every op is in a ledger with its row count, so a recorder
 //! change that drops or adds rows fails here.
 
@@ -42,7 +46,13 @@ const REPLAYED: &[(&str, usize)] = &[
     ("trash", 178),
     ("folderNames", 178),
     ("unreadableNodes", 178),
+    ("removedSince", 178),
     ("touchedSince", 178),
+    ("organisationChangedSince", 178),
+    ("fileReferences", 178),
+    ("workspaceDocumentEntry", 178),
+    ("workspaceDocumentProjection", 178),
+    ("containerPlace", 178),
     ("documentKind@node", 16),
     ("documentContent@node", 16),
     ("documentContentWithTags@node", 16),

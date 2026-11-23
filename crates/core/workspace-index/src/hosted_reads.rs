@@ -10,6 +10,7 @@
 
 use crate::engine_reads::refused;
 use crate::node_meta::{NodeRead, WORKSPACE_TREE_KEY};
+use crate::read_args::read_args_of;
 use crate::walk::walk;
 use whiteboard_crdt::{
     CONTENT_QUERIES, ContainerKind, Entry, LoroDoc, NodeAt, NodeId, Tree, answer_content_query,
@@ -99,46 +100,6 @@ fn keys_stand(held: &Tree, node: NodeId, name: QueryName) -> Stand {
     }
 }
 
-fn is_text(value: &Value) -> bool {
-    matches!(value, Value::String(_))
-}
-
-/// Whether `value` is a version as `[peer, counter]` pairs, as the reader's
-/// schema holds `since`.
-fn is_version(value: &Value) -> bool {
-    let Value::Seq(pairs) = value else { return false };
-    pairs.iter().all(|pair| {
-        matches!(pair, Value::Seq(held) if matches!(held.as_slice(),
-            [Value::String(_), Value::Number(counter)] if is_safe_integer(*counter)))
-    })
-}
-
-/// Arguments the TypeScript's `readArgsSchema` refuses: a refusal of its own,
-/// which this crate leaves to the caller.
-struct ArgumentsRefused;
-
-/// The `kind` a hosted read is asked with, holding the arguments besides
-/// `documentId` to the TypeScript's `readArgsSchema`: `path`, `container` and
-/// `since` are accepted and read by none of these queries.
-fn kind_asked(rest: &[(String, Value)]) -> Result<Option<Value>, ArgumentsRefused> {
-    let mut kind = None;
-    for (key, value) in rest {
-        let accepted = match key.as_str() {
-            "path" | "container" => is_text(value),
-            "since" => is_version(value),
-            "kind" => matches!(value, Value::String(k) if k == "spatial" || k == "markdown"),
-            _ => false,
-        };
-        if !accepted {
-            return Err(ArgumentsRefused);
-        }
-        if key == "kind" {
-            kind = Some(value.clone());
-        }
-    }
-    Ok(kind)
-}
-
 /// The document a query names, and its arguments but that one; `None` for a
 /// query that names none.
 pub(crate) fn hosted(query: &Query) -> Option<(String, Vec<(String, Value)>)> {
@@ -164,7 +125,7 @@ pub(crate) fn answer_hosted(
     if !CONTENT_QUERIES.contains(&query.query) {
         return None;
     }
-    let kind = kind_asked(rest).ok()?;
+    let kind = read_args_of(rest).ok()?.kind;
     let missing = match query.query {
         QueryName::StateSize
         | QueryName::ContentDigest

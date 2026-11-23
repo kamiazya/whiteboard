@@ -6,8 +6,8 @@ use crate::node_meta::{NodeRead, WORKSPACE_TREE_KEY, read_node};
 use crate::record::WorkspaceRecord;
 use crate::tree_write::{attach_content_containers, ensure_folder_path};
 use whiteboard_crdt::{
-    ContainerKind, ImportError, NodeAt, SubtreeCopy, WriteError, commit, copy_subtree,
-    export_subtree, import_bytes, tree,
+    ContainerKind, ImportError, LoroDoc, NodeAt, NodeId, SubtreeCopy, WriteError, commit,
+    copy_subtree, export_subtree, import_bytes, tree,
 };
 
 /// The content keys a document node declares, and what each must hold to be
@@ -57,6 +57,17 @@ pub fn export_subtree_at(
 ) -> Result<Option<Vec<u8>>, WriteError> {
     let Some(found) = record.node_at(path) else { return Ok(None) };
     let from = NodeAt { doc: record.doc(), tree: WORKSPACE_TREE_KEY, node: found.id };
+    export_subtree(from, &COPY).map(Some)
+}
+
+/// The subtree rooted at `node` exported as [`export_subtree_at`] exports
+/// one, for a caller holding the node from a walk it already paid for. `None`
+/// when the tree does not hold the node or a delete took it.
+pub(crate) fn export_node(doc: &LoroDoc, node: NodeId) -> Result<Option<Vec<u8>>, WriteError> {
+    if !tree(doc, WORKSPACE_TREE_KEY).is_some_and(|held| held.is_live(node)) {
+        return Ok(None);
+    }
+    let from = NodeAt { doc, tree: WORKSPACE_TREE_KEY, node };
     export_subtree(from, &COPY).map(Some)
 }
 
