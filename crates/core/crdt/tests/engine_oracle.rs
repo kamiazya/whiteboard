@@ -237,4 +237,22 @@ fn the_recording_reaches_what_the_ledger_claims() {
         .filter(|r| r["op"] == "retiredStoredShape" && r["result"]["ok"].is_string())
         .count();
     assert!(named > 5, "{named} retired shapes named");
+    let holding = |op: &str| {
+        rows.iter()
+            .filter(|r| {
+                r["op"] == op && r["result"]["ok"].as_array().is_some_and(|a| !a.is_empty())
+            })
+            .count()
+    };
+    for op in ["annotations", "commentThreads", "proposals"] {
+        assert!(holding(op) > 10, "{op}: {} rows held a record", holding(op));
+    }
+    let marked = rows
+        .iter()
+        .filter(|r| {
+            r["op"] == "threadMarks"
+                && !r["result"]["ok"]["$map"].as_array().unwrap_or(&Vec::new()).is_empty()
+        })
+        .count();
+    assert!(marked > 10, "{marked} rows held a mark");
 }
