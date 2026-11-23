@@ -82,8 +82,8 @@
     {
       "crate": "crates/core/workspace-index",
       "lint": "dead_code",
-      "count": 2,
-      "reason": "tests/engine_oracle.rs and tests/hosted_cases.rs borrow whiteboard-crdt's shared recording helpers (tests/support) and each uses some of them"
+      "count": 3,
+      "reason": "tests/hosted_cases.rs and tests/workspace_write_cases.rs borrow whiteboard-crdt's shared recording helpers (tests/support) and tests/engine_oracle.rs its writer replay (tests/write_replay), and each uses some of them"
     },
     {
       "crate": "crates/core/edge-routing",

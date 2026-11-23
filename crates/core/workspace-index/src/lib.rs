@@ -18,6 +18,7 @@ pub mod derive_copy;
 pub mod display_name;
 pub mod document_path;
 pub mod engine_reads;
+pub mod engine_writes;
 pub mod entry;
 pub mod first_free_segment;
 mod hosted_reads;
@@ -33,6 +34,7 @@ pub mod restore_judgement;
 pub mod subtree;
 #[cfg(test)]
 mod test_record;
+pub mod touched;
 pub mod trash;
 pub mod tree_write;
 pub mod walk;
@@ -43,6 +45,7 @@ pub use display_name::{
     shown_name, sibling_display_name_taken,
 };
 pub use engine_reads::answer_workspace_query;
+pub use engine_writes::{WORKSPACE_WRITERS, WorkspaceWriters, write_workspace_batch};
 pub use entry::{DocumentEntry, EntryError, Found, entry_of};
 pub use first_free_segment::first_free_segment;
 pub use index_duplicate::{DuplicateDocument, duplicate_document};
@@ -64,4 +67,5 @@ pub use index_writes::{
 pub use move_collision::move_collision;
 pub use record::{PlacedDocument, WorkspaceRecord};
 pub use restore_judgement::{Placement, restorable_trash_documents};
+pub use touched::documents_touched_since;
 pub use trash::TrashRow;

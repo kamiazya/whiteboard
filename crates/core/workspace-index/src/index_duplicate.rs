@@ -66,8 +66,13 @@ pub fn duplicate_document(
     let document_id = mint();
     let names: Vec<String> = documents.iter().map(|(node, meta)| shown(&node.path, meta)).collect();
     let name = derive_copy_name(&shown(&source.path, meta), &names);
-    let created =
-        NewDocument { document_id: &document_id, kind: &meta.kind, name: Some(&name), now_ms };
+    let created = NewDocument {
+        document_id: &document_id,
+        kind: &meta.kind,
+        name: Some(&name),
+        created_at: now_ms,
+        updated_at: now_ms,
+    };
     create_document_at_path(record.doc(), &path, &created)?;
     if let Some(to) = record.document_node(&document_id) {
         copy_document_content(record.doc(), source.id, to.id, input.without_annotations, now_ms)?;

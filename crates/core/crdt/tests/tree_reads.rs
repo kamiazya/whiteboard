@@ -3,7 +3,7 @@
 use loro::{LoroDoc, LoroMap, LoroMovableList, LoroText, TreeID};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
-use whiteboard_crdt::{ContainerKind, Entry, deep_value, peek, tree};
+use whiteboard_crdt::{ContainerKind, Entry, NodeId, deep_value, peek, tree};
 use whiteboard_model::Value;
 
 fn node_result(doc: &LoroDoc, parent: Option<TreeID>) -> loro::LoroResult<TreeID> {
@@ -137,4 +137,23 @@ fn reading_a_tree_the_record_lacks_leaves_its_bytes_and_value_as_they_were() {
     doc.commit();
     assert_eq!(doc.export(loro::ExportMode::Snapshot).expect("a snapshot"), bytes);
     assert_eq!(deep_value(&doc), value);
+}
+
+#[test]
+fn a_node_is_live_until_a_delete_takes_it_or_a_node_above_it() {
+    let doc = LoroDoc::new();
+    doc.set_peer_id(1).expect("a peer");
+    let gone = node!(&doc, None);
+    let below = node!(&doc, Some(gone));
+    let kept = node!(&doc, None);
+    doc.get_tree("t").delete(gone).expect("a delete");
+    let held = tree(&doc, "t").expect("a tree");
+    let id = |n: TreeID| NodeId::parse(&format!("{}@{}", n.counter, n.peer)).expect("an id");
+    assert!(held.is_live(id(kept)));
+    assert!(!held.is_live(id(gone)), "deleted");
+    assert!(!held.is_live(id(below)), "below a deleted node");
+    assert!(!held.is_live(NodeId::parse("99@1").expect("an id")), "never held");
+    assert_eq!(held.parent(id(below)), Some(id(gone)), "a deleted node keeps its parent");
+    assert_eq!(held.parent(id(kept)), None);
+    assert_eq!(NodeId::parse("0@1@2"), None);
 }

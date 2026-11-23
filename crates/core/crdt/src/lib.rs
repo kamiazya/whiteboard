@@ -34,6 +34,7 @@ mod envelope;
 mod frontiers;
 mod image_refs;
 mod judgement;
+mod ops_since;
 mod patch;
 mod plain;
 mod projection;
@@ -54,7 +55,9 @@ pub use content::{
 };
 pub use content_digest::{content_digest_of, stable_stringify};
 pub use copy::{NodeAt, copy_meta, fill_meta};
-pub use engine_write::{ENGINE_WRITERS, WriteAnswer, Written, write_batch};
+pub use engine_write::{
+    ENGINE_WRITERS, MoreWriters, WriteAnswer, Written, write_batch, write_batch_with,
+};
 pub use frontiers::{
     FrontiersError, decode_frontiers, encode_frontiers, frontiers_version, shallow_root_version,
     version_frontiers,
@@ -62,17 +65,19 @@ pub use frontiers::{
 pub use judgement::{CONTENT_KEYS, content_digest_of_document, state_size};
 pub use loro::{
     ExpandType, ExportMode, LoroDoc, LoroList, LoroMap, LoroMovableList, LoroText, LoroValue,
-    StyleConfig, StyleConfigMap, TreeID, loro_value,
+    StyleConfig, StyleConfigMap, TreeID, VersionVector, loro_value,
 };
+pub use ops_since::nodes_written_since;
 pub use projection::project_node;
 pub use read::{
     ImportError, deep_value, frontier_pairs, import_bytes, loro_value_to_value, version_pairs,
 };
+pub use spatial_write::{Fault, Step};
 pub use subtree::{SubtreeCopy, copy_subtree, export_subtree};
 pub use text_limits::{BreachShape, TextBreach, Unjudged, judge_state};
 pub use tree::{ContainerKind, Entry, NodeId, Tree, peek, tree};
 pub use write::{
     WriteError, commit, create_node, deep_value_with_id, delete_meta, delete_node,
-    delete_root_entry, move_node, open_meta_container, open_root_list, set_meta, set_peer_id,
-    set_root_entry,
+    delete_root_entry, move_node, open_meta_container, open_root_list, open_tree, set_meta,
+    set_peer_id, set_root_entry,
 };

@@ -10,16 +10,25 @@
 
 #[cfg(test)]
 #[path = "../../crdt/tests/support/mod.rs"]
-#[expect(dead_code, reason = "the shared helpers are each used by some of the recordings' tests")]
 mod support;
+#[cfg(test)]
+#[path = "../../crdt/tests/write_replay/mod.rs"]
+#[expect(
+    dead_code,
+    reason = "the replay of a writer this crate does not answer is the crdt crate's"
+)]
+mod write_replay;
 
 use std::collections::BTreeMap;
 use support::{assert_same, base64_decode, model_of, rows_of};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_crdt::import_bytes;
-use whiteboard_model::crdt::{Query, QueryName};
-use whiteboard_workspace_index::answer_workspace_query;
+use whiteboard_model::crdt::{Query, QueryName, WriteJudge, WriterName};
+use whiteboard_workspace_index::{
+    WORKSPACE_WRITERS, answer_workspace_query, write_workspace_batch,
+};
+use write_replay::check_write_with;
 
 const RECORDING: &str =
     include_str!("../../../../packages/loro-adapter/src/oracle/crdt-engine.jsonl");
@@ -54,6 +63,24 @@ const REPLAYED: &[(&str, usize)] = &[
     ("retiredStoredShape@node", 16),
     ("retiredCommentRows@node", 16),
 ];
+
+/// The workspace writers replayed here, with the rows the recording holds of
+/// each. A writer row was recorded under the pinned clock.
+const WRITES_REPLAYED: &[(&str, usize)] = &[
+    ("createWorkspaceDocumentAtPath", 6),
+    ("createWorkspaceDocument", 6),
+    ("ensureFolderPath", 6),
+    ("moveWorkspaceDocument", 6),
+    ("moveWorkspaceNodeToPath", 6),
+    ("setWorkspaceDocumentName", 6),
+    ("setWorkspaceFolderName", 6),
+    ("deleteWorkspaceDocument", 6),
+    ("deleteWorkspaceNode", 6),
+    ("deleteWorkspaceNodeAtPath", 6),
+];
+
+/// `RECORDED_NOW`, the clock the recorder pins `Date.now` to.
+const RECORDED_NOW: f64 = 1_700_000_000_000.0;
 
 /// Replays a query row, `false` when the record's reads do not answer it.
 #[cfg(test)]
@@ -95,4 +122,27 @@ fn every_row_a_record_answers_is_answered_as_the_typescript_answered_it() {
     let ledger: BTreeMap<String, usize> =
         REPLAYED.iter().map(|&(op, n)| (op.to_owned(), n)).collect();
     assert_eq!(replayed, ledger, "the rows replayed, by op");
+}
+
+#[test]
+fn every_workspace_writer_row_is_answered_as_the_typescript_answered_it() {
+    let mut replayed: BTreeMap<String, usize> = BTreeMap::new();
+    let write = |before: &[u8], peer: u64, batch: &[whiteboard_model::crdt::Write]| {
+        write_workspace_batch(before, peer, batch, WriteJudge::None, RECORDED_NOW)
+    };
+    let rows = rows_of(RECORDING);
+    for (row, line) in rows.iter().zip(RECORDING.lines().filter(|line| !line.is_empty())) {
+        let op = row["op"].as_str().expect("an op");
+        let ours = WriterName::from_wire(op).is_some_and(|op| WORKSPACE_WRITERS.contains(&op));
+        if ours && row.get("batch").is_some() {
+            assert!(
+                check_write_with(row["id"].as_str().expect("an id"), row, line, &write),
+                "{op}"
+            );
+            *replayed.entry(op.to_owned()).or_default() += 1;
+        }
+    }
+    let ledger: BTreeMap<String, usize> =
+        WRITES_REPLAYED.iter().map(|&(op, n)| (op.to_owned(), n)).collect();
+    assert_eq!(replayed, ledger, "the writer rows replayed, by op");
 }
