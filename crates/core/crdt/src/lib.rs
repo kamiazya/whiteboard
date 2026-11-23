@@ -18,11 +18,14 @@
 
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
+mod canvas;
 mod content;
 mod copy;
+mod envelope;
 mod frontiers;
 mod plain;
 mod read;
+mod stored;
 mod subtree;
 mod tree;
 mod write;

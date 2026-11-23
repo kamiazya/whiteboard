@@ -8,10 +8,10 @@
 //! root it never held registers an empty one, which the next snapshot then
 //! carries. A container is resolved once per query, never per entry.
 
-use crate::plain::{plain, plain_object, undefined};
+use crate::plain::{Undecided, plain, plain_object, undefined};
+use crate::{canvas, envelope, stored};
 use loro::{ContainerType, LoroDoc, LoroMap, LoroText, LoroValue, TextDelta, ValueOrContainer};
 use whiteboard_model::Value;
-use whiteboard_model::checks::extension_facet_keys;
 use whiteboard_model::crdt::{Query, QueryName, ReadResponse};
 
 const DOCUMENT_KEY: &str = "document";
@@ -43,7 +43,7 @@ pub enum DocumentKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Refusal(pub &'static str);
 
-fn map_of(doc: &LoroDoc, key: &str) -> LoroMap {
+pub(crate) fn map_of(doc: &LoroDoc, key: &str) -> LoroMap {
     doc.get_map(key)
 }
 
@@ -53,7 +53,7 @@ fn text_of(doc: &LoroDoc) -> LoroText {
 
 /// A map entry's plain value; a container, which the readers here never see
 /// written, is not a value.
-fn value_of(held: ValueOrContainer) -> Option<LoroValue> {
+pub(crate) fn value_of(held: ValueOrContainer) -> Option<LoroValue> {
     match held {
         ValueOrContainer::Value(value) => Some(value),
         ValueOrContainer::Container(_) => None,
@@ -130,7 +130,7 @@ fn retired_markdown_body_shape(doc: &LoroDoc) -> Option<String> {
 
 /// A markdown document with an empty body whose canvas holds a node carrying
 /// text: a body stored as a text node under some other id.
-fn retired_markdown_canvas_shape(doc: &LoroDoc) -> Option<String> {
+pub(crate) fn retired_markdown_canvas_shape(doc: &LoroDoc) -> Option<String> {
     if !text_of(doc).is_empty() {
         return None;
     }
@@ -172,19 +172,28 @@ fn retired_elements_shape(doc: &LoroDoc) -> Option<String> {
     })
 }
 
-/// The first retired shape the document holds, which no reader serves.
-#[must_use]
-pub fn retired_stored_shape(doc: &LoroDoc) -> Option<String> {
-    let canvas = map_of(doc, CANVAS_KEY);
+/// The first retired node, edge or canvas-settings shape, in that order.
+fn retired_canvas_record(doc: &LoroDoc) -> Option<String> {
     first_retired(&map_of(doc, NODES_KEY), retired_node_shape)
         .or_else(|| first_retired(&map_of(doc, EDGES_KEY), retired_edge_shape))
         .or_else(|| {
-            holds(&canvas, PRE_ADR_0037_EXTENSION_KEY).then(|| {
+            holds(&map_of(doc, CANVAS_KEY), PRE_ADR_0037_EXTENSION_KEY).then(|| {
                 format!(
                     "canvas settings stored under the pre-ADR-0037 `{PRE_ADR_0037_EXTENSION_KEY}` key"
                 )
             })
         })
+}
+
+/// The first retired shape a canvas holds: what refuses a read of it.
+pub(crate) fn retired_canvas_shape(doc: &LoroDoc) -> Option<String> {
+    retired_canvas_record(doc).or_else(|| retired_elements_shape(doc))
+}
+
+/// The first retired shape the document holds, which no reader serves.
+#[must_use]
+pub fn retired_stored_shape(doc: &LoroDoc) -> Option<String> {
+    retired_canvas_record(doc)
         .or_else(|| retired_markdown_shape(doc))
         .or_else(|| retired_elements_shape(doc))
 }
@@ -225,17 +234,11 @@ fn locks(doc: &LoroDoc, key: &str) -> Value {
     Value::Seq(locked.into_iter().map(Value::String).collect())
 }
 
-/// Whether `key` is a facet key a reader shows; an entry under another key
-/// stays stored and is left alone.
-fn is_readable_facet_key(key: &str) -> bool {
-    extension_facet_keys(&vec![(key.to_owned(), Value::Null)]).is_empty()
-}
-
 /// The extension-facet bucket, each entry a reader can read.
 fn facets(doc: &LoroDoc) -> Option<Value> {
     let map = map_of(doc, FACETS_KEY);
     let mut shown = Vec::new();
-    for key in map.keys().filter(|key| is_readable_facet_key(key)) {
+    for key in map.keys().filter(|key| stored::is_readable_facet_key(key)) {
         let held = map.get(&key).and_then(value_of).unwrap_or(LoroValue::Null);
         shown.push((key.to_string(), plain(&held)?));
     }
@@ -252,7 +255,7 @@ fn refused(Refusal(class): Refusal) -> ReadResponse {
 }
 
 /// The content queries this crate answers, by the contract's name.
-pub const CONTENT_QUERIES: [QueryName; 8] = [
+pub const CONTENT_QUERIES: [QueryName; 14] = [
     QueryName::DocumentKind,
     QueryName::NodeLocks,
     QueryName::EdgeLocks,
@@ -261,6 +264,12 @@ pub const CONTENT_QUERIES: [QueryName; 8] = [
     QueryName::Facets,
     QueryName::RetiredStoredShape,
     QueryName::RetiredCommentRows,
+    QueryName::SpatialCanvas,
+    QueryName::SpatialNodeCount,
+    QueryName::DocumentContent,
+    QueryName::DocumentContentWithTags,
+    QueryName::CoreFacets,
+    QueryName::TrustFacets,
 ];
 
 /// Answers `query` over a document that is the root of its own `LoroDoc`, or
@@ -298,8 +307,56 @@ pub fn answer_content_query(doc: &LoroDoc, query: &Query) -> Option<ReadResponse
             );
             ok(Value::Number(rows))
         }
+        _ => return answer_document_query(doc, query),
+    })
+}
+
+/// The queries over a document's whole content: the canvas, the half its kind
+/// names, and the envelope facets.
+fn answer_document_query(doc: &LoroDoc, query: &Query) -> Option<ReadResponse> {
+    Some(match query.query {
+        QueryName::SpatialCanvas => match canvas::spatial_canvas(doc) {
+            Ok(value) => ok(value?),
+            Err(refusal) => refused(refusal),
+        },
+        QueryName::SpatialNodeCount => ok(canvas::spatial_node_count(doc)),
+        QueryName::DocumentContent | QueryName::DocumentContentWithTags => {
+            let asked = kind_asked_by(query).ok()?;
+            match canvas::document_content(doc, asked) {
+                Ok(content) => ok(match query.query {
+                    QueryName::DocumentContent => content?.value,
+                    _ => canvas::content_with_tags(content?),
+                }),
+                Err(refusal) => refused(refusal),
+            }
+        }
+        QueryName::CoreFacets => {
+            ok(envelope::core_facets(doc).map_or_else(|| Some(undefined()), |core| core.value())?)
+        }
+        QueryName::TrustFacets => ok(envelope::trust_facets(doc).ok()?.unwrap_or_else(undefined)),
         _ => return None,
     })
+}
+
+/// The kind a content read is asked to fall back to, `None` for none; an
+/// argument the contract's reader refuses is undecided, its refusal being its own.
+fn kind_asked_by(query: &Query) -> Result<Option<DocumentKind>, Undecided> {
+    // The reader parses `query.args ?? {}`, so null is no arguments and any
+    // other non-object is refused by its object schema.
+    let args = match &query.args {
+        None | Some(Value::Null) => return Ok(None),
+        Some(Value::Map(args)) => args,
+        Some(_) => return Err(Undecided),
+    };
+    match args.as_slice() {
+        [] => Ok(None),
+        [(key, Value::String(kind))] if key == "kind" => match kind.as_str() {
+            "spatial" => Ok(Some(DocumentKind::Spatial)),
+            "markdown" => Ok(Some(DocumentKind::Markdown)),
+            _ => Err(Undecided),
+        },
+        _ => Err(Undecided),
+    }
 }
 
 fn hosted_on_a_node(query: &Query) -> bool {
