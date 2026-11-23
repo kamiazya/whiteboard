@@ -6,13 +6,12 @@
 //! it leaves to the caller: one that names an argument it does not read, or
 //! one `whiteboard-crdt` answers over a document of its own.
 
+use crate::hosted_reads::{answer_hosted, hosted, is_safe_integer};
 use crate::node_meta::{DocumentMeta, NodeRead, WORKSPACE_TREE_KEY};
 use crate::record::{PlacedDocument, WorkspaceRecord};
 use crate::trash::TrashRow;
 use crate::walk::{Walked, walk, walk_naming_unreadable};
-use whiteboard_crdt::{
-    CONTENT_QUERIES, Entry, LoroDoc, NodeAt, answer_content_query, peek, project_node, tree,
-};
+use whiteboard_crdt::{Entry, LoroDoc, peek, tree};
 use whiteboard_model::Value;
 use whiteboard_model::crdt::{Query, QueryName, ReadResponse};
 
@@ -41,7 +40,7 @@ fn ok(value: Value) -> ReadResponse {
     ReadResponse { value: map([("ok", value)]) }
 }
 
-fn refused(class: &str) -> ReadResponse {
+pub(crate) fn refused(class: &str) -> ReadResponse {
     ReadResponse { value: map([("err", text(class))]) }
 }
 
@@ -110,11 +109,12 @@ fn number(value: u64) -> Value {
     Value::Number(value as f64)
 }
 
-/// `lastCompactedAt`, when the record stores one that is an integer.
+/// `lastCompactedAt`, when the record stores one that is a safe integer, as
+/// the TypeScript's `z.number().int()` holds it.
 fn workspace_meta(doc: &LoroDoc) -> Value {
     let stored = peek(doc, &format!("{WORKSPACE_META_KEY}/lastCompactedAt"));
     match stored {
-        Some(Entry::Value(Value::Number(at))) if at.fract() == 0.0 && at.is_finite() => {
+        Some(Entry::Value(Value::Number(at))) if is_safe_integer(at) => {
             map([("lastCompactedAt", Value::Number(at))])
         }
         _ => Value::Map(Vec::new()),
@@ -148,44 +148,11 @@ fn answer_record_query(doc: &LoroDoc, name: QueryName) -> Option<ReadResponse> {
     }))
 }
 
-/// The query's arguments but the document it names, and that document.
-fn hosted(query: &Query) -> Option<(String, Value)> {
-    let Some(Value::Map(args)) = &query.args else { return None };
-    let (id, rest): (Vec<_>, Vec<_>) =
-        args.iter().cloned().partition(|(key, _)| key == "documentId");
-    let Some((_, Value::String(id))) = id.into_iter().next() else { return None };
-    Some((id, Value::Map(rest)))
-}
-
-/// A content query asked of the document hosted on the node that carries
-/// `document_id`, answered over the document that node holds. A document the
-/// record does not hold is refused as the TypeScript refuses it: the whole-document
-/// reads say it is out of range, the rest that there is no such document.
-fn answer_hosted(doc: &LoroDoc, query: &Query, document_id: &str, rest: Value) -> ReadResponse {
-    let found = walk(doc).0.into_iter().find(|walked| {
-        matches!(&walked.read, NodeRead::Document(meta) if meta.document_id == document_id)
-    });
-    let missing = match query.query {
-        QueryName::StateSize
-        | QueryName::ContentDigest
-        | QueryName::TextLimitBreach
-        | QueryName::DocumentJudgement => "RangeError",
-        _ => "Error",
-    };
-    let Some(found) = found else { return refused(missing) };
-    let at = NodeAt { doc, tree: WORKSPACE_TREE_KEY, node: found.id };
-    let Ok(projected) = project_node(at) else { return refused(missing) };
-    let asked = Query { query: query.query, args: Some(rest) };
-    answer_content_query(&projected, &asked).unwrap_or_else(|| refused("TypeError"))
-}
-
 /// Answers `query` over a workspace record, `None` for a query it does not read.
 #[must_use]
 pub fn answer_workspace_query(doc: &LoroDoc, query: &Query) -> Option<ReadResponse> {
     if let Some((document_id, rest)) = hosted(query) {
-        return CONTENT_QUERIES
-            .contains(&query.query)
-            .then(|| answer_hosted(doc, query, &document_id, rest));
+        return answer_hosted(doc, query, &document_id, &rest);
     }
     match &query.args {
         None => answer_record_query(doc, query.query),

@@ -20,6 +20,7 @@ pub mod document_path;
 pub mod engine_reads;
 pub mod entry;
 pub mod first_free_segment;
+mod hosted_reads;
 pub mod index_duplicate;
 pub mod index_error;
 pub mod index_reads;
