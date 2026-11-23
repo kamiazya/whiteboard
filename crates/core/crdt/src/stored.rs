@@ -15,13 +15,13 @@ use whiteboard_model::Value;
 use whiteboard_model::checks::{canonical_ulid, canvas_color_hex, extension_facet_keys};
 use whiteboard_model::spatial::{Arrowhead, BackgroundStyle, CanvasColorPreset, EdgeSide};
 
-const URI_LIST: &str = "text/uri-list";
+pub(crate) const URI_LIST: &str = "text/uri-list";
 
 pub(crate) fn is_readable_facet_key(key: &str) -> bool {
     extension_facet_keys(&vec![(key.to_owned(), Value::Null)]).is_empty()
 }
 
-fn text(value: &LoroValue) -> Option<&str> {
+pub(crate) fn text(value: &LoroValue) -> Option<&str> {
     match value {
         LoroValue::String(text) => Some(text.as_str()),
         _ => None,
@@ -29,7 +29,7 @@ fn text(value: &LoroValue) -> Option<&str> {
 }
 
 /// Whether the value is a number JavaScript can hold as a finite one.
-fn finite(value: &LoroValue) -> bool {
+pub(crate) fn finite(value: &LoroValue) -> bool {
     match value {
         LoroValue::Double(d) => d.is_finite(),
         LoroValue::I64(_) => true,
@@ -38,7 +38,7 @@ fn finite(value: &LoroValue) -> bool {
 }
 
 /// A node's width or height: finite and not negative.
-fn size(value: &LoroValue) -> bool {
+pub(crate) fn size(value: &LoroValue) -> bool {
     match value {
         LoroValue::Double(d) => d.is_finite() && *d >= 0.0,
         LoroValue::I64(n) => *n >= 0,
@@ -46,45 +46,45 @@ fn size(value: &LoroValue) -> bool {
     }
 }
 
-fn node_id(value: &LoroValue) -> bool {
+pub(crate) fn node_id(value: &LoroValue) -> bool {
     text(value).is_some_and(|id| !id.is_empty())
 }
 
 /// The map's value under `key`, if the key is held.
-fn field<'a>(map: &'a LoroMapValue, key: &str) -> Option<&'a LoroValue> {
+pub(crate) fn field<'a>(map: &'a LoroMapValue, key: &str) -> Option<&'a LoroValue> {
     map.get(key)
 }
 
 /// Whether the key is absent or its value passes `check`; `null` is not absent.
-fn optional(map: &LoroMapValue, key: &str, check: impl Fn(&LoroValue) -> bool) -> bool {
+pub(crate) fn optional(map: &LoroMapValue, key: &str, check: impl Fn(&LoroValue) -> bool) -> bool {
     field(map, key).is_none_or(check)
 }
 
-fn required(map: &LoroMapValue, key: &str, check: impl Fn(&LoroValue) -> bool) -> bool {
+pub(crate) fn required(map: &LoroMapValue, key: &str, check: impl Fn(&LoroValue) -> bool) -> bool {
     field(map, key).is_some_and(check)
 }
 
 /// A strict object: every key held is one the schema names.
-fn names_only(map: &LoroMapValue, keys: &[&str]) -> bool {
+pub(crate) fn names_only(map: &LoroMapValue, keys: &[&str]) -> bool {
     map.iter().all(|(key, _)| keys.contains(&key.as_str()))
 }
 
-fn map_of(value: &LoroValue) -> Option<&LoroMapValue> {
+pub(crate) fn map_of(value: &LoroValue) -> Option<&LoroMapValue> {
     match value {
         LoroValue::Map(map) => Some(map),
         _ => None,
     }
 }
 
-fn color(value: &LoroValue) -> bool {
+pub(crate) fn color(value: &LoroValue) -> bool {
     text(value).is_some_and(|c| CanvasColorPreset::from_wire(c).is_some() || canvas_color_hex(c))
 }
 
-fn variant<T>(from_wire: fn(&str) -> Option<T>) -> impl Fn(&LoroValue) -> bool {
+pub(crate) fn variant<T>(from_wire: fn(&str) -> Option<T>) -> impl Fn(&LoroValue) -> bool {
     move |value| text(value).and_then(from_wire).is_some()
 }
 
-fn is_text(value: &LoroValue) -> bool {
+pub(crate) fn is_text(value: &LoroValue) -> bool {
     text(value).is_some()
 }
 
@@ -103,7 +103,7 @@ fn point(value: &LoroValue) -> bool {
     })
 }
 
-fn bends(value: &LoroValue) -> bool {
+pub(crate) fn bends(value: &LoroValue) -> bool {
     matches!(value, LoroValue::List(points) if (1..=64).contains(&points.len()) && points.iter().all(point))
 }
 
@@ -139,11 +139,11 @@ fn node_end(end: &LoroMapValue, extra: &[&str]) -> bool {
         && optional(end, "end", variant(Arrowhead::from_wire))
 }
 
-fn edge_end(value: &LoroValue) -> bool {
+pub(crate) fn edge_end(value: &LoroValue) -> bool {
     map_of(value).is_some_and(|end| node_end(end, &[]))
 }
 
-fn line_end(value: &LoroValue) -> bool {
+pub(crate) fn line_end(value: &LoroValue) -> bool {
     let Some(end) = map_of(value) else { return false };
     match field(end, "kind").and_then(text) {
         Some("node") => node_end(end, &["kind"]),

@@ -58,8 +58,14 @@
     {
       "crate": "crates/core/crdt",
       "lint": "clippy::cast_precision_loss",
+      "count": 2,
+      "reason": "a loro integer read as the f64 a JavaScript number holds: npm loro-crdt hands every i64 to JavaScript as a number, so one past +-2^53 rounds the same way there (tests/value_conversion.rs pins 2^53 + 1 and 2^62); the second compares two anchor offsets on the rounded value, which the schema's safe-integer check has already bounded"
+    },
+    {
+      "crate": "crates/core/crdt",
+      "lint": "dead_code",
       "count": 1,
-      "reason": "a loro integer read as the f64 a JavaScript number holds: npm loro-crdt hands every i64 to JavaScript as a number, so one past +-2^53 rounds the same way there (tests/value_conversion.rs pins 2^53 + 1 and 2^62)"
+      "reason": "tests/support is shared by the recordings' tests and each test binary uses some of it; the expectation sits on the module in the binary that uses the least"
     },
     {
       "crate": "crates/core/crdt",
