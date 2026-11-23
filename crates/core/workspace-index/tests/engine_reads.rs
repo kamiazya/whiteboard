@@ -69,6 +69,37 @@ fn row(entries: Vec<(&str, LoroValue)>) -> LoroValue {
     LoroValue::Map(entries.into_iter().map(|(k, v)| (k.to_owned(), v)).collect())
 }
 
+/// The workspace's own state beside its tree: a compaction stamp, pins, and a
+/// trash holding two rows that read and one that does not.
+#[cfg(test)]
+fn keep_workspace_state(doc: &LoroDoc) {
+    let meta = doc.get_map("workspaceMeta");
+    meta.insert("lastCompactedAt", 1_700_000_000_000_i64).expect("a stamp");
+    let pinned = meta.insert_container("pinned", LoroMovableList::new()).expect("pins");
+    for id in [B, "gone", A] {
+        pinned.push(id).expect("a pin");
+    }
+    let trash = doc.get_map("trash");
+    let gone = row(vec![
+        ("documentId", text(B)),
+        ("path", text("old/b")),
+        ("deletedAt", 5.into()),
+        ("blob", blob("a")),
+    ]);
+    let folders = LoroValue::from(vec![row(vec![("path", text("old")), ("name", text("Old"))])]);
+    let newer = row(vec![
+        ("documentId", text(C)),
+        ("path", text("old/c")),
+        ("name", text("Doc C")),
+        ("deletedAt", 9.into()),
+        ("blob", blob("b")),
+        ("folderNames", folders),
+    ]);
+    trash.insert(B, gone).expect("a row");
+    trash.insert(C, newer).expect("a row");
+    trash.insert("damaged", row(vec![("documentId", text("damaged"))])).expect("a row");
+}
+
 /// A record holding a folder with a marked markdown document, a canvas and a
 /// markdown document sharing a path, a node no reader reads, and the workspace's
 /// own pins, compaction stamp and trash.
@@ -112,31 +143,7 @@ fn record() -> LoroDoc {
         [("segment", text("x")), ("kind", text("weird")), ("documentId", text("nope"))];
     let (bad, _) = node(&doc, None, &unreadable);
     node(&doc, Some(bad), &[("segment", text("below"))]);
-    let meta = doc.get_map("workspaceMeta");
-    meta.insert("lastCompactedAt", 1_700_000_000_000_i64).expect("a stamp");
-    let pinned = meta.insert_container("pinned", LoroMovableList::new()).expect("pins");
-    for id in [B, "gone", A] {
-        pinned.push(id).expect("a pin");
-    }
-    let trash = doc.get_map("trash");
-    let gone = row(vec![
-        ("documentId", text(B)),
-        ("path", text("old/b")),
-        ("deletedAt", 5.into()),
-        ("blob", blob("a")),
-    ]);
-    let folders = LoroValue::from(vec![row(vec![("path", text("old")), ("name", text("Old"))])]);
-    let newer = row(vec![
-        ("documentId", text(C)),
-        ("path", text("old/c")),
-        ("name", text("Doc C")),
-        ("deletedAt", 9.into()),
-        ("blob", blob("b")),
-        ("folderNames", folders),
-    ]);
-    trash.insert(B, gone).expect("a row");
-    trash.insert(C, newer).expect("a row");
-    trash.insert("damaged", row(vec![("documentId", text("damaged"))])).expect("a row");
+    keep_workspace_state(&doc);
     doc.commit();
     doc
 }
