@@ -10,12 +10,16 @@
 //! change with integer keys; batches of a verdict and a body, of an unknown op
 //! and of a reconcile that throws; and a restore of one root — the body, a
 //! thread synced into its container, a flattened thread, a value over a map, a
-//! nested text, an equal past, and a root the past lacks.
+//! nested text or list, values unequal by depth, key and kind, a key the past
+//! dropped, a counter root the restore passes over, an equal past, and a text
+//! or map root the past lacks; and a verdict adding the status a change lacked.
 //!
 //! `fixtures/annotation_write_cases.jsonl` holds each case as the engine's
 //! recorder writes a writer row, answered by the TypeScript's engine with
 //! `judge: "none"`. Then what is not answered here: the arguments the
-//! TypeScript's types refuse, and a restore that changes several roots.
+//! TypeScript's types refuse, a restore that changes several roots, and one
+//! the TypeScript would misread (a container handle compared as an object,
+//! bytes compared as a typed array, a tree, a root named `__proto__`).
 
 #[cfg(test)]
 mod support;
@@ -43,7 +47,7 @@ fn every_case_is_answered_as_the_typescript_answered_it() {
         assert!(check_write(name, row, line), "{name} was not answered");
         thrown += usize::from(row["result"].get("err").is_some());
     }
-    assert_eq!(rows.len(), 45, "the cases held");
+    assert_eq!(rows.len(), 56, "the cases held");
     assert_eq!(thrown, 9, "the cases a writer threw in");
 }
 
@@ -289,4 +293,53 @@ fn a_restore_that_changes_one_root_is_answered() {
     assert!(applied.local_update.is_some());
     assert_eq!(done.doc.get_text("body").to_string(), "abc");
     assert!(write_batch(&base64_decode("AAAA"), 3, &[], WriteJudge::None).is_none());
+}
+
+/// A restore of the facet bucket alone, from `target` to `past`.
+#[cfg(test)]
+fn restore_facets(target: impl Fn(&LoroDoc), past: impl Fn(&LoroDoc)) -> Option<WriteAnswer> {
+    let written = |edit: &dyn Fn(&LoroDoc)| {
+        let doc = LoroDoc::new();
+        doc.set_peer_id(1).expect("a peer");
+        doc.get_text("body").insert(0, "ab").expect("a body");
+        edit(&doc);
+        doc.commit();
+        doc.export(ExportMode::Snapshot).expect("a snapshot")
+    };
+    let past = whiteboard_model::encoding::bytes_to_base64(&written(&past));
+    let write =
+        Write { op: WriterName::ReconcileDocContent, args: object(&[("past", text(&past))]) };
+    write_batch(&written(&target), 3, &[write], WriteJudge::None).map(|done| done.answer)
+}
+
+#[test]
+#[cfg(test)]
+fn a_restore_the_typescript_would_misread_is_not_answered() {
+    let facets = |doc: &LoroDoc| doc.get_map("facets");
+    let over_text = |doc: &LoroDoc| {
+        facets(doc).insert_container("k", whiteboard_crdt::LoroText::new()).expect("a text");
+    };
+    // `jsonEqual` would read a text handle's own keys against an object.
+    let object_value = |doc: &LoroDoc| {
+        facets(doc).insert("k", whiteboard_crdt::loro_value!({ "a": 1 })).expect("a value");
+    };
+    assert!(restore_facets(over_text, object_value).is_none(), "an object over a text");
+    let scalar = |doc: &LoroDoc| {
+        facets(doc).insert("k", 1).expect("a value");
+    };
+    assert!(restore_facets(over_text, scalar).is_some(), "a scalar over a text is written");
+    let tree = |doc: &LoroDoc| {
+        facets(doc).insert_container("k", loro::LoroTree::new()).expect("a tree");
+    };
+    assert!(restore_facets(scalar, tree).is_none(), "a tree no copy carries");
+    let bytes = |doc: &LoroDoc| {
+        let held = whiteboard_crdt::LoroValue::Binary(vec![1_u8].into());
+        facets(doc).insert("k", held).expect("bytes");
+    };
+    assert!(restore_facets(scalar, bytes).is_none(), "bytes reach JavaScript as a typed array");
+    assert!(restore_facets(bytes, scalar).is_none(), "and are compared there by index");
+    let proto = |doc: &LoroDoc| {
+        doc.get_map("__proto__").insert("k", 1).expect("a root");
+    };
+    assert!(restore_facets(scalar, proto).is_none(), "a root JavaScript cannot name");
 }
