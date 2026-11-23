@@ -354,7 +354,8 @@ status, a message template (`{name}`, `{name|filter}`, `{{`/`}}`) and one `examp
   puts it in `SYNC_TEXT_BREACH_CODES` / `SYNC_WORKSPACE_BREACH_CODES`, the tables `loro-adapter`
   re-exports.
 - A param the class takes from the model (a `*_LIMIT_PHRASE`, `MARKDOWN_MAX_CHARS`) is pinned by the
-  example's real value, and an example past a limit is over it by one, so a changed limit fails
+  example's real value, and an example past a limit exceeds it (a new boundary fixture uses the
+  limit plus one, the first refused value), so a changed limit fails
   `refusals.contract.test.ts` in server-core until the contract is edited with it. That test builds
   every entry from its real class and holds the message to `exampleText`.
 - `syncWriteRefusalCodeSchema` is `z.enum` over the generated list. Do not add a code there.

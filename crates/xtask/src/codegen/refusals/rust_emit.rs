@@ -162,20 +162,24 @@ fn rust_codes(out: &mut String, entries: &[Checked<'_>]) {
     }
 }
 
-/// Match arms with the same body written as one arm over their patterns, in the
-/// order each body first appears: clippy's the lint against repeated arms refuses a repeat.
-fn rust_arms(out: &mut String, arms: &[(String, String)]) {
-    let mut order: Vec<&str> = Vec::new();
-    let mut by_body: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-    for (pattern, body) in arms {
-        let patterns = by_body.entry(body.as_str()).or_default();
+/// Match arms with the same body AND the same bindings written as one arm over
+/// their patterns, in the order each first appears: clippy's lint against
+/// repeated arms refuses a repeat, and an or-pattern must bind each name at
+/// one type. An arm is `(pattern, body, bindings)`, the last empty when the
+/// pattern binds nothing.
+fn rust_arms(out: &mut String, arms: &[(String, String, String)]) {
+    let mut order: Vec<(&str, &str)> = Vec::new();
+    let mut by_key: BTreeMap<(&str, &str), Vec<&str>> = BTreeMap::new();
+    for (pattern, body, bindings) in arms {
+        let key = (body.as_str(), bindings.as_str());
+        let patterns = by_key.entry(key).or_default();
         if patterns.is_empty() {
-            order.push(body.as_str());
+            order.push(key);
         }
         patterns.push(pattern.as_str());
     }
-    for body in order {
-        let _ = writeln!(out, "            {} => {body},", by_body[body].join(" | "));
+    for key in order {
+        let _ = writeln!(out, "            {} => {},", by_key[&key].join(" | "), key.0);
     }
 }
 
@@ -186,9 +190,12 @@ fn rust_methods(out: &mut String, entries: &[Checked<'_>]) {
     out.push_str(
         "    #[must_use]\n    pub const fn code(&self) -> &'static str {\n        match self {\n",
     );
-    let arms: Vec<(String, String)> = entries
+    let arms: Vec<(String, String, String)> = entries
         .iter()
-        .map(|e| (rust_pattern(e, false), format!("code::{}", e.entry.code.to_ascii_uppercase())))
+        .map(|e| {
+            let body = format!("code::{}", e.entry.code.to_ascii_uppercase());
+            (rust_pattern(e, false), body, String::new())
+        })
         .collect();
     rust_arms(out, &arms);
     out.push_str("        }\n    }\n\n");
@@ -197,15 +204,19 @@ fn rust_methods(out: &mut String, entries: &[Checked<'_>]) {
     out.push_str(
         "    #[must_use]\n    pub const fn status(&self) -> u16 {\n        match self {\n",
     );
-    let arms: Vec<(String, String)> =
-        entries.iter().map(|e| (rust_pattern(e, false), e.entry.status.to_string())).collect();
+    let arms: Vec<(String, String, String)> = entries
+        .iter()
+        .map(|e| (rust_pattern(e, false), e.entry.status.to_string(), String::new()))
+        .collect();
     rust_arms(out, &arms);
     out.push_str("        }\n    }\n\n");
     out.push_str("    /// The sentence, as the TypeScript says it.\n");
     out.push_str(EXPECT_LONG_MATCH);
     out.push_str("    #[must_use]\n    pub fn message(&self) -> String {\n        match self {\n");
-    let arms: Vec<(String, String)> =
-        entries.iter().map(|e| (rust_pattern(e, true), rust_message(e))).collect();
+    let arms: Vec<(String, String, String)> = entries
+        .iter()
+        .map(|e| (rust_pattern(e, true), rust_message(e), format!("{:?}", e.tys)))
+        .collect();
     rust_arms(out, &arms);
     out.push_str("        }\n    }\n}\n");
 }

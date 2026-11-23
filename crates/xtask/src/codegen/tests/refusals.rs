@@ -415,8 +415,13 @@ fn a_signature_past_the_column_takes_a_param_to_a_line_and_the_body_joins_when_i
 }
 
 #[test]
+fn a_refusal_named_for_a_global_the_filters_call_is_refused() {
+    refused("\"Echo\"", "\"JSON\"", "would shadow a global the filters call");
+}
+
+#[test]
 fn a_param_a_typescript_function_could_not_name_is_refused() {
-    for name in ["new", "i", "this"] {
+    for name in ["new", "i", "this", "debugger", "extends", "instanceof"] {
         let text = CONTRACT
             .replace("\"reason\"", &format!("\"{name}\""))
             .replace("{reason}", &format!("{{{name}}}"));
@@ -522,6 +527,13 @@ fn a_refusal_with_a_module_is_generated_into_that_packages_own_file() {
             "{bad}: {errors:?}"
         );
     }
+    let text = CONTRACT.replacen(
+        r#""family": "sync-write","#,
+        r#""family": "sync-write", "module": "model","#,
+        1,
+    );
+    let errors = files(&text).unwrap_err();
+    assert!(errors.iter().any(|e| e.contains("would overwrite the main catalog")), "{errors:?}");
 }
 
 const AWKWARD: &str = r#"{
@@ -555,6 +567,16 @@ const AWKWARD: &str = r#"{
       "name": "Plural", "code": "plural", "status": 400, "description": "One filter twice on one param.",
       "message": "{n} item{n|s}{n|s}", "params": { "n": "integer" }, "example": { "n": 1 },
       "exampleText": "1 item", "surfaces": ["api-v1"], "source": "S"
+    },
+    {
+      "name": "CountInt", "code": "count_int", "status": 400, "description": "One body, an integer.",
+      "message": "Value: {count}", "params": { "count": "integer" }, "example": { "count": 2 },
+      "exampleText": "Value: 2", "surfaces": ["api-v1"], "source": "S"
+    },
+    {
+      "name": "CountStr", "code": "count_str", "status": 400, "description": "The same body, a string.",
+      "message": "Value: {count}", "params": { "count": "string" }, "example": { "count": "x" },
+      "exampleText": "Value: x", "surfaces": ["api-v1"], "source": "S"
     }
   ]
 }"#;
@@ -569,8 +591,9 @@ fn the_rust_half_of_an_awkward_contract_compiles_and_says_what_the_contract_pins
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("generated.rs"), rust).unwrap();
     let text = concat!(env!("CARGO_MANIFEST_DIR"), "/../ops/api-contracts/src/refusal_text.rs");
+    let text = rust_literal(text);
     let main = format!(
-        r#"#[path = "{text}"]
+        r#"#[path = {text}]
 mod refusal_text;
 #[path = "generated.rs"]
 mod refusals;
@@ -582,6 +605,8 @@ fn main() {{
     println!("{{}}", Refusal::Collide {{ path: "p".to_owned(), path_json: "q".to_owned() }}.message());
     println!("{{}}", Refusal::Lists {{ paths: list(&["a"]), paths_json: list(&["b", "c"]) }}.message());
     println!("{{}}", Refusal::Plural {{ n: 1 }}.message());
+    println!("{{}}", Refusal::CountInt {{ count: 2 }}.message());
+    println!("{{}}", Refusal::CountStr {{ count: "x".to_owned() }}.message());
 }}
 "#
     );
@@ -595,7 +620,7 @@ fn main() {{
     assert!(built.status.success(), "{}", String::from_utf8_lossy(&built.stderr));
     let ran = std::process::Command::new(dir.join("probe")).output().unwrap();
     let said = String::from_utf8(ran.stdout).unwrap();
-    let wanted = ["7", "\"a\\\"b\"", "\"p\": q", "\"a\"|b, c", "1 item"];
+    let wanted = ["7", "\"a\\\"b\"", "\"p\": q", "\"a\"|b, c", "1 item", "Value: 2", "Value: x"];
     assert_eq!(said.lines().collect::<Vec<_>>(), wanted);
     let _ = std::fs::remove_dir_all(&dir);
 }

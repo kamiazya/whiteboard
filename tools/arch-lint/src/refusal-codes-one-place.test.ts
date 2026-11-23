@@ -59,7 +59,7 @@ const NEVER_ANSWERED: Readonly<Record<string, string>> = {
 interface Entry {
   readonly name: string
   readonly code: string
-  readonly breach?: unknown
+  readonly breach?: { readonly table: string }
 }
 
 const contract = JSON.parse(readFileSync(join(REPO_ROOT, CONTRACT), 'utf8')) as {
@@ -162,15 +162,63 @@ function objectionsTo(
   })
 }
 
-/** Whether `text` reaches `code` through the generated module: its constant, or the keyed table. */
-function reachesCode(text: string, code: string): boolean {
+/**
+ * What a source names, read off its syntax tree so a comment names nothing:
+ * every identifier, every member of `REFUSAL_CODES` (dotted or keyed by a
+ * literal), and every string literal.
+ */
+interface Uses {
+  readonly names: Set<string>
+  readonly members: Set<string>
+  readonly literals: Set<string>
+}
+
+function usesOf(path: string, source: string, into?: Uses): Uses {
+  const uses = into ?? { names: new Set(), members: new Set(), literals: new Set() }
+  const visit = (node: ts.Node): void => {
+    if (ts.isIdentifier(node)) uses.names.add(node.text)
+    else if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+      uses.literals.add(node.text)
+    }
+    if (ts.isPropertyAccessExpression(node) && node.expression.getText() === 'REFUSAL_CODES') {
+      uses.members.add(node.name.text)
+    }
+    if (
+      ts.isElementAccessExpression(node) &&
+      node.expression.getText() === 'REFUSAL_CODES' &&
+      ts.isStringLiteralLike(node.argumentExpression)
+    ) {
+      uses.members.add(node.argumentExpression.text)
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(parseSource(path, source))
+  return uses
+}
+
+/** Whether `uses` reaches `code`: its constant, a member of the keyed table, or a literal. */
+function reachesCode(uses: Uses, code: string): boolean {
   const camel = code.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase())
   return (
-    new RegExp(`\\bREFUSAL_CODE_${code.toUpperCase()}(?![\\w$])`).test(text) ||
-    new RegExp(`\\bREFUSAL_CODES\\.${camel}(?![\\w$])`).test(text) ||
-    text.includes(`REFUSAL_CODES['${camel}']`) ||
-    text.includes(`REFUSAL_CODES["${camel}"]`) ||
-    new RegExp(`['"\`]${code}['"\`]`).test(text)
+    uses.names.has(`REFUSAL_CODE_${code.toUpperCase()}`) ||
+    uses.members.has(camel) ||
+    uses.literals.has(code)
+  )
+}
+
+/** The breach table each code sits in, by the generated name of the table. */
+const BREACH_TABLES: Readonly<Record<string, string>> = {
+  text: 'SYNC_TEXT_BREACH_CODES',
+  workspace: 'SYNC_WORKSPACE_BREACH_CODES',
+}
+
+/** Whether `uses` names a breach table `code` sits in: a code in both is reached by either. */
+function reachesThroughTable(uses: Uses, code: string): boolean {
+  return contract.refusals.some(
+    (entry) =>
+      entry.code === code &&
+      entry.breach !== undefined &&
+      uses.names.has(BREACH_TABLES[entry.breach.table] ?? ''),
   )
 }
 
@@ -236,19 +284,47 @@ describe('the refusal codes are written in one place', () => {
 
   it('reaches a code through its constant, either keyed form of the table, or a literal', () => {
     const code = 'too_many_documents'
-    for (const text of [
-      'REFUSAL_CODE_TOO_MANY_DOCUMENTS',
-      'REFUSAL_CODES.tooManyDocuments',
-      "REFUSAL_CODES['tooManyDocuments']",
-      'REFUSAL_CODES["tooManyDocuments"]',
+    const reaches = (source: string) => reachesCode(usesOf('f.ts', source), code)
+    for (const source of [
+      'f(REFUSAL_CODE_TOO_MANY_DOCUMENTS)',
+      'f(REFUSAL_CODES.tooManyDocuments)',
+      "f(REFUSAL_CODES['tooManyDocuments'])",
+      'f(REFUSAL_CODES["tooManyDocuments"])',
       "const c = 'too_many_documents'",
     ]) {
-      expect(reachesCode(text, code), text).toBe(true)
+      expect(reaches(source), source).toBe(true)
     }
-    expect(reachesCode('REFUSAL_CODES.tooManyFolders too_many_documents_x', code)).toBe(false)
+    expect(reaches("f(REFUSAL_CODES.tooManyFolders, 'too_many_documents_x')")).toBe(false)
     // A longer member or constant sharing the prefix names another code.
-    expect(reachesCode('REFUSAL_CODES.tooManyDocumentsExtra', code)).toBe(false)
-    expect(reachesCode('REFUSAL_CODE_TOO_MANY_DOCUMENTS_EXTRA', code)).toBe(false)
+    expect(reaches('f(REFUSAL_CODES.tooManyDocumentsExtra)')).toBe(false)
+    expect(reaches('f(REFUSAL_CODE_TOO_MANY_DOCUMENTS_EXTRA)')).toBe(false)
+    // A comment names nothing, whichever spelling it quotes.
+    expect(reaches('// REFUSAL_CODE_TOO_MANY_DOCUMENTS\nconst a = 1')).toBe(false)
+    expect(reaches("/* REFUSAL_CODES.tooManyDocuments 'too_many_documents' */")).toBe(false)
+    expect(reaches('/** see REFUSAL_CODE_TOO_MANY_DOCUMENTS */\nexport const a = 1')).toBe(false)
+  })
+
+  it('reaches a breach code only through the table it sits in', () => {
+    const workspaceOnly = contract.refusals.find(
+      (entry) =>
+        entry.breach?.table === 'workspace' &&
+        !contract.refusals.some((e) => e.code === entry.code && e.breach?.table === 'text'),
+    )
+    const both = contract.refusals.find(
+      (entry) =>
+        entry.breach?.table === 'workspace' &&
+        contract.refusals.some((e) => e.code === entry.code && e.breach?.table === 'text'),
+    )
+    expect(workspaceOnly, 'a code only the workspace table holds').toBeDefined()
+    expect(both, 'a code both tables hold').toBeDefined()
+    const text = usesOf('f.ts', 'f(SYNC_TEXT_BREACH_CODES)')
+    const workspace = usesOf('f.ts', 'f(SYNC_WORKSPACE_BREACH_CODES)')
+    expect(reachesThroughTable(text, workspaceOnly?.code ?? '')).toBe(false)
+    expect(reachesThroughTable(workspace, workspaceOnly?.code ?? '')).toBe(true)
+    expect(reachesThroughTable(text, both?.code ?? '')).toBe(true)
+    expect(
+      reachesThroughTable(usesOf('f.ts', '// SYNC_WORKSPACE_BREACH_CODES'), both?.code ?? ''),
+    ).toBe(false)
   })
 
   it('has no shared file spelling a contract code or answering one the contract lacks', () => {
@@ -278,13 +354,10 @@ describe('the refusal codes are written in one place', () => {
       ...production('packages/daemon-client/src'),
       ...production('apps/web/src'),
     ]
-    const text = sources.map((path) => readFileSync(join(REPO_ROOT, path), 'utf8')).join('\n')
-    const tableCodes = new Set(
-      contract.refusals.filter((entry) => entry.breach !== undefined).map((entry) => entry.code),
-    )
-    const tables = /SYNC_(TEXT|WORKSPACE)_BREACH_CODES/.test(text)
+    const uses: Uses = { names: new Set(), members: new Set(), literals: new Set() }
+    for (const path of sources) usesOf(path, readFileSync(join(REPO_ROOT, path), 'utf8'), uses)
     const stale = [...codes].filter(
-      (code) => !reachesCode(text, code) && !(tables && tableCodes.has(code)),
+      (code) => !reachesCode(uses, code) && !reachesThroughTable(uses, code),
     )
     expect(stale, 'contract codes no TypeScript emits').toEqual([])
   })

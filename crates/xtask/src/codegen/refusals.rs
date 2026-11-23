@@ -43,6 +43,15 @@ const TS_LINE_WIDTH: usize = 100;
 /// The largest integer a JavaScript number holds exactly.
 const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 
+/// Where a refusal with a `module` is generated: that package's own file.
+fn module_target(module: &str) -> String {
+    format!("packages/{module}/src/generated/refusals.ts")
+}
+
+/// The globals the generated TypeScript calls, which a refusal's exported
+/// name must not shadow in the module that holds it.
+const JS_GLOBALS_USED: &[&str] = &["JSON"];
+
 /// Words a TypeScript parameter cannot be named, and `i`, the name the list
 /// filters use for an item.
 const JS_RESERVED: &[&str] = &[
@@ -50,15 +59,18 @@ const JS_RESERVED: &[&str] = &[
     "case",
     "catch",
     "class",
+    "debugger",
     "default",
     "delete",
     "eval",
     "export",
+    "extends",
     "finally",
     "function",
     "i",
     "implements",
     "import",
+    "instanceof",
     "interface",
     "let",
     "new",
@@ -185,12 +197,47 @@ fn check_template(entry: &Entry, tys: &BTreeMap<&str, Ty>) -> Result<Vec<Piece>,
     Ok(pieces)
 }
 
+/// Lowercase kebab-case: a letter first, no doubled or trailing hyphen.
+fn is_kebab(text: &str) -> bool {
+    text.starts_with(|c: char| c.is_ascii_lowercase())
+        && !text.ends_with('-')
+        && !text.contains("--")
+        && text.chars().all(|c| c.is_ascii_lowercase() || c == '-')
+}
+
+/// Where an entry lands besides the main catalog: its breach table and its module.
+fn check_placement(entry: &Entry) -> Result<(), String> {
+    if let Some(breach) = &entry.breach {
+        if !BREACH_TABLES.iter().any(|(table, _)| *table == breach.table) {
+            return Err(format!("breach table `{}` is not one of {BREACH_TABLES:?}", breach.table));
+        }
+        if entry.family.as_deref() != Some("sync-write") {
+            return Err("a breach shape is answered by a sync-write refusal".to_owned());
+        }
+        if !is_kebab(&breach.shape) {
+            return Err(format!("breach shape `{}` is not lowercase kebab-case", breach.shape));
+        }
+    }
+    if let Some(module) = &entry.module {
+        if !is_kebab(module) {
+            return Err(format!("module `{module}` is not a package directory name"));
+        }
+        if module_target(module) == TS_TARGET {
+            return Err(format!("module `{module}` would overwrite the main catalog"));
+        }
+    }
+    Ok(())
+}
+
 fn check_entry<'a>(
     entry: &'a Entry,
     surfaces: &BTreeMap<String, String>,
 ) -> Result<Checked<'a>, String> {
     if !is_pascal(&entry.name) {
         return Err("name is not PascalCase".to_owned());
+    }
+    if JS_GLOBALS_USED.contains(&entry.name.as_str()) {
+        return Err(format!("name `{}` would shadow a global the filters call", entry.name));
     }
     if !is_code(&entry.code) {
         return Err(format!("code `{}` is not lowercase snake_case", entry.code));
@@ -203,30 +250,7 @@ fn check_entry<'a>(
     {
         return Err(format!("family `{family}` is not one of {FAMILIES:?}"));
     }
-    if let Some(breach) = &entry.breach {
-        if !BREACH_TABLES.iter().any(|(table, _)| *table == breach.table) {
-            return Err(format!("breach table `{}` is not one of {BREACH_TABLES:?}", breach.table));
-        }
-        if entry.family.as_deref() != Some("sync-write") {
-            return Err("a breach shape is answered by a sync-write refusal".to_owned());
-        }
-        let kebab = breach.shape.starts_with(|c: char| c.is_ascii_lowercase())
-            && !breach.shape.ends_with('-')
-            && !breach.shape.contains("--")
-            && breach.shape.chars().all(|c| c.is_ascii_lowercase() || c == '-');
-        if !kebab {
-            return Err(format!("breach shape `{}` is not lowercase kebab-case", breach.shape));
-        }
-    }
-    if let Some(module) = &entry.module {
-        let ok = module.starts_with(|c: char| c.is_ascii_lowercase())
-            && !module.ends_with('-')
-            && !module.contains("--")
-            && module.chars().all(|c| c.is_ascii_lowercase() || c == '-');
-        if !ok {
-            return Err(format!("module `{module}` is not a package directory name"));
-        }
-    }
+    check_placement(entry)?;
     if entry.description.contains("*/") {
         return Err("description holds `*/`, which would end its generated doc comment".to_owned());
     }
@@ -434,7 +458,9 @@ fn ts_filtered(filter: Option<Filter>, field: &str) -> String {
         Some(Filter::S) => format!("{p} === 1 ? '' : 's'"),
         Some(Filter::List) => format!("{p}.join(', ')"),
         Some(Filter::AndList) => format!("{p}.join(' and ')"),
-        Some(Filter::JsonList) => format!("{p}.map((i) => JSON.stringify(i)).join(', ')"),
+        Some(Filter::JsonList) => {
+            format!("{p}.map((i) => JSON.stringify(i)).join(', ')")
+        }
         Some(Filter::QuotedList) => format!("{p}.map((i) => `\"${{i}}\"`).join(', ')"),
     }
 }
@@ -601,10 +627,7 @@ pub(super) fn generate(text: &str) -> Result<Vec<(String, String, bool)>, Vec<St
     modules.dedup();
     let mut texts = vec![(TS_TARGET.to_owned(), ts(&entries))];
     for module in modules {
-        texts.push((
-            format!("packages/{module}/src/generated/refusals.ts"),
-            ts_module(&entries, module),
-        ));
+        texts.push((module_target(module), ts_module(&entries, module)));
     }
     for (target, text) in texts {
         let text = within_width(text).map_err(|long| {
