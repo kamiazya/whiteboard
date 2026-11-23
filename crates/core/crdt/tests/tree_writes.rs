@@ -461,6 +461,28 @@ mod cases {
         assert_eq!(held(&filled, "stamp"), None, "a fill leaves the scalars behind");
     }
 
+    /// Bytes are compared as stored, since JavaScript reads them as a typed
+    /// array `jsonEqual` cannot see into: the same bytes write nothing, other
+    /// bytes are written.
+    #[test]
+    fn a_map_entry_of_bytes_is_rewritten_only_when_the_bytes_differ() {
+        let fill = |held: &[u8], wanted: &[u8]| {
+            let source = LoroDoc::new();
+            let from = node(&source, None);
+            let meta = source.get_tree(T).get_meta(source.get_tree(T).roots()[0]).expect("meta");
+            let map = meta.insert_container("m", LoroMap::new()).expect("a map");
+            map.insert("b", LoroValue::Binary(wanted.to_vec().into())).expect("bytes");
+            let target = LoroDoc::new();
+            let to = node(&target, None);
+            let meta = target.get_tree(T).get_meta(target.get_tree(T).roots()[0]).expect("meta");
+            let map = meta.insert_container("m", LoroMap::new()).expect("a map");
+            map.insert("b", LoroValue::Binary(held.to_vec().into())).expect("bytes");
+            fill_meta(at(&source, from), at(&target, to), &|_, _| true).expect("filled")
+        };
+        assert!(!fill(&[1, 2], &[1, 2]), "the same bytes");
+        assert!(fill(&[1, 2], &[3]), "other bytes");
+    }
+
     #[test]
     fn filling_leaves_a_key_held_as_another_kind_alone_and_reports_no_change_for_empty_content() {
         let source = LoroDoc::new();
