@@ -14,7 +14,6 @@
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
 pub mod ceiling;
-pub mod content_digest;
 pub mod derive_copy;
 pub mod display_name;
 pub mod document_path;

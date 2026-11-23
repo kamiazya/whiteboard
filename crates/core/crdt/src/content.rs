@@ -9,7 +9,7 @@
 //! carries. A container is resolved once per query, never per entry.
 
 use crate::plain::{Undecided, plain, plain_object, undefined};
-use crate::{annotations, canvas, envelope, image_refs, proposals, stored};
+use crate::{annotations, canvas, envelope, image_refs, judgement, proposals, stored};
 use loro::{ContainerType, LoroDoc, LoroMap, LoroText, LoroValue, TextDelta, ValueOrContainer};
 use whiteboard_model::Value;
 use whiteboard_model::crdt::{Query, QueryName, ReadResponse};
@@ -246,7 +246,7 @@ fn facets(doc: &LoroDoc) -> Option<Value> {
     Some(Value::Map(shown))
 }
 
-fn ok(value: Value) -> ReadResponse {
+pub(crate) fn ok(value: Value) -> ReadResponse {
     ReadResponse { value: Value::Map(vec![("ok".to_owned(), value)]) }
 }
 
@@ -255,7 +255,7 @@ fn refused(Refusal(class): Refusal) -> ReadResponse {
 }
 
 /// The content queries this crate answers, by the contract's name.
-pub const CONTENT_QUERIES: [QueryName; 20] = [
+pub const CONTENT_QUERIES: [QueryName; 22] = [
     QueryName::DocumentKind,
     QueryName::NodeLocks,
     QueryName::EdgeLocks,
@@ -276,6 +276,8 @@ pub const CONTENT_QUERIES: [QueryName; 20] = [
     QueryName::ThreadMarks,
     QueryName::Proposals,
     QueryName::ImageRefIds,
+    QueryName::StateSize,
+    QueryName::ContentDigest,
 ];
 
 /// Answers `query` over a document that is the root of its own `LoroDoc`, or
@@ -362,7 +364,7 @@ fn answer_annotation_query(doc: &LoroDoc, query: &Query) -> Option<ReadResponse>
             Ok(ids) => ok(ids),
             Err(refusal) => refused(refusal),
         },
-        _ => return None,
+        _ => return judgement::answer(doc, query),
     })
 }
 

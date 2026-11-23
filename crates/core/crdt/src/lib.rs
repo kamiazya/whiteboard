@@ -22,10 +22,12 @@ mod anchor;
 mod annotations;
 mod canvas;
 mod content;
+mod content_digest;
 mod copy;
 mod envelope;
 mod frontiers;
 mod image_refs;
+mod judgement;
 mod patch;
 mod plain;
 mod proposals;
@@ -39,11 +41,13 @@ pub use content::{
     CONTENT_QUERIES, DocumentKind, Refusal, answer_content_query, document_kind, markdown_body,
     retired_stored_shape,
 };
+pub use content_digest::{content_digest_of, stable_stringify};
 pub use copy::{NodeAt, copy_meta, fill_meta};
 pub use frontiers::{
     FrontiersError, decode_frontiers, encode_frontiers, frontiers_version, shallow_root_version,
     version_frontiers,
 };
+pub use judgement::{CONTENT_KEYS, content_digest_of_document, state_size};
 pub use loro::{
     ExportMode, LoroDoc, LoroList, LoroMap, LoroMovableList, LoroText, LoroValue, TreeID,
     loro_value,

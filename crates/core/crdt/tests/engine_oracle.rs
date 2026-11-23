@@ -52,13 +52,13 @@ const REPLAYED: &[(&str, usize)] = &[
     ("threadMarks", 178),
     ("proposals", 178),
     ("imageRefIds", 178),
+    ("stateSize", 178),
+    ("contentDigest", 178),
 ];
 
 /// The ops not replayed, with their rows: a query a document hosted on a
 /// workspace tree node asks is listed as `<query>@node`.
 const DEFERRED: &[(&str, usize)] = &[
-    ("stateSize", 178),
-    ("contentDigest", 178),
     ("textLimitBreach", 178),
     ("documents", 178),
     ("nodes", 178),

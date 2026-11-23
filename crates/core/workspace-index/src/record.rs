@@ -1,7 +1,6 @@
 //! A workspace record, opened from the bytes a keeper stores, and what the
 //! document index reads from it.
 
-use crate::content_digest::content_digest_of;
 use crate::entry::Found;
 use crate::index_rules::Node;
 use crate::node_meta::{DocumentMeta, NodeRead, WORKSPACE_TREE_KEY};
@@ -9,26 +8,10 @@ use crate::trash::{TrashRow, read_trash_rows};
 use crate::walk::{Walked, walk, walk_in};
 use std::collections::BTreeSet;
 use whiteboard_crdt::{
-    ContainerKind, Entry, ImportError, LoroDoc, Tree, import_bytes, peek, set_peer_id, tree,
+    CONTENT_KEYS, ContainerKind, Entry, ImportError, LoroDoc, Tree, content_digest_of,
+    import_bytes, peek, set_peer_id, tree,
 };
 use whiteboard_model::Value;
-
-/// The containers a document's content lives in, which its digest names.
-const CONTENT_KEYS: [&str; 13] = [
-    "nodes",
-    "edges",
-    "lines",
-    "canvas",
-    "threads",
-    "proposals",
-    "facets",
-    "nodeLocks",
-    "edgeLocks",
-    "core",
-    "trust",
-    "document",
-    "body",
-];
 
 pub(crate) const WORKSPACE_META_KEY: &str = "workspaceMeta";
 pub(crate) const PINNED_KEY: &str = "pinned";
