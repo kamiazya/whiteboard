@@ -65,8 +65,8 @@ fn a_mark_on_the_text_survives_and_the_copy_has_a_history_of_its_own() {
 /// read them: a whole double within 2^53 an integer, a negative zero the
 /// integer zero, an integer past 2^53 the double it rounds to. The real
 /// engine's `duplicateWorkspaceDocument` copies `{ x: 1.0, y: -0.0, z: 2^60 + 1 }`
-/// so, through the projection this is (`workspace_record_write_cases`,
-/// `dup-foreign`).
+/// so, through the projection this is (the `dup-foreign` row of
+/// `crates/core/workspace-index/tests/fixtures/workspace_record_write_cases.jsonl`).
 #[test]
 fn a_copied_value_holds_its_numbers_as_javascript_would_store_them() {
     let doc = LoroDoc::new();
