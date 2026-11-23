@@ -217,6 +217,18 @@ fn passages(range: Value) -> Value {
     object(&[("passages", Value::Seq(vec![Value::Seq(vec![text("t"), range])]))])
 }
 
+/// JavaScript's `Math.min(-0, length)` is `-0`, which loro's mark reads as
+/// the body's start: a passage from `-0` marks as one from `0` does.
+#[test]
+#[cfg(test)]
+fn a_passage_from_negative_zero_marks_from_the_start() {
+    let from = |start: f64| {
+        let range = object(&[("start", number(start)), ("end", number(1.0))]);
+        answered(WriterName::MarkThreadPassages, passages(range)).expect("answered")
+    };
+    assert_eq!(from(-0.0), from(0.0));
+}
+
 #[test]
 #[cfg(test)]
 fn a_verdict_on_a_change_holding_bytes_or_a_container_is_not_answered() {
