@@ -20,7 +20,10 @@
 //! A document that is the root of its own `LoroDoc` holds no workspace tree
 //! the canvas writers write under, so the documents a write touched are none.
 
+use crate::annotation_write::apply_annotation;
+use crate::content_sync::reconcile_doc_content;
 use crate::content_write::apply_content;
+use crate::proposal_write::apply_proposal;
 use crate::spatial_batch::{reconcile, with_spatial_batch};
 use crate::spatial_write::{
     EDGE_LOCKS, EDGE_PLANE, Fault, NODE_LOCKS, NODE_PLANE, Step, delete_element, delete_node,
@@ -51,6 +54,15 @@ pub const ENGINE_WRITERS: &[WriterName] = &[
     WriterName::ReconcileFacets,
     WriterName::ReconcileCoreFacets,
     WriterName::WriteCanvasFacetsField,
+    WriterName::WriteCommentThread,
+    WriterName::WriteThreadMessage,
+    WriterName::SetCommentThreadStatus,
+    WriterName::MoveCommentThread,
+    WriterName::MarkThreadPassages,
+    WriterName::WriteProposal,
+    WriterName::SetProposedChangeStatus,
+    WriterName::WithDocumentBatch,
+    WriterName::ReconcileDocContent,
 ];
 
 /// What a batch answered.
@@ -119,7 +131,11 @@ fn apply(doc: &LoroDoc, op: WriterName, args: &Value) -> Step {
             id_writer(doc, args, |doc, id| set_lock(doc, EDGE_LOCKS, id, field(args, "locked")))
         }
         WriterName::WithSpatialBatch => with_spatial_batch(doc, items(field(args, "steps"))?),
-        _ => apply_content(doc, op, args).unwrap_or(Err(Fault::Declined)),
+        WriterName::ReconcileDocContent => reconcile_doc_content(doc, text(field(args, "past"))?),
+        _ => apply_content(doc, op, args)
+            .or_else(|| apply_annotation(doc, op, args))
+            .or_else(|| apply_proposal(doc, op, args))
+            .unwrap_or(Err(Fault::Declined)),
     }
 }
 

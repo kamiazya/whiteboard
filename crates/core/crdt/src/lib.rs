@@ -3,8 +3,8 @@
 //! version vector and frontiers, answered as the TypeScript records them, and
 //! a tree container's nodes and the roots beside it, read without writing,
 //! writes a tree and its containers one loro call at a time, and answers the
-//! document engine's spatial-canvas and document-content writers over a
-//! document of its own.
+//! document engine's spatial-canvas, document-content, annotation and
+//! proposal writers over a document of its own.
 //!
 //! The `loro` crate is pinned `=` to the version of the npm package
 //! (ADR-0054 decision 13). One `LoroDoc` is never split across two engines:
@@ -21,10 +21,12 @@
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
 mod anchor;
+mod annotation_write;
 mod annotations;
 mod canvas;
 mod content;
 mod content_digest;
+mod content_sync;
 mod content_write;
 mod copy;
 mod engine_write;
@@ -35,6 +37,7 @@ mod judgement;
 mod patch;
 mod plain;
 mod projection;
+mod proposal_write;
 mod proposals;
 mod read;
 mod spatial_batch;

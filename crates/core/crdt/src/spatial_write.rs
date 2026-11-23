@@ -68,7 +68,7 @@ pub(crate) fn items(value: Option<&Value>) -> Result<&[Value], Fault> {
 }
 
 /// `holdsReservedKey`: a key named `__proto__` anywhere in the value.
-fn holds_reserved_key(value: &Value) -> bool {
+pub(crate) fn holds_reserved_key(value: &Value) -> bool {
     match value {
         Value::Map(entries) => {
             entries.iter().any(|(k, v)| k == RESERVED_MAP_KEY || holds_reserved_key(v))

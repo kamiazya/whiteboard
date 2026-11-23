@@ -23,7 +23,7 @@ const TRUST: &str = "trust";
 /// A root container name npm loro-crdt refuses to open starts with this.
 const MERGEABLE_PREFIX: &str = "🤝:";
 /// What npm loro-crdt throws is a string, so the engine names its class so.
-const LORO_REFUSAL: Fault = Fault::Thrown("string");
+pub(crate) const LORO_REFUSAL: Fault = Fault::Thrown("string");
 
 type Entries = Vec<(String, Value)>;
 
@@ -60,7 +60,7 @@ pub(crate) fn minimal_change<'a>(current: &[u16], next: &'a [u16]) -> (usize, us
 
 /// `spliceText` (`minimal-change.ts`): `next` written into `target` as the
 /// one span that differs.
-fn splice_minimal(target: &LoroText, next: &str) -> Step {
+pub(crate) fn splice_minimal(target: &LoroText, next: &str) -> Step {
     let current: Vec<u16> = target.to_string().encode_utf16().collect();
     let next: Vec<u16> = next.encode_utf16().collect();
     let (from, to, insert) = minimal_change(&current, &next);
