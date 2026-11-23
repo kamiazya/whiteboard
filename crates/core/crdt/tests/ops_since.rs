@@ -38,10 +38,28 @@ mod cases {
         node(&doc, Some(a));
         doc.get_map("tree").insert("k", 1).expect("a map root named like the tree");
         doc.get_map("other").insert("k", 1).expect("another root");
+        let other = doc.get_tree("other").create(None).expect("a node of another tree");
+        doc.get_tree("other").get_meta(other).expect("its map").insert("k", 1).expect("a write");
         commit(&doc);
         assert_eq!(written(&doc, &since), vec![c, b], "first written first, each once");
         assert_eq!(written(&doc, &after_attach), vec![c, b], "a write inside a container counts");
         assert_eq!(written(&doc, &doc.oplog_vv()), Vec::<NodeId>::new());
+    }
+
+    #[test]
+    fn a_node_a_delete_took_with_itself_or_above_it_is_none_written() {
+        let doc = LoroDoc::new();
+        let (a, b) = (node(&doc, None), node(&doc, None));
+        let child = node(&doc, Some(a));
+        commit(&doc);
+        let since = doc.oplog_vv();
+        for n in [a, child, b] {
+            name(&doc, n, "x");
+        }
+        let roots = doc.get_tree(T).roots();
+        doc.get_tree(T).delete(roots[0]).expect("a delete");
+        commit(&doc);
+        assert_eq!(written(&doc, &since), vec![b]);
     }
 
     /// The node ids are opaque outside the crate; the tree hands them back in order.

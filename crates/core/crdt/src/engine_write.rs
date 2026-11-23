@@ -152,20 +152,6 @@ pub trait MoreWriters {
     fn changed(&self, doc: &LoroDoc, from: &VersionVector) -> Vec<String>;
 }
 
-/// No writer beyond this crate's: a document that is the root of its own
-/// `LoroDoc` holds no workspace tree, so a write touches no document.
-struct NoMore;
-
-impl MoreWriters for NoMore {
-    fn apply(&self, _: &LoroDoc, _: WriterName, _: &Value) -> Option<Step> {
-        None
-    }
-
-    fn changed(&self, _: &LoroDoc, _: &VersionVector) -> Vec<String> {
-        Vec::new()
-    }
-}
-
 /// A writer this crate answers: one it ports, over a document of its own.
 fn answerable(write: &Write) -> bool {
     ENGINE_WRITERS.contains(&write.op) && field(&write.args, "documentId").is_none()
@@ -182,7 +168,7 @@ pub fn write_batch(
     batch: &[Write],
     judge: WriteJudge,
 ) -> Option<Written> {
-    write_batch_with(before, peer, batch, judge, &NoMore)
+    run(before, peer, batch, judge, None)
 }
 
 /// [`write_batch`], with the writers `more` answers beside this crate's.
@@ -193,6 +179,19 @@ pub fn write_batch_with(
     batch: &[Write],
     judge: WriteJudge,
     more: &dyn MoreWriters,
+) -> Option<Written> {
+    run(before, peer, batch, judge, Some(more))
+}
+
+/// The batch, with no writer beyond this crate's when `more` is `None`: a
+/// document that is the root of its own `LoroDoc` holds no workspace tree, so
+/// a write there touches no document.
+fn run(
+    before: &[u8],
+    peer: u64,
+    batch: &[Write],
+    judge: WriteJudge,
+    more: Option<&dyn MoreWriters>,
 ) -> Option<Written> {
     if judge != WriteJudge::None || !batch.iter().all(|write| matches!(write.args, Value::Map(_))) {
         return None;
@@ -205,7 +204,7 @@ pub fn write_batch_with(
         let step = if answerable(write) {
             apply(&doc, write.op, &args)
         } else {
-            more.apply(&doc, write.op, &args)?
+            more?.apply(&doc, write.op, &args)?
         };
         match step {
             Ok(()) => {}
@@ -221,7 +220,7 @@ pub fn write_batch_with(
     if doc.oplog_vv() != from {
         let update = doc.export(ExportMode::updates(&from)).ok()?;
         applied.local_update = Some(bytes_to_base64(&update));
-        applied.changed = more.changed(&doc, &from);
+        applied.changed = more.map(|more| more.changed(&doc, &from)).unwrap_or_default();
     }
     Some(Written { answer: WriteAnswer::Applied(applied), doc })
 }

@@ -29,15 +29,16 @@ fn placed(tree: &Tree, node: NodeId) -> bool {
 }
 
 /// The id of every document an operation after `since` wrote to, in the order
-/// the operations reach them: a live node holding a `documentId` with a path.
-/// A folder, a node a delete took and a node below an unreadable segment are
-/// not documents a write touched.
+/// the operations reach them: a node holding a `documentId` with a path. A
+/// folder and a node below an unreadable segment are not documents a write
+/// touched, nor is a node a delete took, with itself or an ancestor, which
+/// `nodes_written_since` already leaves out: no path reaches its containers.
 #[must_use]
 pub fn documents_touched_since(doc: &LoroDoc, since: &VersionVector) -> Vec<String> {
     let Some(held) = tree(doc, WORKSPACE_TREE_KEY) else { return Vec::new() };
     nodes_written_since(doc, WORKSPACE_TREE_KEY, since)
         .into_iter()
-        .filter(|&node| held.is_live(node) && placed(&held, node))
+        .filter(|&node| placed(&held, node))
         .filter_map(|node| held_text(&held, node, "documentId"))
         .collect()
 }
