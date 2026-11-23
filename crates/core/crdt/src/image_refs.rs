@@ -41,6 +41,10 @@ fn inline_refs(body: &str) -> Vec<&str> {
     let mut refs = Vec::new();
     let mut at = 0_usize;
     while let Some(bang) = find_from(body, "![", at) {
+        // A search never answers before where it began; one that does cannot advance the scan.
+        if bang < at {
+            break;
+        }
         let Some(close) = bang.checked_add(2).and_then(|from| find_from(body, "](", from)) else {
             break;
         };
