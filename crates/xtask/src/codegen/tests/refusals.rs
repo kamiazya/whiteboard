@@ -341,6 +341,10 @@ fn comments_wrap_at_the_column_and_a_short_one_stays_a_line() {
     assert!(out.starts_with("  /**\n   * word word"), "{out}");
     assert!(out.ends_with("   */\n"), "{out}");
     assert!(out.lines().all(|l| l.chars().count() <= 100), "{out}");
+    // The indent comes off the width: 80 columns of text at an indent of 40 take two lines.
+    let mut out = String::new();
+    ts_doc(&mut out, 40, &"word ".repeat(16));
+    assert!(out.lines().count() > 1, "{out}");
     let mut out = String::new();
     rust_doc(&mut out, 4, &"word ".repeat(30));
     assert!(out.lines().count() > 1 && out.lines().all(|l| l.starts_with("    /// ")), "{out}");
@@ -654,4 +658,15 @@ fn a_description_that_would_end_its_doc_comment_and_codes_that_collide_are_refus
     assert!(errors.iter().any(|e| e.contains("codes `a_1` and `a1` are both `a1`")), "{errors:?}");
     // One raw code said more than one way is not a collision.
     assert!(files(CONTRACT).is_ok());
+}
+
+#[test]
+fn only_a_whole_quoted_literal_is_a_line_biome_cannot_break() {
+    use super::super::emit::lone_string;
+    for line in ["  'abc',", "\"abc\"", "`a b`,"] {
+        assert!(lone_string(line), "{line}");
+    }
+    for line in ["'", "'abc", "abc'", "'a' + b", "x"] {
+        assert!(!lone_string(line), "{line}");
+    }
 }

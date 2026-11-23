@@ -436,7 +436,7 @@ pub(super) fn zod(checked: &Checked<'_>, source: &str) -> Result<String, Vec<Str
 
 /// A line holding only a string or template literal and its comma, which biome leaves as
 /// long as the string is: there is nowhere in it to break.
-fn lone_string(line: &str) -> bool {
+pub(super) fn lone_string(line: &str) -> bool {
     let line = line.trim_start();
     let line = line.strip_suffix(',').unwrap_or(line);
     ["'", "\"", "`"]
