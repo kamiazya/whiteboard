@@ -1,11 +1,18 @@
 import type { FacetTarget } from '@kamiazya/whiteboard-facet-engine'
 import {
+  DocumentHasNoFrontmatter,
   type DocumentKind,
+  EdgeLockedNothingWritten,
   type ExtensionFacets,
+  FacetSetNeedsPayload,
   growsPast,
+  NodeAndCanvasTarget,
+  NodeAndEdgeTarget,
+  NodeLockedNothingWritten,
+  NodeTargetNeedsOneDocument,
   type SpatialCanvas,
-  TAG_COUNT_LIMIT_PHRASE,
   TAGS_PER_ELEMENT_MAX,
+  TooManyTagsOnElement,
   type documentEngine as wire,
 } from '@kamiazya/whiteboard-model'
 import { type DocumentSession, withDocument } from '../document-session.js'
@@ -20,7 +27,6 @@ import {
 import type { ServerDeps } from '../server-deps.js'
 import { announceAgentActivity } from './agent-activity.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
-import { lockedDetail } from './element-lock.js'
 import { DocumentKindMismatchError, EdgeNotFoundError, NodeNotFoundError } from './errors.js'
 import {
   type FacetSetInput,
@@ -38,7 +44,7 @@ export { type FacetSetInput, facetSetInputSchema } from './facet-set.schemas.js'
 /** Neither `tags` nor `facets`: nothing to write, and a silent no-op would read as done. */
 export class FacetSetNeedsPayloadError extends Error {
   constructor() {
-    super('Nothing to set: pass `tags` (add/remove tags) or `facets` (extension facets), or both.')
+    super(FacetSetNeedsPayload())
     this.name = 'FacetSetNeedsPayloadError'
   }
 }
@@ -46,9 +52,7 @@ export class FacetSetNeedsPayloadError extends Error {
 /** A markdown document that has no frontmatter yet has nowhere to put a tag. */
 export class DocumentHasNoFrontmatterError extends Error {
   constructor(documentId: string) {
-    super(
-      `Document ${documentId} has no OKF frontmatter to tag. Write its content first with wb_workspace_edit's document.set op (a markdown body starting with a --- frontmatter block), then tag it.`,
-    )
+    super(DocumentHasNoFrontmatter(documentId))
     this.name = 'DocumentHasNoFrontmatterError'
   }
 }
@@ -65,11 +69,7 @@ export class DocumentHasNoFrontmatterError extends Error {
  */
 export class NodeTargetNeedsOneDocumentError extends Error {
   constructor(count: number) {
-    super(
-      `nodeId names a node of ONE document, and ${count} documentIds were given. ` +
-        'Node ids are scoped to their own document, so the same nodeId in two documents ' +
-        'is two unrelated nodes. Call once per document.',
-    )
+    super(NodeTargetNeedsOneDocument(count))
     this.name = 'NodeTargetNeedsOneDocumentError'
   }
 }
@@ -81,7 +81,7 @@ export class NodeTargetNeedsOneDocumentError extends Error {
  */
 export class NodeAndEdgeTargetError extends Error {
   constructor() {
-    super('nodeId targets a node and edgeId targets an edge; pass one or the other.')
+    super(NodeAndEdgeTarget())
     this.name = 'NodeAndEdgeTargetError'
   }
 }
@@ -93,9 +93,7 @@ export class NodeAndEdgeTargetError extends Error {
  */
 export class NodeAndCanvasTargetError extends Error {
   constructor() {
-    super(
-      "nodeId targets one node and target: 'canvas' targets the canvas envelope; pass one or the other.",
-    )
+    super(NodeAndCanvasTarget())
     this.name = 'NodeAndCanvasTargetError'
   }
 }
@@ -106,9 +104,9 @@ export class NodeAndCanvasTargetError extends Error {
  * and a tag RENAME that would reach a locked element refuses the whole batch
  * rather than rewriting some of what the board holds.
  */
-class ElementLockedError extends Error {
+export class ElementLockedError extends Error {
   constructor(kind: 'node' | 'edge', id: string) {
-    super(`${lockedDetail(kind, id)}. Nothing was written.`)
+    super(kind === 'node' ? NodeLockedNothingWritten(id) : EdgeLockedNothingWritten(id))
     this.name = 'ElementLockedError'
   }
 }
@@ -118,9 +116,9 @@ class ElementLockedError extends Error {
  * more tags than `TAGS_PER_ELEMENT_MAX` and more than it carries now. A set
  * stored larger before the bound still takes a change that does not grow it.
  */
-class TooManyTagsError extends Error {
+export class TooManyTagsError extends Error {
   constructor(what: string, count: number) {
-    super(`${what} would carry ${count} tags, past ${TAG_COUNT_LIMIT_PHRASE}. Nothing was written.`)
+    super(TooManyTagsOnElement(what, count))
     this.name = 'TooManyTagsError'
   }
 }

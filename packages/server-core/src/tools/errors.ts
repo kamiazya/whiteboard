@@ -4,6 +4,7 @@ import {
   DocumentSerializeFailed,
   describeThrown,
   FacetWriteRejected,
+  EdgeNotFound,
   NodeNotFound,
   REFUSAL_CODE_NODE_NOT_FOUND,
 } from '@kamiazya/whiteboard-model'
@@ -81,7 +82,7 @@ export class EdgeNotFoundError extends Error {
     public readonly documentId: string,
     public readonly edgeId: string,
   ) {
-    super(`edge not found: ${edgeId} in document ${documentId}`)
+    super(EdgeNotFound(edgeId, documentId))
     this.name = 'EdgeNotFoundError'
   }
 }

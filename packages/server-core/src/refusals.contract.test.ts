@@ -47,9 +47,19 @@ import { OkfParseError } from './tools/document-set.js'
 import {
   DocumentKindMismatchError,
   DocumentSerializeError,
+  EdgeNotFoundError,
   FacetWriteRejectedError,
   NodeNotFoundError,
 } from './tools/errors.js'
+import {
+  DocumentHasNoFrontmatterError,
+  ElementLockedError,
+  FacetSetNeedsPayloadError,
+  NodeAndCanvasTargetError,
+  NodeAndEdgeTargetError,
+  NodeTargetNeedsOneDocumentError,
+  TooManyTagsError,
+} from './tools/facet-set.js'
 import { NamelessLinkifyTargetError } from './tools/linkify-mentions.js'
 import { refuseAgainstLibrary } from './tools/tag-library.js'
 import {
@@ -357,6 +367,15 @@ const FACTORIES: Factories = {
   DocumentKindMismatch: (p) =>
     new DocumentKindMismatchError(p.documentId, p.kind as never, p.detail),
   NodeNotFound: (p) => new NodeNotFoundError(p.documentId, p.nodeId),
+  EdgeNotFound: (p) => new EdgeNotFoundError(p.documentId, p.edgeId),
+  FacetSetNeedsPayload: () => new FacetSetNeedsPayloadError(),
+  DocumentHasNoFrontmatter: (p) => new DocumentHasNoFrontmatterError(p.documentId),
+  NodeTargetNeedsOneDocument: (p) => new NodeTargetNeedsOneDocumentError(p.count),
+  NodeAndEdgeTarget: () => new NodeAndEdgeTargetError(),
+  NodeAndCanvasTarget: () => new NodeAndCanvasTargetError(),
+  NodeLockedNothingWritten: (p) => new ElementLockedError('node', p.id),
+  EdgeLockedNothingWritten: (p) => new ElementLockedError('edge', p.id),
+  TooManyTagsOnElement: (p) => new TooManyTagsError(p.what, p.count),
   WorkspaceNotFoundForCallerRead: (p) => new WorkspaceNotFoundForCallerError(p.workspaceId, 'read'),
   WorkspaceNotFoundForCallerReadKnown: (p) =>
     new WorkspaceNotFoundForCallerError(p.workspaceId, 'read', p.known),
