@@ -254,7 +254,14 @@ impl<'s> Writer<'s> {
         let closed = get(written, "propertyNames")
             .and_then(|names| self.values(scope, names, &mut Vec::new()));
         if let Some(names) = closed.filter(|names| !names.is_empty()) {
-            out.push(member("required", Value::Seq(names)));
+            // A set, as `_zod.values` is: each key once, where first met.
+            let mut once: Vec<Value> = Vec::new();
+            for name in names {
+                if !once.contains(&name) {
+                    once.push(name);
+                }
+            }
+            out.push(member("required", Value::Seq(once)));
         }
         out
     }

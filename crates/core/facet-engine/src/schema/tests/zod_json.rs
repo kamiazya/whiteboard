@@ -334,3 +334,28 @@ fn a_registered_definition_reached_twice_through_one_contract_is_written_once() 
     );
     assert_eq!(published_registering(defs, "Pair"), Some(parse(&zod)));
 }
+
+/// A key set is a set: a value two arms admit is required once, where it is
+/// first met (Zod 4.6.7 reads `_zod.values`, a `Set`), and an arm named twice
+/// is no cycle.
+#[test]
+fn a_closed_key_set_requires_each_key_once() {
+    let keys = r##"{"$defs": {
+        "X": {"type": "string", "const": "x"},
+        "Xy": {"type": "string", "enum": ["x", "y"]},
+        "Overlap": {"anyOf": [{"$ref": "#/$defs/X"}, {"$ref": "#/$defs/Xy"}]},
+        "Twin": {"anyOf": [{"$ref": "#/$defs/X"}, {"$ref": "#/$defs/X"}]},
+        "Keys": {"type": "object", "properties": {
+            "o": {"type": "object", "propertyNames": {"$ref": "#/$defs/Overlap"},
+                "additionalProperties": {"type": "boolean"}},
+            "t": {"type": "object", "propertyNames": {"$ref": "#/$defs/Twin"},
+                "additionalProperties": {"type": "boolean"}}
+        }, "required": ["o", "t"], "x-wb-order": ["o", "t"],
+        "additionalProperties": false, "x-wb-unknownKeys": "refuse"}
+    }}"##;
+    let x = r#"{"type":"string","const":"x"}"#;
+    let zod = format!(
+        r#"{{{DIALECT},"type":"object","properties":{{"o":{{"type":"object","propertyNames":{{"anyOf":[{x},{{"type":"string","enum":["x","y"]}}]}},"additionalProperties":{{"type":"boolean"}},"required":["x","y"]}},"t":{{"type":"object","propertyNames":{{"anyOf":[{x},{x}]}},"additionalProperties":{{"type":"boolean"}},"required":["x"]}}}},"required":["o","t"],"additionalProperties":false}}"#
+    );
+    assert_eq!(published(keys, "Keys"), Some(parse(&zod)));
+}
