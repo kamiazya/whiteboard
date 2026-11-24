@@ -1,0 +1,25 @@
+[package]
+name = "whiteboard-mcp"
+description = "The MCP protocol as a transport-agnostic JSON-RPC dispatcher: the 2025-era lifecycle, logging/setLevel and tools/list and tools/call routed to a tool catalogue, answering as the TypeScript SDK's server does."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+whiteboard-api-contracts = { path = "../../ops/api-contracts" }
+whiteboard-ports = { path = "../../ports/ports" }
+
+[dev-dependencies]
+whiteboard-port-fakes = { path = "../../testing/port-fakes" }
+whiteboard-proptest = { path = "../../testing/proptest" }
+
+# QR-21 layer 3: the same tests run natively and on wasm32 under Node.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[lints]
+workspace = true

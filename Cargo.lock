@@ -1824,6 +1824,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "whiteboard-mcp"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "wasm-bindgen-test",
+ "whiteboard-api-contracts",
+ "whiteboard-port-fakes",
+ "whiteboard-ports",
+ "whiteboard-proptest",
+]
+
+[[package]]
 name = "whiteboard-model"
 version = "0.0.0"
 dependencies = [

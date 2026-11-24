@@ -2,6 +2,12 @@
   "$comment": "Every `#[expect(lint)]` in the Rust workspace, counted per crate per lint, held from both sides by tools/arch-lint's expect-ledger.test.ts: a new expectation fails until it is listed here with a reason, and an entry whose count no longer matches fails too, so the ledger only shrinks by deletion. A site with two lints counts once for each. The reason is why the lint is wrong FOR THAT CLASS of site; the site's own `reason = \"...\"` says why for the one expression. A lint the workspace should instead satisfy belongs in the code, not here.",
   "entries": [
     {
+      "crate": "crates/adapters/mcp",
+      "lint": "clippy::cast_possible_truncation",
+      "count": 1,
+      "reason": "a JSON-RPC id read as the integer JavaScript reads, checked whole and within 2^53 beside the cast"
+    },
+    {
       "crate": "crates/bindings/wasm",
       "lint": "clippy::cast_possible_truncation",
       "count": 2,
