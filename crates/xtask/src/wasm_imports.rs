@@ -46,8 +46,8 @@ const HOST_IMPORTS: &[&str] = &["measure"];
 /// rule: `loro-internal` depends on `wasm-bindgen`, `js-sys` and
 /// `getrandom`'s `js` backend unconditionally on wasm32 (a peer id is random
 /// per document), so the crate that owns the CRDT cannot build without them,
-/// nor can any crate that links it (`workspace-index`, `history`, and `ops`,
-/// whose reads open a workspace record).
+/// nor can any crate that links it (`workspace-index`, `history`, `ops`,
+/// whose reads open a workspace record, and `mcp`, whose catalogue runs them).
 /// An allowance is not a host contract: the artifact that links such a crate
 /// must supply the randomness and the clock from its host (a later, separate
 /// CRDT artifact; the shipped `whiteboard-wasm` does not link it). It is held
@@ -58,6 +58,7 @@ pub(crate) const CORE_IMPORT_ALLOWANCES: &[(&str, &[&str])] = &[
     ("whiteboard-workspace-index", WASM_BINDGEN_MODULES),
     ("whiteboard-history", WASM_BINDGEN_MODULES),
     ("whiteboard-ops", WASM_BINDGEN_MODULES),
+    ("whiteboard-mcp", WASM_BINDGEN_MODULES),
 ];
 
 /// The modules `name`, a core crate, may import from.
@@ -418,21 +419,35 @@ mod tests {
         let index = "whiteboard-workspace-index".to_owned();
         let history = "whiteboard-history".to_owned();
         let ops = "whiteboard-ops".to_owned();
+        let mcp = "whiteboard-mcp".to_owned();
         assert_eq!(
             orphan_allowances(&[&det]),
             vec![
                 "whiteboard-crdt",
                 "whiteboard-workspace-index",
                 "whiteboard-history",
-                "whiteboard-ops"
+                "whiteboard-ops",
+                "whiteboard-mcp"
             ]
         );
         assert_eq!(
             orphan_allowances(&[&det, &crdt]),
-            vec!["whiteboard-workspace-index", "whiteboard-history", "whiteboard-ops"]
+            vec![
+                "whiteboard-workspace-index",
+                "whiteboard-history",
+                "whiteboard-ops",
+                "whiteboard-mcp"
+            ]
         );
-        assert_eq!(orphan_allowances(&[&det, &crdt, &index, &history]), vec!["whiteboard-ops"]);
-        assert!(orphan_allowances(&[&det, &crdt, &index, &history, &ops]).is_empty());
+        assert_eq!(
+            orphan_allowances(&[&det, &crdt, &index, &history]),
+            vec!["whiteboard-ops", "whiteboard-mcp"]
+        );
+        assert_eq!(
+            orphan_allowances(&[&det, &crdt, &index, &history, &ops]),
+            vec!["whiteboard-mcp"]
+        );
+        assert!(orphan_allowances(&[&det, &crdt, &index, &history, &ops, &mcp]).is_empty());
     }
 
     #[test]

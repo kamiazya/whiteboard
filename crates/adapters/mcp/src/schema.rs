@@ -135,7 +135,7 @@ fn within(
 }
 
 /// The type Zod names a value by when it refuses it.
-fn received(value: Option<&Value>) -> &'static str {
+pub(crate) fn received(value: Option<&Value>) -> &'static str {
     match value {
         None => "undefined",
         Some(Value::Null) => "null",

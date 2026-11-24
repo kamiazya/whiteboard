@@ -1,0 +1,154 @@
+{
+  "name": "wb_facet_set",
+  "description": "Tag documents, boards, nodes and edges, or set facets on them. `tags` adds and removes tags by name — on one or more markdown documents (OKF core tags), on a spatial document's board, or with nodeId / edgeId on one node or one edge — leaving the other tags alone. `facets` sets extension facets (keys like `visual.shape/v0`; wb_facet_list says which are registered) on the documents, on a spatial document's canvas (target: 'canvas' — where visual.theme/v0 chooses a theme and visual.edges/v0 routes every edge), or — with nodeId or edgeId — on one node or one edge of a spatial document, merging by key: an omitted key keeps its stored value, null deletes it. Registered facets are validated against their schema, their declared targets, and the assets they name. A workspace's tag library (the document at `tags`; wb_facet_list shows it) may restrict a key's values or make it one value at a time, and a tag outside it is refused before anything is written. One payload covers every document named, so tagging five notes is one call.",
+  "inputSchema": {
+    "type": "object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "workspaceId": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9-]+(\\/[a-zA-Z0-9-]+)?$",
+        "description": "Workspace id, <handle>/<segment>, or a segment of your own."
+      },
+      "documentIds": {
+        "minItems": 1,
+        "maxItems": 50,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+        },
+        "description": "The documents to write, all with the same payload."
+      },
+      "nodeId": {
+        "description": "Write to this node of a spatial document instead of to the document itself. Takes exactly one documentId.",
+        "type": "string",
+        "minLength": 1
+      },
+      "edgeId": {
+        "description": "Write to this edge of a spatial document instead of to the document itself. Takes exactly one documentId.",
+        "type": "string",
+        "minLength": 1
+      },
+      "tags": {
+        "description": "Add and remove tags by name on the documents, on a board, or (with nodeId / edgeId) on one node or edge; every other tag stays. A scoped tag is key:value in lowercase identifiers, e.g. health:failing, and one key may carry several values.",
+        "type": "object",
+        "properties": {
+          "add": {
+            "description": "Tags to add; one already present is left where it is.",
+            "maxItems": 1024,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          },
+          "remove": {
+            "description": "Tags to drop, by name.",
+            "maxItems": 1024,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          },
+          "rename": {
+            "description": "Rename tags throughout the documents named — their own tags and every node and edge — or, with nodeId / edgeId, on that object alone.",
+            "maxItems": 1024,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "from": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "description": "The tag as it is spelled now."
+                },
+                "to": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "description": "What to call it; an existing tag merges."
+                }
+              },
+              "required": ["from", "to"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "target": {
+        "type": "string",
+        "enum": ["document", "canvas"]
+      },
+      "facets": {
+        "description": "Extension facets to set, keyed `{namespace}.{name}/v{n}` (wb_facet_list says which are registered). Merged by key: an omitted key keeps its value, null deletes it. Not for tags — those are `tags`.",
+        "$ref": "#/$defs/ExtensionFacets"
+      }
+    },
+    "required": ["workspaceId", "documentIds"],
+    "additionalProperties": false,
+    "$defs": {
+      "ExtensionFacets": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      }
+    }
+  },
+  "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "title": "Tag and set facets on documents, canvases, nodes and edges"
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "updated": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "documentId": {
+              "type": "string",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+            },
+            "facets": {
+              "description": "The extension facets now on the document or node.",
+              "$ref": "#/$defs/ExtensionFacets"
+            },
+            "tags": {
+              "description": "The tags on the document, board, node or edge after the write, when `tags` was given.",
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["documentId", "facets"],
+          "additionalProperties": false
+        },
+        "description": "One entry per document, in the order asked for."
+      }
+    },
+    "required": ["updated"],
+    "additionalProperties": false,
+    "$defs": {
+      "ExtensionFacets": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      }
+    }
+  }
+}

@@ -1,0 +1,1246 @@
+{
+  "name": "wb_document_get",
+  "description": "Read one or more documents, each in its own format: a markdown document as OKF Markdown, a spatial one as JSON Canvas. The format is not a parameter — it follows from what each document was created as, and `kind` on each result says which you got. Each result carries the comment `threads` on the document in full (anchor, status, every message with author and time), and the `proposals` made to it with the status of each change (open, adopted or dismissed), when it has any. Threads and proposals too large to answer whole are trimmed and flagged `annotationsTruncated`. A document that cannot be read is reported in `failed` rather than failing the whole call.",
+  "inputSchema": {
+    "type": "object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "workspaceId": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9-]+(\\/[a-zA-Z0-9-]+)?$",
+        "description": "Workspace id, <handle>/<segment>, or a segment of your own."
+      },
+      "documentIds": {
+        "minItems": 1,
+        "maxItems": 20,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+        }
+      },
+      "options": {
+        "type": "object",
+        "properties": {
+          "strict": {
+            "default": false,
+            "description": "JSON Canvas only: drop the x-whiteboard extension so the output is plain JSON Canvas 1.0.",
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "required": ["workspaceId", "documentIds"],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false,
+    "title": "Read a document in its own format"
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "documents": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "documentId": {
+              "type": "string",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+            },
+            "kind": {
+              "type": "string",
+              "enum": ["spatial", "markdown"]
+            },
+            "content": {
+              "type": "string"
+            },
+            "frontmatter": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "title": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "resource": {
+                  "type": "string"
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "view": {
+                  "type": "string"
+                },
+                "generated": {
+                  "type": "object",
+                  "properties": {
+                    "by": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "at": {
+                      "type": "string",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                    }
+                  },
+                  "required": ["by", "at"],
+                  "additionalProperties": {}
+                },
+                "verified": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "by": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "at": {
+                        "type": "string",
+                        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                      }
+                    },
+                    "required": ["by", "at"],
+                    "additionalProperties": {}
+                  }
+                },
+                "facets": {
+                  "$ref": "#/$defs/ExtensionFacets"
+                },
+                "facetsRaw": {
+                  "description": "Root frontmatter keys the server does not interpret, kept verbatim under their own names (a note with `created: 2020-01-02` reads back as facetsRaw.created).",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {}
+                }
+              },
+              "required": ["type"],
+              "additionalProperties": false
+            },
+            "threads": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "anchor": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "spatial"
+                          },
+                          "nodeId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "edgeId": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "nodeIds": {
+                            "minItems": 2,
+                            "maxItems": 2000,
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "x": {
+                            "type": "integer"
+                          },
+                          "y": {
+                            "type": "integer"
+                          },
+                          "width": {
+                            "type": "integer",
+                            "minimum": 0
+                          },
+                          "height": {
+                            "type": "integer",
+                            "minimum": 0
+                          }
+                        },
+                        "required": ["kind", "x", "y"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "text"
+                          },
+                          "nodeId": {
+                            "description": "The text node the passage is in; omit for a markdown document's own body.",
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "quote": {
+                            "type": "object",
+                            "properties": {
+                              "prefix": {
+                                "description": "Text just before the passage, to tell it from a repeat.",
+                                "type": "string"
+                              },
+                              "exact": {
+                                "type": "string",
+                                "minLength": 1,
+                                "description": "The passage, quoted exactly as the body has it."
+                              },
+                              "suffix": {
+                                "description": "Text just after the passage, to tell it from a repeat.",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["exact"],
+                            "additionalProperties": false,
+                            "description": "What the passage says; this is what finds it if the text has moved."
+                          },
+                          "start": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "Character offset where the passage starts in the body (or node text) as you read it."
+                          },
+                          "end": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "Character offset just past the end of the passage."
+                          }
+                        },
+                        "required": ["kind", "quote", "start", "end"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "document"
+                          }
+                        },
+                        "required": ["kind"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": ["open", "resolved"]
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                  },
+                  "messages": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "body": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "author": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                        },
+                        "editedAt": {
+                          "type": "string",
+                          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                        }
+                      },
+                      "required": ["id", "body"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["id", "anchor", "status", "messages"],
+                "additionalProperties": false
+              }
+            },
+            "proposals": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "author": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                  },
+                  "changes": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "Your id for this change; any short unique string."
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["open", "adopted", "dismissed"]
+                            },
+                            "op": {
+                              "type": "string",
+                              "const": "node.add"
+                            },
+                            "node": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "x": {
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "type": "number"
+                                },
+                                "width": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "description": "Box width; text wraps at it. Omit it for the default."
+                                },
+                                "height": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "description": "Box height. Omit it and a text box is made tall enough for its text; a named one too short for the text is refused with the height it needs."
+                                },
+                                "color": {
+                                  "$ref": "#/$defs/CanvasColor"
+                                },
+                                "embed": {
+                                  "$ref": "#/$defs/NodeEmbed"
+                                },
+                                "facets": {
+                                  "$ref": "#/$defs/ExtensionFacets"
+                                },
+                                "tags": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "resource": {
+                                  "type": "object",
+                                  "properties": {
+                                    "mimeType": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    },
+                                    "location": {
+                                      "type": "string"
+                                    },
+                                    "subpath": {
+                                      "type": "string",
+                                      "pattern": "^#"
+                                    }
+                                  },
+                                  "required": ["mimeType"],
+                                  "additionalProperties": false
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "background": {
+                                  "type": "string"
+                                },
+                                "backgroundStyle": {
+                                  "type": "string",
+                                  "enum": ["cover", "ratio", "repeat"]
+                                }
+                              },
+                              "required": ["id", "x", "y", "width", "height"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["id", "status", "op", "node"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "Your id for this change; any short unique string."
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["open", "adopted", "dismissed"]
+                            },
+                            "op": {
+                              "type": "string",
+                              "const": "node.patch"
+                            },
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "patch": {
+                              "type": "object",
+                              "properties": {
+                                "x": {
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "type": "number"
+                                },
+                                "width": {
+                                  "description": "Box width; text wraps at it.",
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "height": {
+                                  "description": "Box height; one too short for the text is refused with the height it needs.",
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "color": {
+                                  "$ref": "#/$defs/CanvasColor"
+                                },
+                                "text": {
+                                  "type": "string"
+                                },
+                                "file": {
+                                  "type": "string"
+                                },
+                                "subpath": {
+                                  "type": "string",
+                                  "pattern": "^#"
+                                },
+                                "url": {
+                                  "type": "string",
+                                  "format": "uri"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "background": {
+                                  "type": "string"
+                                },
+                                "backgroundStyle": {
+                                  "type": "string",
+                                  "enum": ["cover", "ratio", "repeat"]
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "assumed": {
+                              "type": "object",
+                              "properties": {
+                                "x": {
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "type": "number"
+                                },
+                                "width": {
+                                  "description": "Box width; text wraps at it.",
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "height": {
+                                  "description": "Box height; one too short for the text is refused with the height it needs.",
+                                  "type": "number",
+                                  "minimum": 0
+                                },
+                                "color": {
+                                  "$ref": "#/$defs/CanvasColor"
+                                },
+                                "text": {
+                                  "type": "string"
+                                },
+                                "file": {
+                                  "type": "string"
+                                },
+                                "subpath": {
+                                  "type": "string",
+                                  "pattern": "^#"
+                                },
+                                "url": {
+                                  "type": "string",
+                                  "format": "uri"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "background": {
+                                  "type": "string"
+                                },
+                                "backgroundStyle": {
+                                  "type": "string",
+                                  "enum": ["cover", "ratio", "repeat"]
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["id", "status", "op", "nodeId", "patch", "assumed"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "Your id for this change; any short unique string."
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["open", "adopted", "dismissed"]
+                            },
+                            "op": {
+                              "type": "string",
+                              "const": "node.remove"
+                            },
+                            "nodeId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "assumed": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "x": {
+                                  "type": "number"
+                                },
+                                "y": {
+                                  "type": "number"
+                                },
+                                "width": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "description": "Box width; text wraps at it. Omit it for the default."
+                                },
+                                "height": {
+                                  "type": "number",
+                                  "minimum": 0,
+                                  "description": "Box height. Omit it and a text box is made tall enough for its text; a named one too short for the text is refused with the height it needs."
+                                },
+                                "color": {
+                                  "$ref": "#/$defs/CanvasColor"
+                                },
+                                "embed": {
+                                  "$ref": "#/$defs/NodeEmbed"
+                                },
+                                "facets": {
+                                  "$ref": "#/$defs/ExtensionFacets"
+                                },
+                                "tags": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "resource": {
+                                  "type": "object",
+                                  "properties": {
+                                    "mimeType": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "content": {
+                                      "type": "string"
+                                    },
+                                    "location": {
+                                      "type": "string"
+                                    },
+                                    "subpath": {
+                                      "type": "string",
+                                      "pattern": "^#"
+                                    }
+                                  },
+                                  "required": ["mimeType"],
+                                  "additionalProperties": false
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "background": {
+                                  "type": "string"
+                                },
+                                "backgroundStyle": {
+                                  "type": "string",
+                                  "enum": ["cover", "ratio", "repeat"]
+                                }
+                              },
+                              "required": ["id", "x", "y", "width", "height"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["id", "status", "op", "nodeId", "assumed"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "Your id for this change; any short unique string."
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["open", "adopted", "dismissed"]
+                            },
+                            "op": {
+                              "type": "string",
+                              "const": "edge.add"
+                            },
+                            "edge": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "from": {
+                                  "description": "The node the relation starts at.",
+                                  "$ref": "#/$defs/EdgeEnd"
+                                },
+                                "to": {
+                                  "description": "The node the relation ends at.",
+                                  "$ref": "#/$defs/EdgeEnd"
+                                },
+                                "color": {
+                                  "$ref": "#/$defs/CanvasColor"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "bends": {
+                                  "$ref": "#/$defs/Bends"
+                                },
+                                "facets": {
+                                  "$ref": "#/$defs/ExtensionFacets"
+                                },
+                                "tags": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": ["id", "from", "to"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["id", "status", "op", "edge"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "Your id for this change; any short unique string."
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["open", "adopted", "dismissed"]
+                            },
+                            "op": {
+                              "type": "string",
+                              "const": "edge.patch"
+                            },
+                            "edgeId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "patch": {
+                              "type": "object",
+                              "properties": {
+                                "from": {
+                                  "description": "The node the relation starts at.",
+                                  "$ref": "#/$defs/EdgeEnd"
+                                },
+                                "to": {
+                                  "description": "The node the relation ends at.",
+                                  "$ref": "#/$defs/EdgeEnd"
+                                },
+                                "color": {
+                                  "$ref": "#/$defs/CanvasColor"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "bends": {
+                                  "$ref": "#/$defs/Bends"
+                                },
+                                "facets": {
+                                  "$ref": "#/$defs/ExtensionFacets"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "assumed": {
+                              "type": "object",
+                              "properties": {
+                                "from": {
+                                  "description": "The node the relation starts at.",
+                                  "$ref": "#/$defs/EdgeEnd"
+                                },
+                                "to": {
+                                  "description": "The node the relation ends at.",
+                                  "$ref": "#/$defs/EdgeEnd"
+                                },
+                                "color": {
+                                  "$ref": "#/$defs/CanvasColor"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "bends": {
+                                  "$ref": "#/$defs/Bends"
+                                },
+                                "facets": {
+                                  "$ref": "#/$defs/ExtensionFacets"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["id", "status", "op", "edgeId", "patch", "assumed"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "Your id for this change; any short unique string."
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["open", "adopted", "dismissed"]
+                            },
+                            "op": {
+                              "type": "string",
+                              "const": "edge.remove"
+                            },
+                            "edgeId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "assumed": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "from": {
+                                  "description": "The node the relation starts at.",
+                                  "$ref": "#/$defs/EdgeEnd"
+                                },
+                                "to": {
+                                  "description": "The node the relation ends at.",
+                                  "$ref": "#/$defs/EdgeEnd"
+                                },
+                                "color": {
+                                  "$ref": "#/$defs/CanvasColor"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "bends": {
+                                  "$ref": "#/$defs/Bends"
+                                },
+                                "facets": {
+                                  "$ref": "#/$defs/ExtensionFacets"
+                                },
+                                "tags": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": ["id", "from", "to"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["id", "status", "op", "edgeId", "assumed"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "Your id for this change; any short unique string."
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["open", "adopted", "dismissed"]
+                            },
+                            "op": {
+                              "type": "string",
+                              "const": "line.add"
+                            },
+                            "line": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "from": {
+                                  "description": "Where the line starts: on a node (`{kind:\"node\",node}`) or at a free point on the canvas (`{kind:\"point\",point}`).",
+                                  "$ref": "#/$defs/LineEnd"
+                                },
+                                "to": {
+                                  "description": "Where the line ends: on a node (`{kind:\"node\",node}`) or at a free point on the canvas (`{kind:\"point\",point}`).",
+                                  "$ref": "#/$defs/LineEnd"
+                                },
+                                "color": {
+                                  "$ref": "#/$defs/CanvasColor"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "bends": {
+                                  "$ref": "#/$defs/Bends"
+                                },
+                                "facets": {
+                                  "$ref": "#/$defs/ExtensionFacets"
+                                }
+                              },
+                              "required": ["id", "from", "to"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["id", "status", "op", "line"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "Your id for this change; any short unique string."
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["open", "adopted", "dismissed"]
+                            },
+                            "op": {
+                              "type": "string",
+                              "const": "line.patch"
+                            },
+                            "lineId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "patch": {
+                              "type": "object",
+                              "properties": {
+                                "from": {
+                                  "description": "Where the line starts: on a node (`{kind:\"node\",node}`) or at a free point on the canvas (`{kind:\"point\",point}`).",
+                                  "$ref": "#/$defs/LineEnd"
+                                },
+                                "to": {
+                                  "description": "Where the line ends: on a node (`{kind:\"node\",node}`) or at a free point on the canvas (`{kind:\"point\",point}`).",
+                                  "$ref": "#/$defs/LineEnd"
+                                },
+                                "color": {
+                                  "$ref": "#/$defs/CanvasColor"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "bends": {
+                                  "$ref": "#/$defs/Bends"
+                                },
+                                "facets": {
+                                  "$ref": "#/$defs/ExtensionFacets"
+                                }
+                              },
+                              "additionalProperties": false
+                            },
+                            "assumed": {
+                              "type": "object",
+                              "properties": {
+                                "from": {
+                                  "description": "Where the line starts: on a node (`{kind:\"node\",node}`) or at a free point on the canvas (`{kind:\"point\",point}`).",
+                                  "$ref": "#/$defs/LineEnd"
+                                },
+                                "to": {
+                                  "description": "Where the line ends: on a node (`{kind:\"node\",node}`) or at a free point on the canvas (`{kind:\"point\",point}`).",
+                                  "$ref": "#/$defs/LineEnd"
+                                },
+                                "color": {
+                                  "$ref": "#/$defs/CanvasColor"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "bends": {
+                                  "$ref": "#/$defs/Bends"
+                                },
+                                "facets": {
+                                  "$ref": "#/$defs/ExtensionFacets"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["id", "status", "op", "lineId", "patch", "assumed"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "Your id for this change; any short unique string."
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["open", "adopted", "dismissed"]
+                            },
+                            "op": {
+                              "type": "string",
+                              "const": "line.remove"
+                            },
+                            "lineId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "assumed": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "from": {
+                                  "description": "Where the line starts: on a node (`{kind:\"node\",node}`) or at a free point on the canvas (`{kind:\"point\",point}`).",
+                                  "$ref": "#/$defs/LineEnd"
+                                },
+                                "to": {
+                                  "description": "Where the line ends: on a node (`{kind:\"node\",node}`) or at a free point on the canvas (`{kind:\"point\",point}`).",
+                                  "$ref": "#/$defs/LineEnd"
+                                },
+                                "color": {
+                                  "$ref": "#/$defs/CanvasColor"
+                                },
+                                "label": {
+                                  "type": "string"
+                                },
+                                "bends": {
+                                  "$ref": "#/$defs/Bends"
+                                },
+                                "facets": {
+                                  "$ref": "#/$defs/ExtensionFacets"
+                                }
+                              },
+                              "required": ["id", "from", "to"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["id", "status", "op", "lineId", "assumed"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1,
+                              "description": "Your id for this change; any short unique string."
+                            },
+                            "status": {
+                              "type": "string",
+                              "enum": ["open", "adopted", "dismissed"]
+                            },
+                            "op": {
+                              "type": "string",
+                              "const": "body.replace"
+                            },
+                            "anchor": {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "const": "text"
+                                },
+                                "nodeId": {
+                                  "description": "The text node the passage is in; omit for a markdown document's own body.",
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "quote": {
+                                  "type": "object",
+                                  "properties": {
+                                    "prefix": {
+                                      "description": "Text just before the passage, to tell it from a repeat.",
+                                      "type": "string"
+                                    },
+                                    "exact": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "description": "The passage, quoted exactly as the body has it."
+                                    },
+                                    "suffix": {
+                                      "description": "Text just after the passage, to tell it from a repeat.",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": ["exact"],
+                                  "additionalProperties": false,
+                                  "description": "What the passage says; this is what finds it if the text has moved."
+                                },
+                                "start": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "description": "Character offset where the passage starts in the body (or node text) as you read it."
+                                },
+                                "end": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "description": "Character offset just past the end of the passage."
+                                }
+                              },
+                              "required": ["kind", "quote", "start", "end"],
+                              "additionalProperties": false,
+                              "description": "Which passage to replace."
+                            },
+                            "text": {
+                              "type": "string",
+                              "description": "What the passage becomes; empty deletes it."
+                            },
+                            "assumed": {
+                              "type": "string",
+                              "description": "What the passage said when you wrote this; refused by name if it has changed since."
+                            }
+                          },
+                          "required": ["id", "status", "op", "anchor", "text", "assumed"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": ["id", "changes"],
+                "additionalProperties": false
+              }
+            },
+            "annotationsTruncated": {
+              "description": "Present when this document alone exceeded the response budget: its content is whole, and `threads` and `proposals` hold only the leading entries that fit.",
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": ["documentId", "kind", "content"],
+          "additionalProperties": false
+        }
+      },
+      "failed": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "documentId": {
+              "type": "string",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": ["documentId", "reason"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["documents", "failed"],
+    "additionalProperties": false,
+    "$defs": {
+      "ExtensionFacets": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      },
+      "CanvasColor": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["1", "2", "3", "4", "5", "6"]
+          },
+          {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          }
+        ]
+      },
+      "NodeEmbed": {
+        "type": "object",
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+          },
+          "versionRef": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["documentId"],
+        "additionalProperties": false
+      },
+      "EdgeEnd": {
+        "type": "object",
+        "properties": {
+          "node": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The node this end attaches to."
+          },
+          "side": {
+            "description": "The side of the node to attach to. Omit it: the router picks the side that keeps the line clear of other boxes, and a named side is kept even through one.",
+            "type": "string",
+            "enum": ["top", "right", "bottom", "left"]
+          },
+          "end": {
+            "description": "The arrowhead drawn at this end.",
+            "type": "string",
+            "enum": ["none", "arrow"]
+          }
+        },
+        "required": ["node"],
+        "additionalProperties": false
+      },
+      "Bends": {
+        "minItems": 1,
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/CanvasPoint"
+        }
+      },
+      "CanvasPoint": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          }
+        },
+        "required": ["x", "y"],
+        "additionalProperties": false
+      },
+      "LineEnd": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "node"
+              },
+              "node": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The node this end attaches to."
+              },
+              "side": {
+                "description": "The side of the node to attach to. Omit it: the router picks the side that keeps the line clear of other boxes, and a named side is kept even through one.",
+                "type": "string",
+                "enum": ["top", "right", "bottom", "left"]
+              },
+              "end": {
+                "description": "The arrowhead drawn at this end.",
+                "type": "string",
+                "enum": ["none", "arrow"]
+              }
+            },
+            "required": ["kind", "node"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "point"
+              },
+              "point": {
+                "description": "Where this end sits, in canvas coordinates.",
+                "$ref": "#/$defs/CanvasPoint"
+              },
+              "end": {
+                "description": "The arrowhead drawn at this end.",
+                "type": "string",
+                "enum": ["none", "arrow"]
+              }
+            },
+            "required": ["kind", "point"],
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  }
+}

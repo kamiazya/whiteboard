@@ -1,0 +1,398 @@
+{
+  "name": "wb_canvas_snapshot",
+  "description": "Read a spatial canvas as a compact snapshot: every node with its type, text, geometry, lock state, facets and tags, plus every edge and every line with its bends and facets. Long text and large boards are cut, and the true totals (nodeCount, edgeCount, lineCount) are reported alongside so nothing is hidden silently. Comments are not part of the board: wb_document_get reads every thread whole. Prefer this over wb_document_get when reading a canvas to decide what to change.",
+  "inputSchema": {
+    "type": "object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "workspaceId": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9-]+(\\/[a-zA-Z0-9-]+)?$",
+        "description": "Workspace id, <handle>/<segment>, or a segment of your own."
+      },
+      "documentId": {
+        "type": "string",
+        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+      },
+      "layout": {
+        "type": "boolean"
+      }
+    },
+    "required": ["workspaceId", "documentId"],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false,
+    "title": "Read a spatial canvas as a compact snapshot"
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "documentId": {
+        "type": "string",
+        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+      },
+      "nodes": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": {
+              "type": "string",
+              "enum": ["text", "file", "link", "group"]
+            },
+            "x": {
+              "type": "number"
+            },
+            "y": {
+              "type": "number"
+            },
+            "width": {
+              "type": "number",
+              "minimum": 0
+            },
+            "height": {
+              "type": "number",
+              "minimum": 0
+            },
+            "text": {
+              "type": "string"
+            },
+            "textTruncated": {
+              "type": "boolean",
+              "const": true
+            },
+            "label": {
+              "type": "string"
+            },
+            "file": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "color": {
+              "$ref": "#/$defs/CanvasColor"
+            },
+            "locked": {
+              "type": "boolean",
+              "const": true
+            },
+            "facets": {
+              "$ref": "#/$defs/ExtensionFacets"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "overflows": {
+              "type": "boolean",
+              "const": true
+            }
+          },
+          "required": ["id", "type", "x", "y", "width", "height"],
+          "additionalProperties": false
+        }
+      },
+      "edges": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "from": {
+              "$ref": "#/$defs/EdgeEnd"
+            },
+            "to": {
+              "$ref": "#/$defs/EdgeEnd"
+            },
+            "label": {
+              "type": "string"
+            },
+            "color": {
+              "$ref": "#/$defs/CanvasColor"
+            },
+            "locked": {
+              "type": "boolean",
+              "const": true
+            },
+            "bends": {
+              "$ref": "#/$defs/Bends"
+            },
+            "facets": {
+              "$ref": "#/$defs/ExtensionFacets"
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": ["id", "from", "to"],
+          "additionalProperties": false
+        }
+      },
+      "lines": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "from": {
+              "$ref": "#/$defs/LineEnd"
+            },
+            "to": {
+              "$ref": "#/$defs/LineEnd"
+            },
+            "label": {
+              "type": "string"
+            },
+            "color": {
+              "$ref": "#/$defs/CanvasColor"
+            },
+            "bends": {
+              "$ref": "#/$defs/Bends"
+            },
+            "facets": {
+              "$ref": "#/$defs/ExtensionFacets"
+            }
+          },
+          "required": ["id", "from", "to"],
+          "additionalProperties": false
+        }
+      },
+      "nodeCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "edgeCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "lineCount": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "truncated": {
+        "type": "boolean"
+      },
+      "layout": {
+        "type": "object",
+        "properties": {
+          "overlaps": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                }
+              ],
+              "items": false,
+              "minItems": 2,
+              "maxItems": 2
+            }
+          },
+          "containment": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "parent": {
+                  "type": "string"
+                },
+                "child": {
+                  "type": "string"
+                }
+              },
+              "required": ["parent", "child"],
+              "additionalProperties": false
+            }
+          },
+          "clusters": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "freeRegions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "number"
+                },
+                "y": {
+                  "type": "number"
+                },
+                "w": {
+                  "type": "number"
+                },
+                "h": {
+                  "type": "number"
+                }
+              },
+              "required": ["x", "y", "w", "h"],
+              "additionalProperties": false
+            }
+          },
+          "partial": {
+            "type": "boolean"
+          }
+        },
+        "required": ["overlaps", "containment", "clusters", "freeRegions", "partial"],
+        "additionalProperties": false
+      }
+    },
+    "required": [
+      "documentId",
+      "nodes",
+      "edges",
+      "lines",
+      "nodeCount",
+      "edgeCount",
+      "lineCount",
+      "truncated"
+    ],
+    "additionalProperties": false,
+    "$defs": {
+      "CanvasColor": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["1", "2", "3", "4", "5", "6"]
+          },
+          {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          }
+        ]
+      },
+      "ExtensionFacets": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      },
+      "EdgeEnd": {
+        "type": "object",
+        "properties": {
+          "node": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The node this end attaches to."
+          },
+          "side": {
+            "description": "The side of the node to attach to. Omit it: the router picks the side that keeps the line clear of other boxes, and a named side is kept even through one.",
+            "type": "string",
+            "enum": ["top", "right", "bottom", "left"]
+          },
+          "end": {
+            "description": "The arrowhead drawn at this end.",
+            "type": "string",
+            "enum": ["none", "arrow"]
+          }
+        },
+        "required": ["node"],
+        "additionalProperties": false
+      },
+      "Bends": {
+        "minItems": 1,
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/CanvasPoint"
+        }
+      },
+      "CanvasPoint": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          }
+        },
+        "required": ["x", "y"],
+        "additionalProperties": false
+      },
+      "LineEnd": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "node"
+              },
+              "node": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The node this end attaches to."
+              },
+              "side": {
+                "description": "The side of the node to attach to. Omit it: the router picks the side that keeps the line clear of other boxes, and a named side is kept even through one.",
+                "type": "string",
+                "enum": ["top", "right", "bottom", "left"]
+              },
+              "end": {
+                "description": "The arrowhead drawn at this end.",
+                "type": "string",
+                "enum": ["none", "arrow"]
+              }
+            },
+            "required": ["kind", "node"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "point"
+              },
+              "point": {
+                "description": "Where this end sits, in canvas coordinates.",
+                "$ref": "#/$defs/CanvasPoint"
+              },
+              "end": {
+                "description": "The arrowhead drawn at this end.",
+                "type": "string",
+                "enum": ["none", "arrow"]
+              }
+            },
+            "required": ["kind", "point"],
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  }
+}

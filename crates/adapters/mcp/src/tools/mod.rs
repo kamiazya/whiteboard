@@ -1,0 +1,110 @@
+//! The tool catalogue over the ops table: each tool whose operation
+//! `whiteboard-ops` implements, listed as its contract publishes it and
+//! called as the TypeScript's tool wrapper calls it.
+//!
+//! A tool's published surface is `contracts/tools/<name>.json`, written from
+//! the TypeScript server's own `tools/list` and held equal to it there
+//! (`packages/mcp-server/src/server/mcp/tool-contracts.oracle.test.ts`). A
+//! call is judged against the input the binding declares, in the SDK's words,
+//! run through the operation, and answered with the output as
+//! `structuredContent` and as its `JSON.stringify` text, or with the
+//! operation's refusal.
+
+mod document_list;
+mod input;
+mod json;
+
+use serde_json::{Map, Value, json};
+use whiteboard_ops::{DocumentList, Operation, Ports};
+
+use crate::{ToolCatalogue, ToolError};
+use input::Input;
+use json::Json;
+
+/// The tools the TypeScript registers whose operation is not ported yet:
+/// not listed, and `Tool <name> not found` when called. A tool leaves this
+/// list in the slice that binds its operation.
+pub const PENDING_TOOLS: &[&str] = &[
+    "canvas_view",
+    "wb_body_edit",
+    "wb_canvas_edit",
+    "wb_canvas_snapshot",
+    "wb_document_get",
+    "wb_document_search",
+    "wb_facet_list",
+    "wb_facet_set",
+    "wb_scene_render",
+    "wb_thread_edit",
+    "wb_version_list",
+    "wb_version_restore",
+    "wb_version_save",
+    "wb_viewport_set",
+    "wb_workspace_edit",
+];
+
+/// An operation as a tool: its name and contract, its input as the SDK
+/// judges it, and its output as the tool answers it.
+trait Binding: Operation {
+    const NAME: &'static str;
+    /// The contract file's text: the tool as `tools/list` publishes it.
+    const CONTRACT: &'static str;
+    const INPUT: Input;
+
+    /// The operation's input from arguments `INPUT` has passed.
+    fn input(arguments: &Map<String, Value>) -> Self::Input;
+
+    fn output(output: &Self::Output) -> Json;
+}
+
+/// The tools of the ops table, over one ports bundle.
+pub struct OpsCatalogue<P> {
+    ports: P,
+}
+
+impl<P: Ports> OpsCatalogue<P> {
+    pub fn new(ports: P) -> Self {
+        Self { ports }
+    }
+}
+
+impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
+    fn tools(&self) -> Vec<Value> {
+        vec![contract::<DocumentList>()]
+    }
+
+    async fn call(
+        &self,
+        name: &str,
+        arguments: Option<&Map<String, Value>>,
+    ) -> Result<Value, ToolError> {
+        if name == DocumentList::NAME {
+            return run::<DocumentList, P>(&self.ports, arguments).await;
+        }
+        Err(ToolError::NotFound)
+    }
+}
+
+/// The tool as its contract publishes it; the contract is held to parse by
+/// the catalogue's tests.
+fn contract<B: Binding>() -> Value {
+    serde_json::from_str(B::CONTRACT).unwrap_or_default()
+}
+
+/// One call: the SDK's judgement of the arguments (absent: an empty object),
+/// the operation, and the result the tool wrapper answers.
+async fn run<B: Binding, P: Ports>(
+    ports: &P,
+    arguments: Option<&Map<String, Value>>,
+) -> Result<Value, ToolError> {
+    let empty = Map::new();
+    let arguments = arguments.unwrap_or(&empty);
+    if let Some(text) = input::refusal(B::NAME, &B::INPUT, arguments) {
+        return Err(ToolError::Failed(text));
+    }
+    let output = B::execute(ports, B::input(arguments)).await.map_err(ToolError::Refused)?;
+    let output = B::output(&output);
+    Ok(json!({
+        "content": [{ "type": "text", "text": output.text() }],
+        "structuredContent": output.value(),
+    }))
+}

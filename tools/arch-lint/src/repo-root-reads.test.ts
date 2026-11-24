@@ -114,6 +114,8 @@ const STAYS_IN_PACKAGE: Readonly<Record<string, string>> = {
     "imports the daemon's registered tool list to hold the skills against it",
   'packages/mcp-server/src/server/tool-call-examples.contract.test.ts':
     "parses every tool call a skill, the README or a docs page shows through the input schema the daemon's own createServer registers for that tool",
+  'packages/mcp-server/src/server/mcp/tool-contracts.oracle.test.ts':
+    "holds contracts/tools to the tools/list the daemon's own createMcpServer answers, which this project cannot import",
   'packages/mcp-server/src/shared/test-utils/repo-root.test.ts':
     'tests the helper that finds the repo root',
 }

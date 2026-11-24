@@ -1,0 +1,209 @@
+{
+  "name": "wb_facet_list",
+  "description": "List what a write may name: facets (the exact key to write, the owning plugin, which objects each may be attached to, the payload schema) and assets (the stencil, theme and icon ids a write names by id). This deployment’s, plus — when workspaceId is given — the stencils the workspace defines in its own library, the tags it already uses, counted by what carries them, and the keys its tag library declares (the document at `tags`: per key a description, exclusivity, and the admitted values with a colour each). Optionally filtered to one target or one asset kind.",
+  "inputSchema": {
+    "type": "object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "target": {
+        "description": "Keeps only facets whose declared targets include this one.",
+        "type": "string",
+        "enum": ["document", "canvas", "node", "edge"]
+      },
+      "assetKind": {
+        "description": "Keeps only assets of this kind. The facets are unaffected.",
+        "type": "string",
+        "enum": ["themes", "icons", "stencils"]
+      },
+      "workspaceId": {
+        "description": "Also list the stencils this workspace defines in its own library, as `workspace.<name>`. Omit for the deployment’s vocabulary alone.",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false,
+    "title": "List registered facets, a workspace's stencils, tags in use and tag library"
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "facets": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "displayName": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "version": {
+              "type": "string"
+            },
+            "targets": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["document", "canvas", "node", "edge"]
+              }
+            },
+            "schema": {},
+            "assetRefs": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {
+                "type": "string",
+                "enum": ["themes", "icons", "stencils"]
+              }
+            }
+          },
+          "required": ["key", "namespace", "displayName", "name", "version", "targets"],
+          "additionalProperties": false
+        }
+      },
+      "assets": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": ["themes", "icons", "stencils"]
+            },
+            "namespace": {
+              "type": "string"
+            },
+            "displayName": {
+              "type": "string"
+            }
+          },
+          "required": ["id", "kind", "namespace"],
+          "additionalProperties": false
+        }
+      },
+      "otherTargets": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string",
+          "enum": ["document", "canvas", "node", "edge"]
+        },
+        "additionalProperties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "tags": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "tag": {
+              "type": "string",
+              "minLength": 1
+            },
+            "key": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "documents": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "boards": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "nodes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "edges": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["tag", "documents", "boards", "nodes", "edges"],
+          "additionalProperties": false
+        }
+      },
+      "tagLibrary": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "key": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "exclusive": {
+              "type": "boolean"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "type": "string"
+                  },
+                  "color": {
+                    "$ref": "#/$defs/CanvasColor"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                },
+                "required": ["value"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["key"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["facets", "assets"],
+    "additionalProperties": false,
+    "$defs": {
+      "CanvasColor": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["1", "2", "3", "4", "5", "6"]
+          },
+          {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          }
+        ]
+      }
+    }
+  }
+}

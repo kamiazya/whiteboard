@@ -11,9 +11,11 @@ publish.workspace = true
 [dependencies]
 serde_json.workspace = true
 whiteboard-api-contracts = { path = "../../ops/api-contracts" }
+whiteboard-ops = { path = "../../ops/ops" }
 whiteboard-ports = { path = "../../ports/ports" }
 
 [dev-dependencies]
+whiteboard-model = { path = "../../core/model" }
 whiteboard-port-fakes = { path = "../../testing/port-fakes" }
 whiteboard-proptest = { path = "../../testing/proptest" }
 

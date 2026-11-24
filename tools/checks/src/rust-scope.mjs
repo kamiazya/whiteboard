@@ -93,6 +93,9 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/quality',
     'packages/canvas-render/src/oracle',
     'packages/canvas-render/src/test-utils',
+    // The TypeScript MCP server's tool-call answers, replayed by the Rust MCP
+    // adapter's catalogue (crates/adapters/mcp/tests/tool_calls.rs).
+    'packages/mcp-server/src/server/mcp/oracle',
     // The shim over the artifact, tested in the rust job (core-wasm-rust).
     'packages/core-wasm',
     // The Rust codec replays the OKF recordings that live beside the codec's

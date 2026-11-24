@@ -20,9 +20,10 @@
 //! - The table ([`OPERATIONS`], [`each_operation`]) is data: one [`Row`] per
 //!   operation naming its tool, its route and its input and output contracts,
 //!   with `execute` reached through the type. An adapter builds its dispatch
-//!   from it rather than from a list of its own. The contracts are named by
-//!   the server-core schema they mirror until the tool contracts are generated
-//!   from `contracts/`; input validation is the adapter's, against them.
+//!   from it rather than from a list of its own, and `whiteboard-mcp` holds
+//!   every tool a row names to be listed. The contracts are named by the
+//!   server-core schema they mirror; a tool's published surface is
+//!   `contracts/tools/<name>.json`, and input validation is the adapter's.
 //! - A read opens the workspace record from the bytes the store answers and
 //!   answers from `whiteboard-workspace-index`'s reads. A write goes through
 //!   one bracket — lock, load, engine write, persist, release — which lands

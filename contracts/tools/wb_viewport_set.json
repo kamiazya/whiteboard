@@ -1,0 +1,70 @@
+{
+  "name": "wb_viewport_set",
+  "description": "Move a watching browser's view of a spatial canvas: frame specific elements, or pan and zoom directly. Answers delivered:false rather than failing when no browser is open, so it is safe to call headlessly; delivered:true means a browser was told, not that it confirmed. wb_canvas_edit already follows its own edits — use this to point at something you did not just change.",
+  "inputSchema": {
+    "type": "object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "workspaceId": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9-]+(\\/[a-zA-Z0-9-]+)?$",
+        "description": "Workspace id, <handle>/<segment>, or a segment of your own."
+      },
+      "documentId": {
+        "type": "string",
+        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+      },
+      "mode": {
+        "description": "fit frames elementIds (none: the whole board) and takes no scrollX, scrollY or zoom; move goes to scrollX, scrollY at zoom and takes no elementIds. Omitted: move if you give scrollX, scrollY or zoom, else fit.",
+        "type": "string",
+        "enum": ["fit", "move"]
+      },
+      "elementIds": {
+        "maxItems": 2000,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "scrollX": {
+        "description": "move: pan offset on x; omitted is 0.",
+        "type": "number"
+      },
+      "scrollY": {
+        "description": "move: pan offset on y; omitted is 0.",
+        "type": "number"
+      },
+      "zoom": {
+        "description": "Scale, 0.1 to 10; 1 is actual size (not a percentage); omitted is 1.",
+        "type": "number",
+        "minimum": 0.1,
+        "maximum": 10
+      }
+    },
+    "required": ["workspaceId", "documentId"],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": false,
+    "title": "Move a watching browser's view of the spatial canvas"
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "documentId": {
+        "type": "string",
+        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+      },
+      "delivered": {
+        "type": "boolean",
+        "description": "True when a subscribed browser was sent the request; the page does not confirm."
+      }
+    },
+    "required": ["documentId", "delivered"],
+    "additionalProperties": false
+  }
+}

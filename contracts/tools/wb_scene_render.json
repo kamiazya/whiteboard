@@ -1,0 +1,73 @@
+{
+  "name": "wb_scene_render",
+  "description": "Render a document as SVG — a canvas as its laid-out scene, a markdown document as a page. A one-way projection: the SVG cannot be parsed back into a document. `embedReferences` draws what it links to (file nodes, `![[path]]` embeds, `#Heading` / `#Group` parts); `fragment` renders one part on its own. Comments are left out unless `comments` is true.",
+  "inputSchema": {
+    "type": "object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "workspaceId": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9-]+(\\/[a-zA-Z0-9-]+)?$",
+        "description": "Workspace id, <handle>/<segment>, or a segment of your own."
+      },
+      "documentId": {
+        "type": "string",
+        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+      },
+      "embedReferences": {
+        "default": false,
+        "description": "Resolve what this document references against the workspace: a file node's target renders inside the node (a markdown document as its body, a canvas as a miniature), a `![[path]]` embed in any markdown body renders the document or the `#Heading` / `#Group` part it names, and every reference shows its readable name instead of its raw id. Off by default so the render stays a pure function of this document alone; off, an embed renders as its address.",
+        "type": "boolean"
+      },
+      "fragment": {
+        "description": "Render one PART of the document rather than the whole: a heading's text for a markdown document (that section, through the next heading of the same or a higher level), or a group's label for a canvas (the group, the nodes inside its box, and the edges between them). The same names `[[path#...]]` uses; `^` followed by a node id addresses a node durably. Unknown → an error naming it.",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "comments": {
+        "default": false,
+        "description": "Draw the review conversation into a canvas: comment pins and cards, region outlines, and the highlight behind a quoted passage. Off by default — a picture handed to someone else carries the board, not the authors' discussion of it. A markdown document has no such layer in its picture.",
+        "type": "boolean"
+      },
+      "style": {
+        "default": "clean",
+        "description": "Which look a canvas is drawn in. 'clean' (the default) is the bundled look whatever the document says, so an agent reading the SVG never pays for a theme's jittered geometry or glow unasked. 'document' draws the theme the canvas names in its visual.theme/v0 facet. A theme id such as 'visual.sketch' draws that theme without the document naming it — a preview. On a markdown document it draws the canvases the body embeds.",
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["clean", "document"]
+          },
+          {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
+          }
+        ]
+      }
+    },
+    "required": ["workspaceId", "documentId"],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false,
+    "title": "Render the laid-out scene as SVG"
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "svg": {
+        "type": "string"
+      },
+      "width": {
+        "type": "number"
+      },
+      "height": {
+        "type": "number"
+      }
+    },
+    "required": ["svg", "width", "height"],
+    "additionalProperties": false
+  }
+}
