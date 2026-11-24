@@ -56,14 +56,19 @@ impl Collection {
     }
 
     /// What a markdown document is told when asked for an element.
-    const fn mismatch(self) -> &'static str {
-        match self {
+    fn mismatch(self, document_id: &str, kind: Kind) -> Refusal {
+        let detail = match self {
             Self::Nodes => {
                 "Node-target facets live on a spatial document's node. Omit nodeId to set facets on a markdown document."
             }
             Self::Edges => {
                 "Edge-target facets live on a spatial document's edge. Omit edgeId to set facets on a markdown document."
             }
+        };
+        Refusal::DocumentKindMismatch {
+            document_id: document_id.to_owned(),
+            kind: kind.name().to_owned(),
+            detail: detail.to_owned(),
         }
     }
 
@@ -189,13 +194,7 @@ pub(super) fn element(
 ) -> Result<Change, Halt> {
     let Some(kind) = kind else { return Err(which.not_found(doc.id, id).into()) };
     if kind != Kind::Spatial {
-        let detail = which.mismatch().to_owned();
-        return Err(Refusal::DocumentKindMismatch {
-            document_id: doc.id.to_owned(),
-            kind: kind.name().to_owned(),
-            detail,
-        }
-        .into());
+        return Err(which.mismatch(doc.id, kind).into());
     }
     let canvas = doc.canvas()?;
     let members = elements(&canvas, which.name());

@@ -48,17 +48,17 @@ import {
   DocumentKindMismatchError,
   DocumentSerializeError,
   EdgeNotFoundError,
+  ElementLockedError,
   FacetWriteRejectedError,
   NodeNotFoundError,
+  TooManyTagsError,
 } from './tools/errors.js'
 import {
   DocumentHasNoFrontmatterError,
-  ElementLockedError,
   FacetSetNeedsPayloadError,
   NodeAndCanvasTargetError,
   NodeAndEdgeTargetError,
   NodeTargetNeedsOneDocumentError,
-  TooManyTagsError,
 } from './tools/facet-set.js'
 import { NamelessLinkifyTargetError } from './tools/linkify-mentions.js'
 import { refuseAgainstLibrary } from './tools/tag-library.js'

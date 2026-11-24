@@ -3,10 +3,16 @@ import {
   DocumentKindMismatch,
   DocumentSerializeFailed,
   describeThrown,
-  FacetWriteRejected,
+  EdgeLockedNothingWritten,
   EdgeNotFound,
+  FacetWriteRejected,
+  NodeLockedNothingWritten,
   NodeNotFound,
+  REFUSAL_CODE_EDGE_NOT_FOUND,
+  REFUSAL_CODE_ELEMENT_LOCKED,
   REFUSAL_CODE_NODE_NOT_FOUND,
+  REFUSAL_CODE_TOO_MANY_TAGS,
+  TooManyTagsOnElement,
 } from '@kamiazya/whiteboard-model'
 import type { ServerDeps } from '../server-deps.js'
 
@@ -78,6 +84,8 @@ export class NodeNotFoundError extends Error {
 
 /** Thrown when a tool targets an edgeId absent from the canvas. */
 export class EdgeNotFoundError extends Error {
+  readonly code = REFUSAL_CODE_EDGE_NOT_FOUND
+
   constructor(
     public readonly documentId: string,
     public readonly edgeId: string,
@@ -129,4 +137,33 @@ export class PassageNotApplicableError extends Error {
  */
 export function reportedFaultText(deps: ServerDeps, tool: string, fault: unknown): string {
   return deps.reportedFaultText?.(tool, fault) ?? describeThrown(fault)
+}
+
+/**
+ * A lock binds this tool as it binds `wb_canvas_edit`: a person's promise that
+ * an agent will not change an element covers its facets and its tags alike,
+ * and a tag RENAME that would reach a locked element refuses the whole batch
+ * rather than rewriting some of what the board holds.
+ */
+export class ElementLockedError extends Error {
+  readonly code = REFUSAL_CODE_ELEMENT_LOCKED
+
+  constructor(kind: 'node' | 'edge', id: string) {
+    super(kind === 'node' ? NodeLockedNothingWritten(id) : EdgeLockedNothingWritten(id))
+    this.name = 'ElementLockedError'
+  }
+}
+
+/**
+ * A tag change that would leave one document, board, node or edge carrying
+ * more tags than `TAGS_PER_ELEMENT_MAX` and more than it carries now. A set
+ * stored larger before the bound still takes a change that does not grow it.
+ */
+export class TooManyTagsError extends Error {
+  readonly code = REFUSAL_CODE_TOO_MANY_TAGS
+
+  constructor(what: string, count: number) {
+    super(TooManyTagsOnElement(what, count))
+    this.name = 'TooManyTagsError'
+  }
 }

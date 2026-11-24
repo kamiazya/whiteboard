@@ -281,13 +281,17 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
     assert_eq!(updated, 53, "the calls answered with documents");
 }
 
-/// The recording reaches every refusal the operation owns, and every site a
-/// write lands on: a count far below this is a recording that stopped
-/// reaching them, which reads as a replay that checked.
+#[cfg(test)]
+fn rows() -> Vec<Value> {
+    CASES.lines().skip(2).map(|line| serde_json::from_str(line).expect("JSON")).collect()
+}
+
+/// The recording reaches every refusal the operation owns: a count far below
+/// this is a recording that stopped reaching them, which reads as a replay
+/// that checked.
 #[test]
-fn the_recording_reaches_every_refusal_and_every_site() {
-    let rows: Vec<Value> =
-        CASES.lines().skip(2).map(|line| serde_json::from_str(line).expect("JSON")).collect();
+fn the_recording_reaches_every_refusal() {
+    let rows = rows();
     let said = |phrase: &str| {
         rows.iter()
             .filter(|row| {
@@ -321,14 +325,19 @@ fn the_recording_reaches_every_refusal_and_every_site() {
     ] {
         assert!(said(phrase) > 0, "no call was refused with: {phrase}");
     }
+}
+
+/// ... and every site a write lands on, with what the pages were told of it.
+#[test]
+fn the_recording_reaches_every_site() {
+    let rows = rows();
     let told = |summary: &str| {
-        rows.iter()
-            .filter(|row| {
-                row["activity"]
-                    .as_array()
-                    .is_some_and(|a| a.iter().any(|t| t["summary"] == summary))
-            })
-            .count()
+        let said = |row: &&Value| {
+            row["activity"]
+                .as_array()
+                .is_some_and(|all| all.iter().any(|t| t["summary"] == summary))
+        };
+        rows.iter().filter(said).count()
     };
     assert!(told("changed the canvas") >= 4 && told("changed 1") >= 12);
     let touched = |kind: &str| {

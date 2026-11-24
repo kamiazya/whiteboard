@@ -2,17 +2,19 @@ import type { FacetTarget } from '@kamiazya/whiteboard-facet-engine'
 import {
   DocumentHasNoFrontmatter,
   type DocumentKind,
-  EdgeLockedNothingWritten,
   type ExtensionFacets,
   FacetSetNeedsPayload,
   growsPast,
   NodeAndCanvasTarget,
   NodeAndEdgeTarget,
-  NodeLockedNothingWritten,
   NodeTargetNeedsOneDocument,
+  REFUSAL_CODE_DOCUMENT_HAS_NO_FRONTMATTER,
+  REFUSAL_CODE_FACET_SET_NEEDS_PAYLOAD,
+  REFUSAL_CODE_NODE_AND_CANVAS_TARGET,
+  REFUSAL_CODE_NODE_AND_EDGE_TARGET,
+  REFUSAL_CODE_NODE_TARGET_NEEDS_ONE_DOCUMENT,
   type SpatialCanvas,
   TAGS_PER_ELEMENT_MAX,
-  TooManyTagsOnElement,
   type documentEngine as wire,
 } from '@kamiazya/whiteboard-model'
 import { type DocumentSession, withDocument } from '../document-session.js'
@@ -27,7 +29,13 @@ import {
 import type { ServerDeps } from '../server-deps.js'
 import { announceAgentActivity } from './agent-activity.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
-import { DocumentKindMismatchError, EdgeNotFoundError, NodeNotFoundError } from './errors.js'
+import {
+  DocumentKindMismatchError,
+  EdgeNotFoundError,
+  ElementLockedError,
+  NodeNotFoundError,
+  TooManyTagsError,
+} from './errors.js'
 import {
   type FacetSetInput,
   type FacetSetOutput,
@@ -43,6 +51,8 @@ export { type FacetSetInput, facetSetInputSchema } from './facet-set.schemas.js'
 
 /** Neither `tags` nor `facets`: nothing to write, and a silent no-op would read as done. */
 export class FacetSetNeedsPayloadError extends Error {
+  readonly code = REFUSAL_CODE_FACET_SET_NEEDS_PAYLOAD
+
   constructor() {
     super(FacetSetNeedsPayload())
     this.name = 'FacetSetNeedsPayloadError'
@@ -51,6 +61,8 @@ export class FacetSetNeedsPayloadError extends Error {
 
 /** A markdown document that has no frontmatter yet has nowhere to put a tag. */
 export class DocumentHasNoFrontmatterError extends Error {
+  readonly code = REFUSAL_CODE_DOCUMENT_HAS_NO_FRONTMATTER
+
   constructor(documentId: string) {
     super(DocumentHasNoFrontmatter(documentId))
     this.name = 'DocumentHasNoFrontmatterError'
@@ -68,6 +80,8 @@ export class DocumentHasNoFrontmatterError extends Error {
  * `.shape` to the SDK to build the tool's published JSON Schema.
  */
 export class NodeTargetNeedsOneDocumentError extends Error {
+  readonly code = REFUSAL_CODE_NODE_TARGET_NEEDS_ONE_DOCUMENT
+
   constructor(count: number) {
     super(NodeTargetNeedsOneDocument(count))
     this.name = 'NodeTargetNeedsOneDocumentError'
@@ -80,6 +94,8 @@ export class NodeTargetNeedsOneDocumentError extends Error {
  * not a schema `.refine`.
  */
 export class NodeAndEdgeTargetError extends Error {
+  readonly code = REFUSAL_CODE_NODE_AND_EDGE_TARGET
+
   constructor() {
     super(NodeAndEdgeTarget())
     this.name = 'NodeAndEdgeTargetError'
@@ -92,34 +108,11 @@ export class NodeAndEdgeTargetError extends Error {
  * the same reason it is not a schema `.refine`.
  */
 export class NodeAndCanvasTargetError extends Error {
+  readonly code = REFUSAL_CODE_NODE_AND_CANVAS_TARGET
+
   constructor() {
     super(NodeAndCanvasTarget())
     this.name = 'NodeAndCanvasTargetError'
-  }
-}
-
-/**
- * A lock binds this tool as it binds `wb_canvas_edit`: a person's promise that
- * an agent will not change an element covers its facets and its tags alike,
- * and a tag RENAME that would reach a locked element refuses the whole batch
- * rather than rewriting some of what the board holds.
- */
-export class ElementLockedError extends Error {
-  constructor(kind: 'node' | 'edge', id: string) {
-    super(kind === 'node' ? NodeLockedNothingWritten(id) : EdgeLockedNothingWritten(id))
-    this.name = 'ElementLockedError'
-  }
-}
-
-/**
- * A tag change that would leave one document, board, node or edge carrying
- * more tags than `TAGS_PER_ELEMENT_MAX` and more than it carries now. A set
- * stored larger before the bound still takes a change that does not grow it.
- */
-export class TooManyTagsError extends Error {
-  constructor(what: string, count: number) {
-    super(TooManyTagsOnElement(what, count))
-    this.name = 'TooManyTagsError'
   }
 }
 
