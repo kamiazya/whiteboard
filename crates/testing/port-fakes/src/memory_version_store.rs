@@ -1,14 +1,38 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::future::{Future, ready};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
-use whiteboard_ports::{MaybeSend, PortError, SavedVersion, VersionStore};
+use whiteboard_ports::{
+    MaybeSend, NewVersion, OperatorKind, PortError, SavedVersion, VersionOperator, VersionStore,
+};
 
-/// Version histories held in memory, each listed back in the order it was
-/// given; or a store that answers every listing with one failure.
-#[derive(Debug, Default, Clone)]
-pub struct MemoryVersionStore {
+/// The stamp a save takes when the store was given none.
+const EPOCH: &str = "1970-01-01T00:00:00.000Z";
+
+#[derive(Debug, Default)]
+struct State {
     histories: BTreeMap<(String, String), Vec<SavedVersion>>,
+    /// The ids the next saves take, in order.
+    ids: VecDeque<String>,
+    /// How many saves minted an id of their own once `ids` ran out.
+    minted: u64,
+    /// The stamp every save takes.
+    at: Option<String>,
+}
+
+/// Version histories held in memory, each listed back newest first; or a
+/// store that answers every call with one failure.
+///
+/// A save is the keeper's as the port describes it: an id from the ones the
+/// store was handed (`version-<n>` once they run out), the stamp it was
+/// handed, the agent as its operator, and a refusal once the document keeps
+/// as many manual versions as the ceiling the store was given, which spends
+/// its id as the daemon's store does.
+#[derive(Debug, Default)]
+pub struct MemoryVersionStore {
+    state: Mutex<State>,
     failure: Option<PortError>,
+    manual_ceiling: Option<usize>,
 }
 
 impl MemoryVersionStore {
@@ -22,19 +46,89 @@ impl MemoryVersionStore {
     /// of `document_id` in `workspace_id`.
     #[must_use]
     pub fn holding(
-        mut self,
+        self,
         workspace_id: &str,
         document_id: &str,
         versions: Vec<SavedVersion>,
     ) -> Self {
-        self.histories.insert((workspace_id.to_owned(), document_id.to_owned()), versions);
+        let key = (workspace_id.to_owned(), document_id.to_owned());
+        self.locked().histories.insert(key, versions);
         self
     }
 
-    /// A store whose every listing fails with `failure`.
+    /// The same store, its saves taking `ids` in order and every one stamped
+    /// `at` (`toISOString`'s text).
+    #[must_use]
+    pub fn minting(self, ids: Vec<String>, at: &str) -> Self {
+        {
+            let mut state = self.locked();
+            state.ids = ids.into();
+            state.at = Some(at.to_owned());
+        }
+        self
+    }
+
+    /// The same store, refusing a manual save of a document that already
+    /// keeps `limit` manual versions.
+    #[must_use]
+    pub fn keeping_at_most(mut self, limit: usize) -> Self {
+        self.manual_ceiling = Some(limit);
+        self
+    }
+
+    /// A store whose every listing and save fails with `failure`.
     #[must_use]
     pub fn failing(failure: PortError) -> Self {
-        Self { histories: BTreeMap::new(), failure: Some(failure) }
+        Self { failure: Some(failure), ..Self::default() }
+    }
+
+    /// A poisoned state is still a consistent one: no critical section here
+    /// can panic part way through a change.
+    fn locked(&self) -> MutexGuard<'_, State> {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn record(
+        &self,
+        workspace_id: &str,
+        document_id: &str,
+        save: &NewVersion,
+    ) -> Result<SavedVersion, PortError> {
+        if let Some(failure) = &self.failure {
+            return Err(failure.clone());
+        }
+        let mut state = self.locked();
+        let key = (workspace_id.to_owned(), document_id.to_owned());
+        let id = if let Some(id) = state.ids.pop_front() {
+            id
+        } else {
+            state.minted += 1;
+            format!("version-{}", state.minted)
+        };
+        // The id is minted before the ceiling is asked, as the daemon's store
+        // mints it: a refused save spends one.
+        let manual =
+            state.histories.get(&key).map_or(0, |held| held.iter().filter(|v| !v.auto).count());
+        if let Some(limit) = self.manual_ceiling
+            && !save.auto
+            && manual >= limit
+        {
+            return Err(PortError::TooManyVersions { limit });
+        }
+        let saved = SavedVersion {
+            id,
+            created_at: state.at.clone().unwrap_or_else(|| EPOCH.to_owned()),
+            label: save.label.clone(),
+            auto: save.auto,
+            operator: Some(VersionOperator { kind: OperatorKind::Ai, display_name: None }),
+            restored_from: None,
+        };
+        let history = state.histories.entry(key).or_default();
+        // Newest first, the later of two equal stamps first. Stamps compare as
+        // text, which orders the four-digit years a fake is handed.
+        let at = history.iter().position(|held| held.created_at <= saved.created_at);
+        history.insert(at.unwrap_or(history.len()), saved.clone());
+        Ok(saved)
     }
 }
 
@@ -47,8 +141,17 @@ impl VersionStore for MemoryVersionStore {
         let key = (workspace_id.to_owned(), document_id.to_owned());
         ready(match &self.failure {
             Some(failure) => Err(failure.clone()),
-            None => Ok(self.histories.get(&key).cloned().unwrap_or_default()),
+            None => Ok(self.locked().histories.get(&key).cloned().unwrap_or_default()),
         })
+    }
+
+    fn save(
+        &self,
+        workspace_id: &str,
+        document_id: &str,
+        save: &NewVersion,
+    ) -> impl Future<Output = Result<SavedVersion, PortError>> + MaybeSend {
+        ready(self.record(workspace_id, document_id, save))
     }
 }
 
@@ -58,14 +161,27 @@ mod tests {
     use crate::block_on;
 
     fn saved(id: &str) -> SavedVersion {
+        stamped(id, "2026-01-02T03:04:05.006Z")
+    }
+
+    fn stamped(id: &str, at: &str) -> SavedVersion {
         SavedVersion {
             id: id.to_owned(),
-            created_at: "2026-01-02T03:04:05.006Z".to_owned(),
+            created_at: at.to_owned(),
             label: None,
             auto: false,
             operator: None,
             restored_from: None,
         }
+    }
+
+    fn manual(label: &str) -> NewVersion {
+        NewVersion { label: Some(label.to_owned()), auto: false }
+    }
+
+    fn ids(store: &MemoryVersionStore, workspace_id: &str, document_id: &str) -> Vec<String> {
+        let listed = block_on(store.list(workspace_id, document_id)).expect("a listing");
+        listed.into_iter().map(|version| version.id).collect()
     }
 
     #[test]
@@ -80,9 +196,77 @@ mod tests {
     }
 
     #[test]
-    fn a_failing_store_answers_its_failure_for_every_document() {
+    fn a_failing_store_answers_its_failure_for_every_call() {
         let store = MemoryVersionStore::failing(PortError::DatabaseBusy);
         assert_eq!(block_on(store.list("w", "d")), Err(PortError::DatabaseBusy));
         assert_eq!(block_on(store.list("x", "e")), Err(PortError::DatabaseBusy));
+        assert_eq!(block_on(store.save("w", "d", &manual("l"))), Err(PortError::DatabaseBusy));
+    }
+
+    #[test]
+    fn a_save_takes_the_next_minted_id_and_stamp_and_names_the_agent() {
+        let store = MemoryVersionStore::new()
+            .minting(vec!["m1".to_owned(), "m2".to_owned()], "2026-11-24T12:00:00.000Z");
+        let first = block_on(store.save("w", "d", &manual("one"))).expect("a save");
+        let second = block_on(store.save("w", "e", &NewVersion { label: None, auto: true }))
+            .expect("a save");
+        let third = block_on(store.save("w", "d", &manual("three"))).expect("a save");
+        assert_eq!(
+            first,
+            SavedVersion {
+                id: "m1".to_owned(),
+                created_at: "2026-11-24T12:00:00.000Z".to_owned(),
+                label: Some("one".to_owned()),
+                auto: false,
+                operator: Some(VersionOperator { kind: OperatorKind::Ai, display_name: None }),
+                restored_from: None,
+            }
+        );
+        assert_eq!((second.id.as_str(), second.label, second.auto), ("m2", None, true));
+        assert_eq!(third.id, "version-1");
+        assert_eq!(ids(&store, "w", "d"), ["version-1", "m1"]);
+        assert_eq!(ids(&store, "w", "e"), ["m2"]);
+    }
+
+    #[test]
+    fn a_store_given_no_stamp_stamps_the_epoch() {
+        let store = MemoryVersionStore::new();
+        let saved = block_on(store.save("w", "d", &manual("l"))).expect("a save");
+        assert_eq!((saved.id.as_str(), saved.created_at.as_str()), ("version-1", EPOCH));
+    }
+
+    #[test]
+    fn a_save_is_listed_by_its_stamp_newest_first() {
+        let store = MemoryVersionStore::new()
+            .holding(
+                "w",
+                "d",
+                vec![
+                    stamped("late", "2026-12-01T00:00:00.000Z"),
+                    stamped("same", "2026-11-24T12:00:00.000Z"),
+                    stamped("early", "2026-01-01T00:00:00.000Z"),
+                ],
+            )
+            .minting(vec!["new".to_owned()], "2026-11-24T12:00:00.000Z");
+        block_on(store.save("w", "d", &manual("l"))).expect("a save");
+        assert_eq!(ids(&store, "w", "d"), ["late", "new", "same", "early"]);
+    }
+
+    #[test]
+    fn a_manual_save_past_the_ceiling_is_refused_and_keeps_nothing() {
+        let automatic = SavedVersion { auto: true, ..saved("auto") };
+        let store = MemoryVersionStore::new()
+            .holding("w", "d", vec![automatic, saved("a"), saved("b")])
+            .keeping_at_most(2);
+        let refused = block_on(store.save("w", "d", &manual("l")));
+        assert_eq!(refused, Err(PortError::TooManyVersions { limit: 2 }));
+        assert_eq!(ids(&store, "w", "d"), ["auto", "a", "b"]);
+        let checkpoint = NewVersion { label: None, auto: true };
+        assert!(block_on(store.save("w", "d", &checkpoint)).is_ok());
+        assert!(block_on(store.save("w", "e", &manual("l"))).is_ok());
+        assert_eq!(ids(&store, "w", "e"), ["version-3"], "the refused save spent version-1");
+        let one_below =
+            MemoryVersionStore::new().holding("w", "d", vec![saved("a")]).keeping_at_most(2);
+        assert!(block_on(one_below.save("w", "d", &manual("l"))).is_ok());
     }
 }

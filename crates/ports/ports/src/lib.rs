@@ -24,5 +24,5 @@ pub use id_mint::IdMint;
 pub use lock::WorkspaceLock;
 pub use maybe_send::{MaybeSend, MaybeSync};
 pub use record_store::WorkspaceRecordStore;
-pub use version_store::{OperatorKind, SavedVersion, VersionOperator, VersionStore};
+pub use version_store::{NewVersion, OperatorKind, SavedVersion, VersionOperator, VersionStore};
 pub use workspace_registry::{WorkspaceEntry, WorkspaceLookup, WorkspaceRegistry};

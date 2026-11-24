@@ -40,6 +40,7 @@ impl From<&PortError> for Refusal {
             PortError::TooManyFolders { folders, limit } => {
                 Self::TooManyFolders { folders: count(*folders), limit: count(*limit) }
             }
+            PortError::TooManyVersions { limit } => Self::TooManyVersions { limit: count(*limit) },
             // The TypeScript answers a clock no `Date` holds as any other
             // uncaught throw.
             PortError::InvalidTime => Self::InternalError,

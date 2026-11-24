@@ -110,6 +110,7 @@ fn port_errors() -> Vec<(PortError, bool)> {
         (PortError::TooManyWorkspaces { namespace: s("ns"), limit: 1000 }, true),
         (PortError::TooManyDocuments { documents: 2001, limit: 2000 }, true),
         (PortError::TooManyFolders { folders: 4001, limit: 4000 }, true),
+        (PortError::TooManyVersions { limit: 200 }, true),
         (PortError::InvalidTime, false),
     ]
 }
