@@ -459,6 +459,8 @@ mod tests {
             judged(json!({ "length": 9 })),
             [TYPE, "f: Too big: expected unknown to be <=3"]
         );
+        assert_eq!(judged(json!({ "length": 1 })), [TYPE]);
+        assert_eq!(judged(json!({ "length": 3 })), [TYPE]);
         assert_eq!(judged(json!({ "length": 2 })), [TYPE]);
         assert_eq!(judged(json!({ "length": 1.5 })), [TYPE]);
         assert_eq!(
