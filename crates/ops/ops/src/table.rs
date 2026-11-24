@@ -2,7 +2,7 @@
 
 use crate::{
     DocumentGet, DocumentList, DocumentResolve, DocumentSearch, FacetList, Operation, Row,
-    VersionList,
+    VersionList, VersionSave,
 };
 
 /// Visits each operation by type, so a caller reaches its `execute` and its
@@ -24,7 +24,15 @@ macro_rules! table {
     };
 }
 
-table!(DocumentList, DocumentResolve, DocumentGet, VersionList, FacetList, DocumentSearch);
+table!(
+    DocumentList,
+    DocumentResolve,
+    DocumentGet,
+    VersionList,
+    VersionSave,
+    FacetList,
+    DocumentSearch
+);
 
 #[cfg(test)]
 mod tests;

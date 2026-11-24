@@ -34,6 +34,7 @@ impl Ports for Fakes {
     type Registry = MemoryRegistry;
     type Caller = FixedCaller;
     type Versions = MemoryVersionStore;
+    type Lock = whiteboard_port_fakes::KeyedLock;
 
     fn records(&self) -> &MemoryRecordStore {
         &self.0
@@ -49,6 +50,10 @@ impl Ports for Fakes {
 
     fn versions(&self) -> &MemoryVersionStore {
         unreachable!("a search lists no version")
+    }
+
+    fn lock(&self) -> &whiteboard_port_fakes::KeyedLock {
+        unreachable!("a read takes no lock")
     }
 }
 
@@ -108,9 +113,9 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         ranked += usize::from(results.iter().any(|hit| hit.get("lexicalRank").is_some()));
         filtered += usize::from(results.iter().any(|hit| hit.get("lexicalRank").is_none()));
     }
-    assert_eq!(replayed, 80, "the recording's calls, every one answered");
-    assert_eq!(answered, 40, "the calls that found something");
-    assert_eq!(ranked, 28, "the calls words ranked");
+    assert_eq!(replayed, 87, "the recording's calls, every one answered");
+    assert_eq!(answered, 41, "the calls that found something");
+    assert_eq!(ranked, 29, "the calls words ranked");
     assert_eq!(filtered, 12, "the calls a filter answered alone");
 }
 

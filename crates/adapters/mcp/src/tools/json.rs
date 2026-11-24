@@ -68,19 +68,14 @@ impl Json {
     }
 }
 
-/// The number its text reads back as: a whole double within the safe range
-/// as the integer `JSON.parse` of its digits gives, any other as the double
-/// itself (exact, where a parser of its text may land an ulp off).
+/// The number its text reads back as: a whole double as the integer a JSON
+/// reader takes its digits for, where an `i64` holds it, any other as the
+/// double itself (exact, where a parser of its text may land an ulp off).
 fn number_value(number: f64) -> Value {
-    const SAFE: f64 = 9_007_199_254_740_991.0;
-    if number.fract() == 0.0 && number.abs() <= SAFE {
-        let whole = format!("{}", number.abs());
-        let digits: u64 = whole.parse().unwrap_or_default();
-        return if number < 0.0 {
-            Value::from(0_i64.saturating_sub_unsigned(digits))
-        } else {
-            Value::from(digits)
-        };
+    if number.fract() == 0.0
+        && let Ok(whole) = format!("{number}").parse::<i64>()
+    {
+        return Value::from(whole);
     }
     serde_json::Number::from_f64(number).map_or(Value::Null, Value::Number)
 }

@@ -26,6 +26,10 @@ pub(crate) struct Field {
 pub(crate) enum Kind {
     /// A required string, refined.
     Text(Refined),
+    /// A required string `min` to `max` characters long, then at most `max`
+    /// UTF-16 units: `utf16Max(z.string().min(min), max)`, whose refinement
+    /// is judged only when the length in characters passed.
+    Sized { min: usize, max: usize },
     /// A required array of refined strings, `min` to `max` items long.
     List { min: usize, max: usize, item: Refined },
     /// An optional strict object.
@@ -103,13 +107,12 @@ fn field_issues(path: &str, kind: &Kind, value: Option<&Value>) -> Vec<String> {
     match kind {
         Kind::Text(refined) => text_issue(path, refined, value).into_iter().collect(),
         Kind::List { min, max, item } => list_issues(path, (*min, *max), None, item, value),
+        Kind::Sized { min, max } => sized_issues(path, (*min, *max), value),
         Kind::Listed { min, max, too_big, item } => match value {
             None => Vec::new(),
             Some(_) => list_issues(path, (*min, *max), Some(too_big), item, value),
         },
-        Kind::Bounded { max, too_big } => {
-            bounded_issue(path, *max, too_big, value).into_iter().collect()
-        }
+        Kind::Bounded { max, too_big } => bounded_issues(path, *max, too_big, value),
         Kind::Whole { min, max } => whole_issues(path, (*min, *max), value),
         Kind::Object(fields) => match value {
             None => Vec::new(),
@@ -145,21 +148,76 @@ fn text_issue(path: &str, refined: &Refined, value: Option<&Value>) -> Option<St
     }
 }
 
-/// An optional string of one unit to `max`: `too_big` past it, Zod's own
-/// words under it.
-fn bounded_issue(path: &str, max: usize, too_big: &str, value: Option<&Value>) -> Option<String> {
-    match value? {
-        Value::String(text) => {
+/// A length out of `min..=max` in `what`'s words, as Zod's length checks
+/// word it; Zod judges the length of any value that has one.
+/// Past `max`, `too_big` replaces Zod's words when the schema gave its own.
+fn length_issue(
+    path: &str,
+    (min, max): (usize, usize),
+    length: usize,
+    what: &str,
+    too_big: Option<&str>,
+) -> Option<String> {
+    let unit = if what == "array" { "items" } else { "characters" };
+    if length < min {
+        Some(at(path, &format!("Too small: expected {what} to have >={min} {unit}")))
+    } else if length > max {
+        Some(at(
+            path,
+            &too_big.map_or_else(
+                || format!("Too big: expected {what} to have <={max} {unit}"),
+                str::to_owned,
+            ),
+        ))
+    } else {
+        None
+    }
+}
+
+/// A string's length in characters, as Zod 4 counts one: code points.
+fn characters(text: &str) -> usize {
+    text.chars().count()
+}
+
+/// A string within its bounds in characters, then within `max` UTF-16 units;
+/// an array is no string, and Zod still judges its length, in items.
+fn sized_issues(path: &str, (min, max): (usize, usize), value: Option<&Value>) -> Vec<String> {
+    match value {
+        Some(Value::String(text)) => {
             let units = text.encode_utf16().count();
-            if units < 1 {
-                Some(at(path, "Too small: expected string to have >=1 characters"))
-            } else if units > max {
-                Some(at(path, too_big))
-            } else {
-                None
-            }
+            length_issue(path, (min, max), characters(text), "string", None)
+                .or_else(|| {
+                    (units > max).then(|| {
+                        at(path, &format!("Too big: expected string to have <={max} UTF-16 units"))
+                    })
+                })
+                .into_iter()
+                .collect()
         }
-        _ => Some(expected(path, "string", value)),
+        Some(Value::Array(items)) => std::iter::once(expected(path, "string", value))
+            .chain(length_issue(path, (min, max), items.len(), "array", None))
+            .collect(),
+        _ => vec![expected(path, "string", value)],
+    }
+}
+
+/// An optional string of one character to `max`, then at most `max` UTF-16
+/// units, refused past either with `too_big`: `utf16Max(z.string().min(1),
+/// max, too_big)`, whose words are the schema's for both. An array is no
+/// string, and Zod still judges its length, in items.
+fn bounded_issues(path: &str, max: usize, too_big: &str, value: Option<&Value>) -> Vec<String> {
+    let Some(given) = value else { return Vec::new() };
+    match given {
+        Value::String(text) => {
+            length_issue(path, (1, max), characters(text), "string", Some(too_big))
+                .or_else(|| (text.encode_utf16().count() > max).then(|| at(path, too_big)))
+                .into_iter()
+                .collect()
+        }
+        Value::Array(items) => std::iter::once(expected(path, "string", value))
+            .chain(length_issue(path, (1, max), items.len(), "array", Some(too_big)))
+            .collect(),
+        _ => vec![expected(path, "string", value)],
     }
 }
 
@@ -189,8 +247,7 @@ fn whole_issues(path: &str, (min, max): (f64, f64), value: Option<&Value>) -> Ve
 
 /// An array's length out of bounds is its only issue; within them, each
 /// item's. A string is no array, and Zod still judges its length, in
-/// characters (UTF-16 code units). Past `max`, `too_big` replaces Zod's
-/// words when the schema gave its own.
+/// characters (code points).
 fn list_issues(
     path: &str,
     (min, max): (usize, usize),
@@ -198,21 +255,7 @@ fn list_issues(
     item: &Refined,
     value: Option<&Value>,
 ) -> Vec<String> {
-    let bounds = |length: usize, what: &str| {
-        if length < min {
-            Some(at(path, &format!("Too small: expected {what} to have >={min} {}", unit(what))))
-        } else if length > max {
-            Some(at(
-                path,
-                &too_big.map_or_else(
-                    || format!("Too big: expected {what} to have <={max} {}", unit(what)),
-                    str::to_owned,
-                ),
-            ))
-        } else {
-            None
-        }
-    };
+    let bounds = |length: usize, what: &str| length_issue(path, (min, max), length, what, too_big);
     match value {
         Some(Value::Array(items)) => bounds(items.len(), "array").map_or_else(
             || {
@@ -227,12 +270,8 @@ fn list_issues(
             |issue| vec![issue],
         ),
         Some(Value::String(text)) => std::iter::once(expected(path, "array", value))
-            .chain(bounds(text.encode_utf16().count(), "string"))
+            .chain(bounds(characters(text), "string"))
             .collect(),
         _ => vec![expected(path, "array", value)],
     }
-}
-
-fn unit(what: &str) -> &'static str {
-    if what == "array" { "items" } else { "characters" }
 }

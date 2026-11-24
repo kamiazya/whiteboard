@@ -48,8 +48,8 @@ impl Binding for DocumentSearch {
         });
         // `INPUT` has held it whole, from 1 to 50; `10.0` is ten.
         let limit = arguments.get("limit").and_then(Value::as_f64);
-        let limit =
-            limit.and_then(|limit| (1..=50_u32).find(|n| (f64::from(*n) - limit).abs() < 0.5));
+        let limit = limit
+            .and_then(|limit| (1..=50_u32).find(|n| f64::from(*n).to_bits() == limit.to_bits()));
         DocumentSearchInput {
             workspace_id: workspace_id.unwrap_or_default(),
             query: text("query"),
