@@ -265,7 +265,11 @@ async function saved(deps: ServerDeps, path: string, label: string): Promise<str
  * saved in states no sync write would keep (a node under the reserved key
  * `__proto__`, an envelope naming the other kind) and put right after.
  */
-async function historyOf(deps: ServerDeps, call: Call, ids: Record<string, string>) {
+async function historyOf(
+  deps: ServerDeps,
+  call: Call,
+  ids: Record<string, string>,
+): Promise<Record<string, string>> {
   await landed(call, 'wb_canvas_edit', draw(ids.board, [textNode('a', 0, 'A')]))
   await landed(
     call,
