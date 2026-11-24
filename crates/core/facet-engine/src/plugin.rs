@@ -11,7 +11,8 @@
 //! checked against the schema of the facet it names.
 //!
 //! Not here yet: the editor's derived form, more than one plugin and a workspace's own stencil library.
-//! The asset VALUES are judged and then dropped; the registry holds their ids.
+//! The asset VALUES are judged and then dropped; the registry holds their ids,
+//! and each stencil's display name.
 
 use whiteboard_model::Value;
 use whiteboard_model::json;
@@ -21,7 +22,7 @@ use crate::manifest;
 use crate::plugin_manifest::{AssetKind, ManifestAssets};
 use crate::registry::{BuildError, Migration, PayloadRefusal, Registry};
 use crate::schema::{CompileError, Contracts, DefId, Host, Issue};
-use crate::value::{entries, field};
+use crate::value::{entries, field, text};
 
 /// What the engine's own contracts (assets and manifest) name and the host
 /// supplies: the matchers of their patterns.
@@ -212,9 +213,16 @@ pub fn build(sources: &PluginSources<'_>, host: &Host<'_>) -> Result<Registry, L
         };
         table.iter().map(|(id, _)| id.clone()).collect()
     };
-    let registry =
+    let mut registry =
         Registry::build(std::slice::from_ref(&manifest), contracts, ids, sources.migrations)
             .map_err(LoadError::Registry)?;
+    // A stencil's shape requires its display name, so every one has one.
+    registry.stencil_names = stencils
+        .iter()
+        .map(|(id, stencil)| {
+            (id.clone(), field(stencil, "displayName").map(text).unwrap_or_default())
+        })
+        .collect();
     for (id, stencil) in &stencils {
         let facets = field(stencil, "facets").map_or(&[][..], entries);
         for (key, payload) in facets {

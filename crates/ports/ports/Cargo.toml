@@ -1,6 +1,6 @@
 [package]
 name = "whiteboard-ports"
-description = "The only route to I/O: the error taxonomy and the Caller, Clock, IdMint, WorkspaceLock, WorkspaceRecordStore and WorkspaceRegistry traits, with no runtime behind them."
+description = "The only route to I/O: the error taxonomy and the Caller, Clock, IdMint, WorkspaceLock, WorkspaceRecordStore, WorkspaceRegistry and VersionStore traits, with no runtime behind them."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

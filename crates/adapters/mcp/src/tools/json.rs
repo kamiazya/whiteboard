@@ -13,6 +13,8 @@ pub(crate) enum Json {
     Bool(bool),
     List(Vec<Json>),
     Object(Vec<(&'static str, Json)>),
+    /// An object whose member names are data, not the tool's own.
+    Fields(Vec<(String, Json)>),
     /// A value an operation answers as it was read, objects in their stored
     /// order.
     Plain(Plain),
@@ -31,6 +33,9 @@ impl Json {
                     .map(|(key, value)| ((*key).to_owned(), value.value()))
                     .collect::<Map<_, _>>(),
             ),
+            Self::Fields(members) => Value::Object(
+                members.iter().map(|(key, value)| (key.clone(), value.value())).collect(),
+            ),
             // What `JSON.parse` of its text reads back, which is what a
             // client of the TypeScript reads: a whole double past 2^53 an
             // integer, a number JSON cannot spell `null`.
@@ -48,16 +53,20 @@ impl Json {
                 let items: Vec<String> = items.iter().map(Self::text).collect();
                 format!("[{}]", items.join(","))
             }
-            Self::Object(members) => {
-                let members: Vec<String> = members
-                    .iter()
-                    .map(|(key, value)| format!("{}:{}", Value::from(*key), value.text()))
-                    .collect();
-                format!("{{{}}}", members.join(","))
+            Self::Object(members) => object_text(members.iter().map(|(key, value)| (*key, value))),
+            Self::Fields(members) => {
+                object_text(members.iter().map(|(key, value)| (key.as_str(), value)))
             }
             // An operation's value is plain JSON, which the writer always
             // spells.
             Self::Plain(plain) => json_text(plain).unwrap_or_default(),
         }
     }
+}
+
+/// `JSON.stringify` of an object's members, in the order given.
+fn object_text<'a>(members: impl Iterator<Item = (&'a str, &'a Json)>) -> String {
+    let members: Vec<String> =
+        members.map(|(key, value)| format!("{}:{}", Value::from(key), value.text())).collect();
+    format!("{{{}}}", members.join(","))
 }

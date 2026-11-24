@@ -92,13 +92,16 @@ fn a_document_neither_its_content_nor_its_index_row_gives_a_kind_is_failed() {
 
 #[test]
 fn a_workspace_the_store_holds_no_record_of_is_refused() {
-    use whiteboard_port_fakes::{FixedCaller, MemoryRecordStore, MemoryRegistry, block_on};
+    use whiteboard_port_fakes::{
+        FixedCaller, MemoryRecordStore, MemoryRegistry, MemoryVersionStore, block_on,
+    };
 
     struct Empty(MemoryRecordStore, MemoryRegistry, FixedCaller);
     impl Ports for Empty {
         type Records = MemoryRecordStore;
         type Registry = MemoryRegistry;
         type Caller = FixedCaller;
+        type Versions = MemoryVersionStore;
         fn records(&self) -> &MemoryRecordStore {
             &self.0
         }
@@ -107,6 +110,9 @@ fn a_workspace_the_store_holds_no_record_of_is_refused() {
         }
         fn caller(&self) -> &FixedCaller {
             &self.2
+        }
+        fn versions(&self) -> &MemoryVersionStore {
+            unreachable!("a document read lists no version")
         }
     }
     let ports = Empty(MemoryRecordStore::new(), MemoryRegistry::new(), FixedCaller::new());

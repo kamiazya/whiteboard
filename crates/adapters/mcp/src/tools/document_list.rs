@@ -12,8 +12,8 @@ impl Binding for DocumentList {
     const CONTRACT: &str = include_str!("../../../../../contracts/tools/wb_document_list.json");
     const INPUT: Input = Input { fields: &[WORKSPACE_ADDRESS] };
 
-    fn input(_: &Map<String, Value>, workspace_id: String) -> DocumentListInput {
-        DocumentListInput { workspace_id }
+    fn input(_: &Map<String, Value>, workspace_id: Option<String>) -> DocumentListInput {
+        DocumentListInput { workspace_id: workspace_id.unwrap_or_default() }
     }
 
     fn output(output: &DocumentListOutput) -> Option<Json> {

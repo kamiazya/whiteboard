@@ -134,6 +134,10 @@ fn in_callers_words(refusal: Refusal, workspace_id: &str, handle: &str) -> Refus
                 workspace_id: said(workspace_id),
             }
         }
+        Refusal::DocumentNotFound { document_id, workspace_id } => Refusal::DocumentNotFound {
+            document_id: said(document_id),
+            workspace_id: said(workspace_id),
+        },
         Refusal::CorruptStoredData { message } => {
             Refusal::CorruptStoredData { message: said(message) }
         }

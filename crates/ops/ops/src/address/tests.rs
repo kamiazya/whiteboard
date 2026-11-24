@@ -1,7 +1,9 @@
 use super::*;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
-use whiteboard_port_fakes::{FixedCaller, MemoryRecordStore, MemoryRegistry, block_on};
+use whiteboard_port_fakes::{
+    FixedCaller, MemoryRecordStore, MemoryRegistry, MemoryVersionStore, block_on,
+};
 
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const X: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAX";
@@ -16,6 +18,7 @@ impl Ports for Fakes {
     type Records = MemoryRecordStore;
     type Registry = MemoryRegistry;
     type Caller = FixedCaller;
+    type Versions = MemoryVersionStore;
 
     fn records(&self) -> &MemoryRecordStore {
         &self.records
@@ -27,6 +30,10 @@ impl Ports for Fakes {
 
     fn caller(&self) -> &FixedCaller {
         &self.caller
+    }
+
+    fn versions(&self) -> &MemoryVersionStore {
+        unreachable!("an address reads no version")
     }
 }
 
@@ -186,6 +193,10 @@ fn a_refusal_quoting_the_id_is_said_with_the_handle_the_caller_typed() {
             message: "stored workspace document plan could not be imported: plan".into()
         }
     );
+    assert_eq!(
+        refused(Refusal::DocumentNotFound { document_id: W.into(), workspace_id: W.into() }),
+        Refusal::DocumentNotFound { document_id: "plan".into(), workspace_id: "plan".into() }
+    );
     assert_eq!(refused(Refusal::DatabaseBusy), Refusal::DatabaseBusy);
 }
 
@@ -206,6 +217,7 @@ impl Ports for (MemoryRegistry, Unreadable) {
     type Records = MemoryRecordStore;
     type Registry = MemoryRegistry;
     type Caller = Unreadable;
+    type Versions = MemoryVersionStore;
 
     fn records(&self) -> &MemoryRecordStore {
         unreachable!("an unknown address reads no record")
@@ -217,6 +229,10 @@ impl Ports for (MemoryRegistry, Unreadable) {
 
     fn caller(&self) -> &Unreadable {
         &self.1
+    }
+
+    fn versions(&self) -> &MemoryVersionStore {
+        unreachable!("an address reads no version")
     }
 }
 

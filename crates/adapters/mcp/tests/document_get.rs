@@ -28,7 +28,9 @@ use whiteboard_codec::okf;
 use whiteboard_mcp::{Identity, OpsCatalogue, Server};
 use whiteboard_model::encoding::base64_to_bytes;
 use whiteboard_ops::Ports;
-use whiteboard_port_fakes::{FixedCaller, MemoryRecordStore, MemoryRegistry, block_on};
+use whiteboard_port_fakes::{
+    FixedCaller, MemoryRecordStore, MemoryRegistry, MemoryVersionStore, block_on,
+};
 use whiteboard_ports::WorkspaceEntry;
 
 const CASES: &str =
@@ -47,6 +49,7 @@ impl Ports for Fakes {
     type Records = MemoryRecordStore;
     type Registry = MemoryRegistry;
     type Caller = FixedCaller;
+    type Versions = MemoryVersionStore;
 
     fn records(&self) -> &MemoryRecordStore {
         &self.0
@@ -58,6 +61,10 @@ impl Ports for Fakes {
 
     fn caller(&self) -> &FixedCaller {
         &self.2
+    }
+
+    fn versions(&self) -> &MemoryVersionStore {
+        unreachable!("a document read lists no version")
     }
 }
 

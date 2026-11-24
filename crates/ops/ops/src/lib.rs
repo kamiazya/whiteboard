@@ -40,10 +40,12 @@ mod address;
 mod document_get;
 mod document_list;
 mod document_resolve;
+mod facet_list;
 mod operation;
 mod ports;
 mod record;
 mod table;
+mod version_list;
 
 pub use address::{
     WorkspaceAddress, parse_workspace_address, resolve_workspace, with_resolved_workspace,
@@ -56,6 +58,12 @@ pub use document_list::{
     DocumentList, DocumentListInput, DocumentListOutput, FolderName, ListedDocument,
 };
 pub use document_resolve::{DocumentDetail, DocumentResolve, DocumentResolveInput};
+pub use facet_list::{
+    AssetEntry, FacetEntry, FacetList, FacetListAnswer, FacetListInput, FacetListOutput,
+};
 pub use operation::{Contract, Method, Operation, Route, Row};
 pub use ports::Ports;
 pub use table::{OPERATIONS, Visit, each_operation};
+pub use version_list::{VersionList, VersionListInput, VersionListOutput};
+/// The facet vocabulary a listing is filtered by, as the engine names it.
+pub use whiteboard_facet_engine::plugin_manifest::{AssetKind, FacetTarget};

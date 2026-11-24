@@ -250,10 +250,11 @@ impl Compiler<'_> {
         // A definition's id is its place in this list, which is how the
         // references compiled above name it.
         let contract = path.to_owned();
-        self.defs.extend(written.iter().zip(roots).map(|((name, _), root)| Def {
+        self.defs.extend(written.iter().zip(roots).map(|((name, node), root)| Def {
             contract: contract.clone(),
             name: name.clone(),
             root,
+            written: node.clone(),
         }));
         Ok(())
     }

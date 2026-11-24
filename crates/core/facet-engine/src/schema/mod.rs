@@ -79,6 +79,8 @@ struct Def {
     contract: String,
     name: String,
     root: usize,
+    /// The definition as its contract writes it.
+    written: Value,
 }
 
 /// Contracts compiled and ready to judge values.
@@ -110,6 +112,74 @@ impl Contracts {
     #[must_use]
     pub fn name(&self, def: DefId) -> Option<&str> {
         self.defs.get(def.0).map(|d| d.name.as_str())
+    }
+
+    /// The definition as a JSON Schema reader reads it: as its contract
+    /// writes it, every `x-wb-*` member dropped at any depth and each
+    /// `#/$defs/<name>` reference replaced by the definition it names in the
+    /// same contract, so the answer stands alone. A reference the contract
+    /// does not hold is kept as written; references cannot cycle, since a
+    /// contract whose definitions do is refused when it loads.
+    #[must_use]
+    pub fn published(&self, def: DefId) -> Option<Value> {
+        let held = self.defs.get(def.0)?;
+        Some(self.publish(&held.contract, &held.written, &mut vec![held.name.as_str()]))
+    }
+
+    /// `written` published; `open` holds the definitions being inlined, so a
+    /// reference back into one is kept as written. Only a compiled
+    /// definition's references are checked for cycles at load, and an
+    /// external one's are not compiled.
+    fn publish<'s>(&'s self, contract: &str, written: &'s Value, open: &mut Vec<&'s str>) -> Value {
+        match written {
+            Value::Map(members) => {
+                let local = members.iter().find_map(|(key, value)| match value {
+                    Value::String(pointer) if key == "$ref" => pointer.strip_prefix("#/$defs/"),
+                    _ => None,
+                });
+                let named = local.and_then(|name| {
+                    self.defs.iter().find(|d| d.contract == contract && d.name == name)
+                });
+                if let Some(target) = named.filter(|d| !open.contains(&d.name.as_str())) {
+                    open.push(&target.name);
+                    let inlined = self.publish(contract, &target.written, open);
+                    open.pop();
+                    return inlined;
+                }
+                Value::Map(
+                    members
+                        .iter()
+                        .filter(|(key, _)| !key.starts_with("x-wb-"))
+                        .map(|(key, value)| (key.clone(), self.member(contract, key, value, open)))
+                        .collect(),
+                )
+            }
+            Value::Seq(items) => {
+                Value::Seq(items.iter().map(|item| self.publish(contract, item, open)).collect())
+            }
+            other => other.clone(),
+        }
+    }
+
+    /// A keyword's value published: under `properties` the keys are the
+    /// payload's field names, kept whatever they spell, and each value is a
+    /// schema.
+    fn member<'s>(
+        &'s self,
+        contract: &str,
+        key: &str,
+        value: &'s Value,
+        open: &mut Vec<&'s str>,
+    ) -> Value {
+        match value {
+            Value::Map(fields) if key == "properties" => Value::Map(
+                fields
+                    .iter()
+                    .map(|(name, schema)| (name.clone(), self.publish(contract, schema, open)))
+                    .collect(),
+            ),
+            _ => self.publish(contract, value, open),
+        }
     }
 
     /// Whether the definition is an object that declares `field`: what an

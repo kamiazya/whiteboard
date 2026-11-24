@@ -11,6 +11,7 @@ mod fixed_clock;
 mod keyed_lock;
 mod memory_record_store;
 mod memory_registry;
+mod memory_version_store;
 mod seq_id_mint;
 #[cfg(test)]
 mod within;
@@ -21,4 +22,5 @@ pub use fixed_clock::FixedClock;
 pub use keyed_lock::{Acquire, KeyedGuard, KeyedLock};
 pub use memory_record_store::MemoryRecordStore;
 pub use memory_registry::MemoryRegistry;
+pub use memory_version_store::MemoryVersionStore;
 pub use seq_id_mint::SeqIdMint;

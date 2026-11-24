@@ -82,6 +82,26 @@ fn a_plugin_loads_into_a_registry_that_knows_its_facets_and_assets() {
 }
 
 #[test]
+fn a_loaded_plugin_lists_its_facets_with_its_name_and_its_stencils_by_display_name() {
+    let registry = load(MANIFEST, CONTRACT, &tables()).expect("it loads");
+    let listed = registry.listed_facets();
+    assert_eq!(listed.len(), 1);
+    let mark = &listed[0];
+    assert_eq!((mark.namespace, mark.display_name), ("demo", "Demo"));
+    assert_eq!((mark.name, mark.version), ("mark", "v0"));
+    assert_eq!(mark.targets, [FacetTarget::Node, FacetTarget::Edge]);
+    assert_eq!(mark.asset_refs, [("theme".to_owned(), AssetKind::Themes)]);
+    let schema = json::parse(
+        r#"{"type": "object", "properties": {"theme": {"type": "string"}}, "required": ["theme"]}"#,
+    )
+    .expect("JSON");
+    assert_eq!(mark.schema, Some(schema));
+    assert_eq!(registry.stencil_display_name("demo.box"), Some("Box"));
+    assert_eq!(registry.stencil_display_name("demo.sketch"), None);
+    assert_eq!(registry.stencil_display_name("demo.missing"), None);
+}
+
+#[test]
 fn a_manifest_without_assets_registers_none() {
     let bare = r#"{"id": "demo", "displayName": "Demo", "facets": []}"#;
     let registry = load(bare, CONTRACT, &[]).expect("it loads");

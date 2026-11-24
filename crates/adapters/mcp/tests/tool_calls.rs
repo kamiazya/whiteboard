@@ -21,7 +21,9 @@ use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_mcp::{Identity, OpsCatalogue, PENDING_TOOLS, Server, ToolCatalogue};
 use whiteboard_model::encoding::base64_to_bytes;
 use whiteboard_ops::Ports;
-use whiteboard_port_fakes::{FixedCaller, MemoryRecordStore, MemoryRegistry, block_on};
+use whiteboard_port_fakes::{
+    FixedCaller, MemoryRecordStore, MemoryRegistry, MemoryVersionStore, block_on,
+};
 use whiteboard_ports::WorkspaceEntry;
 
 const CASES: &str =
@@ -30,16 +32,19 @@ const READS: &str =
     include_str!("../../../../packages/mcp-server/src/server/mcp/oracle/document-reads.jsonl");
 const DOCUMENT_LIST: &str = include_str!("../../../../contracts/tools/wb_document_list.json");
 const DOCUMENT_GET: &str = include_str!("../../../../contracts/tools/wb_document_get.json");
+const VERSION_LIST: &str = include_str!("../../../../contracts/tools/wb_version_list.json");
+const FACET_LIST: &str = include_str!("../../../../contracts/tools/wb_facet_list.json");
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
-/// The ports the ported tools read: the record store, the registry and the
-/// caller.
-struct Fakes(MemoryRecordStore, MemoryRegistry, FixedCaller);
+/// The ports the ported tools read: the record store, the registry, the
+/// caller and the version store, which holds no version here.
+struct Fakes(MemoryRecordStore, MemoryRegistry, FixedCaller, MemoryVersionStore);
 
 impl Ports for Fakes {
     type Records = MemoryRecordStore;
     type Registry = MemoryRegistry;
     type Caller = FixedCaller;
+    type Versions = MemoryVersionStore;
 
     fn records(&self) -> &MemoryRecordStore {
         &self.0
@@ -52,11 +57,20 @@ impl Ports for Fakes {
     fn caller(&self) -> &FixedCaller {
         &self.2
     }
+
+    fn versions(&self) -> &MemoryVersionStore {
+        &self.3
+    }
 }
 
 /// No workspace, and a caller in `me` told of none.
 fn nothing() -> Fakes {
-    Fakes(MemoryRecordStore::new(), MemoryRegistry::new(), FixedCaller::new())
+    Fakes(
+        MemoryRecordStore::new(),
+        MemoryRegistry::new(),
+        FixedCaller::new(),
+        MemoryVersionStore::new(),
+    )
 }
 
 /// A call whose unknown keys the client wrote out of sorted order. The
@@ -100,7 +114,7 @@ fn fakes_of(record: &Value) -> Fakes {
         let known = known.iter().map(|h| h.as_str().expect("a handle").to_owned()).collect();
         caller = caller.knowing(known);
     }
-    Fakes(records, registry, caller)
+    Fakes(records, registry, caller, MemoryVersionStore::new())
 }
 
 #[cfg(test)]
@@ -163,7 +177,13 @@ fn the_listing_is_the_contract_of_each_ported_tool() {
     )
     .expect("an answer");
     let contract = |text: &str| serde_json::from_str::<Value>(text).expect("the contract parses");
-    assert_eq!(answer["result"]["tools"], json!([contract(DOCUMENT_LIST), contract(DOCUMENT_GET)]));
+    let listed = [
+        contract(DOCUMENT_LIST),
+        contract(DOCUMENT_GET),
+        contract(VERSION_LIST),
+        contract(FACET_LIST),
+    ];
+    assert_eq!(answer["result"]["tools"], json!(listed));
 }
 
 #[test]

@@ -23,7 +23,9 @@ use whiteboard_ops::{
     DocumentDetail, DocumentList, DocumentListInput, DocumentListOutput, DocumentResolve,
     DocumentResolveInput, Operation, Ports, with_resolved_workspace,
 };
-use whiteboard_port_fakes::{FixedCaller, MemoryRecordStore, MemoryRegistry, block_on};
+use whiteboard_port_fakes::{
+    FixedCaller, MemoryRecordStore, MemoryRegistry, MemoryVersionStore, block_on,
+};
 use whiteboard_ports::WorkspaceEntry;
 
 const CASES: &str =
@@ -37,6 +39,7 @@ impl Ports for Fakes {
     type Records = MemoryRecordStore;
     type Registry = MemoryRegistry;
     type Caller = FixedCaller;
+    type Versions = MemoryVersionStore;
 
     fn records(&self) -> &MemoryRecordStore {
         &self.0
@@ -48,6 +51,10 @@ impl Ports for Fakes {
 
     fn caller(&self) -> &FixedCaller {
         &self.2
+    }
+
+    fn versions(&self) -> &MemoryVersionStore {
+        unreachable!("a document read lists no version")
     }
 }
 

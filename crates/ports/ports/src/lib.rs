@@ -14,6 +14,7 @@ pub mod id_mint;
 pub mod lock;
 pub mod maybe_send;
 pub mod record_store;
+pub mod version_store;
 pub mod workspace_registry;
 
 pub use caller::{Caller, SINGLE_PERSON_NAMESPACE};
@@ -23,4 +24,5 @@ pub use id_mint::IdMint;
 pub use lock::WorkspaceLock;
 pub use maybe_send::{MaybeSend, MaybeSync};
 pub use record_store::WorkspaceRecordStore;
+pub use version_store::{OperatorKind, SavedVersion, VersionOperator, VersionStore};
 pub use workspace_registry::{WorkspaceEntry, WorkspaceLookup, WorkspaceRegistry};
