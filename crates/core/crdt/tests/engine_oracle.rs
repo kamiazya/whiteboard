@@ -23,6 +23,7 @@ use support::{assert_same, base64_decode, model_of, rows_of};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_crdt::{CONTENT_QUERIES, ENGINE_WRITERS, answer_content_query, import_bytes};
+use whiteboard_model::Value;
 use whiteboard_model::crdt::{Query, QueryName, WriterName};
 use write_replay::{check_state, check_write};
 
@@ -296,4 +297,91 @@ fn the_recording_reaches_what_the_ledger_claims() {
         })
         .count();
     assert!(marked > 10, "{marked} rows held a mark");
+}
+
+/// The queries whose objects the TypeScript parses through a schema, so whose
+/// keys it writes in that schema's order.
+const SCHEMA_ORDERED: &[QueryName] = &[
+    QueryName::CoreFacets,
+    QueryName::TrustFacets,
+    QueryName::Annotations,
+    QueryName::CommentThreads,
+    QueryName::Proposals,
+    QueryName::SpatialCanvas,
+];
+
+/// The keys whose value is a free map, at any depth.
+const FREE_MAPS: &[&str] = &["facets", "facetsRaw"];
+
+/// Where the keys of two values first stand in another order, counting the
+/// objects of two keys or more compared. A free map (a facet payload, the raw
+/// keys) holds its keys in the order of npm loro-crdt's hash map, which no
+/// schema decides, so it is not compared.
+#[cfg(test)]
+fn order_difference(
+    path: &str,
+    answer: &Value,
+    recorded: &Value,
+    compared: &mut usize,
+) -> Option<String> {
+    match (answer, recorded) {
+        (Value::Map(left), Value::Map(right)) => {
+            let names =
+                |map: &[(String, Value)]| map.iter().map(|(k, _)| k.clone()).collect::<Vec<_>>();
+            if names(left) != names(right) {
+                return Some(format!("{path}: {:?} != {:?}", names(left), names(right)));
+            }
+            if left.len() > 1 {
+                *compared += 1;
+            }
+            left.iter()
+                .zip(right)
+                .filter(|(entry, _)| !FREE_MAPS.contains(&entry.0.as_str()))
+                .find_map(|((key, l), (_, r))| {
+                    order_difference(&format!("{path}/{key}"), l, r, compared)
+                })
+        }
+        (Value::Seq(left), Value::Seq(right)) => left
+            .iter()
+            .zip(right)
+            .enumerate()
+            .find_map(|(i, (l, r))| order_difference(&format!("{path}[{i}]"), l, r, compared)),
+        _ => None,
+    }
+}
+
+#[test]
+fn every_schema_read_answers_in_the_typescripts_key_order() {
+    let rows = rows_of(RECORDING);
+    let bytes: BTreeMap<String, Vec<u8>> = rows
+        .iter()
+        .filter(|row| row["op"] == "open")
+        .map(|row| {
+            let id = row["id"].as_str().expect("an id").to_owned();
+            (id, base64_decode(row["snapshot"].as_str().expect("bytes")))
+        })
+        .collect();
+    let (mut compared, mut unreadable) = (0_usize, 0_usize);
+    for (row, line) in rows.iter().zip(RECORDING.lines().filter(|line| !line.is_empty())) {
+        let Some(query) = query_of(row) else { continue };
+        if !SCHEMA_ORDERED.contains(&query.query) || row["args"].get("documentId").is_some() {
+            continue;
+        }
+        let Ok(written) = whiteboard_model::json::parse(line) else {
+            unreadable += 1;
+            continue;
+        };
+        let Value::Map(fields) = written else { panic!("a row") };
+        let recorded = fields.into_iter().find(|(k, _)| k == "result").expect("a result").1;
+        let held = bytes.get(row["doc"].as_str().expect("a document")).expect("an open row");
+        let doc = import_bytes(held).expect("bytes");
+        let answer = answer_content_query(&doc, &query).expect("answered");
+        let id = row["id"].as_str().expect("an id");
+        if let Some(found) = order_difference("", &answer.value, &recorded, &mut compared) {
+            panic!("{id} {}: {found}", query.query.as_str());
+        }
+    }
+    // 1,871 objects of two keys or more when this was written.
+    assert!(compared > 1500, "only {compared} objects compared, so the order was barely judged");
+    assert_eq!(unreadable, 0, "rows whose text a Rust string cannot hold");
 }

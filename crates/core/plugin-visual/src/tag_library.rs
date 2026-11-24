@@ -2,7 +2,46 @@
 //! every reader of colour-by-intent makes, so they cannot disagree about what
 //! "declared" means.
 
+use whiteboard_facet_engine::registry::Registry;
+use whiteboard_model::{Map, Value};
+
+use crate::stencil_library::{member, sorted};
 use crate::visual::{CanvasColor, TagLibrary};
+
+/// Where a workspace keeps its tag library.
+pub const TAG_LIBRARY_PATH: &str = "tags";
+/// The facet a tag library is declared in.
+pub const VISUAL_TAGS_KEY: &str = "visual.tags/v0";
+const VISUAL_TAGS_FACET: &str = "facets/visual/visual.schema.json#/$defs/VisualTagsFacet";
+
+/// What a library document's facets declare (`readTagLibrary`): each key's
+/// declaration as the schema parses it, keys and each key's values in name
+/// order; none for facets without the library facet or with one the schema
+/// refuses, since a drawing must stay readable when a document elsewhere is
+/// wrong. A declaration's own fields come in name order too, which is the
+/// schema's order for both of its records.
+#[must_use]
+pub fn read_tag_library(facets: &Value, registry: &Registry) -> Map {
+    let contracts = registry.contracts();
+    let parsed = member(facets, VISUAL_TAGS_KEY)
+        .zip(contracts.resolve(VISUAL_TAGS_FACET))
+        .and_then(|(raw, shape)| contracts.validate(shape, raw).ok());
+    match parsed.as_ref().and_then(|parsed| member(parsed, "keys")) {
+        Some(Value::Map(keys)) => ordered(keys),
+        _ => Map::new(),
+    }
+}
+
+/// `entries` with every record in them, at any depth, in name order.
+fn ordered(entries: &Map) -> Map {
+    sorted(entries)
+        .into_iter()
+        .map(|(name, value)| match value {
+            Value::Map(inner) => (name, Value::Map(ordered(&inner))),
+            other => (name, other),
+        })
+        .collect()
+}
 
 /// The colour the library declares for the value `value` of the key `key`
 /// (`declaredColourOf`): an undeclared key, an undeclared value and a value
@@ -20,7 +59,10 @@ pub fn declared_colour_of<'l>(
 
 #[cfg(test)]
 mod tests {
-    use super::declared_colour_of;
+    use whiteboard_model::json;
+
+    use super::{declared_colour_of, read_tag_library};
+    use crate::host::visual_registry;
     use crate::visual::{TagKeyDeclaration, TagLibrary, TagValueDeclaration};
 
     #[cfg(target_arch = "wasm32")]
@@ -45,6 +87,36 @@ mod tests {
                 },
             ),
         ]
+    }
+
+    fn read(facets: &str) -> whiteboard_model::Map {
+        let registry = visual_registry().expect("the bundled plugin");
+        read_tag_library(&json::parse(facets).expect("JSON"), &registry)
+    }
+
+    #[test]
+    fn a_library_reads_its_keys_and_values_in_name_order() {
+        let library = read(
+            r#"{"visual.tags/v0": {"keys": {"team": {}, "health": {"exclusive": true,
+                "values": {"ok": {"color": "4"}, "failing": {"description": "d", "color": "1"}}}}}}"#,
+        );
+        let expected = json::parse(
+            r#"{"health": {"exclusive": true, "values": {"failing": {"color": "1", "description": "d"},
+                "ok": {"color": "4"}}}, "team": {}}"#,
+        );
+        assert_eq!(Some(whiteboard_model::Value::Map(library)), expected.ok());
+    }
+
+    #[test]
+    fn no_library_or_one_the_schema_refuses_reads_as_none() {
+        for facets in [
+            r"{}",
+            r#"{"visual.tags/v0": {"keys": {"Bad Key": {}}}}"#,
+            r#"{"visual.tags/v0": {"keys": {"k": {"stray": 1}}}}"#,
+            r#"{"visual.tags/v0": []}"#,
+        ] {
+            assert!(read(facets).is_empty(), "{facets}");
+        }
     }
 
     #[test]

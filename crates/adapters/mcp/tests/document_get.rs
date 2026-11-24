@@ -7,24 +7,13 @@
 //! documents by name), and every row after it one `tools/call` and the result
 //! the TypeScript server drew, answered over a real data directory the record
 //! was loaded into. A result's `structuredContent` is held as `structured:
-//! true`, being what its text spells; the text is held byte for byte.
-//!
-//! One difference is declared rather than reproduced: the ORDER of the keys
-//! of an object the engine reads back. The TypeScript's readers build a
-//! thread, a proposal and the core and trust facets in their schemas' order
-//! and hand a free map (a facet's payload) over in npm loro-crdt's order,
-//! while `whiteboard-crdt` answers every object with its keys ascending. So a
-//! text is compared byte for byte where it can be, and otherwise as the same
-//! JSON with each markdown document's OKF text compared as the same document
-//! ([`same_document`]); [`KEY_ORDER`] counts the calls that need it, and
-//! falls to none when the engine answers in the TypeScript's order. A spatial
-//! document's JSON Canvas is compared byte for byte: the codec writes it in
-//! its own order whichever order the engine read it in.
+//! true`, being what its text spells; the text is held byte for byte, key
+//! order included: the engine reads an object the TypeScript parses through a
+//! schema in that schema's order.
 
 use serde_json::{Value, json};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
-use whiteboard_codec::okf;
 use whiteboard_mcp::{Identity, OpsCatalogue, Server};
 use whiteboard_model::encoding::base64_to_bytes;
 use whiteboard_ops::Ports;
@@ -36,12 +25,6 @@ use whiteboard_ports::WorkspaceEntry;
 const CASES: &str =
     include_str!("../../../../packages/mcp-server/src/server/mcp/oracle/document-get.jsonl");
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
-
-/// How many recorded calls are answered with the same JSON in another key
-/// order (see the module's note): twelve over markdown documents, and six
-/// reading a spatial document that holds a thread or a proposal, whose JSON
-/// Canvas is byte for byte the TypeScript's.
-const KEY_ORDER: usize = 18;
 
 struct Fakes(MemoryRecordStore, MemoryRegistry, FixedCaller);
 
@@ -113,52 +96,6 @@ fn expected(answer: &Value) -> Value {
 }
 
 #[cfg(test)]
-/// A value with every map's keys ascending.
-fn sorted(value: whiteboard_model::Value) -> whiteboard_model::Value {
-    use whiteboard_model::Value as Plain;
-    match value {
-        Plain::Seq(items) => Plain::Seq(items.into_iter().map(sorted).collect()),
-        Plain::Map(entries) => {
-            let mut entries: Vec<_> = entries.into_iter().map(|(k, v)| (k, sorted(v))).collect();
-            entries.sort_by(|a, b| a.0.cmp(&b.0));
-            Plain::Map(entries)
-        }
-        other => other,
-    }
-}
-
-#[cfg(test)]
-/// An OKF text written again from what it parses to, every free map's keys
-/// ascending: two texts that say the same document in another key order are
-/// the same text here.
-fn same_document(text: &str) -> String {
-    let mut document = okf::parse(text).expect("an OKF text");
-    let sort = |map: Option<Vec<(String, whiteboard_model::Value)>>| {
-        map.map(|map| match sorted(whiteboard_model::Value::Map(map)) {
-            whiteboard_model::Value::Map(map) => map,
-            _ => unreachable!("a map sorts to a map"),
-        })
-    };
-    document.frontmatter.facets = sort(document.frontmatter.facets.take());
-    document.frontmatter.facets_raw = sort(document.frontmatter.facets_raw.take());
-    okf::serialize(&document).expect("a writable document")
-}
-
-#[cfg(test)]
-/// A result's text as JSON, each markdown document's content as
-/// [`same_document`] writes it.
-fn canonical(text: &str) -> Value {
-    let mut answer: Value = serde_json::from_str(text).expect("JSON text");
-    for document in answer["documents"].as_array_mut().into_iter().flatten() {
-        if document["kind"] == "markdown" {
-            let content = same_document(document["content"].as_str().expect("a content"));
-            document["content"] = Value::from(content);
-        }
-    }
-    answer
-}
-
-#[cfg(test)]
 /// A result without its content and structured output.
 fn rest(result: &Value) -> Value {
     let mut rest = result.clone();
@@ -173,7 +110,7 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
     let mut lines = CASES.lines();
     let record: Value = serde_json::from_str(lines.next().expect("a record")).expect("JSON");
     let server = server(&record);
-    let (mut replayed, mut reordered) = (0, 0);
+    let mut replayed = 0;
     for (id, line) in lines.enumerate() {
         let row: Value = serde_json::from_str(line).expect("a JSON row");
         let message =
@@ -191,10 +128,7 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
                 result["structuredContent"], parsed,
                 "{case}: the text spells the structure"
             );
-            if said != held {
-                assert_eq!(canonical(&said), canonical(&held), "{case}");
-                reordered += 1;
-            }
+            assert_eq!(said, held, "{case}: the text, byte for byte");
             assert_eq!(rest(result), rest(&expected), "{case}");
         } else {
             assert_eq!(result, &expected, "{case}");
@@ -202,5 +136,4 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         replayed += 1;
     }
     assert_eq!(replayed, 48, "the recording's calls, every one answered");
-    assert_eq!(reordered, KEY_ORDER, "the calls answered in another key order");
 }

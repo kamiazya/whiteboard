@@ -64,9 +64,26 @@ fn model_of(json: &Json) -> Value {
     }
 }
 
+/// A value with every map's keys ascending, as `model_of` writes the expected
+/// one: the order a read answers in is held by `engine_oracle.rs`, against what
+/// the TypeScript recorded, so these compare what is answered, not its order.
+#[cfg(test)]
+fn sorted(value: Value) -> Value {
+    match value {
+        Value::Seq(items) => Value::Seq(items.into_iter().map(sorted).collect()),
+        Value::Map(entries) => {
+            let mut entries: Vec<(String, Value)> =
+                entries.into_iter().map(|(k, v)| (k, sorted(v))).collect();
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            Value::Map(entries)
+        }
+        other => other,
+    }
+}
+
 #[cfg(test)]
 fn assert_same(label: &str, answer: &Value, expected: &Value) {
-    assert_eq!(answer, expected, "{label}");
+    assert_eq!(&sorted(answer.clone()), expected, "{label}");
 }
 
 /// Asserts the answer equals the recorded form `expected`.

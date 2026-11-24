@@ -100,3 +100,4 @@ pub(super) fn issue(path: &str, code: Code, continues: bool) -> (String, Code, b
 
 mod compile;
 mod run;
+mod zod_json;

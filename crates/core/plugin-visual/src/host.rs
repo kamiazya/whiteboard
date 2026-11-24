@@ -22,6 +22,9 @@ const GLYPHS: &str =
     include_str!("../../../../packages/plugin-visual/src/assets/icons-glyphs.json");
 
 const CONTRACT_PATH: &str = "facets/visual/visual.schema.json";
+/// The model's contract, which the three definitions the visual contract
+/// leaves to `model-vocabulary.js` are generated from.
+const MODEL_SPATIAL: &str = include_str!("../../../../contracts/model/spatial.schema.json");
 
 /// The model's `CanvasColor`, as its union answers: a preset or a six-digit
 /// hex string. A string that is neither is refused by the hex arm alone (the
@@ -54,15 +57,19 @@ fn canvas_color(value: &Value) -> Result<Value, Vec<Issue>> {
 
 /// What `contracts/facets/visual` leaves to its host, beside the engine's own
 /// matchers: its tag grammar, the two named checks, and the three definitions
-/// the model owns (`EdgeRoutingStyle` and `LineJumps` as the contract writes
-/// them, `CanvasColor` by the model's own union).
+/// the model's contract owns (`EdgeRoutingStyle` and `LineJumps` judged as the
+/// visual contract writes them, `CanvasColor` by the model's own union), each
+/// published as the model's contract writes it.
 pub const VISUAL_HOST: Host<'static> = Host {
     matchers: &[("tag_identifier", checks::tag_identifier)],
     checks: &[("single_grapheme", checks::single_grapheme), ("canvas_color", checks::canvas_color)],
     externals: &[
-        ("EdgeRoutingStyle", External::AsWritten),
-        ("LineJumps", External::AsWritten),
-        ("CanvasColor", External::Validator(canvas_color)),
+        ("EdgeRoutingStyle", External::Defined { contract: MODEL_SPATIAL, validator: None }),
+        ("LineJumps", External::Defined { contract: MODEL_SPATIAL, validator: None }),
+        (
+            "CanvasColor",
+            External::Defined { contract: MODEL_SPATIAL, validator: Some(canvas_color) },
+        ),
     ],
 };
 

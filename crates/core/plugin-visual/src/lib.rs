@@ -16,6 +16,7 @@ pub mod host;
 pub mod read;
 pub mod render;
 pub mod shortcode;
+pub mod stencil_library;
 pub mod tag_library;
 #[path = "generated/visual.rs"]
 pub mod visual;
