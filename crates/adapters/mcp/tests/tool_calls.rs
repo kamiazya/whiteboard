@@ -193,6 +193,23 @@ fn the_listing_is_the_contract_of_each_ported_tool() {
     assert_eq!(answer["result"]["tools"], json!(listed));
 }
 
+/// Every listed tool is dispatched to its binding: called with no arguments,
+/// each answers its own input refusal, never `not found`.
+#[test]
+fn every_listed_tool_is_called_through_its_binding() {
+    let catalogue = OpsCatalogue::new(nothing());
+    for tool in catalogue.tools() {
+        let name = tool["name"].as_str().expect("a name");
+        let answer = block_on(server(nothing()).handle(&json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": name, "arguments": { "unknown": true } } })))
+        .expect("an answer");
+        let text = answer["result"]["content"][0]["text"].as_str().unwrap_or_default();
+        let refused = format!("Input validation error: Invalid arguments for tool {name}: ");
+        assert!(text.starts_with(&refused), "{name}: {answer}");
+    }
+}
+
 #[test]
 fn a_pending_tool_is_not_listed_and_not_found() {
     let catalogue = OpsCatalogue::new(nothing());
