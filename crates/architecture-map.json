@@ -233,7 +233,7 @@
       "path": "crates/ports/ports",
       "layer": "ports",
       "status": "present",
-      "description": "the contracts an operation reaches I/O through: the error taxonomy, the MaybeSend and MaybeSync bounds, and the Caller, Clock, IdMint, WorkspaceLock, WorkspaceRecordStore, WorkspaceRegistry and VersionStore traits; the blob, scheduler and measurement ports and the record store's writes join as their first operation needs them",
+      "description": "the contracts an operation reaches I/O through: the error taxonomy, the MaybeSend and MaybeSync bounds, and the Caller, Clock, IdMint, WorkspaceLock, WorkspaceRecordStore, WorkspaceRegistry and VersionStore traits; the record store's appended update; the blob, scheduler and measurement ports join as their first operation needs them",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det", "whiteboard-log", "whiteboard-model"],
       "allowedThirdParty": {},

@@ -62,7 +62,7 @@ impl Operation for VersionSave {
         for document_id in &document_ids {
             resolve_in(&record, &workspace_id, document_id)?;
         }
-        let asked = NewVersion { label: Some(label), auto: false };
+        let asked = NewVersion { label: Some(label), auto: false, restored_from: None };
         let mut saved = Vec::with_capacity(document_ids.len());
         for document_id in document_ids {
             let version = ports

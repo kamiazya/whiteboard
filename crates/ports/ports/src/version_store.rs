@@ -40,16 +40,18 @@ pub struct SavedVersion {
 }
 
 /// What a save asks the keeper to record: a point somebody chose, under
-/// their label, or an automatic checkpoint.
+/// their label, or an automatic checkpoint; and, for the point a restore
+/// produced, the version it restored.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewVersion {
     pub label: Option<String>,
     pub auto: bool,
+    pub restored_from: Option<String>,
 }
 
 /// The version history a keeper holds: natively a table beside the record,
-/// on Workers a Durable Object's storage. The listing and the save are here;
-/// a checkout and a restore join with the operations that make them.
+/// on Workers a Durable Object's storage: the listing, the save, and the
+/// checkouts a restore reads a past state through.
 pub trait VersionStore {
     /// Every saved version of `document_id` in `workspace_id`, newest first
     /// (two saves in one millisecond: the later save first), or none for a
@@ -69,11 +71,37 @@ pub trait VersionStore {
     /// daemon's `agentVersionHistory` stamps an unnamed save). The keeper
     /// tells the document's watchers the version exists, and refuses a
     /// manual save once the document keeps as many manual versions as one
-    /// document may (`TooManyVersions`), keeping nothing.
+    /// document may (`TooManyVersions`), keeping nothing. A save naming
+    /// `restored_from` is refused the same way once the document keeps as
+    /// many restore points as one document may, whatever it saves.
     fn save(
         &self,
         workspace_id: &str,
         document_id: &str,
         save: &NewVersion,
     ) -> impl Future<Output = Result<SavedVersion, PortError>> + MaybeSend;
+
+    /// The state of the document `version_id` was saved of, as the bytes of a
+    /// document of its own: the stored record checked out at the version and
+    /// that document projected out of it. `None` when the workspace holds no
+    /// version by that id, or the document is not in the record at it.
+    ///
+    /// A version id is unique per workspace, not per document: whether the
+    /// version is the caller's document's is the caller's to ask of `list`.
+    fn load(
+        &self,
+        workspace_id: &str,
+        version_id: &str,
+    ) -> impl Future<Output = Result<Option<Vec<u8>>, PortError>> + MaybeSend;
+
+    /// The whole workspace record as it stood at `version_id`, as the bytes
+    /// of a record of its own, which a subtree rollback walks. `None` when the
+    /// workspace holds no version by that id, or the version does not carry
+    /// the workspace: a per-document version cannot say where its siblings
+    /// were.
+    fn load_workspace_at(
+        &self,
+        workspace_id: &str,
+        version_id: &str,
+    ) -> impl Future<Output = Result<Option<Vec<u8>>, PortError>> + MaybeSend;
 }
