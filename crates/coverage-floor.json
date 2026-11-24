@@ -2,6 +2,11 @@
   "$comment": "QR-18: each crate's floor for line and region coverage of the native test run, as `cargo xtask coverage` measures it (one `cargo llvm-cov --workspace` run; every workspace test counts toward every crate). A floor starts at the first measured value rounded down and only goes up: a measurement under it fails, and so does a floor more than headroomPoints below it, so the PR that earned the coverage raises the floor (`cargo xtask coverage --update` only raises). Lowering a floor is a hand edit with its reason here.",
   "headroomPoints": 2,
   "crates": {
+    "adapters/mcp": {
+      "lines": 99,
+      "regions": 99,
+      "reason": "first measured 2026-11-24 at 99.43% lines and 99.44% regions, over the dispatcher's unit tests, the replay of the TypeScript server's answers (tests/protocol.rs) and the envelope property; what is left is the poisoned-lock arm of the session lock, which nothing that holds it can reach"
+    },
     "bindings/native-fixture": {
       "lines": 0,
       "regions": 0,

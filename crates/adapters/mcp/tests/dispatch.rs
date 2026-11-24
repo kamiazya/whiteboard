@@ -155,3 +155,30 @@ fn handling_a_message_can_move_between_threads() {
     sends(&future);
     assert_eq!(block_on(future), Some(json!({ "jsonrpc": "2.0", "id": 1, "result": {} })));
 }
+
+/// The other half: on wasm32 a catalogue may hold what cannot cross threads,
+/// as a browser's ports do.
+#[test]
+#[cfg(target_arch = "wasm32")]
+fn a_catalogue_that_cannot_cross_threads_is_served_on_wasm32() {
+    struct Shared(std::rc::Rc<Value>);
+    impl ToolCatalogue for Shared {
+        fn tools(&self) -> Vec<Value> {
+            vec![(*self.0).clone()]
+        }
+        fn call(
+            &self,
+            _: &str,
+            _: Option<&Map<String, Value>>,
+        ) -> impl Future<Output = Result<Value, ToolError>> {
+            let held = std::rc::Rc::clone(&self.0);
+            async move { Ok((*held).clone()) }
+        }
+    }
+    let identity = Identity { name: "n".into(), version: "v".into(), instructions: String::new() };
+    let server = Server::new(identity, Shared(std::rc::Rc::new(json!({ "name": "rc" }))));
+    let message =
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "x" } });
+    let answer = block_on(server.handle(&message)).expect("an answer");
+    assert_eq!(answer["result"], json!({ "name": "rc" }));
+}
