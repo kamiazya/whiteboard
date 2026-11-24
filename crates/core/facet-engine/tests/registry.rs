@@ -276,7 +276,8 @@ fn every_facet_is_listed_in_manifest_order_under_its_plugins_name() {
 
 /// A definition published: the dialect's members gone at every depth, and a
 /// reference replaced by the definition it names in its own contract (itself
-/// published), never by the same name in another loaded contract.
+/// published), never by the same name in another loaded contract; a string
+/// that only reads like a pointer is kept.
 #[test]
 fn a_published_definition_drops_the_dialect_and_inlines_its_own_contracts_references() {
     let parse = |text: &str| whiteboard_model::json::parse(text).expect("JSON");
@@ -284,7 +285,7 @@ fn a_published_definition_drops_the_dialect_and_inlines_its_own_contracts_refere
     let contract = parse(
         r##"{"$schema": "x", "$defs": {
             "Id": {"type": "string", "x-wb-minUtf16": 1, "description": "an id"},
-            "Pair": {"type": "object",
+            "Pair": {"type": "object", "description": "#/$defs/Id",
                 "properties": {"id": {"$ref": "#/$defs/Id"},
                     "ids": {"type": "array", "items": {"$ref": "#/$defs/Id"}}},
                 "required": ["id"], "x-wb-order": ["id", "ids"], "x-wb-unknownKeys": "strip"}
@@ -295,10 +296,10 @@ fn a_published_definition_drops_the_dialect_and_inlines_its_own_contracts_refere
     let contracts = Contracts::load(&loaded, &host).expect("it compiles");
     let pair = contracts.resolve(&format!("{PATH}#/$defs/Pair")).expect("Pair");
     let published = parse(
-        r#"{"type": "object",
+        r##"{"type": "object", "description": "#/$defs/Id",
             "properties": {"id": {"type": "string", "description": "an id"},
                 "ids": {"type": "array", "items": {"type": "string", "description": "an id"}}},
-            "required": ["id"]}"#,
+            "required": ["id"]}"##,
     );
     assert_eq!(contracts.published(pair), Some(published));
     let other_id = contracts.resolve("facets/other.schema.json#/$defs/Id").expect("Id");
