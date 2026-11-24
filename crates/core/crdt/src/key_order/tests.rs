@@ -137,3 +137,12 @@ fn a_value_that_is_no_object_is_handed_back() {
     assert_eq!(anchor(Value::Null), Value::Null);
     assert_eq!(change(Value::Null), Value::Null);
 }
+
+#[test]
+fn what_no_schema_reads_is_written_as_held() {
+    let numeric = |key: &str| Value::Map(vec![(key.to_owned(), Value::Number(1.0))]);
+    assert_eq!(anchor(numeric("kind")), numeric("kind"), "a kind that is no text");
+    assert_eq!(change(numeric("op")), numeric("op"), "an op that is no text");
+    let stray = object(&["verified", "stray", "generated"]);
+    assert_eq!(keys(&trust(stray)), ["generated", "verified", "stray"], "nulls, not lists");
+}

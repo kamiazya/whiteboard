@@ -123,10 +123,11 @@ fn each(value: Value, item: fn(Value) -> Value) -> Value {
     }
 }
 
-fn kind_of(value: &Value) -> Option<&str> {
+/// The text an object holds at `name`: the arm a union discriminates on.
+fn text_at<'a>(value: &'a Value, name: &str) -> Option<&'a str> {
     let Value::Map(entries) = value else { return None };
-    entries.iter().find(|(key, _)| key == "kind").and_then(|(_, held)| match held {
-        Value::String(kind) => Some(kind.as_str()),
+    entries.iter().find(|(key, _)| key == name).and_then(|(_, held)| match held {
+        Value::String(text) => Some(text.as_str()),
         _ => None,
     })
 }
@@ -158,7 +159,7 @@ fn text_anchor(value: Value) -> Value {
 
 /// An annotation anchor, by its arm; the `document` arm holds one key.
 fn anchor(value: Value) -> Value {
-    match kind_of(&value) {
+    match text_at(&value, "kind") {
         Some("text") => text_anchor(value),
         Some("spatial") => shaped(value, SPATIAL_ANCHOR, flat),
         _ => value,
@@ -220,17 +221,9 @@ pub(crate) fn canvas(value: Value) -> Value {
     })
 }
 
-fn op_of(value: &Value) -> Option<&str> {
-    let Value::Map(entries) = value else { return None };
-    entries.iter().find(|(key, _)| key == "op").and_then(|(_, held)| match held {
-        Value::String(op) => Some(op.as_str()),
-        _ => None,
-    })
-}
-
 /// A proposed change, its payload in the shape its verb names.
 fn change(value: Value) -> Value {
-    let subject: fn(&str, Value) -> Value = match op_of(&value) {
+    let subject: fn(&str, Value) -> Value = match text_at(&value, "op") {
         Some("node.add" | "node.remove") => |key, held| match key {
             "node" | "assumed" => node(held),
             _ => held,
