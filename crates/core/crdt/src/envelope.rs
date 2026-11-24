@@ -7,6 +7,7 @@
 //! `type` (the one required field) did not.
 
 use crate::content::{DocumentKind, document_kind, map_of, value_of};
+use crate::key_order;
 use crate::plain::{Undecided, plain};
 use loro::{LoroDoc, LoroValue};
 use whiteboard_model::Value;
@@ -76,8 +77,7 @@ impl Core {
         for (key, held) in &self.fields {
             written.push((key.clone(), plain(held)?));
         }
-        written.sort_by(|a, b| a.0.cmp(&b.0));
-        Some(Value::Map(written))
+        Some(key_order::core(Value::Map(written)))
     }
 }
 
@@ -111,6 +111,5 @@ pub(crate) fn trust_facets(doc: &LoroDoc) -> Result<Option<Value>, Undecided> {
             written.push((key.to_string(), plain(&value).ok_or(Undecided)?));
         }
     }
-    written.sort_by(|a, b| a.0.cmp(&b.0));
-    Ok((!written.is_empty()).then_some(Value::Map(written)))
+    Ok((!written.is_empty()).then(|| key_order::trust(Value::Map(written))))
 }
