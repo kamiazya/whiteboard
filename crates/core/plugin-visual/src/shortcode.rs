@@ -109,6 +109,7 @@ pub fn expand_emoji_shortcodes(text: &str) -> String {
 
 /// `emojiShortcodeRanges`' characters: what each `:name:` naming an emoji
 /// draws, in order.
+#[cfg(feature = "emoji-search")]
 pub(crate) fn emoji_shortcode_chars(text: &str) -> Vec<&'static str> {
     candidates(text, ":", emoji_byte)
         .into_iter()

@@ -5,6 +5,8 @@
 //! writes `emoji-search.jsonl`: per text, the terms it lends a search index.
 //! This replays every line exactly.
 
+#![cfg(feature = "emoji-search")]
+
 use serde_json::Value as Json;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;

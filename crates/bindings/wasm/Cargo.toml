@@ -20,7 +20,7 @@ whiteboard-det = { path = "../../core/det" }
 whiteboard-facet-engine = { path = "../../core/facet-engine" }
 whiteboard-model = { path = "../../core/model" }
 whiteboard-edge-routing = { path = "../../core/edge-routing" }
-whiteboard-plugin-visual = { path = "../../core/plugin-visual" }
+whiteboard-plugin-visual = { path = "../../core/plugin-visual", default-features = false }
 whiteboard-scene = { path = "../../core/scene" }
 whiteboard-search = { path = "../../core/search" }
 
