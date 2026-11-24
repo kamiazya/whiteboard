@@ -1,7 +1,9 @@
 import { access, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { InMemoryTransport, type McpServer } from '@modelcontextprotocol/server'
+import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from '../routes/_test-helpers.js'
 
@@ -10,13 +12,18 @@ import { withTempDataDir } from '../routes/_test-helpers.js'
  * layer's `FacetList` is replayed against
  * (`crates/adapters/mcp/tests/facet_list.rs`).
  *
- * `oracle/facet-list.jsonl` opens with one record row: the registry rows that
- * address the one workspace, `W` (an empty one: what a workspace's own
- * library and tags add is a later recording's), the caller's namespace and
- * the handles a refusal may name. Every row after it is one `tools/call` and
- * the result it drew, its `structuredContent` held as `structured: true`
- * once it is shown to be what its text spells. Nothing here is minted, so a
- * rerun answers the same rows; re-record after a deliberate change with
+ * `oracle/facet-list.jsonl` opens with one record row: the one workspace's
+ * record (`snapshot`, kept as `W`), the registry rows that address it, the
+ * caller's namespace and the handles a refusal may name. The record was built
+ * once through the daemon's own tools: a stencil library and a tag library at
+ * their well-known paths, a note, a board, a node and an edge carrying tags,
+ * and a document whose tags are another's. Delete the file to build it again
+ * (the ids are minted, though no answer names one).
+ *
+ * Every row after it is one `tools/call` and the result it drew, answered
+ * over a fresh data directory the record was loaded into, its
+ * `structuredContent` held as `structured: true` once it is shown to be what
+ * its text spells. Re-record after a deliberate change with
  * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project mcp-node facet-list.oracle`.
  */
 const FIXTURE = new URL('./oracle/facet-list.jsonl', import.meta.url)
@@ -42,6 +49,9 @@ vi.mock('../config.js', () => ({
 // `../config.js`, so they read this file's temporary data directory.
 const { createMcpServer } = await import('./server.js')
 const { resolveTestServerDeps } = await import('../routes/_test-helpers.js')
+const { importWorkspaceRecord, workspaceRecordCopy } = await import(
+  '../store/_test-workspace-record.js'
+)
 
 type Message = Record<string, unknown>
 
@@ -83,6 +93,104 @@ async function freshDeps(known: string[]): Promise<ServerDeps> {
   return { ...deps, knownWorkspaceHandles: async () => known }
 }
 
+/** The structured answer of a call that must succeed. */
+async function ok(call: Call, name: string, args: Message): Promise<Message> {
+  const answer = await call(name, args)
+  if (answer.isError === true || answer.error !== undefined) {
+    throw new Error(`${name} failed while building the record: ${JSON.stringify(answer)}`)
+  }
+  return answer.structuredContent as Message
+}
+
+const STENCILS = {
+  ledger: { displayName: 'Ledger' },
+  lakehouse: {
+    displayName: 'Lakehouse',
+    color: '3',
+    facets: { 'visual.shape/v0': { kind: 'cylinder' } },
+  },
+  'api-gateway': { displayName: 'API gateway', color: '#1a2b3c' },
+}
+
+const TAG_KEYS = {
+  team: {},
+  health: {
+    description: 'How a service is doing.',
+    exclusive: true,
+    values: {
+      ok: { color: '4' },
+      failing: { color: '1', description: 'Down or erroring.' },
+      degraded: { description: 'Slow.' },
+    },
+  },
+  owner: { exclusive: false, values: { ana: {} } },
+}
+
+/** Documents, tags and the two libraries, written through the tools. */
+async function populate(call: Call): Promise<void> {
+  const created = await ok(call, 'wb_workspace_edit', {
+    workspaceId: W,
+    ops: [
+      { op: 'document.create', path: 'note', kind: 'markdown', markdown: '# Note\n' },
+      { op: 'document.create', path: 'other', kind: 'markdown', markdown: 'tagged too' },
+      { op: 'document.create', path: 'board', kind: 'spatial' },
+      { op: 'document.create', path: 'stencils', kind: 'markdown' },
+      { op: 'document.create', path: 'tags', kind: 'markdown' },
+    ],
+  })
+  const ids: Record<string, string> = {}
+  for (const result of created.results as { path: string; documentId: string }[]) {
+    ids[result.path] = result.documentId
+  }
+  const board = ids.board as string
+  await ok(call, 'wb_canvas_edit', {
+    workspaceId: W,
+    documentId: board,
+    mode: 'apply',
+    ops: [
+      { op: 'node.add', node: { id: 'a', type: 'text', text: 'API', x: 0, y: 0 } },
+      { op: 'node.add', node: { id: 'b', type: 'text', text: 'DB', x: 300, y: 0 } },
+      { op: 'node.add', node: { id: 'c', type: 'text', text: 'Cache', x: 0, y: 300 } },
+      { op: 'edge.add', edge: { id: 'e', from: { node: 'a' }, to: { node: 'b' } } },
+    ],
+  })
+  const tag = (documentIds: string[], add: string[], at: Message = {}) =>
+    ok(call, 'wb_facet_set', { workspaceId: W, documentIds, tags: { add }, ...at })
+  await tag([ids.note as string, ids.other as string], ['health:failing', 'ml'])
+  await tag([ids.other as string], ['team:core', 'ml'])
+  await tag([board], ['team:core', 'zeta'])
+  await tag([board], ['health:ok', 'team:core', 'health:degraded'], { nodeId: 'a' })
+  await tag([board], ['health:ok'], { nodeId: 'b' })
+  await tag([board], ['owner:ana', 'ml'], { edgeId: 'e' })
+  await ok(call, 'wb_facet_set', {
+    workspaceId: W,
+    documentIds: [ids.stencils as string],
+    facets: { 'visual.stencils/v0': { stencils: STENCILS } },
+  })
+  await ok(call, 'wb_facet_set', {
+    workspaceId: W,
+    documentIds: [ids.tags as string],
+    facets: { 'visual.tags/v0': { keys: TAG_KEYS } },
+  })
+}
+
+/** The record the calls are answered over, built through the tools. */
+async function buildRecord(): Promise<Message> {
+  const deps = await freshDeps(KNOWN)
+  await populate(await caller(deps))
+  const record = await workspaceRecordCopy(W)
+  const registry = (await deps.documentIndex.listWorkspaces()).filter(
+    (row) => row.workspaceId === W,
+  )
+  return {
+    case: 'deployment',
+    snapshot: bytesToBase64(record.export({ mode: 'snapshot' })),
+    registry,
+    callerNamespace: (await deps.callerNamespace?.()) ?? 'me',
+    known: KNOWN,
+  }
+}
+
 const TARGETS = ['document', 'canvas', 'node', 'edge']
 const ASSET_KINDS = ['themes', 'icons', 'stencils']
 
@@ -103,6 +211,8 @@ function workspaceCalls(): [string, Message | undefined][] {
     ['a workspace by id', { workspaceId: W }],
     ['a workspace by segment, filtered', { workspaceId: SEGMENT, target: 'node' }],
     ['a workspace by namespace and segment', { workspaceId: `me/${SEGMENT}` }],
+    ['a workspace, its stencils alone', { workspaceId: W, assetKind: 'stencils' }],
+    ['a workspace, filtered to the canvas', { workspaceId: W, target: 'canvas' }],
     ['a workspace nothing answers to', { workspaceId: 'nope' }],
     ['an id nothing answers to', { workspaceId: '01BX5ZZKBKACTAV9WEVGEMMVRZ' }],
     ['an empty address', { workspaceId: '' }],
@@ -148,18 +258,13 @@ async function rowsOf(file: URL): Promise<Message[]> {
     .map((line) => JSON.parse(line) as Message)
 }
 
-/** Every call, answered by a daemon holding the one workspace. */
-async function answer(): Promise<Message[]> {
+/** Every call, answered by a daemon the record was loaded into. */
+async function answer(record: Message): Promise<Message[]> {
   const deps = await freshDeps(KNOWN)
-  const registry = (await deps.documentIndex.listWorkspaces()).filter(
-    (row) => row.workspaceId === W,
+  await importWorkspaceRecord(
+    W,
+    LoroDoc.fromSnapshot(base64ToBytes(record.snapshot as string) as Uint8Array),
   )
-  const record = {
-    case: 'deployment',
-    registry,
-    callerNamespace: (await deps.callerNamespace?.()) ?? 'me',
-    known: KNOWN,
-  }
   const call = await caller(deps)
   const rows: Message[] = [record]
   for (const [about, args] of [...listCalls(), ...workspaceCalls(), ...validationCalls()]) {
@@ -170,10 +275,12 @@ async function answer(): Promise<Message[]> {
   return rows
 }
 
-describe('wb_facet_list over the deployment registry', () => {
+describe('wb_facet_list over a workspace with libraries and tags', () => {
   it('answers every recorded call as the recording holds it', { timeout: 120_000 }, async () => {
-    const answered = await answer()
-    if (RECORD || !(await exists(FIXTURE))) {
+    const held = (await exists(FIXTURE)) ? (await rowsOf(FIXTURE))[0] : undefined
+    const record = held?.snapshot === undefined ? await buildRecord() : held
+    const answered = await answer(record)
+    if (RECORD || held?.snapshot === undefined) {
       await writeFile(FIXTURE, `${answered.map((row) => JSON.stringify(row)).join('\n')}\n`)
     }
     expect(await rowsOf(FIXTURE)).toEqual(answered)

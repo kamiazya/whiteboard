@@ -195,6 +195,13 @@ impl Registry {
             .collect()
     }
 
+    /// The contracts the registry judges payloads by, which a plugin's own
+    /// readers judge its other definitions by too.
+    #[must_use]
+    pub const fn contracts(&self) -> &Contracts {
+        &self.contracts
+    }
+
     /// What a picker calls the registered stencil `id`, if one is.
     #[must_use]
     pub fn stencil_display_name(&self, id: &str) -> Option<&str> {

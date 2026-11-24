@@ -7,13 +7,18 @@
 //!
 //! [`Contracts::published`]: whiteboard_facet_engine::schema::Contracts::published
 
+mod workspace;
+
 use whiteboard_api_contracts::Refusal;
 use whiteboard_facet_engine::plugin_manifest::{AssetKind, FacetTarget};
 use whiteboard_facet_engine::registry::{ListedFacet, Registry};
 use whiteboard_model::Value;
 use whiteboard_plugin_visual::host::visual_registry;
 
+use crate::record::open_record;
 use crate::{Contract, Operation, Ports, Row};
+pub use whiteboard_reference_graph::TagInUse;
+use workspace::{Unread, Vocabulary, vocabulary};
 
 /// The filters, and the workspace (already resolved to its canonical id)
 /// whose own vocabulary is asked for too.
@@ -51,18 +56,46 @@ pub struct AssetEntry {
     pub display_name: Option<String>,
 }
 
+/// One value a declared key admits.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeclaredValue {
+    pub value: String,
+    /// What a box or an edge carrying it is drawn in.
+    pub color: Option<String>,
+    pub description: Option<String>,
+}
+
+/// One key a workspace's tag library declares; `values` absent admits any.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeclaredKey {
+    pub key: String,
+    pub description: Option<String>,
+    pub exclusive: Option<bool>,
+    pub values: Option<Vec<DeclaredValue>>,
+}
+
+/// What a named workspace adds beside its stencils: the tags in use, sorted
+/// by tag, and the keys its library declares, sorted by key.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkspaceTags {
+    pub tags: Vec<TagInUse>,
+    pub tag_library: Vec<DeclaredKey>,
+}
+
 /// The facets sorted by key, the assets in registration order (themes,
-/// icons, stencils), and, when a target filtered the facets, the keys it
-/// filtered out by the scopes that hold them (none written when empty).
+/// icons, stencils, a workspace's stencils last), and, when a target
+/// filtered the facets, the keys it filtered out by the scopes that hold
+/// them (none written when empty); a named workspace's tags beside them.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FacetListOutput {
     pub facets: Vec<FacetEntry>,
     pub assets: Vec<AssetEntry>,
     pub other_targets: Vec<(FacetTarget, Vec<String>)>,
+    pub workspace: Option<WorkspaceTags>,
 }
 
-/// The listing, or `Pending` for a call naming a workspace: its own stencil
-/// library, the tags it uses and its tag library are not answered yet.
+/// The listing, or `Pending` for a workspace holding a read this crate does
+/// not answer yet.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FacetListAnswer {
     Listed(FacetListOutput),
@@ -86,16 +119,28 @@ impl Operation for FacetList {
     };
 
     /// The deployment's registry is the bundled visual plugin's, the one the
-    /// daemon refuses to boot without.
+    /// daemon refuses to boot without. A named workspace is read from its
+    /// record, which an unknown one does not have: refused, since answering
+    /// the deployment's vocabulary would read as "this workspace declares
+    /// none".
     async fn execute<P: Ports>(
-        _ports: &P,
+        ports: &P,
         input: FacetListInput,
     ) -> Result<FacetListAnswer, Refusal> {
-        if input.workspace_id.is_some() {
-            return Ok(FacetListAnswer::Pending);
-        }
         let registry = visual_registry().map_err(|_| Refusal::InternalError)?;
-        Ok(FacetListAnswer::Listed(listing(&registry, input.target, input.asset_kind)))
+        let found = match &input.workspace_id {
+            None => None,
+            Some(id) => {
+                let record =
+                    open_record(ports.records(), id).await.map_err(|e| Refusal::from(&e))?;
+                match vocabulary(&record, &registry) {
+                    Ok(found) => Some(found),
+                    Err(Unread::Refused(refusal)) => return Err(refusal),
+                    Err(Unread::Pending) => return Ok(FacetListAnswer::Pending),
+                }
+            }
+        };
+        Ok(FacetListAnswer::Listed(listing(&registry, input.target, input.asset_kind, found)))
     }
 }
 
@@ -103,6 +148,7 @@ fn listing(
     registry: &Registry,
     target: Option<FacetTarget>,
     asset_kind: Option<AssetKind>,
+    found: Option<Vocabulary>,
 ) -> FacetListOutput {
     let mut all: Vec<FacetEntry> = registry.listed_facets().into_iter().map(entry).collect();
     // Every key is ASCII by its grammar, so a byte order is the code-unit
@@ -113,7 +159,15 @@ fn listing(
         .into_iter()
         .filter(|facet| target.is_none_or(|target| facet.targets.contains(&target)))
         .collect();
-    FacetListOutput { facets, assets: assets(registry, asset_kind), other_targets }
+    let mut assets = assets(registry, asset_kind);
+    let Some(found) = found else {
+        return FacetListOutput { facets, assets, other_targets, workspace: None };
+    };
+    if asset_kind.is_none_or(|only| only == AssetKind::Stencils) {
+        assets.extend(found.stencils);
+    }
+    let workspace = WorkspaceTags { tags: found.tags, tag_library: found.tag_library };
+    FacetListOutput { facets, assets, other_targets, workspace: Some(workspace) }
 }
 
 fn entry(listed: ListedFacet<'_>) -> FacetEntry {

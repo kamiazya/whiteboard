@@ -14,7 +14,7 @@ const UNNAMED_RETIRED_SHAPE: &str = "a markdown body stored as a canvas text nod
 
 /// Why a read has no value.
 #[derive(Debug, Clone, PartialEq)]
-pub(super) enum Fault {
+pub(crate) enum Fault {
     /// The document holds a shape an older version stored: a failure of this
     /// document alone, reported beside the others.
     Retired(String),
@@ -24,9 +24,9 @@ pub(super) enum Fault {
 
 /// The document a read is asked of, in the record that hosts it.
 #[derive(Clone, Copy)]
-pub(super) struct Hosted<'a> {
-    pub(super) record: &'a WorkspaceRecord,
-    pub(super) document_id: &'a str,
+pub(crate) struct Hosted<'a> {
+    pub(crate) record: &'a WorkspaceRecord,
+    pub(crate) document_id: &'a str,
 }
 
 impl Hosted<'_> {
@@ -54,7 +54,7 @@ impl Hosted<'_> {
     }
 
     /// `query`'s value, a refusal re-raised as the class it stands for.
-    pub(super) fn read(self, query: QueryName, args: &[(&str, Value)]) -> Result<Value, Fault> {
+    pub(crate) fn read(self, query: QueryName, args: &[(&str, Value)]) -> Result<Value, Fault> {
         let class = match self.raw(query, args).map_err(Fault::Stop)? {
             Ok(value) => return Ok(value),
             Err(class) => class,
@@ -89,7 +89,7 @@ fn count(rows: f64) -> u64 {
 }
 
 /// `value` unless it is the engine's mark for no value.
-pub(super) fn defined(value: Value) -> Option<Value> {
+pub(crate) fn defined(value: Value) -> Option<Value> {
     match &value {
         Value::Map(entries) if matches!(entries.as_slice(), [(key, _)] if key == "$undefined") => {
             None

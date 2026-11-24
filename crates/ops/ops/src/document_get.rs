@@ -14,7 +14,7 @@
 //! the TypeScript shim's), and a read the record leaves to its caller.
 
 mod budget;
-mod engine;
+pub(crate) mod engine;
 mod markdown;
 mod spatial;
 

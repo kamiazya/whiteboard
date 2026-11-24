@@ -1,8 +1,10 @@
 //! `wb_facet_list` over `whiteboard-ops`'s `FacetList`.
 
 use serde_json::{Map, Value};
+use whiteboard_model::Value as Plain;
 use whiteboard_ops::{
-    AssetEntry, AssetKind, FacetEntry, FacetList, FacetListAnswer, FacetListInput, FacetTarget,
+    AssetEntry, AssetKind, DeclaredKey, DeclaredValue, FacetEntry, FacetList, FacetListAnswer,
+    FacetListInput, FacetTarget, TagInUse,
 };
 
 use super::Binding;
@@ -48,6 +50,11 @@ impl Binding for FacetList {
                 .collect();
             members.push(("otherTargets", Json::Object(scopes)));
         }
+        if let Some(workspace) = &output.workspace {
+            members.push(("tags", Json::List(workspace.tags.iter().map(tag_in_use).collect())));
+            let keys = workspace.tag_library.iter().map(declared_key).collect();
+            members.push(("tagLibrary", Json::List(keys)));
+        }
         Some(Json::Object(members))
     }
 }
@@ -84,5 +91,40 @@ fn asset(entry: &AssetEntry) -> Json {
         ("namespace", Json::Text(entry.namespace.clone())),
     ];
     members.extend(entry.display_name.clone().map(|name| ("displayName", Json::Text(name))));
+    Json::Object(members)
+}
+
+/// A tag in use in `tagsInUse`'s member order, a plain tag without halves.
+fn tag_in_use(row: &TagInUse) -> Json {
+    let count = |n: u32| Json::Plain(Plain::Number(f64::from(n)));
+    let mut members = vec![("tag", Json::Text(row.tag.clone()))];
+    if let Some((key, value)) = &row.scoped {
+        members.push(("key", Json::Text(key.clone())));
+        members.push(("value", Json::Text(value.clone())));
+    }
+    members.extend([
+        ("documents", count(row.documents)),
+        ("boards", count(row.boards)),
+        ("nodes", count(row.nodes)),
+        ("edges", count(row.edges)),
+    ]);
+    Json::Object(members)
+}
+
+/// What a declared key or value leaves undeclared is left out.
+fn declared_key(key: &DeclaredKey) -> Json {
+    let mut members = vec![("key", Json::Text(key.key.clone()))];
+    members.extend(key.description.clone().map(|text| ("description", Json::Text(text))));
+    members.extend(key.exclusive.map(|flag| ("exclusive", Json::Bool(flag))));
+    if let Some(values) = &key.values {
+        members.push(("values", Json::List(values.iter().map(declared_value).collect())));
+    }
+    Json::Object(members)
+}
+
+fn declared_value(value: &DeclaredValue) -> Json {
+    let mut members = vec![("value", Json::Text(value.value.clone()))];
+    members.extend(value.color.clone().map(|color| ("color", Json::Text(color))));
+    members.extend(value.description.clone().map(|text| ("description", Json::Text(text))));
     Json::Object(members)
 }

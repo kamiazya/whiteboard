@@ -16,6 +16,7 @@
 
 pub mod backlinks;
 pub mod facts;
+pub mod in_use;
 pub mod linkify;
 pub mod markup;
 pub mod mentions;
@@ -32,6 +33,7 @@ pub use facts::{
     ContentFacts, LoadedContent, SplitTags, TagBearer, extract_content_facts, split_bearer_tags,
     tag_bearers_of,
 };
+pub use in_use::{TagInUse, tags_in_use};
 pub use linkify::{LinkifyPlan, LinkifyTarget, plan_linkify_mentions};
 pub use mentions::{Span, UnlinkedNameSpans, unlinked_name_spans};
 pub use references::{NodeVia, RawReference};
