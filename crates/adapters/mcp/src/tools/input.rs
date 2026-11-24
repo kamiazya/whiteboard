@@ -208,10 +208,15 @@ fn characters(text: &str) -> usize {
     text.chars().count()
 }
 
+/// A bound as the double a JavaScript comparison holds; the schemas' bounds
+/// are far below `u32::MAX`.
+fn bound(limit: usize) -> f64 {
+    f64::from(u32::try_from(limit).unwrap_or(u32::MAX))
+}
+
 /// The length issue of an object whose `length` is a number, as Zod words it
 /// for a value that is neither string nor array: after the type issue, since
 /// the bounds are judged on any value whose `length` is defined.
-#[expect(clippy::cast_precision_loss, reason = "a bound is a few thousand, exact in f64")]
 fn object_length_issue(
     path: &str,
     (min, max): (usize, usize),
@@ -219,9 +224,9 @@ fn object_length_issue(
     too_big: Option<&str>,
 ) -> Option<String> {
     let length = object.get("length")?.as_f64()?;
-    if length < min as f64 {
+    if length < bound(min) {
         Some(at(path, &format!("Too small: expected unknown to be >={min}")))
-    } else if length > max as f64 {
+    } else if length > bound(max) {
         Some(at(
             path,
             &too_big
