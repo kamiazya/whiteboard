@@ -1,13 +1,12 @@
 //! The catalogue over the ops table held to what the TypeScript server
 //! answered: `tools/list` for the ported tools, and `tools/call` for each.
 //!
-//! `fixtures/tool_calls.jsonl` is recorded by
-//! `packages/mcp-server/src/server/mcp/tool-contracts.oracle.test.ts`, which
-//! drives `createMcpServer` over the workspace records the ops fixture holds
-//! (`crates/ops/ops/tests/fixtures/document_reads.jsonl`) and keeps the
-//! recording equal to what it answers today. A row with a `snapshot` is a
-//! workspace record (`null`: the keeper holds no such workspace); each row
-//! after it is one `tools/call` over that record and the result it drew.
+//! `packages/mcp-server/src/server/mcp/oracle/tool-calls.jsonl` is recorded by
+//! `tool-contracts.oracle.test.ts` beside it, which drives `createMcpServer`
+//! and keeps the recording equal to what it answers today. A row with a
+//! `snapshot` is a workspace record (`null`: the keeper holds no such
+//! workspace), the same records the ops crate's fixture holds; each row after
+//! it is one `tools/call` over that record and the result it drew.
 //!
 //! The comparison is of parsed JSON values, except a text content, which is
 //! a string and held byte for byte — the structured output's `JSON.stringify`
@@ -22,7 +21,9 @@ use whiteboard_model::encoding::base64_to_bytes;
 use whiteboard_ops::Ports;
 use whiteboard_port_fakes::{MemoryRecordStore, block_on};
 
-const CASES: &str = include_str!("fixtures/tool_calls.jsonl");
+const CASES: &str =
+    include_str!("../../../../packages/mcp-server/src/server/mcp/oracle/tool-calls.jsonl");
+const READS: &str = include_str!("../../../ops/ops/tests/fixtures/document_reads.jsonl");
 const DOCUMENT_LIST: &str = include_str!("../../../../contracts/tools/wb_document_list.json");
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
@@ -92,6 +93,22 @@ fn every_recorded_call_is_answered_as_the_typescript_answered_it() {
         replayed += 1;
     }
     assert_eq!(replayed, 28, "the recording's calls, every one replayed");
+}
+
+/// The records `case`'s rows name, `(case, snapshot)` in order.
+#[cfg(test)]
+fn records(rows: &str) -> Vec<(Value, Value)> {
+    rows.lines()
+        .map(|line| serde_json::from_str::<Value>(line).expect("a JSON row"))
+        .filter_map(|row| Some((row["case"].clone(), row.get("snapshot")?.clone())))
+        .collect()
+}
+
+#[test]
+fn the_recorded_calls_run_over_the_records_the_ops_fixture_holds() {
+    let records = records(CASES);
+    assert_eq!(records.len(), 4, "the recording's records");
+    assert_eq!(records, self::records(READS));
 }
 
 #[test]

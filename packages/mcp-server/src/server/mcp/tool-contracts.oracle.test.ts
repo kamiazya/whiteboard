@@ -9,6 +9,7 @@ import {
 import { InMemoryTransport, type McpServer } from '@modelcontextprotocol/server'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { repoRoot } from '../../shared/test-utils/repo-root.js'
 import { withTempDataDir } from '../routes/_test-helpers.js'
 import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
 
@@ -19,21 +20,21 @@ import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
  * stay the source; the files are written FROM the live listing, so this test
  * is what keeps them equal to it.
  *
- * The second recording is the TypeScript's answers to `tools/call` for the
- * tools the Rust ops layer implements, over the workspace records
- * `crates/ops/ops/tests/fixtures/document_reads.jsonl` holds: successes,
- * refusals and the SDK's own validation failures, replayed by
- * `crates/adapters/mcp/tests/tool_calls.rs`.
+ * The second recording, `oracle/tool-calls.jsonl`, is the TypeScript's
+ * answers to `tools/call` for the tools the Rust ops layer implements:
+ * successes, refusals and the SDK's own validation failures, replayed by
+ * `crates/adapters/mcp/tests/tool_calls.rs`. Its inputs ride in it — each
+ * `snapshot` row is a workspace record, the ones the ops crate's own fixture
+ * holds (the Rust test holds the two equal) — so this test reads nothing but
+ * the recording to answer them again.
  *
  * Re-record after a deliberate change with
  * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project mcp-node tool-contracts.oracle`,
  * then `pnpm exec biome format --write contracts/tools` (the comparison is of
  * parsed JSON, so the formatter's wrapping is no difference).
  */
-const REPO = new URL('../../../../../', import.meta.url)
-const CONTRACTS = new URL('contracts/tools/', REPO)
-const READS = new URL('crates/ops/ops/tests/fixtures/document_reads.jsonl', REPO)
-const CALLS = new URL('crates/adapters/mcp/tests/fixtures/tool_calls.jsonl', REPO)
+const CONTRACTS = join(repoRoot(), 'contracts', 'tools')
+const CALLS = new URL('./oracle/tool-calls.jsonl', import.meta.url)
 const RECORD = process.env.WHITEBOARD_RECORD_ORACLE === '1'
 
 const tmp = withTempDataDir('whiteboard-mcp-tool-contracts-')
@@ -82,14 +83,20 @@ async function listedTools(deps: ServerDeps): Promise<Message[]> {
 
 const W = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
-/** The workspace records the ops fixture holds, by case. */
-async function records(): Promise<{ case: string; snapshot: string | null }[]> {
-  const rows = (await readFile(READS, 'utf8'))
+/** The recording's rows, inputs and answers alike. */
+async function recorded(): Promise<Message[]> {
+  return (await readFile(CALLS, 'utf8'))
     .trimEnd()
     .split('\n')
-    .map((line) => JSON.parse(line) as { case: string; snapshot?: string | null })
-  return rows.flatMap((row) =>
-    row.snapshot === undefined ? [] : [{ case: row.case, snapshot: row.snapshot }],
+    .map((line) => JSON.parse(line) as Message)
+}
+
+/** The workspace records the recording holds, by case. */
+async function records(): Promise<{ case: string; snapshot: string | null }[]> {
+  return (await recorded()).flatMap((row) =>
+    row.snapshot === undefined
+      ? []
+      : [{ case: row.case as string, snapshot: row.snapshot as string | null }],
   )
 }
 
@@ -174,7 +181,7 @@ async function recordCalls(): Promise<Message[]> {
   return rows
 }
 
-const contractFile = (name: string) => new URL(`${name}.json`, CONTRACTS)
+const contractFile = (name: string) => join(CONTRACTS, `${name}.json`)
 
 describe('the tool contracts', () => {
   beforeEach(async () => {
@@ -203,10 +210,6 @@ describe('the tool contracts', () => {
   it('hold every tool call the Rust adapter replays as the TypeScript answers it', async () => {
     const answered = await recordCalls()
     if (RECORD) await writeFile(CALLS, `${answered.map((row) => JSON.stringify(row)).join('\n')}\n`)
-    const recorded = (await readFile(CALLS, 'utf8'))
-      .trimEnd()
-      .split('\n')
-      .map((line) => JSON.parse(line) as Message)
-    expect(recorded).toEqual(answered)
+    expect(await recorded()).toEqual(answered)
   })
 })
