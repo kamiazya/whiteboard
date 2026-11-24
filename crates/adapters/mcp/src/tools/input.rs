@@ -211,6 +211,7 @@ fn characters(text: &str) -> usize {
 /// The length issue of an object whose `length` is a number, as Zod words it
 /// for a value that is neither string nor array: after the type issue, since
 /// the bounds are judged on any value whose `length` is defined.
+#[expect(clippy::cast_precision_loss, reason = "a bound is a few thousand, exact in f64")]
 fn object_length_issue(
     path: &str,
     (min, max): (usize, usize),
