@@ -123,10 +123,14 @@ impl Contracts {
     #[must_use]
     pub fn published(&self, def: DefId) -> Option<Value> {
         let held = self.defs.get(def.0)?;
-        Some(self.publish(&held.contract, &held.written))
+        Some(self.publish(&held.contract, &held.written, &mut vec![held.name.as_str()]))
     }
 
-    fn publish(&self, contract: &str, written: &Value) -> Value {
+    /// `written` published; `open` holds the definitions being inlined, so a
+    /// reference back into one is kept as written. Only a compiled
+    /// definition's references are checked for cycles at load, and an
+    /// external one's are not compiled.
+    fn publish<'s>(&'s self, contract: &str, written: &'s Value, open: &mut Vec<&'s str>) -> Value {
         match written {
             Value::Map(members) => {
                 let local = members.iter().find_map(|(key, value)| match value {
@@ -136,21 +140,45 @@ impl Contracts {
                 let named = local.and_then(|name| {
                     self.defs.iter().find(|d| d.contract == contract && d.name == name)
                 });
-                if let Some(target) = named {
-                    return self.publish(contract, &target.written);
+                if let Some(target) = named.filter(|d| !open.contains(&d.name.as_str())) {
+                    open.push(&target.name);
+                    let inlined = self.publish(contract, &target.written, open);
+                    open.pop();
+                    return inlined;
                 }
                 Value::Map(
                     members
                         .iter()
                         .filter(|(key, _)| !key.starts_with("x-wb-"))
-                        .map(|(key, value)| (key.clone(), self.publish(contract, value)))
+                        .map(|(key, value)| (key.clone(), self.member(contract, key, value, open)))
                         .collect(),
                 )
             }
             Value::Seq(items) => {
-                Value::Seq(items.iter().map(|item| self.publish(contract, item)).collect())
+                Value::Seq(items.iter().map(|item| self.publish(contract, item, open)).collect())
             }
             other => other.clone(),
+        }
+    }
+
+    /// A keyword's value published: under `properties` the keys are the
+    /// payload's field names, kept whatever they spell, and each value is a
+    /// schema.
+    fn member<'s>(
+        &'s self,
+        contract: &str,
+        key: &str,
+        value: &'s Value,
+        open: &mut Vec<&'s str>,
+    ) -> Value {
+        match value {
+            Value::Map(fields) if key == "properties" => Value::Map(
+                fields
+                    .iter()
+                    .map(|(name, schema)| (name.clone(), self.publish(contract, schema, open)))
+                    .collect(),
+            ),
+            _ => self.publish(contract, value, open),
         }
     }
 
