@@ -44,6 +44,7 @@ mod operation;
 mod ports;
 mod record;
 mod table;
+mod version_list;
 
 pub use address::{
     WorkspaceAddress, parse_workspace_address, resolve_workspace, with_resolved_workspace,
@@ -59,3 +60,4 @@ pub use document_resolve::{DocumentDetail, DocumentResolve, DocumentResolveInput
 pub use operation::{Contract, Method, Operation, Route, Row};
 pub use ports::Ports;
 pub use table::{OPERATIONS, Visit, each_operation};
+pub use version_list::{VersionList, VersionListInput, VersionListOutput};
