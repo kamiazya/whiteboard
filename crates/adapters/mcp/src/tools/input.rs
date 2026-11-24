@@ -208,8 +208,32 @@ fn characters(text: &str) -> usize {
     text.chars().count()
 }
 
+/// The length issue of an object whose `length` is a number, as Zod words it
+/// for a value that is neither string nor array: after the type issue, since
+/// the bounds are judged on any value whose `length` is defined.
+fn object_length_issue(
+    path: &str,
+    (min, max): (usize, usize),
+    object: &Map<String, Value>,
+    too_big: Option<&str>,
+) -> Option<String> {
+    let length = object.get("length")?.as_f64()?;
+    if length < min as f64 {
+        Some(at(path, &format!("Too small: expected unknown to be >={min}")))
+    } else if length > max as f64 {
+        Some(at(
+            path,
+            &too_big
+                .map_or_else(|| format!("Too big: expected unknown to be <={max}"), str::to_owned),
+        ))
+    } else {
+        None
+    }
+}
+
 /// A string within its bounds in characters, then within `max` UTF-16 units;
-/// an array is no string, and Zod still judges its length, in items.
+/// an array is no string, and Zod still judges its length, in items; so is
+/// an object with a numeric `length`.
 fn sized_issues(path: &str, (min, max): (usize, usize), value: Option<&Value>) -> Vec<String> {
     match value {
         Some(Value::String(text)) => {
@@ -225,6 +249,9 @@ fn sized_issues(path: &str, (min, max): (usize, usize), value: Option<&Value>) -
         }
         Some(Value::Array(items)) => std::iter::once(expected(path, "string", value))
             .chain(length_issue(path, (min, max), items.len(), "array", None))
+            .collect(),
+        Some(Value::Object(object)) => std::iter::once(expected(path, "string", value))
+            .chain(object_length_issue(path, (min, max), object, None))
             .collect(),
         _ => vec![expected(path, "string", value)],
     }
@@ -247,7 +274,8 @@ fn path_issues(path: &str, max: usize, segments: &Refined, value: Option<&Value>
 /// An optional string of one character to `max`, then at most `max` UTF-16
 /// units, refused past either with `too_big`: `utf16Max(z.string().min(1),
 /// max, too_big)`, whose words are the schema's for both. An array is no
-/// string, and Zod still judges its length, in items.
+/// string, and Zod still judges its length, in items; so is an object with a
+/// numeric `length`.
 fn bounded_issues(path: &str, max: usize, too_big: &str, value: Option<&Value>) -> Vec<String> {
     let Some(given) = value else { return Vec::new() };
     match given {
@@ -259,6 +287,9 @@ fn bounded_issues(path: &str, max: usize, too_big: &str, value: Option<&Value>) 
         }
         Value::Array(items) => std::iter::once(expected(path, "string", value))
             .chain(length_issue(path, (1, max), items.len(), "array", Some(too_big)))
+            .collect(),
+        Value::Object(object) => std::iter::once(expected(path, "string", value))
+            .chain(object_length_issue(path, (1, max), object, Some(too_big)))
             .collect(),
         _ => vec![expected(path, "string", value)],
     }
@@ -374,7 +405,7 @@ mod tests {
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
-    use super::{Field, Input, Kind, refusal};
+    use super::{Field, Input, Kind, bounded_issues, refusal, sized_issues};
 
     const FIELDS: &[Field] = &[
         Field { name: "f", kind: Kind::Flag },
@@ -409,5 +440,44 @@ mod tests {
             issues(&json!({ "o": 3 })),
             "o: Invalid input: expected object, received number"
         );
+    }
+
+    const TYPE: &str = "f: Invalid input: expected string, received object";
+
+    /// Zod 4's issues for `z.string().min(1).max(3)` on an object: the type
+    /// issue, then the length's, worded for `unknown`, whenever `length` is a
+    /// number; an object without one has the type issue alone.
+    #[test]
+    fn an_object_with_a_numeric_length_is_judged_for_it_after_the_type_issue() {
+        let judged = |value: Value| sized_issues("f", (1, 3), Some(&value));
+        assert_eq!(
+            judged(json!({ "length": 0 })),
+            [TYPE, "f: Too small: expected unknown to be >=1"]
+        );
+        assert_eq!(
+            judged(json!({ "length": 9 })),
+            [TYPE, "f: Too big: expected unknown to be <=3"]
+        );
+        assert_eq!(judged(json!({ "length": 2 })), [TYPE]);
+        assert_eq!(judged(json!({ "length": 1.5 })), [TYPE]);
+        assert_eq!(
+            judged(json!({ "length": -1 })),
+            [TYPE, "f: Too small: expected unknown to be >=1"]
+        );
+        assert_eq!(judged(json!({})), [TYPE]);
+    }
+
+    /// The same, for `utf16Max(z.string().min(1), 3, "BIG")`: the schema's own
+    /// words replace the default past the maximum, as they do for an array.
+    #[test]
+    fn a_bounded_object_with_a_numeric_length_is_refused_in_the_schema_s_words() {
+        let judged = |value: Value| bounded_issues("f", 3, "BIG", Some(&value));
+        assert_eq!(judged(json!({ "length": 9 })), [TYPE, "f: BIG"]);
+        assert_eq!(
+            judged(json!({ "length": 0 })),
+            [TYPE, "f: Too small: expected unknown to be >=1"]
+        );
+        assert_eq!(judged(json!({ "length": 3 })), [TYPE]);
+        assert_eq!(judged(json!({ "other": 9 })), [TYPE]);
     }
 }
