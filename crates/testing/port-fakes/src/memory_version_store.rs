@@ -149,24 +149,7 @@ impl MemoryVersionStore {
         };
         // The id is minted before the ceilings are asked, as the daemon's
         // store mints it: a refused save spends one.
-        let held = |kept: fn(&SavedVersion) -> bool| {
-            state
-                .histories
-                .get(&key)
-                .map_or(0, |history| history.iter().filter(|v| kept(v)).count())
-        };
-        if let Some(limit) = self.manual_ceiling
-            && !save.auto
-            && held(|v| !v.auto) >= limit
-        {
-            return Err(PortError::TooManyVersions { limit });
-        }
-        if let Some(limit) = self.restore_point_ceiling
-            && save.restored_from.is_some()
-            && held(|v| v.restored_from.is_some()) >= limit
-        {
-            return Err(PortError::TooManyVersions { limit });
-        }
+        self.within_ceilings(state.histories.get(&key).map_or(&[], Vec::as_slice), save)?;
         let saved = SavedVersion {
             id,
             created_at: state.at.clone().unwrap_or_else(|| EPOCH.to_owned()),
@@ -181,6 +164,29 @@ impl MemoryVersionStore {
         let at = history.iter().position(|held| held.created_at <= saved.created_at);
         history.insert(at.unwrap_or(history.len()), saved.clone());
         Ok(saved)
+    }
+
+    /// Refuses a save that would pass a ceiling the store was given: the
+    /// manual one for a manual save, the restore-point one for a restore point.
+    fn within_ceilings(
+        &self,
+        history: &[SavedVersion],
+        save: &NewVersion,
+    ) -> Result<(), PortError> {
+        let held = |kept: fn(&SavedVersion) -> bool| history.iter().filter(|v| kept(v)).count();
+        if let Some(limit) = self.manual_ceiling
+            && !save.auto
+            && held(|v| !v.auto) >= limit
+        {
+            return Err(PortError::TooManyVersions { limit });
+        }
+        if let Some(limit) = self.restore_point_ceiling
+            && save.restored_from.is_some()
+            && held(|v| v.restored_from.is_some()) >= limit
+        {
+            return Err(PortError::TooManyVersions { limit });
+        }
+        Ok(())
     }
 
     fn checkout(

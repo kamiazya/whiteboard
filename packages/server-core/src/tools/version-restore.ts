@@ -4,7 +4,6 @@ import {
   documentPathSchema,
   ID_LIMIT_PHRASE,
   ID_MAX_CHARS,
-  InvalidRestoreTargetPath,
   RestoreTargetExists,
   SubtreeNeedsWorkspaceVersion,
   SubtreeTakesNoTarget,
@@ -12,6 +11,7 @@ import {
   VersionNotFound,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { InvalidRestoreTargetPathError } from '../operations/restore-refusals.js'
 import { type RestoreVersionResult, restoreVersion } from '../operations/restore-version.js'
 import type { ServerDeps } from '../server-deps.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
@@ -97,14 +97,6 @@ export class SubtreeTakesNoTargetError extends Error {
   constructor() {
     super(SubtreeTakesNoTarget())
     this.name = 'SubtreeTakesNoTargetError'
-  }
-}
-
-/** A `targetPath` that is not a document path. */
-export class InvalidRestoreTargetPathError extends Error {
-  constructor(public readonly targetPath: string | undefined) {
-    super(InvalidRestoreTargetPath(String(targetPath)))
-    this.name = 'InvalidRestoreTargetPathError'
   }
 }
 

@@ -23,7 +23,10 @@ import {
 import { ReferenceRewriteTooLargeError } from '@kamiazya/whiteboard-reference-graph'
 import { describe, expect, it } from 'vitest'
 import { DocumentEngineTrapError, SnapshotNotFoundError } from './document-io.js'
-import { RestoredDocumentIdMissingError } from './operations/restore-version.js'
+import {
+  InvalidRestoreTargetPathError,
+  RestoredDocumentIdMissingError,
+} from './operations/restore-refusals.js'
 import {
   CausalGapError,
   DocumentKindChangedError,
@@ -49,7 +52,6 @@ import {
 import { NamelessLinkifyTargetError } from './tools/linkify-mentions.js'
 import { refuseAgainstLibrary } from './tools/tag-library.js'
 import {
-  InvalidRestoreTargetPathError,
   RestoreTargetExistsError,
   SubtreeNeedsWorkspaceVersionError,
   SubtreeTakesNoTargetError,
