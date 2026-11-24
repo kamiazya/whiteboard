@@ -8,20 +8,18 @@ use whiteboard_api_contracts::Refusal;
 use whiteboard_facet_engine::partition::compose_library;
 use whiteboard_facet_engine::plugin_manifest::AssetKind;
 use whiteboard_facet_engine::registry::Registry;
-use whiteboard_model::canvas_value::canvas_of;
 use whiteboard_model::crdt::QueryName;
 use whiteboard_model::{Map, Value};
 use whiteboard_plugin_visual::stencil_library::{STENCIL_LIBRARY_PATH, read_stencil_library};
 use whiteboard_plugin_visual::tag_library::{TAG_LIBRARY_PATH, read_tag_library};
 use whiteboard_ports::PortError;
-use whiteboard_reference_graph::{
-    DocumentContent, LoadedContent, TagBearer, TagInUse, tag_bearers_of, tags_in_use,
-};
+use whiteboard_reference_graph::{TagBearer, TagInUse, tag_bearers_of, tags_in_use};
 use whiteboard_workspace_index::{DocumentEntry, WorkspaceRecord, list_documents};
 
 use super::{AssetEntry, DeclaredKey, DeclaredValue};
-use crate::document_get::Stop;
-use crate::document_get::engine::{Fault, Hosted};
+pub(super) use crate::content::Unread;
+use crate::content::{field, read_loaded};
+use crate::document_get::engine::Hosted;
 
 /// A workspace's own vocabulary.
 #[derive(Debug, Clone, PartialEq)]
@@ -30,25 +28,6 @@ pub(super) struct Vocabulary {
     pub(super) stencils: Vec<AssetEntry>,
     pub(super) tags: Vec<TagInUse>,
     pub(super) tag_library: Vec<DeclaredKey>,
-}
-
-/// Why a workspace's vocabulary is not answered.
-#[derive(Debug, Clone, PartialEq)]
-pub(super) enum Unread {
-    Refused(Refusal),
-    /// A read this crate does not answer yet: one the record leaves to its
-    /// caller, a stored shape an older version wrote, or a canvas the model
-    /// does not read.
-    Pending,
-}
-
-impl From<Fault> for Unread {
-    fn from(fault: Fault) -> Self {
-        match fault {
-            Fault::Stop(Stop::Refused(refusal)) => Self::Refused(refusal),
-            Fault::Stop(Stop::Pending(_)) | Fault::Retired(_) => Self::Pending,
-        }
-    }
 }
 
 pub(super) fn vocabulary(
@@ -93,13 +72,6 @@ fn stencil(id: String, library: &Map) -> AssetEntry {
     AssetEntry { id, kind: AssetKind::Stencils, namespace, display_name }
 }
 
-fn field<'v>(value: &'v Value, key: &str) -> Option<&'v Value> {
-    match value {
-        Value::Map(entries) => entries.iter().find(|(name, _)| name == key).map(|(_, held)| held),
-        _ => None,
-    }
-}
-
 fn text(value: &Value, key: &str) -> Option<String> {
     match field(value, key) {
         Some(Value::String(held)) => Some(held.clone()),
@@ -108,31 +80,9 @@ fn text(value: &Value, key: &str) -> Option<String> {
 }
 
 /// What carries a tag in one document, read as the reference graph's cache
-/// loads it: its content with a note's own tags, the index row's kind asked
-/// for a document that records none.
+/// loads it.
 fn bearers_of(hosted: Hosted<'_>, entry: &DocumentEntry) -> Result<Vec<TagBearer>, Unread> {
-    let kind: Vec<(&str, Value)> =
-        entry.kind.iter().map(|kind| ("kind", Value::String(kind.clone()))).collect();
-    let read = hosted.read(QueryName::DocumentContentWithTags, &kind)?;
-    let content = field(&read, "content").ok_or(Unread::Pending)?;
-    let tags: Option<Vec<String>> = match field(&read, "tags") {
-        Some(Value::Seq(tags)) => tags
-            .iter()
-            .map(|tag| match tag {
-                Value::String(tag) => Some(tag.clone()),
-                _ => None,
-            })
-            .collect(),
-        _ => None,
-    };
-    let canvas = field(content, "canvas").map(|canvas| canvas_of(canvas).ok_or(Unread::Pending));
-    let canvas = canvas.transpose()?;
-    let content = match (&canvas, field(content, "body")) {
-        (Some(canvas), _) => DocumentContent::Spatial(canvas),
-        (None, Some(Value::String(body))) => DocumentContent::Markdown { body },
-        _ => return Err(Unread::Pending),
-    };
-    Ok(tag_bearers_of(&LoadedContent { content, tags: tags.as_deref() }))
+    read_loaded(hosted, entry, tag_bearers_of)
 }
 
 /// A declared key as an answer: arrays rather than the record it is stored

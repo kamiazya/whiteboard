@@ -107,6 +107,16 @@ pub fn expand_emoji_shortcodes(text: &str) -> String {
     expand_with(EMOJI_SHORTCODES, text)
 }
 
+/// `emojiShortcodeRanges`' characters: what each `:name:` naming an emoji
+/// draws, in order.
+#[cfg(feature = "emoji-search")]
+pub(crate) fn emoji_shortcode_chars(text: &str) -> Vec<&'static str> {
+    candidates(text, ":", emoji_byte)
+        .into_iter()
+        .filter_map(|candidate| emoji_in(EMOJI_SHORTCODES, candidate.name))
+        .collect()
+}
+
 /// The names `table` (an icon asset file) holds, whatever each entry is: the
 /// nameable set is the vendored file's keys (`BUILT_IN_ICON_NAMES`), not every
 /// icon the plugin registers.

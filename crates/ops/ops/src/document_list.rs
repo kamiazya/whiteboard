@@ -76,7 +76,7 @@ impl Operation for DocumentList {
 /// An unknown workspace in the advice for a read, as the tool surface words
 /// it, naming the workspaces the caller may see; any other failure as the
 /// port's own refusal.
-async fn refusal_for_read<P: Ports>(ports: &P, error: PortError) -> Refusal {
+pub(crate) async fn refusal_for_read<P: Ports>(ports: &P, error: PortError) -> Refusal {
     match error {
         PortError::WorkspaceNotFound { workspace_id } => {
             unknown_workspace(ports, workspace_id).await

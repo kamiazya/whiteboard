@@ -8,6 +8,15 @@ license.workspace = true
 repository.workspace = true
 publish.workspace = true
 
+[features]
+default = ["emoji-search"]
+# What a document showing an emoji is found by (`emoji_search`), with its
+# 180 KB term table. Off in the shipped wasm artifact (its dependents there
+# take no default features), which searches through `whiteboard-search` with
+# the host's expander; a second caller of the shortcode scan would change how
+# that artifact inlines it.
+emoji-search = []
+
 [dependencies]
 unicode-segmentation.workspace = true
 whiteboard-det = { path = "../det" }

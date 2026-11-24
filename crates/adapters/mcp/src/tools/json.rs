@@ -11,6 +11,8 @@ use whiteboard_model::Value as Plain;
 pub(crate) enum Json {
     Text(String),
     Bool(bool),
+    /// A finite double, written as `JSON.stringify` writes it.
+    Number(f64),
     List(Vec<Json>),
     Object(Vec<(&'static str, Json)>),
     /// An object whose member names are data, not the tool's own.
@@ -26,6 +28,7 @@ impl Json {
         match self {
             Self::Text(text) => Value::from(text.as_str()),
             Self::Bool(flag) => Value::Bool(*flag),
+            Self::Number(number) => number_value(*number),
             Self::List(items) => Value::Array(items.iter().map(Self::value).collect()),
             Self::Object(members) => Value::Object(
                 members
@@ -49,6 +52,7 @@ impl Json {
         match self {
             Self::Text(text) => Value::from(text.as_str()).to_string(),
             Self::Bool(flag) => flag.to_string(),
+            Self::Number(number) => json_text(&Plain::Number(*number)).unwrap_or_default(),
             Self::List(items) => {
                 let items: Vec<String> = items.iter().map(Self::text).collect();
                 format!("[{}]", items.join(","))
@@ -62,6 +66,18 @@ impl Json {
             Self::Plain(plain) => json_text(plain).unwrap_or_default(),
         }
     }
+}
+
+/// The number its text reads back as: a whole double as the integer a JSON
+/// reader takes its digits for, where an `i64` holds it, any other as the
+/// double itself (exact, where a parser of its text may land an ulp off).
+fn number_value(number: f64) -> Value {
+    if number.fract() == 0.0
+        && let Ok(whole) = format!("{number}").parse::<i64>()
+    {
+        return Value::from(whole);
+    }
+    serde_json::Number::from_f64(number).map_or(Value::Null, Value::Number)
 }
 
 /// `JSON.stringify` of an object's members, in the order given.
