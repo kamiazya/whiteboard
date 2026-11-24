@@ -138,6 +138,56 @@ const NOTES: readonly Message[] = [
   { path: 'archive/2020/old', markdown: 'An old launch report, long superseded.' },
 ]
 
+/** The board: every node kind, a blank text first, labelled and unlabelled edges. */
+const BOARD_OPS: readonly Message[] = [
+  { op: 'node.add', node: { id: 'blank', type: 'text', text: '  ', x: 0, y: -200 } },
+  { op: 'node.add', node: { id: 'pad', type: 'text', text: 'Launch pad', x: 0, y: 0 } },
+  { op: 'node.add', node: { id: 'tower', type: 'text', text: 'Tower', x: 300, y: 0 } },
+  { op: 'node.add', node: { id: 'unlabelled', type: 'text', text: '', x: 600, y: 0 } },
+  {
+    op: 'node.add',
+    node: { id: 'site', type: 'link', url: 'https://launch.example/rocket', x: 0, y: 300 },
+  },
+  {
+    op: 'node.add',
+    node: {
+      id: 'g',
+      type: 'group',
+      label: 'Ground crew',
+      x: -400,
+      y: 500,
+      width: 300,
+      height: 200,
+    },
+  },
+  { op: 'node.add', node: { id: 'f', type: 'file', file: 'plans/launch', x: 600, y: 300 } },
+  {
+    op: 'edge.add',
+    edge: { id: 'fuels', from: { node: 'pad' }, to: { node: 'tower' }, label: 'fuels' },
+  },
+  { op: 'edge.add', edge: { id: 'bare', from: { node: 'tower' }, to: { node: 'site' } } },
+  {
+    op: 'edge.add',
+    edge: { id: 'blank-end', from: { node: 'unlabelled' }, to: { node: 'pad' } },
+  },
+]
+
+/** Tags on notes, on the board, on its nodes and on its edges. */
+async function tagAll(call: Call, ids: Record<string, string>, board: string): Promise<void> {
+  const tag = (documentIds: string[], add: string[], at: Message = {}) =>
+    ok(call, 'wb_facet_set', { workspaceId: W, documentIds, tags: { add }, ...at })
+  await tag([ids['plans/launch'] as string, ids['plans/window'] as string], ['launch', 'q3'])
+  await tag([ids['ops/checklist'] as string], ['launch', 'safety'])
+  await tag([ids.party as string], ['social'])
+  await tag([board], ['launch', 'board-only'])
+  await tag([board], ['safety', 'q3'], { nodeId: 'pad' })
+  await tag([board], ['safety'], { nodeId: 'tower' })
+  await tag([board], ['q3'], { nodeId: 'unlabelled' })
+  await tag([board], ['safety', 'flow'], { edgeId: 'fuels' })
+  await tag([board], ['flow'], { edgeId: 'bare' })
+  await tag([board], ['flow', 'q3'], { edgeId: 'blank-end' })
+}
+
 /** Documents, folders, a board and tags, written through the tools. */
 async function populate(call: Call): Promise<void> {
   const created = await ok(call, 'wb_workspace_edit', {
@@ -161,51 +211,9 @@ async function populate(call: Call): Promise<void> {
     workspaceId: W,
     documentId: board,
     mode: 'apply',
-    ops: [
-      { op: 'node.add', node: { id: 'blank', type: 'text', text: '  ', x: 0, y: -200 } },
-      { op: 'node.add', node: { id: 'pad', type: 'text', text: 'Launch pad', x: 0, y: 0 } },
-      { op: 'node.add', node: { id: 'tower', type: 'text', text: 'Tower', x: 300, y: 0 } },
-      { op: 'node.add', node: { id: 'unlabelled', type: 'text', text: '', x: 600, y: 0 } },
-      {
-        op: 'node.add',
-        node: { id: 'site', type: 'link', url: 'https://launch.example/rocket', x: 0, y: 300 },
-      },
-      {
-        op: 'node.add',
-        node: {
-          id: 'g',
-          type: 'group',
-          label: 'Ground crew',
-          x: -400,
-          y: 500,
-          width: 300,
-          height: 200,
-        },
-      },
-      { op: 'node.add', node: { id: 'f', type: 'file', file: 'plans/launch', x: 600, y: 300 } },
-      {
-        op: 'edge.add',
-        edge: { id: 'fuels', from: { node: 'pad' }, to: { node: 'tower' }, label: 'fuels' },
-      },
-      { op: 'edge.add', edge: { id: 'bare', from: { node: 'tower' }, to: { node: 'site' } } },
-      {
-        op: 'edge.add',
-        edge: { id: 'blank-end', from: { node: 'unlabelled' }, to: { node: 'pad' } },
-      },
-    ],
+    ops: BOARD_OPS,
   })
-  const tag = (documentIds: string[], add: string[], at: Message = {}) =>
-    ok(call, 'wb_facet_set', { workspaceId: W, documentIds, tags: { add }, ...at })
-  await tag([ids['plans/launch'] as string, ids['plans/window'] as string], ['launch', 'q3'])
-  await tag([ids['ops/checklist'] as string], ['launch', 'safety'])
-  await tag([ids.party as string], ['social'])
-  await tag([board], ['launch', 'board-only'])
-  await tag([board], ['safety', 'q3'], { nodeId: 'pad' })
-  await tag([board], ['safety'], { nodeId: 'tower' })
-  await tag([board], ['q3'], { nodeId: 'unlabelled' })
-  await tag([board], ['safety', 'flow'], { edgeId: 'fuels' })
-  await tag([board], ['flow'], { edgeId: 'bare' })
-  await tag([board], ['flow', 'q3'], { edgeId: 'blank-end' })
+  await tagAll(call, ids, board)
 }
 
 /** The record the calls are answered over, built through the tools. */
@@ -331,7 +339,7 @@ function validationCalls(): [string, Message | undefined][] {
     ['a query as a long array', { ...w, query: Array.from({ length: 1025 }, () => 1) }],
     ['a query past its limit in characters', { ...w, query: 'é'.repeat(1025) }],
     ['a query at its limit in units', { ...w, query: `${'x'.repeat(1022)}🚀` }],
-    ['an unsafe integer limit', { ...w, query: 'x', limit: 9007199254740993 }],
+    ['an unsafe integer limit', { ...w, query: 'x', limit: 9007199254740992 }],
     ['a limit as text', { ...w, query: 'x', limit: '10' }],
     ['a null limit', { ...w, query: 'x', limit: null }],
     ['an unknown key', { ...w, query: 'x', tag: 'launch' }],
