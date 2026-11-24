@@ -1,4 +1,4 @@
-// ci.yml's two Rust jobs and rust-fuzz-nightly.yml, held to the scripts and
+// ci.yml's Rust jobs and rust-fuzz-nightly.yml, held to the scripts and
 // crates they run. Each fact here is written twice — once where a tool or a
 // gate is defined, once in the workflow — and nothing else notices when the
 // copies part:
@@ -51,7 +51,7 @@ const nightly = parseYaml(read('.github/workflows/rust-fuzz-nightly.yml')) as Wo
 const mutation = parseYaml(read('.github/workflows/mutation.yml')) as Workflow
 const sonarqube = parseYaml(read('.github/workflows/sonarqube.yml')) as Workflow
 
-const RUST_JOBS = ['rust', 'rust-fuzz-pr', 'rust-mutants']
+const RUST_JOBS = ['rust', 'rust-cross-target', 'rust-fuzz-pr', 'rust-mutants']
 const stepsOf = (workflow: Workflow, id: string): Step[] => workflow.jobs[id]?.steps ?? []
 const runs = (workflow: Workflow, id: string): string[] =>
   stepsOf(workflow, id).flatMap((step) => (step.run === undefined ? [] : [step.run]))
@@ -107,6 +107,13 @@ describe('the rust job runs every Rust gate', () => {
     }
   })
 
+  it('leaves the wasm32 cross-target tests to their own job, so they never run twice', () => {
+    // rust:check is what the rust job runs, so a cross-target step there
+    // would double the slowest Rust gate rather than parallelise it.
+    expect(read('tools/checks/src/rust-check.mjs')).not.toMatch(/'cross-target'/)
+    expect(runs(ci, 'rust').join('\n')).not.toMatch(/cross-target/)
+  })
+
   it('runs the PR fuzz script on a pull request and every target on any other event', () => {
     const script = runs(ci, 'rust-fuzz-pr').join('\n')
     expect(script).toMatch(/^\s*pnpm rust:fuzz:pr\s*$/m)
@@ -114,6 +121,37 @@ describe('the rust job runs every Rust gate', () => {
     const step = stepsOf(ci, 'rust-fuzz-pr').find((s) => s.run?.includes('rust:fuzz:pr'))
     // The merge commit's first parent: what the change is diffed against.
     expect(step?.env?.RUST_FUZZ_BASE).toBe('HEAD^1')
+  })
+})
+
+describe('the rust-cross-target job runs the wasm32 cross-target tests', () => {
+  const steps = stepsOf(ci, 'rust-cross-target')
+
+  it.each(['cargo xtask cross-target'])('runs %s, gated on its own scope', (command) => {
+    const step = steps.find((s) => s.run?.trim() === command)
+    expect(step, `no step of the rust-cross-target job runs \`${command}\``).toBeDefined()
+    expect(step?.if).toBe("steps.scope.outputs.run == 'true'")
+  })
+
+  it('is the command pnpm rust:cross-target names, so the local pass runs the same gate', () => {
+    const scripts = (JSON.parse(read('package.json')) as { scripts: Record<string, string> })
+      .scripts
+    expect(scripts['rust:cross-target']).toBe('cargo xtask cross-target')
+  })
+
+  it('computes its own scope, the rust scope, and is in ci-gate', () => {
+    const scope = steps.find((s) => s.name === 'Detect change scope')
+    expect(scope?.run).toBe(
+      'node tools/checks/src/affected-cli.mjs job rust-cross-target --event "$EVENT"',
+    )
+    expect(ci.jobs['ci-gate']?.needs).toContain('rust-cross-target')
+  })
+
+  it('saves its cache from main only, as the rust job does', () => {
+    const cache = (id: string) =>
+      stepsOf(ci, id).find((s) => s.uses?.startsWith('Swatinem/rust-cache@'))
+    expect(cache('rust-cross-target')?.with?.['save-if']).toBe(cache('rust')?.with?.['save-if'])
+    expect(cache('rust-cross-target')?.uses).toBe(cache('rust')?.uses)
   })
 })
 
@@ -147,6 +185,16 @@ describe('the Rust jobs install the tool versions the scripts require', () => {
     )
     expect(versions.length).toBeGreaterThan(0)
     expect(new Set(versions)).toEqual(new Set([FUZZ_PIN]))
+  })
+
+  it('has rust-cross-target install only the wasm32 test runner, at the pin, through one step', () => {
+    const own = stepsOf(ci, 'rust-cross-target').filter((s) =>
+      s.uses?.startsWith('taiki-e/install-action@'),
+    )
+    expect(own).toHaveLength(1)
+    expect(own[0]?.with?.fallback).toBe('none')
+    expect(own[0]?.uses).toBe(installs[0]?.uses)
+    expect(own[0]?.with?.tool).toBe(`wasm-bindgen@${TOOL_PINS['wasm-bindgen']}`)
   })
 })
 
