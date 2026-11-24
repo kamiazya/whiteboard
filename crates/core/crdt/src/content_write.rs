@@ -74,7 +74,7 @@ pub(crate) fn splice_minimal(target: &LoroText, next: &str) -> Step {
 /// `writeMarkdownBody`.
 fn write_markdown_body(host: &Host<'_>, body: &str) -> Step {
     splice_minimal(&host.text(BODY)?, body)?;
-    host.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -124,7 +124,7 @@ fn replace_bucket(host: &Host<'_>, map: &str, entries: &[(String, Value)]) -> St
     for key in stored.iter().filter(|key| lookup(entries, key).is_none()) {
         delete(host, map, key)?;
     }
-    host.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -170,7 +170,7 @@ fn reconcile_bucket(
     for (key, _) in prev.iter().filter(|(key, _)| lookup(next, key).is_none()) {
         delete(host, map, key)?;
     }
-    host.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -193,7 +193,7 @@ pub(crate) fn apply_content(host: &Host<'_>, op: WriterName, args: &Value) -> Op
             .and_then(|name| items(arg("runs")).and_then(|runs| splice_runs(host, name, runs))),
         WriterName::WriteDocumentKind => text(arg("kind")).and_then(|kind| {
             set(host, DOCUMENT, "kind", &Value::String(kind.to_owned()))?;
-            host.commit();
+            host.doc().commit();
             Ok(())
         }),
         WriterName::WriteFacets => {

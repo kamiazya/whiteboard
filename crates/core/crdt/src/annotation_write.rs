@@ -109,7 +109,7 @@ fn write_comment_thread(host: &Host<'_>, thread: &Value) -> Step {
     for (message_id, fields) in &messages {
         put(&held, message_id, fields)?;
     }
-    host.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -118,7 +118,7 @@ fn write_thread_message(host: &Host<'_>, thread_id: &str, message: Option<&Value
     let Some(container) = thread_container(host, thread_id)? else { return Ok(()) };
     let (id, fields) = message_fields(message.ok_or(Fault::Declined)?)?;
     put(&open_mergeable_map(&container, MESSAGES_KEY)?, id, &fields)?;
-    host.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -126,7 +126,7 @@ fn write_thread_message(host: &Host<'_>, thread_id: &str, message: Option<&Value
 fn set_thread_status(host: &Host<'_>, thread_id: &str, status: Option<&Value>) -> Step {
     let Some(container) = thread_container(host, thread_id)? else { return Ok(()) };
     put(&container, STATUS, status.ok_or(Fault::Declined)?)?;
-    host.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -177,7 +177,7 @@ fn move_thread(host: &Host<'_>, thread_id: &str, drop: Option<&Value>) -> Step {
     let Some(moved) = moved_anchor(&anchor, drop.ok_or(Fault::Declined)?)? else { return Ok(()) };
     assert_finite_anchor(&moved)?;
     put(&container, ANCHOR, &moved)?;
-    host.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -264,7 +264,7 @@ fn mark_passages(host: &Host<'_>, passages: &[Value]) -> Step {
             body.mark_utf16(start..end, &key, true).map_err(|_| Fault::Declined)?;
         }
     }
-    host.commit();
+    host.doc().commit();
     Ok(())
 }
 

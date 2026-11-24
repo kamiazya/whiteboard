@@ -257,7 +257,7 @@ pub(crate) fn delete_node(host: &Host<'_>, id: &str) -> Step {
         return Ok(());
     }
     sweep_anchored(host, &BTreeSet::from([id.to_owned()]))?;
-    host.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -285,7 +285,7 @@ pub(crate) fn set_lock(host: &Host<'_>, locks: &str, id: &str, locked: Option<&V
     } else {
         delete(host, locks, id)?;
     }
-    host.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -348,7 +348,7 @@ pub(crate) fn write_canvas(host: &Host<'_>, canvas: &Value) -> Step {
     drop_every(host, NODE_PLANE, &stale_nodes)?;
     drop_every(host, EDGE_PLANE, &stale_edges)?;
     drop_every(host, LINE_PLANE, &stale_lines)?;
-    host.commit();
+    host.doc().commit();
     Ok(())
 }
 

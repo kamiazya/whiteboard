@@ -98,7 +98,7 @@ pub(crate) fn with_spatial_batch(host: &Host<'_>, steps: &[Value]) -> Step {
     }
     writer.settle()?;
     if writer.wrote {
-        host.commit();
+        host.doc().commit();
     }
     Ok(())
 }
@@ -180,7 +180,7 @@ pub(crate) fn reconcile_into(host: &Host<'_>, prev: &Value, next: &Value) -> Res
 /// `reconcileSpatialCanvas`: one commit, none for an unchanged canvas.
 pub(crate) fn reconcile(host: &Host<'_>, prev: &Value, next: &Value) -> Step {
     if reconcile_into(host, prev, next)? {
-        host.commit();
+        host.doc().commit();
     }
     Ok(())
 }

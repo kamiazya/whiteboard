@@ -116,18 +116,18 @@ fn apply(host: &Host<'_>, op: WriterName, args: &Value) -> Step {
         WriterName::WriteSpatialCanvas => write_canvas(host, arg("canvas")?),
         WriterName::WriteSpatialNode => {
             write_element(host, NODE_PLANE, arg("node")?)?;
-            host.commit();
+            host.doc().commit();
             Ok(())
         }
         WriterName::WriteSpatialEdge => {
             write_element(host, EDGE_PLANE, arg("edge")?)?;
-            host.commit();
+            host.doc().commit();
             Ok(())
         }
         WriterName::DeleteSpatialNode => id_writer(host, args, delete_node),
         WriterName::DeleteSpatialEdge => id_writer(host, args, |host, id| {
             if delete_element(host, EDGE_PLANE, id)? {
-                host.commit();
+                host.doc().commit();
             }
             Ok(())
         }),

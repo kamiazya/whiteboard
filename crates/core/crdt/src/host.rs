@@ -59,14 +59,9 @@ impl<'a> Host<'a> {
         Self { doc, node: Some(meta) }
     }
 
-    /// The `LoroDoc` the containers belong to.
+    /// The `LoroDoc` the containers belong to, which a write commits.
     pub(crate) fn doc(&self) -> &'a LoroDoc {
         self.doc
-    }
-
-    /// Ends the change in progress, on the document the containers belong to.
-    pub(crate) fn commit(&self) {
-        self.doc.commit();
     }
 
     /// `getMap`: the map at `key`, opened.

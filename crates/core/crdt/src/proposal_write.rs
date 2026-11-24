@@ -62,7 +62,7 @@ fn write_proposal(host: &Host<'_>, proposal: &Value) -> Step {
     for (change_id, change) in changes {
         put(&held, change_id, change)?;
     }
-    host.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -117,7 +117,7 @@ fn with_document_batch(host: &Host<'_>, steps: &[Value]) -> Step {
             _ => set_status_into(host, step)?,
         }
     }
-    host.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -127,7 +127,9 @@ pub(crate) fn apply_proposal(host: &Host<'_>, op: WriterName, args: &Value) -> O
         WriterName::WriteProposal => {
             field(args, "proposal").ok_or(Fault::Declined).and_then(|p| write_proposal(host, p))
         }
-        WriterName::SetProposedChangeStatus => set_status_into(host, args).map(|()| host.commit()),
+        WriterName::SetProposedChangeStatus => {
+            set_status_into(host, args).map(|()| host.doc().commit())
+        }
         WriterName::WithDocumentBatch => {
             items(field(args, "steps")).and_then(|steps| with_document_batch(host, steps))
         }
