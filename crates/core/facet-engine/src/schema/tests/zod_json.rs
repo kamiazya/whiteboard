@@ -112,16 +112,18 @@ fn a_registered_root_is_a_reference_beside_its_definition() {
 }
 
 #[test]
-fn an_external_left_to_text_that_is_not_json_is_refused() {
-    let host = Host {
-        matchers: &[],
-        checks: &[],
-        externals: &[("Color", External::Defined { contract: "{", validator: None })],
-    };
+fn an_external_left_to_text_that_is_not_a_contract_is_refused() {
     let contract = parse(r#"{"$defs": {"Color": {"type": "string", "x-wb-external": "m"}}}"#);
-    let refused = Contracts::load(&[("c.json", &contract)], &host).err();
-    let malformed = Refusal::Malformed("an external's contract is not JSON");
-    assert_eq!(refused, Some(CompileError { at: "c.json".to_owned(), refusal: malformed }));
+    for text in ["{", "{}", r#"{"$defs": []}"#] {
+        let host = Host {
+            matchers: &[],
+            checks: &[],
+            externals: &[("Color", External::Defined { contract: text, validator: None })],
+        };
+        let refused = Contracts::load(&[("c.json", &contract)], &host).err();
+        let malformed = Refusal::Malformed("an external's contract is not JSON with $defs");
+        assert_eq!(refused, Some(CompileError { at: "c.json".to_owned(), refusal: malformed }));
+    }
 }
 
 /// A record whose keys are a closed set names every key `required`, as Zod's
@@ -159,4 +161,46 @@ fn properties_are_written_in_the_order_the_contract_names() {
         "additionalProperties": false, "x-wb-unknownKeys": "refuse"}}}"#;
     let zod = r#"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"a":{"type":"boolean"},"b":{"type":"string"}},"required":["a","b"],"additionalProperties":false}"#;
     assert_eq!(published(reordered, "Pair"), Some(parse(zod)));
+}
+
+/// A contract a definition is left to is not compiled, so it is published
+/// however it is written: a member of a shape the dialect does not have
+/// constrains nothing, an order names what it can, and a root referenced
+/// twice inside itself is `#` both times.
+#[test]
+fn a_definition_left_to_an_uncompiled_contract_is_published_as_written() {
+    const OTHER: &str = r##"{"$defs": {
+        "Odd": {"type": "object", "properties": 5},
+        "Listed": {"type": "array", "items": 7},
+        "Ordered": {"type": "object", "properties": {"a": {"type": "string"}}, "x-wb-order": [1, "a"]},
+        "Twice": {"type": "object", "properties": {
+            "l": {"$ref": "#/$defs/Twice"}, "r": {"$ref": "#/$defs/Twice"}}}
+    }}"##;
+    const LEFT: External = External::Defined { contract: OTHER, validator: None };
+    let host = Host {
+        matchers: &[],
+        checks: &[],
+        externals: &[("Odd", LEFT), ("Listed", LEFT), ("Ordered", LEFT), ("Twice", LEFT)],
+    };
+    let left = |name: &str| format!(r#""{name}": {{"type": "string", "x-wb-external": "m"}}"#);
+    let names = ["Odd", "Listed", "Ordered", "Twice"];
+    let defs: Vec<String> = names.iter().map(|name| left(name)).collect();
+    let contract = parse(&format!(r#"{{"$defs": {{{}}}}}"#, defs.join(",")));
+    let contracts = Contracts::load(&[("c.json", &contract)], &host).expect("it compiles");
+    let published = |name: &str| {
+        contracts.published(contracts.resolve(&format!("c.json#/$defs/{name}")).expect("held"))
+    };
+    let dialect = r#""$schema":"https://json-schema.org/draft/2020-12/schema""#;
+    let object = |properties: &str| {
+        parse(&format!(
+            r#"{{{dialect},"type":"object","properties":{properties},"additionalProperties":false}}"#
+        ))
+    };
+    assert_eq!(published("Odd"), Some(object("{}")));
+    assert_eq!(
+        published("Listed"),
+        Some(parse(&format!(r#"{{{dialect},"type":"array","items":{{}}}}"#)))
+    );
+    assert_eq!(published("Ordered"), Some(object(r#"{"a":{"type":"string"}}"#)));
+    assert_eq!(published("Twice"), Some(object(r##"{"l":{"$ref":"#"},"r":{"$ref":"#"}}"##)));
 }

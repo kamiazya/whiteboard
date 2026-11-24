@@ -18,29 +18,27 @@ const VISUAL_TAGS_FACET: &str = "facets/visual/visual.schema.json#/$defs/VisualT
 /// declaration as the schema parses it, keys and each key's values in name
 /// order; none for facets without the library facet or with one the schema
 /// refuses, since a drawing must stay readable when a document elsewhere is
-/// wrong.
+/// wrong. A declaration's own fields come in name order too, which is the
+/// schema's order for both of its records.
 #[must_use]
 pub fn read_tag_library(facets: &Value, registry: &Registry) -> Map {
     let contracts = registry.contracts();
     let parsed = member(facets, VISUAL_TAGS_KEY)
         .zip(contracts.resolve(VISUAL_TAGS_FACET))
         .and_then(|(raw, shape)| contracts.validate(shape, raw).ok());
-    let Some(Value::Map(keys)) = parsed.as_ref().and_then(|parsed| member(parsed, "keys")) else {
-        return Map::new();
-    };
-    sorted(keys)
+    match parsed.as_ref().and_then(|parsed| member(parsed, "keys")) {
+        Some(Value::Map(keys)) => ordered(keys),
+        _ => Map::new(),
+    }
+}
+
+/// `entries` with every record in them, at any depth, in name order.
+fn ordered(entries: &Map) -> Map {
+    sorted(entries)
         .into_iter()
-        .map(|(key, declaration)| {
-            let Value::Map(fields) = declaration else { return (key, declaration) };
-            // `values` is the one record a parsed declaration holds.
-            let fields = fields
-                .into_iter()
-                .map(|(name, value)| match value {
-                    Value::Map(values) => (name, Value::Map(sorted(&values))),
-                    other => (name, other),
-                })
-                .collect();
-            (key, Value::Map(fields))
+        .map(|(name, value)| match value {
+            Value::Map(inner) => (name, Value::Map(ordered(&inner))),
+            other => (name, other),
         })
         .collect()
 }

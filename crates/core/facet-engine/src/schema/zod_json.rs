@@ -47,14 +47,11 @@ pub(super) struct Scope {
 }
 
 impl Scope {
-    /// A contract's scope; `contract` is its whole text as a value.
-    pub(super) fn of(contract: &Value) -> Self {
-        let defs = match get(contract, "$defs") {
-            Some(Value::Map(defs)) => defs.clone(),
-            _ => Map::new(),
-        };
+    /// The scope of a contract whose definitions are `defs`, `contract` being
+    /// its whole text as a value.
+    pub(super) fn of(defs: &Map, contract: &Value) -> Self {
         let describe = get(contract, "x-wb-describe") == Some(&Value::Bool(true));
-        Self { defs, describe, externals: Vec::new() }
+        Self { defs: defs.clone(), describe, externals: Vec::new() }
     }
 }
 
@@ -92,13 +89,6 @@ fn described(mut members: Map, text: &str) -> Map {
     members
 }
 
-fn members_of(value: Value) -> Map {
-    match value {
-        Value::Map(members) => members,
-        _ => Map::new(),
-    }
-}
-
 /// The definition `name` of the scope `scope` as Zod's JSON Schema, or `None`
 /// for a name the scope does not hold.
 pub(super) fn publish(scopes: &[Scope], scope: usize, name: &str) -> Option<Value> {
@@ -106,7 +96,7 @@ pub(super) fn publish(scopes: &[Scope], scope: usize, name: &str) -> Option<Valu
         Writer { scopes, registered: Vec::new(), open: Vec::new(), cyclic: Vec::new() };
     let root = writer.definition(scope, name)?;
     let mut out = vec![member("$schema", string(DIALECT))];
-    out.extend(members_of(root));
+    out.extend(root);
     if !writer.registered.is_empty() {
         out.push(member("$defs", Value::Map(writer.registered)));
     }
@@ -135,16 +125,16 @@ impl<'s> Writer<'s> {
         defs.iter().find(|(key, _)| key == name).map(|(_, written)| (scope, written))
     }
 
-    fn definition(&mut self, scope: usize, name: &str) -> Option<Value> {
+    fn definition(&mut self, scope: usize, name: &str) -> Option<Map> {
         let (scope, written) = self.resolve(scope, name)?;
-        let reference = Value::Map(vec![member("$ref", string(&format!("#/$defs/{name}")))]);
+        let reference = vec![member("$ref", string(&format!("#/$defs/{name}")))];
         if get(written, "x-wb-registered") == Some(&Value::Bool(true)) {
             if !self.registered.iter().any(|(key, _)| key == name) {
                 // Held before its body is written, so it is first met here.
                 self.registered.push(member(name, Value::Null));
                 let body = self.node(scope, written);
                 if let Some((_, slot)) = self.registered.iter_mut().find(|(key, _)| key == name) {
-                    *slot = body;
+                    *slot = Value::Map(body);
                 }
             }
             return Some(reference);
@@ -158,15 +148,15 @@ impl<'s> Writer<'s> {
         let key = self.open.pop()?;
         let capped = get(written, "maxProperties").is_some();
         let body = match self.description(scope, written) {
-            Some(text) if !capped => Value::Map(described(members_of(body), text)),
+            Some(text) if !capped => described(body, text),
             _ => body,
         };
         match self.cyclic.iter().find(|(held, _)| *held == key) {
             Some((_, pointer)) if pointer != "#" => {
                 let pointer = pointer.clone();
                 let id = pointer.trim_start_matches("#/$defs/").to_owned();
-                self.registered.push(member(&id, body));
-                Some(Value::Map(vec![member("$ref", Value::String(pointer))]))
+                self.registered.push(member(&id, Value::Map(body)));
+                Some(vec![member("$ref", Value::String(pointer))])
             }
             _ => Some(body),
         }
@@ -175,15 +165,15 @@ impl<'s> Writer<'s> {
     /// A reference back into a definition being written, as Zod writes a
     /// recursion: `#` for the root, and otherwise the next `__schema<n>`
     /// under `$defs`, where the definition is moved once written.
-    fn recursion(&mut self, key: (usize, String)) -> Value {
+    fn recursion(&mut self, key: (usize, String)) -> Map {
         if let Some((_, pointer)) = self.cyclic.iter().find(|(held, _)| *held == key) {
-            return Value::Map(vec![member("$ref", Value::String(pointer.clone()))]);
+            return vec![member("$ref", Value::String(pointer.clone()))];
         }
         let root = self.open.first() == Some(&key);
         let extracted = self.cyclic.iter().filter(|(_, p)| p != "#").count();
         let pointer = if root { "#".to_owned() } else { format!("#/$defs/__schema{extracted}") };
         self.cyclic.push((key, pointer.clone()));
-        Value::Map(vec![member("$ref", Value::String(pointer))])
+        vec![member("$ref", Value::String(pointer))]
     }
 
     /// What the generator describes `written` with, if anything.
@@ -192,45 +182,50 @@ impl<'s> Writer<'s> {
         if describe { text(written, "description") } else { text(written, "x-wb-describe") }
     }
 
-    fn node(&mut self, scope: usize, written: &Value) -> Value {
+    /// A schema as Zod writes it; a reference nothing answers to, like
+    /// `x-wb-any`'s `unknown()`, constrains nothing.
+    fn node(&mut self, scope: usize, written: &Value) -> Map {
         if let Some(target) = text(written, "$ref") {
             let name = target.strip_prefix("#/$defs/").unwrap_or(target);
-            return self.definition(scope, name).unwrap_or(Value::Map(Map::new()));
+            return self.definition(scope, name).unwrap_or_default();
         }
         for union in ["anyOf", "oneOf"] {
             if let Some(Value::Seq(arms)) = get(written, union) {
-                let arms = arms.iter().map(|arm| self.node(scope, arm)).collect();
-                return Value::Map(vec![member(union, Value::Seq(arms))]);
+                let arms = arms.iter().map(|arm| Value::Map(self.node(scope, arm))).collect();
+                return vec![member(union, Value::Seq(arms))];
             }
         }
         match text(written, "type") {
             Some("array") => self.array(scope, written),
             Some("object") if get(written, "properties").is_some() => self.object(scope, written),
             Some("object") => self.record(scope, written),
-            Some(kind) => Value::Map(scalar(kind, written)),
-            // `x-wb-any`: Zod's `unknown()` constrains nothing.
-            None => Value::Map(Map::new()),
+            Some(kind) => scalar(kind, written),
+            None => Map::new(),
         }
     }
 
-    fn array(&mut self, scope: usize, written: &Value) -> Value {
+    /// A schema a member holds.
+    fn inner(&mut self, scope: usize, written: Option<&Value>) -> Value {
+        Value::Map(written.map(|written| self.node(scope, written)).unwrap_or_default())
+    }
+
+    fn array(&mut self, scope: usize, written: &Value) -> Map {
         let mut out: Map = ["minItems", "maxItems"]
             .into_iter()
             .filter_map(|key| get(written, key).map(|bound| member(key, bound.clone())))
             .collect();
         out.push(member("type", string("array")));
-        let items = get(written, "items").map_or(Value::Map(Map::new()), |i| self.node(scope, i));
+        let items = self.inner(scope, get(written, "items"));
         out.push(member("items", items));
-        Value::Map(out)
+        out
     }
 
-    fn record(&mut self, scope: usize, written: &Value) -> Value {
+    fn record(&mut self, scope: usize, written: &Value) -> Map {
         let keys = get(written, "propertyNames").map_or_else(
             || Value::Map(vec![member("type", string("string"))]),
-            |names| self.node(scope, names),
+            |names| Value::Map(self.node(scope, names)),
         );
-        let values = get(written, "additionalProperties")
-            .map_or(Value::Map(Map::new()), |value| self.node(scope, value));
+        let values = self.inner(scope, get(written, "additionalProperties"));
         let mut out = vec![
             member("type", string("object")),
             member("propertyNames", keys),
@@ -240,7 +235,7 @@ impl<'s> Writer<'s> {
         if let Some(names) = closed.filter(|names| !names.is_empty()) {
             out.push(member("required", Value::Seq(names)));
         }
-        Value::Map(out)
+        out
     }
 
     /// The closed set of strings `written` admits, as Zod's `_zod.values`
@@ -270,7 +265,7 @@ impl<'s> Writer<'s> {
         def.is_some_and(|(_, def)| get(def, "maxProperties").is_some())
     }
 
-    fn object(&mut self, scope: usize, written: &Value) -> Value {
+    fn object(&mut self, scope: usize, written: &Value) -> Map {
         let required: Vec<&Value> = match get(written, "required") {
             Some(Value::Seq(names)) => names.iter().collect(),
             _ => Vec::new(),
@@ -299,7 +294,7 @@ impl<'s> Writer<'s> {
             if !optional || get(property, "default").is_some() {
                 held.push(string(name));
             }
-            properties.push(member(name, self.property(scope, property, optional)));
+            properties.push(member(name, Value::Map(self.property(scope, property, optional))));
         }
         let mut out =
             vec![member("type", string("object")), member("properties", Value::Map(properties))];
@@ -309,21 +304,21 @@ impl<'s> Writer<'s> {
         let keep = text(written, "x-wb-unknownKeys") == Some("keep");
         let unknown = if keep { Value::Map(Map::new()) } else { Value::Bool(false) };
         out.push(member("additionalProperties", unknown));
-        Value::Map(out)
+        out
     }
 
     /// A property: its schema inside the wrapper `optional()`, `default()` or
     /// a registered definition's reference puts it in, described.
-    fn property(&mut self, scope: usize, written: &Value, optional: bool) -> Value {
-        let inner = members_of(self.node(scope, written));
+    fn property(&mut self, scope: usize, written: &Value, optional: bool) -> Map {
+        let inner = self.node(scope, written);
         let text = self.description(scope, written);
         let default = get(written, "default");
         let reference = inner.iter().any(|(key, _)| key == "$ref") || self.capped(scope, written);
         if !(optional || default.is_some() || reference) {
-            return Value::Map(match text {
+            return match text {
                 Some(text) => described(inner, text),
                 None => inner,
-            });
+            };
         }
         let mut out: Map =
             default.map(|value| member("default", value.clone())).into_iter().collect();
@@ -332,7 +327,7 @@ impl<'s> Writer<'s> {
         }
         let dropped = text.is_some();
         out.extend(inner.into_iter().filter(|(key, _)| !(dropped && key == "description")));
-        Value::Map(out)
+        out
     }
 }
 

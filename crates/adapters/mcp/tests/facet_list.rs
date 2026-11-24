@@ -66,10 +66,10 @@ fn server(record: &Value) -> Server<OpsCatalogue<Fakes>> {
     });
     let workspace = text(&rows[0], "workspaceId").expect("the workspace");
     let bytes = base64_to_bytes(record["snapshot"].as_str().expect("a snapshot")).expect("base64");
-    let known = record["known"].as_array().expect("known handles");
+    let known = record["known"].as_array().into_iter().flatten();
     let caller = FixedCaller::new()
         .in_namespace(record["callerNamespace"].as_str().expect("a namespace"))
-        .knowing(known.iter().map(|h| h.as_str().expect("a handle").to_owned()).collect());
+        .knowing(known.map(|h| h.as_str().expect("a handle").to_owned()).collect());
     let records = MemoryRecordStore::new().holding(&workspace, bytes);
     let identity =
         Identity { name: "whiteboard".into(), version: "0".into(), instructions: String::new() };
@@ -108,4 +108,21 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
     }
     assert_eq!(replayed, 26, "the recording's calls, every one answered");
     assert_eq!(workspaces, 5, "the calls answered with a workspace's vocabulary");
+}
+
+/// A workspace holding documents whose content this crate does not read yet
+/// (`wb_document_get`'s recording holds retired stored shapes and documents
+/// with no kind) is answered as pending, never as a listing that skipped
+/// them; what the TypeScript answers there is not recorded.
+#[test]
+fn a_workspace_holding_a_retired_shape_is_pending() {
+    const CONTENT: &str =
+        include_str!("../../../../packages/mcp-server/src/server/mcp/oracle/document-get.jsonl");
+    let record: Value =
+        serde_json::from_str(CONTENT.lines().next().expect("a record")).expect("JSON");
+    let workspace = record["registry"][0]["workspaceId"].clone();
+    let call = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": { "name": "wb_facet_list", "arguments": { "workspaceId": workspace } } });
+    let answer = block_on(server(&record).handle(&call)).expect("an answer");
+    assert_eq!(answer["error"]["message"], json!("Tool wb_facet_list not found"));
 }

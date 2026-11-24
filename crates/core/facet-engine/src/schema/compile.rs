@@ -258,7 +258,7 @@ impl Compiler<'_> {
         // A definition's id is its place in this list, which is how the
         // references compiled above name it.
         let scope = self.scopes.len();
-        self.scopes.push(Written::of(contract));
+        self.scopes.push(Written::of(written, contract));
         self.left_to_others(scope, written, path)?;
         let contract = path.to_owned();
         self.defs.extend(written.iter().zip(roots).map(|((name, _), root)| Def {
@@ -285,11 +285,12 @@ impl Compiler<'_> {
                 }
                 _ => continue,
             };
-            let Ok(parsed) = json::parse(source) else {
-                return malformed(path, "an external's contract is not JSON");
+            let parsed = json::parse(source).unwrap_or(Value::Null);
+            let Some(Value::Map(defs)) = child(Some(&parsed), "$defs") else {
+                return malformed(path, "an external's contract is not JSON with $defs");
             };
             let other = self.scopes.len();
-            self.scopes.push(Written::of(&parsed));
+            self.scopes.push(Written::of(defs, &parsed));
             if let Some(held) = self.scopes.get_mut(scope) {
                 held.externals.push((name.clone(), other));
             }

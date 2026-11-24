@@ -88,10 +88,7 @@ fn facets_at(
 fn stencil(id: String, library: &Map) -> AssetEntry {
     let name = id.split_once('.').map_or("", |(_, name)| name);
     let declared = library.iter().find(|(held, _)| held == name).map(|(_, stencil)| stencil);
-    let display_name = match declared.and_then(|stencil| field(stencil, "displayName")) {
-        Some(Value::String(shown)) => Some(shown.clone()),
-        _ => None,
-    };
+    let display_name = declared.and_then(|stencil| text(stencil, "displayName"));
     let namespace = id.split_once('.').map_or("", |(namespace, _)| namespace).to_owned();
     AssetEntry { id, kind: AssetKind::Stencils, namespace, display_name }
 }
