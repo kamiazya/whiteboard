@@ -3,6 +3,8 @@
 //! counted once however often it repeats a tag, in code-unit order so every
 //! machine answers the same list.
 
+use std::collections::BTreeMap;
+
 use whiteboard_model::tags::parse_scoped_tag;
 
 use crate::facts::{BearerKind, TagBearer};
@@ -41,7 +43,7 @@ impl TagInUse {
 /// (`compareCodeUnit`).
 #[must_use]
 pub fn tags_in_use<'a>(bearers: impl IntoIterator<Item = &'a TagBearer>) -> Vec<TagInUse> {
-    let mut rows: Vec<TagInUse> = Vec::new();
+    let mut rows: BTreeMap<&str, TagInUse> = BTreeMap::new();
     for bearer in bearers {
         let mut seen: Vec<&str> = Vec::new();
         for tag in &bearer.tags {
@@ -49,15 +51,10 @@ pub fn tags_in_use<'a>(bearers: impl IntoIterator<Item = &'a TagBearer>) -> Vec<
                 continue;
             }
             seen.push(tag);
-            if let Some(row) = rows.iter_mut().find(|row| row.tag == *tag) {
-                row.count(bearer.what);
-            } else {
-                let mut row = TagInUse::new(tag);
-                row.count(bearer.what);
-                rows.push(row);
-            }
+            rows.entry(tag).or_insert_with(|| TagInUse::new(tag)).count(bearer.what);
         }
     }
+    let mut rows: Vec<TagInUse> = rows.into_values().collect();
     rows.sort_by(|a, b| a.tag.encode_utf16().cmp(b.tag.encode_utf16()));
     rows
 }
