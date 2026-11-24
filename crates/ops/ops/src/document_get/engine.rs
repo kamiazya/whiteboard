@@ -42,12 +42,13 @@ impl Hosted<'_> {
             return Err(undecided());
         };
         // The engine's contract: `{ ok: value }` or `{ err: class }`.
-        match answer.value {
-            Value::Map(mut entries) => match entries.pop() {
-                Some((key, value)) if key == "ok" => Ok(Ok(value)),
-                Some((_, Value::String(class))) => Ok(Err(class)),
-                _ => Err(undecided()),
-            },
+        let mut entries = match answer.value {
+            Value::Map(entries) => entries,
+            _ => Vec::new(),
+        };
+        match entries.pop() {
+            Some((key, value)) if key == "ok" => Ok(Ok(value)),
+            Some((_, Value::String(class))) => Ok(Err(class)),
             _ => Err(undecided()),
         }
     }

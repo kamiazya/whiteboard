@@ -78,16 +78,16 @@ pub(super) fn export(hosted: Hosted<'_>, name: Option<&str>) -> Result<Exported,
     let core = defined(hosted.read(QueryName::CoreFacets, &[])?);
     let facets = hosted.read(QueryName::Facets, &[])?;
     let trust = defined(hosted.read(QueryName::TrustFacets, &[])?);
-    let frontmatter = frontmatter(core, name, trust, facets);
-    let markdown =
-        serialize_in_order(frontmatter.clone(), &body).map_err(|_| unwritable(hosted))?;
-    Ok(Exported { markdown, frontmatter: Value::Map(frontmatter) })
+    written(hosted.document_id, frontmatter(core, name, trust, facets), &body)
 }
 
-/// A frontmatter the codec has no spelling for: refused there as the
-/// codec's own error, whose words are the TypeScript shim's, so pending.
-fn unwritable(hosted: Hosted<'_>) -> Fault {
-    Fault::Stop(Stop::Pending(Pending::OkfUnwritable(hosted.document_id.to_owned())))
+/// The OKF text of `frontmatter` and `body`. A frontmatter the codec has no
+/// spelling for is refused there as the codec's own error, whose words are
+/// the TypeScript shim's, so pending.
+fn written(document_id: &str, frontmatter: Map, body: &str) -> Result<Exported, Fault> {
+    let markdown = serialize_in_order(frontmatter.clone(), body)
+        .map_err(|_| Fault::Stop(Stop::Pending(Pending::OkfUnwritable(document_id.to_owned()))))?;
+    Ok(Exported { markdown, frontmatter: Value::Map(frontmatter) })
 }
 
 #[cfg(test)]

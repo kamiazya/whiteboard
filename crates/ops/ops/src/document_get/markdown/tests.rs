@@ -36,3 +36,14 @@ fn the_body_is_the_markdown_content_alone() {
     assert_eq!(body_of(map(&[])), "");
     assert_eq!(body_of(Value::Null), "");
 }
+
+#[test]
+fn a_frontmatter_the_writer_cannot_spell_is_pending() {
+    let unwritable = vec![("type".to_owned(), Value::Number(f64::NAN))];
+    let pending = Pending::OkfUnwritable("d".to_owned());
+    assert_eq!(written("d", unwritable, "").err(), Some(Fault::Stop(Stop::Pending(pending))));
+    let note = vec![("type".to_owned(), text("note"))];
+    let Ok(exported) = written("d", note.clone(), "body") else { panic!("written") };
+    assert_eq!(exported.markdown, "---\ntype: note\n---\nbody");
+    assert_eq!(exported.frontmatter, Value::Map(note));
+}

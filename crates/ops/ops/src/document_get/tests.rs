@@ -73,3 +73,37 @@ fn a_repeated_id_is_read_once_where_it_first_appears() {
     let read: Vec<&str> = output.documents.iter().map(|d| d.document_id.as_str()).collect();
     assert_eq!(read, [bare, plan]);
 }
+
+#[test]
+fn a_document_neither_its_content_nor_its_index_row_gives_a_kind_is_failed() {
+    let (record, ids) = recorded();
+    let id = ids["kindless"].as_str().expect("an id");
+    let read = read_known(Hosted { record: &record, document_id: id }, None, None);
+    assert_eq!(read, Ok(Err(kind_unknown(id))));
+}
+
+#[test]
+fn a_workspace_the_store_holds_no_record_of_is_refused() {
+    use whiteboard_port_fakes::{FixedCaller, MemoryRecordStore, MemoryRegistry, block_on};
+
+    struct Empty(MemoryRecordStore, MemoryRegistry, FixedCaller);
+    impl Ports for Empty {
+        type Records = MemoryRecordStore;
+        type Registry = MemoryRegistry;
+        type Caller = FixedCaller;
+        fn records(&self) -> &MemoryRecordStore {
+            &self.0
+        }
+        fn registry(&self) -> &MemoryRegistry {
+            &self.1
+        }
+        fn caller(&self) -> &FixedCaller {
+            &self.2
+        }
+    }
+    let ports = Empty(MemoryRecordStore::new(), MemoryRegistry::new(), FixedCaller::new());
+    let input =
+        DocumentGetInput { workspace_id: "w".to_owned(), document_ids: vec!["d".to_owned()] };
+    let refused = block_on(DocumentGet::execute(&ports, input));
+    assert_eq!(refused, Err(Refusal::WorkspaceNotFoundInIndex { workspace_id: "w".to_owned() }));
+}
