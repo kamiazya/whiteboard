@@ -271,3 +271,98 @@ fn a_line_of_the_wrong_shape_is_refused() {
         ("a line with tags", line(POINT, r#","tags":[]"#)),
     ]);
 }
+
+/// A canvas holding every field the contract names, each once.
+const EVERY_FIELD: &str = r#"{
+    "nodes":[{"id":"a","x":0,"y":0,"width":1,"height":1,"color":"1",
+        "embed":{"documentId":"d","versionRef":"v"},"facets":{},"tags":["t"],
+        "resource":{"mimeType":"m","content":"c","location":"l","subpath":"s"},
+        "label":"L","background":"b","backgroundStyle":"cover"}],
+    "edges":[{"id":"e","from":{"node":"a","side":"left","end":"arrow"},"to":{"node":"a"},
+        "color":"2","label":"l","bends":[{"x":1,"y":2}],"facets":{},"tags":[]}],
+    "lines":[{"id":"i","from":{"kind":"node","node":"a","side":"top","end":"none"},
+        "to":{"kind":"point","point":{"x":1,"y":1},"end":"arrow"},
+        "color":"3","label":"x","bends":[],"facets":{}}],
+    "facets":{},"tags":[]}"#;
+
+/// Where a value sits in the tree: the keys and indices down to it.
+#[derive(Debug, Clone)]
+enum Step {
+    Key(String),
+    At(usize),
+}
+
+/// Every place below the root, in tree order.
+fn places(value: &Value, at: &[Step], found: &mut Vec<Vec<Step>>) {
+    let mut go = |step: Step, item: &Value| {
+        let mut path = at.to_vec();
+        path.push(step);
+        found.push(path.clone());
+        places(item, &path, found);
+    };
+    match value {
+        Value::Map(entries) => entries.iter().for_each(|(k, v)| go(Step::Key(k.clone()), v)),
+        Value::Seq(items) => items.iter().enumerate().for_each(|(i, v)| go(Step::At(i), v)),
+        _ => {}
+    }
+}
+
+/// `value` with the place `path` names handed to `edit`.
+fn edited(value: &Value, path: &[Step], edit: &dyn Fn(&mut Value)) -> Value {
+    let mut copy = value.clone();
+    let mut here = &mut copy;
+    for step in path {
+        here = match (here, step) {
+            (Value::Map(entries), Step::Key(key)) => {
+                &mut entries.iter_mut().find(|(k, _)| k == key).expect("a key").1
+            }
+            (Value::Seq(items), Step::At(i)) => &mut items[*i],
+            _ => panic!("no place at {path:?}"),
+        };
+    }
+    edit(here);
+    copy
+}
+
+/// A value of another type than `value`'s.
+fn other_type(value: &Value) -> Value {
+    match value {
+        Value::Number(_) => Value::String("1".into()),
+        _ => Value::Number(1.0),
+    }
+}
+
+#[test]
+fn a_value_of_another_type_anywhere_is_no_canvas() {
+    let canvas = value(EVERY_FIELD);
+    assert!(canvas_of(&canvas).is_some(), "the control reads");
+    let mut found = Vec::new();
+    places(&canvas, &[], &mut found);
+    assert_eq!(found.len(), 59, "every place of the fixture");
+    for path in found {
+        let wrong = edited(&canvas, &path, &|here| *here = other_type(here));
+        assert_eq!(canvas_of(&wrong), None, "{path:?}");
+    }
+}
+
+#[test]
+fn a_canvas_without_a_required_field_is_none_and_without_an_optional_one_reads() {
+    let canvas = value(EVERY_FIELD);
+    let mut found = Vec::new();
+    places(&canvas, &[], &mut found);
+    let required = ["nodes", "edges", "id", "x", "y", "width", "height", "documentId"];
+    let required = [&required[..], &["mimeType", "from", "to", "node", "kind", "point"]].concat();
+    let mut dropped = 0;
+    for path in found {
+        let Some((Step::Key(key), parent)) = path.split_last() else { continue };
+        let without = edited(&canvas, parent, &|here| {
+            if let Value::Map(entries) = here {
+                entries.retain(|(k, _)| k != key);
+            }
+        });
+        let needed = required.contains(&key.as_str());
+        assert_eq!(canvas_of(&without).is_none(), needed, "{path:?}");
+        dropped += 1;
+    }
+    assert_eq!(dropped, 54, "every key of the fixture");
+}
