@@ -65,6 +65,19 @@ pub(crate) enum Kind {
     /// bounds `Display` writes as Zod does. JSON spells no number that is
     /// not finite, so `finite()` refuses nothing a call can carry.
     Real { min: f64, max: f64 },
+    /// A member whose schema the kinds above do not express (a nested
+    /// refinement, a string held to a grammar), judged by the tool's own
+    /// functions.
+    Checked(Checked),
+}
+
+/// A member judged by the tool's own functions.
+pub(crate) struct Checked {
+    /// The member's issues at `path`, as the SDK words them.
+    pub(crate) issues: fn(&str, Option<&Value>) -> Vec<String>,
+    /// Whether a value of the member's stops Zod judging a refinement over
+    /// the object holding it ([`aborts`]).
+    pub(crate) aborts: fn(Option<&Value>) -> bool,
 }
 
 /// `Number.MAX_SAFE_INTEGER`, which Zod's `int()` holds a number to.
@@ -92,22 +105,26 @@ pub(crate) fn refusal(tool: &str, input: &Input, arguments: &Map<String, Value>)
 }
 
 /// `<path>: <message>`, or the message alone at the root.
-fn at(path: &str, message: &str) -> String {
+pub(crate) fn at(path: &str, message: &str) -> String {
     if path.is_empty() { message.to_owned() } else { format!("{path}: {message}") }
 }
 
-fn joined(path: &str, name: &str) -> String {
+pub(crate) fn joined(path: &str, name: &str) -> String {
     if path.is_empty() { name.to_owned() } else { format!("{path}.{name}") }
 }
 
-fn expected(path: &str, kind: &str, value: Option<&Value>) -> String {
+pub(crate) fn expected(path: &str, kind: &str, value: Option<&Value>) -> String {
     at(path, &format!("Invalid input: expected {kind}, received {}", received(value)))
 }
 
 /// Each field's issues in the schema's order, then the keys it does not name.
 /// Zod names those in the order the client wrote them; a `serde_json` map has
 /// sorted them already.
-fn object_issues(path: &str, fields: &[Field], object: &Map<String, Value>) -> Vec<String> {
+pub(crate) fn object_issues(
+    path: &str,
+    fields: &[Field],
+    object: &Map<String, Value>,
+) -> Vec<String> {
     let mut issues: Vec<String> = fields
         .iter()
         .flat_map(|field| {
@@ -143,6 +160,7 @@ fn field_issues(path: &str, kind: &Kind, value: Option<&Value>) -> Vec<String> {
         Kind::Path { max, segments } => path_issues(path, *max, segments, value),
         Kind::Whole { min, max } => whole_issues(path, (*min, *max), value),
         Kind::Real { min, max } => real_issues(path, (*min, *max), value),
+        Kind::Checked(checked) => (checked.issues)(path, value),
         Kind::Object(fields) => match value {
             None => Vec::new(),
             Some(Value::Object(object)) => object_issues(path, fields, object),
@@ -180,7 +198,7 @@ fn text_issue(path: &str, refined: &Refined, value: Option<&Value>) -> Option<St
 /// A length out of `min..=max` in `what`'s words, as Zod's length checks
 /// word it; Zod judges the length of any value that has one.
 /// Past `max`, `too_big` replaces Zod's words when the schema gave its own.
-fn length_issue(
+pub(crate) fn length_issue(
     path: &str,
     (min, max): (usize, usize),
     length: usize,
@@ -204,7 +222,7 @@ fn length_issue(
 }
 
 /// A string's length in characters, as Zod 4 counts one: code points.
-fn characters(text: &str) -> usize {
+pub(crate) fn characters(text: &str) -> usize {
     text.chars().count()
 }
 
@@ -248,7 +266,12 @@ fn path_issues(path: &str, max: usize, segments: &Refined, value: Option<&Value>
 /// units, refused past either with `too_big`: `utf16Max(z.string().min(1),
 /// max, too_big)`, whose words are the schema's for both. An array is no
 /// string, and Zod still judges its length, in items.
-fn bounded_issues(path: &str, max: usize, too_big: &str, value: Option<&Value>) -> Vec<String> {
+pub(crate) fn bounded_issues(
+    path: &str,
+    max: usize,
+    too_big: &str,
+    value: Option<&Value>,
+) -> Vec<String> {
     let Some(given) = value else { return Vec::new() };
     match given {
         Value::String(text) => {
@@ -307,9 +330,10 @@ fn real_issues(path: &str, (min, max): (f64, f64), value: Option<&Value>) -> Vec
 /// it does not list), or an array past its maximum, which Zod judges before
 /// any item. A bound on a number or a string's length, a refined string and
 /// an unknown key let it run.
-fn aborts(kind: &Kind, value: Option<&Value>) -> bool {
+pub(crate) fn aborts(kind: &Kind, value: Option<&Value>) -> bool {
     let not_text = |value: &Value| !value.is_string();
     match (kind, value) {
+        (Kind::Checked(checked), value) => (checked.aborts)(value),
         (
             Kind::Text(_) | Kind::Sized { .. } | Kind::RequiredBounded { .. } | Kind::List { .. },
             None,

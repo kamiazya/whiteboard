@@ -161,6 +161,13 @@ const DOCUMENTS: Message[] = [
     kind: 'markdown',
     markdown: '---\ntype: note\n---\nc\n',
   },
+  {
+    op: 'document.create',
+    path: 'styled',
+    kind: 'markdown',
+    markdown: '---\ntype: note\n---\ns\n',
+  },
+  { op: 'document.create', path: 'loose', kind: 'markdown', markdown: '---\ntype: note\n---\nl\n' },
   { op: 'document.create', path: 'tags', kind: 'markdown', markdown: '---\ntype: note\n---\nl\n' },
   { op: 'document.create', path: 'board', kind: 'spatial' },
   { op: 'document.create', path: 'empty', kind: 'spatial' },
@@ -296,16 +303,24 @@ function noteCalls(ids: Ids): Asked[] {
     ],
     [
       'a symbol set on a note',
-      note({ facets: { 'visual.symbol/v0': { kind: 'emoji', char: '\u{1F4CC}' } } }),
+      {
+        workspaceId: W,
+        documentIds: [ids.styled],
+        facets: { 'visual.symbol/v0': { kind: 'emoji', char: '\u{1F4CC}' } },
+      },
     ],
     [
       'an unregistered facet passes through',
-      note({ facets: { 'other.thing/v1': { b: 1, a: [true, null], 2: 'x' } } }),
+      {
+        workspaceId: W,
+        documentIds: [ids.loose],
+        facets: { 'other.thing/v1': { 2: 'x', a: [true, null], b: 1 } },
+      },
     ],
+    ['a scalar facet passes through', note({ facets: { 'other.thing/v1': 1 } })],
     ['a facet merged beside the others', note({ facets: { 'other.second/v0': 'plain' } })],
     ['a facet deleted by null', note({ facets: { 'other.thing/v1': null } })],
     ['a facet deleted that is not there', note({ facets: { 'other.absent/v0': null } })],
-    ['facets and tags together', note({ tags: { add: ['both'] }, facets: { 'other.both/v0': 1 } })],
     ['a target document named', note({ target: 'document', tags: { add: ['aimed'] } })],
     [
       'two notes at once',
@@ -574,7 +589,7 @@ function fieldCalls(ids: Ids): Asked[] {
     ['an array for the facets', note({ facets: [] })],
     ['a facet key off the pattern', note({ facets: { Bad: 1 } })],
     ['a core facet key', note({ facets: { tags: ['x'] } })],
-    ['two facet keys off the pattern', note({ facets: { a: 1, B: 2 } })],
+    ['two facet keys off the pattern', note({ facets: { B: 2, a: 1 } })],
     ['a null for the facets', note({ facets: null })],
     ['an unknown key', note({ tags: { add: ['x'] }, follow: true })],
     [
@@ -588,14 +603,6 @@ function fieldCalls(ids: Ids): Asked[] {
 function libraryCalls(ids: Ids): Asked[] {
   const board = (more: Message): Message => ({ workspaceId: W, documentIds: [ids.board], ...more })
   return [
-    [
-      'a stencil written',
-      board({ nodeId: 'pad', facets: { 'visual.stencil/v0': { stencil: 'visual.datastore' } } }),
-    ],
-    [
-      'a stencil nothing registered',
-      board({ nodeId: 'pad', facets: { 'visual.stencil/v0': { stencil: 'workspace.nothing' } } }),
-    ],
     [
       'a tag value the library does not admit',
       board({ nodeId: 'pad', tags: { add: ['region:asia'] } }),
@@ -631,7 +638,7 @@ const libraryDocument = (ids: Ids): Asked[] => [
       facets: {
         'visual.tags/v0': {
           keys: {
-            health: { exclusive: true, values: { ok: {}, failing: {} } },
+            health: { exclusive: true, values: { failing: {}, ok: {} } },
             region: { values: { eu: {}, us: {} } },
           },
         },
@@ -639,6 +646,43 @@ const libraryDocument = (ids: Ids): Asked[] => [
     },
   ],
 ]
+
+/**
+ * The calls the Rust core leaves pending, last because the daemon writes for
+ * them and nothing after them may read it: a stored facet payload of several
+ * keys is read back in the order npm loro's hash map holds them, which a
+ * native build cannot know; a note's facets and tags together change two of
+ * its roots; and a facet that takes a stencil reads the workspace's stencil
+ * library.
+ */
+function pendingCalls(ids: Ids): Asked[] {
+  const board = (more: Message): Message => ({ workspaceId: W, documentIds: [ids.board], ...more })
+  const note = (more: Message): Message => ({ workspaceId: W, documentIds: [ids.note], ...more })
+  return [
+    ['a facet set to sit beside the stored one', note({ facets: { 'other.thing/v1': 2 } })],
+    ['a tag beside two stored facets', note({ tags: { add: ['beside'] } })],
+    [
+      'a stored payload of two keys beside a new facet',
+      { workspaceId: W, documentIds: [ids.styled], facets: { 'other.second/v0': 1 } },
+    ],
+    [
+      'a stored payload of several keys, a tag written',
+      { workspaceId: W, documentIds: [ids.loose], tags: { add: ['x'] } },
+    ],
+    [
+      'facets and tags together on a note',
+      note({ tags: { add: ['both'] }, facets: { 'other.both/v0': 1 } }),
+    ],
+    [
+      'a stencil written',
+      board({ nodeId: 'pad', facets: { 'visual.stencil/v0': { stencil: 'visual.datastore' } } }),
+    ],
+    [
+      'a stencil nothing registered',
+      board({ nodeId: 'pad', facets: { 'visual.stencil/v0': { stencil: 'workspace.nothing' } } }),
+    ],
+  ]
+}
 
 /** Reads back what the writes left, so a refused batch is seen to have kept nothing. */
 const readBack = (ids: Ids, documentId: string | undefined, about: string): Asked[] => [
@@ -655,6 +699,7 @@ function calls(ids: Ids): Asked[] {
     ...libraryDocument(ids),
     ...libraryCalls(ids),
     ...readBack(ids, ids.second, 'the second note after a refused batch'),
+    ...pendingCalls(ids),
   ]
 }
 
