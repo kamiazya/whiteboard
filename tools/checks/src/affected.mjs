@@ -183,13 +183,18 @@ export const PACKAGE_JOBS = {
  * ci.yml jobs scoped by PATH rather than by the workspace graph: each runs
  * when a changed path is one of its scope's root files or lies under one of
  * its trees. The Cargo workspace is not a pnpm node, and modelling its crates
- * as graph nodes would buy nothing yet — both jobs build the whole workspace.
+ * as graph nodes would buy nothing yet — every one of these jobs builds the
+ * whole workspace.
  * A TS package whose source names one of these paths still runs, through
  * scanTreeReaders, as for any READ_TREES entry.
  * @type {Record<string, { scope: { files: string[], trees: string[] }, why: string }>}
  */
 export const PATH_JOBS = {
   rust: { scope: RUST_SCOPE, why: 'pnpm rust:check, the wasm build and the release gates' },
+  'rust-cross-target': {
+    scope: RUST_SCOPE,
+    why: "cargo xtask cross-target: the core crates' tests on wasm32 beside native",
+  },
   'rust-fuzz-pr': {
     scope: RUST_SCOPE,
     why: 'the fuzz targets whose crates changed, for tens of seconds each',

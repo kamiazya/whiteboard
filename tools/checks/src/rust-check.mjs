@@ -2,9 +2,14 @@
 // `pnpm rust:check`: every gate the Rust workspace has, in the order a
 // failure is cheapest to read — formatting, lints, tests, then the xtask
 // guards (architecture map, input caps and the fuzz registry, wasm import
-// scan, the core crates' tests on wasm32, size ledger, coverage floors,
-// dependency-unsafe ledger) and the supply-chain check over both workspaces.
-// Stops at the first failing step. `cargo xtask coverage` needs
+// scan, size ledger, coverage floors, dependency-unsafe ledger) and the
+// supply-chain check over both workspaces. Stops at the first failing step.
+//
+// NOT here: `cargo xtask cross-target` (every core, ports, ops and adapters
+// crate's tests on wasm32 beside native, counts compared). It is the slowest
+// gate by far and grows with every crate, so it is its own script,
+// `pnpm rust:cross-target`, and its own CI job (`rust-cross-target`) running
+// beside this one. A full local pass is both scripts. `cargo xtask coverage` needs
 // cargo-llvm-cov at the version it names and fails saying so when it is
 // missing, like cargo-deny below.
 //
@@ -43,7 +48,6 @@ const STEPS = [
   ['cargo', ['xtask', 'arch-map']],
   ['cargo', ['xtask', 'inputs']],
   ['cargo', ['xtask', 'wasm-imports']],
-  ['cargo', ['xtask', 'cross-target']],
   ['cargo', ['xtask', 'size']],
   ['cargo', ['xtask', 'coverage']],
   ['cargo', ['xtask', 'unsafe-ledger']],

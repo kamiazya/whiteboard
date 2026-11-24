@@ -96,6 +96,11 @@
   },
   {
     "conclusion": "success",
+    "name": "rust-cross-target",
+    "status": "completed"
+  },
+  {
+    "conclusion": "success",
     "name": "rust-fuzz-pr",
     "status": "completed"
   },

@@ -33,6 +33,7 @@
     "verify:git-hooks": "node packages/mcp-server/scripts/verify-git-hooks.mjs",
     "typecheck": "pnpm -r typecheck",
     "rust:check": "node tools/checks/src/rust-check.mjs",
+    "rust:cross-target": "cargo xtask cross-target",
     "rust:build:wasm": "node tools/checks/src/rust-build-wasm.mjs",
     "rust:build:wasm:oracle": "node tools/checks/src/rust-build-wasm.mjs --oracle",
     "rust:fuzz:pr": "node tools/checks/src/rust-fuzz.mjs pr",
