@@ -287,3 +287,50 @@ fn a_definition_left_to_a_contract_without_it_is_refused() {
     let at = "c.json#/$defs/Gone".to_owned();
     assert_eq!(refused, Some(CompileError { at, refusal: malformed }));
 }
+
+/// A contract the definitions `Shared`-reaching `A` and `B` are left to, and
+/// one whose `Ext` reaches a registered `Token` of its own.
+const REGISTERING: &str = r##"{"$defs": {
+    "Token": {"type": "number", "x-wb-registered": true},
+    "Ext": {"type": "object", "properties": {"b": {"$ref": "#/$defs/Token"}}},
+    "Shared": {"type": "string", "x-wb-registered": true},
+    "A": {"type": "object", "properties": {"x": {"$ref": "#/$defs/Shared"}}},
+    "B": {"type": "object", "properties": {"y": {"$ref": "#/$defs/Shared"}}}
+}}"##;
+
+fn published_registering(defs: &str, root: &str) -> Option<Value> {
+    const LEFT: External = External::Defined { contract: REGISTERING, validator: None };
+    let host =
+        Host { matchers: &[], checks: &[], externals: &[("Ext", LEFT), ("A", LEFT), ("B", LEFT)] };
+    let contract = parse(&format!(r#"{{"$defs": {{{defs}}}}}"#));
+    let contracts = Contracts::load(&[("c.json", &contract)], &host).expect("it compiles");
+    contracts.published(contracts.resolve(&format!("c.json#/$defs/{root}")).expect("held"))
+}
+
+/// Two different schemas registered under one id cannot both be written:
+/// Zod 4.6.7 throws ("Duplicate schema id"), which the TypeScript listing
+/// answers by leaving the facet's schema out, so nothing is published.
+#[test]
+fn two_definitions_registered_under_one_name_publish_nothing() {
+    let defs = r##""Token": {"type": "string", "x-wb-registered": true},
+        "Ext": {"type": "string", "x-wb-external": "m"},
+        "Pair": {"type": "object", "properties": {"a": {"$ref": "#/$defs/Token"},
+            "b": {"$ref": "#/$defs/Ext"}}, "required": [], "x-wb-order": ["a", "b"],
+            "additionalProperties": false, "x-wb-unknownKeys": "refuse"}"##;
+    assert_eq!(published_registering(defs, "Pair"), None);
+}
+
+/// One registered definition reached through two definitions left to the
+/// same contract is one schema, written once.
+#[test]
+fn a_registered_definition_reached_twice_through_one_contract_is_written_once() {
+    let defs = r##""A": {"type": "string", "x-wb-external": "m"},
+        "B": {"type": "string", "x-wb-external": "m"},
+        "Pair": {"type": "object", "properties": {"a": {"$ref": "#/$defs/A"},
+            "b": {"$ref": "#/$defs/B"}}, "required": [], "x-wb-order": ["a", "b"],
+            "additionalProperties": false, "x-wb-unknownKeys": "refuse"}"##;
+    let zod = format!(
+        r##"{{{DIALECT},"type":"object","properties":{{"a":{{"type":"object","properties":{{"x":{{"$ref":"#/$defs/Shared"}}}},"additionalProperties":false}},"b":{{"type":"object","properties":{{"y":{{"$ref":"#/$defs/Shared"}}}},"additionalProperties":false}}}},"additionalProperties":false,"$defs":{{"Shared":{{"type":"string"}}}}}}"##
+    );
+    assert_eq!(published_registering(defs, "Pair"), Some(parse(&zod)));
+}

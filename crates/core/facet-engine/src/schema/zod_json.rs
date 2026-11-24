@@ -89,23 +89,37 @@ fn described(mut members: Map, text: &str) -> Map {
     members
 }
 
-/// The definition `name` of the scope `scope` as Zod's JSON Schema.
-pub(super) fn publish(scopes: &[Scope], scope: usize, name: &str) -> Value {
-    let mut writer =
-        Writer { scopes, registered: Vec::new(), open: Vec::new(), cyclic: Vec::new(), root: None };
+/// The definition `name` of the scope `scope` as Zod's JSON Schema, or
+/// `None` where two different definitions it reaches are registered under
+/// one name, which Zod refuses to write ("Duplicate schema id").
+pub(super) fn publish(scopes: &[Scope], scope: usize, name: &str) -> Option<Value> {
+    let mut writer = Writer {
+        scopes,
+        registered: Vec::new(),
+        owners: Vec::new(),
+        open: Vec::new(),
+        cyclic: Vec::new(),
+        root: None,
+    };
     writer.root = writer.resolve(scope, name).map(|(owner, _)| (owner, name.to_owned()));
     let root = writer.definition(scope, name).unwrap_or_default();
     let mut out = vec![member("$schema", string(DIALECT))];
     out.extend(root);
+    let distinct = writer
+        .owners
+        .iter()
+        .all(|(id, owner)| writer.owners.iter().all(|(other, held)| other != id || held == owner));
     if !writer.registered.is_empty() {
         out.push(member("$defs", Value::Map(writer.registered)));
     }
-    Value::Map(out)
+    distinct.then_some(Value::Map(out))
 }
 
 struct Writer<'s> {
     scopes: &'s [Scope],
     registered: Map,
+    /// Each registered name as met, with the definition it was met as.
+    owners: Vec<(String, (usize, String))>,
     /// The definitions being inlined: an external one is not compiled, so a
     /// reference back into one is not refused at load.
     open: Vec<(usize, String)>,
@@ -134,6 +148,7 @@ impl<'s> Writer<'s> {
         let (scope, written) = self.resolve(scope, name)?;
         let reference = vec![member("$ref", string(&format!("#/$defs/{name}")))];
         if get(written, "x-wb-registered") == Some(&Value::Bool(true)) {
+            self.owners.push((name.to_owned(), (scope, name.to_owned())));
             if !self.registered.iter().any(|(key, _)| key == name) {
                 // Held before its body is written, so it is first met here.
                 self.registered.push(member(name, Value::Null));

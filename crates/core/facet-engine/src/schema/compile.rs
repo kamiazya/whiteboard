@@ -200,6 +200,10 @@ struct Compiler<'a> {
     defs: Vec<Def>,
     edges: Vec<(DefId, DefId)>,
     scopes: Vec<Written>,
+    /// The text of each contract a definition is left to, by the scope it is
+    /// read into: one contract is one scope, so a registered definition
+    /// reached through two of its neighbours is one definition.
+    sources: Vec<(&'static str, usize)>,
 }
 
 /// What a contract's definitions are called, with where each is written.
@@ -215,6 +219,7 @@ pub(super) fn load(contracts: &[(&str, &Value)], host: &Host<'_>) -> Compiled<Co
         defs: Vec::new(),
         edges: Vec::new(),
         scopes: Vec::new(),
+        sources: Vec::new(),
     };
     for (index, (path, contract)) in contracts.iter().enumerate() {
         if contracts.iter().take(index).any(|(earlier, _)| earlier == path) {
@@ -271,10 +276,7 @@ impl Compiler<'_> {
     }
 
     /// Each external definition of a contract that the host leaves to
-    /// another contract, by the scope that contract is read into for it.
-    ///
-    /// ponytail: a contract read once per definition left to it; key them by
-    /// text if a host ever leaves many.
+    /// another contract, by the scope that contract is read into.
     fn left_to_others(&mut self, written: &Map, path: &str) -> Compiled<Vec<(String, usize)>> {
         let mut externals = Vec::new();
         for (name, node) in written {
@@ -286,18 +288,30 @@ impl Compiler<'_> {
                 }
                 _ => continue,
             };
-            let parsed = json::parse(source).unwrap_or(Value::Null);
-            let Some(Value::Map(defs)) = child(Some(&parsed), "$defs") else {
-                return malformed(path, "an external's contract is not JSON with $defs");
+            let at = match self.sources.iter().find(|(text, _)| *text == source) {
+                Some((_, at)) => *at,
+                None => self.read_source(source, path)?,
             };
-            if get(defs, name).is_none() {
+            let holds = self.scopes.get(at).is_some_and(|read| get(&read.defs, name).is_some());
+            if !holds {
                 let at = format!("{path}#/$defs/{name}");
                 return malformed(&at, "an external's contract does not define it");
             }
-            externals.push((name.clone(), self.scopes.len()));
-            self.scopes.push(Written::of(defs, &parsed));
+            externals.push((name.clone(), at));
         }
         Ok(externals)
+    }
+
+    /// The contract `source`, read into a scope of its own, and that scope.
+    fn read_source(&mut self, source: &'static str, path: &str) -> Compiled<usize> {
+        let parsed = json::parse(source).unwrap_or(Value::Null);
+        let Some(Value::Map(defs)) = child(Some(&parsed), "$defs") else {
+            return malformed(path, "an external's contract is not JSON with $defs");
+        };
+        let at = self.scopes.len();
+        self.sources.push((source, at));
+        self.scopes.push(Written::of(defs, &parsed));
+        Ok(at)
     }
 
     /// A definition: its node, or the host's validator where the contract

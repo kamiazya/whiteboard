@@ -125,11 +125,14 @@ impl Contracts {
 
     /// The definition as a JSON Schema reader reads it, byte for byte what
     /// `z.toJSONSchema` answers for the Zod `cargo xtask codegen` generates
-    /// from it (see `zod_json`'s rules), so either server publishes one text.
+    /// from it (see `zod_json`'s rules), so either server publishes one text;
+    /// `None` for an id from another set, and where Zod refuses to write one
+    /// (two different definitions it reaches registered under one name), as
+    /// the TypeScript listing then leaves the schema out.
     #[must_use]
     pub fn published(&self, def: DefId) -> Option<Value> {
         let held = self.defs.get(def.0)?;
-        Some(zod_json::publish(&self.scopes, held.scope, &held.name))
+        zod_json::publish(&self.scopes, held.scope, &held.name)
     }
 
     /// Whether the definition is an object that declares `field`: what an
