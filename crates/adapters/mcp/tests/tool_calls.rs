@@ -236,6 +236,39 @@ fn every_listed_tool_is_called_through_its_binding() {
     }
 }
 
+/// Zod 4 judges the bounds of any value with a numeric `length`, so an object
+/// given for a string is refused for its type and then its length.
+#[test]
+fn an_object_given_for_a_string_is_judged_for_its_length_too() {
+    let refusal = |name: &str, arguments: Value| {
+        let answer = block_on(server(nothing()).handle(&json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": name, "arguments": arguments } })))
+        .expect("an answer");
+        answer["result"]["content"][0]["text"].as_str().unwrap_or_default().to_owned()
+    };
+    let wrong = "Invalid input: expected string, received object";
+    let label = refusal("wb_version_save", json!({ "label": { "length": 0 } }));
+    assert!(
+        label.contains(&format!("label: {wrong}, label: Too small: expected unknown to be >=1")),
+        "{label}"
+    );
+    let query = refusal("wb_document_search", json!({ "query": { "length": 2000 } }));
+    assert!(
+        query.contains(&format!(
+            "query: {wrong}, query: a search query is longer than the 1024-character limit"
+        )),
+        "{query}"
+    );
+    let version = refusal("wb_version_restore", json!({ "versionId": { "length": 2000 } }));
+    assert!(
+        version.contains(&format!(
+            "versionId: {wrong}, versionId: a version id is longer than the 256-character limit for one id"
+        )),
+        "{version}"
+    );
+}
+
 #[test]
 fn a_pending_tool_is_not_listed_and_not_found() {
     let catalogue = OpsCatalogue::new(nothing());
