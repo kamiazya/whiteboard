@@ -296,8 +296,8 @@
     "whiteboard-mcp": {
       "path": "crates/adapters/mcp",
       "layer": "adapters",
-      "status": "planned",
-      "description": "a transport-agnostic JSON-RPC dispatcher over the ops tool table",
+      "status": "present",
+      "description": "a transport-agnostic JSON-RPC dispatcher over the ops tool table: today the 2025-era lifecycle (initialize, ping, logging/setLevel) and tools/list and tools/call routed to a tool catalogue seam, answering as the TypeScript SDK's server does",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": [
         "whiteboard-det",
@@ -307,7 +307,9 @@
         "whiteboard-api-contracts",
         "whiteboard-ops"
       ],
-      "allowedThirdParty": {},
+      "allowedThirdParty": {
+        "serde_json": "the JSON-RPC message as a value: a request's params and a tool's arguments and result are arbitrary nested JSON. Pure Rust, no I/O, runs unchanged on wasm32 and native; deny.toml bans unbounded_depth and arbitrary_precision. The transport parses the bytes, so its depth cap is that entry's"
+      },
       "absorbs": ["packages/mcp-server/src/server/mcp"]
     },
     "whiteboard-daemon-store": {
