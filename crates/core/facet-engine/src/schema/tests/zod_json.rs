@@ -177,9 +177,13 @@ const UNCOMPILED: &str = r##"{"$defs": {
         "l": {"$ref": "#/$defs/Twice"}, "r": {"$ref": "#/$defs/Twice"}}},
     "Tree": {"type": "object", "properties": {"child": {"$ref": "#/$defs/Tree"}}},
     "Root": {"type": "object", "required": ["t"],
-        "properties": {"again": {"$ref": "#/$defs/Root"}, "t": {"$ref": "#/$defs/Tree"}}}
+        "properties": {"again": {"$ref": "#/$defs/Root"}, "t": {"$ref": "#/$defs/Tree"}}},
+    "Loop": {"anyOf": [{"type": "string", "const": "a"}, {"$ref": "#/$defs/Loop"}]},
+    "Keyed": {"type": "object", "propertyNames": {"$ref": "#/$defs/Loop"},
+        "additionalProperties": {"type": "boolean"}}
 }}"##;
-const LEFT_NAMES: [&str; 7] = ["Odd", "Listed", "Ordered", "Twice", "Lost", "Afar", "Root"];
+const LEFT_NAMES: [&str; 8] =
+    ["Odd", "Listed", "Ordered", "Twice", "Lost", "Afar", "Root", "Keyed"];
 
 /// `name` of a contract that leaves every one of [`LEFT_NAMES`] to
 /// [`UNCOMPILED`], as published.
@@ -232,4 +236,15 @@ fn a_recursion_left_to_an_uncompiled_contract_is_written_as_zod_writes_one() {
         r##"{{{DIALECT},"type":"object","properties":{{"again":{{"$ref":"#"}},"t":{{"$ref":"#/$defs/__schema0"}}}},"required":["t"],"additionalProperties":false,"$defs":{{"__schema0":{{"type":"object","properties":{{"child":{{"$ref":"#/$defs/__schema0"}}}},"additionalProperties":false}}}}}}"##
     );
     assert_eq!(published_left("Root"), Some(parse(&root)));
+}
+
+/// A record keyed by a union that names itself admits no closed set of keys
+/// (Zod 4.6.7 answers no `_zod.values` for one, so writes no `required`), and
+/// the keys' schema is a recursion like any other.
+#[test]
+fn a_record_keyed_by_a_union_that_names_itself_requires_no_key() {
+    let zod = format!(
+        r##"{{{DIALECT},"type":"object","propertyNames":{{"$ref":"#/$defs/__schema0"}},"additionalProperties":{{"type":"boolean"}},"$defs":{{"__schema0":{{"anyOf":[{{"type":"string","const":"a"}},{{"$ref":"#/$defs/__schema0"}}]}}}}}}"##
+    );
+    assert_eq!(published_left("Keyed"), Some(parse(&zod)));
 }

@@ -231,7 +231,8 @@ impl<'s> Writer<'s> {
             member("propertyNames", keys),
             member("additionalProperties", values),
         ];
-        let closed = get(written, "propertyNames").and_then(|names| self.values(scope, names));
+        let closed = get(written, "propertyNames")
+            .and_then(|names| self.values(scope, names, &mut Vec::new()));
         if let Some(names) = closed.filter(|names| !names.is_empty()) {
             out.push(member("required", Value::Seq(names)));
         }
@@ -239,15 +240,31 @@ impl<'s> Writer<'s> {
     }
 
     /// The closed set of strings `written` admits, as Zod's `_zod.values`
-    /// knows it, or `None` for an open one.
-    fn values(&self, scope: usize, written: &Value) -> Option<Vec<Value>> {
+    /// knows it, or `None` for an open one. `path` holds the definitions
+    /// being walked: one met again inside itself (an external definition is
+    /// not compiled, so nothing refuses its cycle at load) admits no closed
+    /// set, as Zod answers none for a union that names itself.
+    fn values(
+        &self,
+        scope: usize,
+        written: &Value,
+        path: &mut Vec<(usize, String)>,
+    ) -> Option<Vec<Value>> {
         if let Some(target) = text(written, "$ref") {
-            let (scope, target) = self.resolve(scope, target.strip_prefix("#/$defs/")?)?;
-            return self.values(scope, target);
+            let name = target.strip_prefix("#/$defs/")?;
+            let (scope, target) = self.resolve(scope, name)?;
+            let key = (scope, name.to_owned());
+            if path.contains(&key) {
+                return None;
+            }
+            path.push(key);
+            let found = self.values(scope, target, path);
+            path.pop();
+            return found;
         }
         if let Some(Value::Seq(arms)) = get(written, "anyOf") {
             let arms: Option<Vec<Vec<Value>>> =
-                arms.iter().map(|arm| self.values(scope, arm)).collect();
+                arms.iter().map(|arm| self.values(scope, arm, path)).collect();
             return arms.map(|arms| arms.into_iter().flatten().collect());
         }
         match (get(written, "const"), get(written, "enum")) {
