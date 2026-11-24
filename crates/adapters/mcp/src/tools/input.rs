@@ -335,3 +335,47 @@ fn list_issues(
         _ => vec![expected(path, "array", value)],
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{Map, Value, json};
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    use super::{Field, Input, Kind, refusal};
+
+    const FIELDS: &[Field] = &[
+        Field { name: "f", kind: Kind::Flag },
+        Field { name: "o", kind: Kind::Object(&[Field { name: "g", kind: Kind::Flag }]) },
+    ];
+    const REFINED: Input = Input { fields: FIELDS, refine: Some(|_| Some("REFINED")) };
+
+    fn issues(arguments: &Value) -> String {
+        let arguments: &Map<String, Value> = arguments.as_object().expect("an object");
+        let text = refusal("t", &REFINED, arguments).expect("a refusal");
+        text.trim_start_matches("Input validation error: Invalid arguments for tool t: ").to_owned()
+    }
+
+    /// Zod 4's answers to `z.object({ f: z.boolean().optional(), o:
+    /// z.object({ g: z.boolean().optional() }).strict().optional() }).strict()`
+    /// refined by an issue `REFINED` on every value: a value of the wrong type
+    /// stops the refinement, at any depth, and a valid one lets it run.
+    #[test]
+    fn a_value_of_the_wrong_type_stops_the_refinement() {
+        assert_eq!(issues(&json!({})), "REFINED");
+        assert_eq!(issues(&json!({ "f": true })), "REFINED");
+        assert_eq!(
+            issues(&json!({ "f": "x" })),
+            "f: Invalid input: expected boolean, received string"
+        );
+        assert_eq!(
+            issues(&json!({ "o": { "g": 1 } })),
+            "o.g: Invalid input: expected boolean, received number"
+        );
+        assert_eq!(issues(&json!({ "o": { "g": true } })), "REFINED");
+        assert_eq!(
+            issues(&json!({ "o": 3 })),
+            "o: Invalid input: expected object, received number"
+        );
+    }
+}

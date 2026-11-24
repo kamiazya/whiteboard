@@ -323,6 +323,10 @@ function conflictCalls(ids: Record<string, string>): Asked[] {
       board({ elementIds: Array.from({ length: 2001 }, () => 'a'), zoom: 1 }),
     ],
     ['a conflict and a string for the ids', board({ elementIds: 'pad', zoom: 1 })],
+    [
+      'a conflict and 2000 ids',
+      board({ elementIds: Array.from({ length: 2000 }, () => 'a'), zoom: 1 }),
+    ],
   ]
 }
 
