@@ -41,10 +41,11 @@ impl Hosted<'_> {
         let Some(answer) = answer_workspace_query(self.record.doc(), &asked) else {
             return Err(undecided());
         };
+        // The engine's contract: `{ ok: value }` or `{ err: class }`.
         match answer.value {
-            Value::Map(mut entries) if entries.len() == 1 => match entries.pop() {
+            Value::Map(mut entries) => match entries.pop() {
                 Some((key, value)) if key == "ok" => Ok(Ok(value)),
-                Some((key, Value::String(class))) if key == "err" => Ok(Err(class)),
+                Some((_, Value::String(class))) => Ok(Err(class)),
                 _ => Err(undecided()),
             },
             _ => Err(undecided()),

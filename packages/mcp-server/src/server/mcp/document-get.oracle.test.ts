@@ -257,25 +257,28 @@ function hostOf(copy: LoroDoc, documentId: string): LoroMap {
  * trust facets, as a document from before them.
  */
 function retireAndForget(copy: LoroDoc, ids: Record<string, string>): void {
-  holdBodyInNode(hostOf(copy, ids.retired))
+  holdBodyInNode(hostOf(copy, ids.retired), 'okf-body')
   const comments = hostOf(copy, ids['old-comments']).setContainer('comments', new LoroMap())
   comments.set('c1', { id: 'c1', body: 'flat' })
   comments.set('c2', { id: 'c2', body: 'plane' })
   forgetKind(hostOf(copy, ids.kindless))
   const kindlessRetired = hostOf(copy, ids['kindless-retired'])
   forgetKind(kindlessRetired)
-  holdBodyInNode(kindlessRetired)
+  holdBodyInNode(kindlessRetired, 'n1')
   const stripped = hostOf(copy, ids.stripped)
   stripped.delete('core')
   stripped.delete('trust')
 }
 
-/** An empty body, and the text in a canvas text node instead. */
-function holdBodyInNode(host: LoroMap): void {
+/**
+ * An empty body, and the text in a canvas text node instead: `okf-body` is the
+ * id the oldest writer used, which the retired shape is named by.
+ */
+function holdBodyInNode(host: LoroMap, id: string): void {
   const body = host.get('body')
   if (body instanceof LoroText) body.delete(0, body.length)
   const nodes = host.setContainer('nodes', new LoroMap())
-  nodes.set('n1', { id: 'n1', resource: { mimeType: 'text/markdown', content: 'old body' } })
+  nodes.set(id, { id, resource: { mimeType: 'text/markdown', content: 'old body' } })
 }
 
 function forgetKind(host: LoroMap): void {
