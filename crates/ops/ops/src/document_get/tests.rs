@@ -5,10 +5,13 @@ use super::*;
 use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_model::encoding::base64_to_bytes;
 
+// Marked as test code where it is, so repro-check's scan for what production
+// embeds does not read the recording as an input of the shipped build.
+#[cfg(test)]
 const CASES: &str =
     include_str!("../../../../../packages/mcp-server/src/server/mcp/oracle/document-get.jsonl");
 
-/// The recording's record, and the id of its document named `name`.
+/// The recording's record, and its documents' ids by name.
 fn recorded() -> (WorkspaceRecord, serde_json::Value) {
     let line = CASES.lines().next().expect("a record row");
     let row: serde_json::Value = serde_json::from_str(line).expect("JSON");
