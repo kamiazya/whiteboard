@@ -34,7 +34,8 @@ impl Binding for DocumentGet {
         ],
     };
 
-    fn input(arguments: &Map<String, Value>, workspace_id: String) -> DocumentGetInput {
+    fn input(arguments: &Map<String, Value>, workspace_id: Option<String>) -> DocumentGetInput {
+        let workspace_id = workspace_id.unwrap_or_default();
         let document_ids = arguments
             .get("documentIds")
             .and_then(Value::as_array)

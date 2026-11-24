@@ -32,6 +32,10 @@ pub(crate) enum Kind {
     Object(&'static [Field]),
     /// An optional boolean.
     Flag,
+    /// An optional string, any string.
+    OptionalText,
+    /// An optional string, one of these.
+    Choice(&'static [&'static str]),
 }
 
 /// A string held to `test`, refused with `message` when it fails.
@@ -95,6 +99,20 @@ fn field_issues(path: &str, kind: &Kind, value: Option<&Value>) -> Vec<String> {
         Kind::Flag => match value {
             None | Some(Value::Bool(_)) => Vec::new(),
             Some(_) => vec![expected(path, "boolean", value)],
+        },
+        Kind::OptionalText => match value {
+            None | Some(Value::String(_)) => Vec::new(),
+            Some(_) => vec![expected(path, "string", value)],
+        },
+        Kind::Choice(options) => match value {
+            None => Vec::new(),
+            Some(Value::String(text)) if options.contains(&text.as_str()) => Vec::new(),
+            // Zod's enum names its options whatever was given, a non-string
+            // and `null` included.
+            Some(_) => {
+                let options: Vec<String> = options.iter().map(|o| format!("\"{o}\"")).collect();
+                vec![at(path, &format!("Invalid option: expected one of {}", options.join("|")))]
+            }
         },
     }
 }

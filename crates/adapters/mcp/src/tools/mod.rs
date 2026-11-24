@@ -12,13 +12,14 @@
 
 mod document_get;
 mod document_list;
+mod facet_list;
 mod input;
 mod json;
 mod version_list;
 
 use serde_json::{Map, Value, json};
 use whiteboard_ops::{
-    DocumentGet, DocumentList, Operation, Ports, VersionList, with_resolved_workspace,
+    DocumentGet, DocumentList, FacetList, Operation, Ports, VersionList, with_resolved_workspace,
 };
 
 use crate::{ToolCatalogue, ToolError};
@@ -34,7 +35,6 @@ pub const PENDING_TOOLS: &[&str] = &[
     "wb_canvas_edit",
     "wb_canvas_snapshot",
     "wb_document_search",
-    "wb_facet_list",
     "wb_facet_set",
     "wb_scene_render",
     "wb_thread_edit",
@@ -53,8 +53,10 @@ trait Binding: Operation {
     const INPUT: Input;
 
     /// The operation's input from arguments `INPUT` has passed, its workspace
-    /// the canonical id the `workspaceId` address resolved to.
-    fn input(arguments: &Map<String, Value>, workspace_id: String) -> Self::Input;
+    /// the canonical id the `workspaceId` address resolved to, or `None`
+    /// when the arguments name none (which only a tool whose `INPUT` leaves
+    /// the address optional admits).
+    fn input(arguments: &Map<String, Value>, workspace_id: Option<String>) -> Self::Input;
 
     /// The tool's answer, or `None` where the operation met what it does not
     /// answer yet, which the call answers as a pending tool is.
@@ -74,7 +76,12 @@ impl<P: Ports> OpsCatalogue<P> {
 
 impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
     fn tools(&self) -> Vec<Value> {
-        vec![contract::<DocumentList>(), contract::<DocumentGet>(), contract::<VersionList>()]
+        vec![
+            contract::<DocumentList>(),
+            contract::<DocumentGet>(),
+            contract::<VersionList>(),
+            contract::<FacetList>(),
+        ]
     }
 
     async fn call(
@@ -86,6 +93,7 @@ impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
             DocumentList::NAME => run::<DocumentList, P>(&self.ports, arguments).await,
             DocumentGet::NAME => run::<DocumentGet, P>(&self.ports, arguments).await,
             VersionList::NAME => run::<VersionList, P>(&self.ports, arguments).await,
+            FacetList::NAME => run::<FacetList, P>(&self.ports, arguments).await,
             _ => Err(ToolError::NotFound),
         }
     }
@@ -99,9 +107,8 @@ fn contract<B: Binding>() -> Value {
 
 /// One call: the SDK's judgement of the arguments (absent: an empty object),
 /// the `workspaceId` address resolved as server-core's tool record resolves
-/// it, the operation, and the result the tool wrapper answers. Every tool
-/// bound so far takes a workspace address, which `INPUT` has held to be a
-/// string.
+/// it when the arguments name one (`INPUT` has held it to be a string), the
+/// operation, and the result the tool wrapper answers.
 async fn run<B: Binding, P: Ports>(
     ports: &P,
     arguments: Option<&Map<String, Value>>,
@@ -111,11 +118,15 @@ async fn run<B: Binding, P: Ports>(
     if let Some(text) = input::refusal(B::NAME, &B::INPUT, arguments) {
         return Err(ToolError::Failed(text));
     }
-    let handle = arguments.get("workspaceId").and_then(Value::as_str).unwrap_or_default();
-    let output = with_resolved_workspace(ports, handle, |workspace_id| {
-        B::execute(ports, B::input(arguments, workspace_id))
-    })
-    .await
+    let output = match arguments.get("workspaceId").and_then(Value::as_str) {
+        Some(handle) => {
+            with_resolved_workspace(ports, handle, |workspace_id| {
+                B::execute(ports, B::input(arguments, Some(workspace_id)))
+            })
+            .await
+        }
+        None => B::execute(ports, B::input(arguments, None)).await,
+    }
     .map_err(ToolError::Refused)?;
     let output = B::output(&output).ok_or(ToolError::NotFound)?;
     Ok(json!({

@@ -79,6 +79,8 @@ struct Def {
     contract: String,
     name: String,
     root: usize,
+    /// The definition as its contract writes it.
+    written: Value,
 }
 
 /// Contracts compiled and ready to judge values.
@@ -110,6 +112,46 @@ impl Contracts {
     #[must_use]
     pub fn name(&self, def: DefId) -> Option<&str> {
         self.defs.get(def.0).map(|d| d.name.as_str())
+    }
+
+    /// The definition as a JSON Schema reader reads it: as its contract
+    /// writes it, every `x-wb-*` member dropped at any depth and each
+    /// `#/$defs/<name>` reference replaced by the definition it names in the
+    /// same contract, so the answer stands alone. A reference the contract
+    /// does not hold is kept as written; references cannot cycle, since a
+    /// contract whose definitions do is refused when it loads.
+    #[must_use]
+    pub fn published(&self, def: DefId) -> Option<Value> {
+        let held = self.defs.get(def.0)?;
+        Some(self.publish(&held.contract, &held.written))
+    }
+
+    fn publish(&self, contract: &str, written: &Value) -> Value {
+        match written {
+            Value::Map(members) => {
+                let local = members.iter().find_map(|(key, value)| match value {
+                    Value::String(pointer) if key == "$ref" => pointer.strip_prefix("#/$defs/"),
+                    _ => None,
+                });
+                let named = local.and_then(|name| {
+                    self.defs.iter().find(|d| d.contract == contract && d.name == name)
+                });
+                if let Some(target) = named {
+                    return self.publish(contract, &target.written);
+                }
+                Value::Map(
+                    members
+                        .iter()
+                        .filter(|(key, _)| !key.starts_with("x-wb-"))
+                        .map(|(key, value)| (key.clone(), self.publish(contract, value)))
+                        .collect(),
+                )
+            }
+            Value::Seq(items) => {
+                Value::Seq(items.iter().map(|item| self.publish(contract, item)).collect())
+            }
+            other => other.clone(),
+        }
     }
 
     /// Whether the definition is an object that declares `field`: what an

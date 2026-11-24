@@ -130,6 +130,27 @@ pub struct Registry {
     contracts: Contracts,
     facets: Vec<FacetEntry>,
     assets: Vec<(AssetKind, Vec<String>)>,
+    /// Each plugin's id and the name it shows a person, in manifest order.
+    plugins: Vec<(String, String)>,
+    /// What a picker calls each registered stencil, by id.
+    pub(crate) stencil_names: Vec<(String, String)>,
+}
+
+/// A registered facet as a listing describes it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ListedFacet<'r> {
+    /// The owning plugin's id, the facet key's namespace.
+    pub namespace: &'r str,
+    /// The owning plugin's human-facing name.
+    pub display_name: &'r str,
+    pub name: &'r str,
+    pub version: &'r str,
+    pub targets: &'r [FacetTarget],
+    /// Which asset kind each asset-naming field holds, in manifest order.
+    pub asset_refs: &'r [(String, AssetKind)],
+    /// The payload's contract as a JSON Schema reader reads it
+    /// ([`Contracts::published`]).
+    pub schema: Option<Value>,
 }
 
 const KINDS: [AssetKind; 3] = [AssetKind::Themes, AssetKind::Icons, AssetKind::Stencils];
@@ -154,7 +175,35 @@ impl Registry {
     ) -> Result<Self, BuildError> {
         let facets = facet_entries(manifests, &contracts, migrations)?;
         let assets = KINDS.map(|kind| (kind, asset_ids(kind))).to_vec();
-        Ok(Self { contracts, facets, assets })
+        let plugins = manifests.iter().map(|m| (m.id.clone(), m.display_name.clone())).collect();
+        Ok(Self { contracts, facets, assets, plugins, stencil_names: Vec::new() })
+    }
+
+    /// Every registered facet, in the order the manifests declare them.
+    #[must_use]
+    pub fn listed_facets(&self) -> Vec<ListedFacet<'_>> {
+        self.facets
+            .iter()
+            .map(|facet| ListedFacet {
+                namespace: &facet.namespace,
+                display_name: self
+                    .plugins
+                    .iter()
+                    .find(|(id, _)| *id == facet.namespace)
+                    .map_or("", |(_, name)| name.as_str()),
+                name: &facet.name,
+                version: &facet.version,
+                targets: &facet.targets,
+                asset_refs: &facet.asset_refs,
+                schema: self.contracts.published(facet.schema),
+            })
+            .collect()
+    }
+
+    /// What a picker calls the registered stencil `id`, if one is.
+    #[must_use]
+    pub fn stencil_display_name(&self, id: &str) -> Option<&str> {
+        self.stencil_names.iter().find(|(held, _)| held == id).map(|(_, name)| name.as_str())
     }
 
     /// The facet a well-formed key names, whatever version it asks for, and

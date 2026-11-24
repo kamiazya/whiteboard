@@ -33,6 +33,7 @@ const READS: &str =
 const DOCUMENT_LIST: &str = include_str!("../../../../contracts/tools/wb_document_list.json");
 const DOCUMENT_GET: &str = include_str!("../../../../contracts/tools/wb_document_get.json");
 const VERSION_LIST: &str = include_str!("../../../../contracts/tools/wb_version_list.json");
+const FACET_LIST: &str = include_str!("../../../../contracts/tools/wb_facet_list.json");
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
 /// The ports the ported tools read: the record store, the registry, the
@@ -176,7 +177,12 @@ fn the_listing_is_the_contract_of_each_ported_tool() {
     )
     .expect("an answer");
     let contract = |text: &str| serde_json::from_str::<Value>(text).expect("the contract parses");
-    let listed = [contract(DOCUMENT_LIST), contract(DOCUMENT_GET), contract(VERSION_LIST)];
+    let listed = [
+        contract(DOCUMENT_LIST),
+        contract(DOCUMENT_GET),
+        contract(VERSION_LIST),
+        contract(FACET_LIST),
+    ];
     assert_eq!(answer["result"]["tools"], json!(listed));
 }
 

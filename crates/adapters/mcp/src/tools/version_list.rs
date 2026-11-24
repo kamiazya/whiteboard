@@ -26,7 +26,8 @@ impl Binding for VersionList {
         ],
     };
 
-    fn input(arguments: &Map<String, Value>, workspace_id: String) -> VersionListInput {
+    fn input(arguments: &Map<String, Value>, workspace_id: Option<String>) -> VersionListInput {
+        let workspace_id = workspace_id.unwrap_or_default();
         let document_id =
             arguments.get("documentId").and_then(Value::as_str).unwrap_or_default().to_owned();
         VersionListInput { workspace_id, document_id }

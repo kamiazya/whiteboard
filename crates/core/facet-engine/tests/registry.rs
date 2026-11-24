@@ -239,3 +239,70 @@ fn a_key_no_plugin_registered_is_someone_elses_and_is_stored_as_it_came() {
         assert_eq!(registry.validate_facet_write(key, &payload), Ok(payload.clone()), "{key}");
     }
 }
+
+/// Two plugins, each facet listed in manifest order under its own plugin's
+/// name; a plugin built from no manifest name shows none.
+#[test]
+fn every_facet_is_listed_in_manifest_order_under_its_plugins_name() {
+    let named = |id: &str, name: &str, facets| PluginManifest {
+        display_name: name.to_owned(),
+        ..plugin(id, facets)
+    };
+    let plugins = [
+        named("zeta", "Zeta", vec![facet("tone", "v0", "Tone", &[])]),
+        named(
+            "alpha",
+            "Alpha",
+            vec![facet("mark", "v1", "Mark", &[]), facet("b", "v2", "Tone", &[])],
+        ),
+    ];
+    let registry =
+        Registry::build(&plugins, contracts().expect("it compiles"), assets, &[]).expect("built");
+    let listed: Vec<_> = registry
+        .listed_facets()
+        .iter()
+        .map(|f| (f.namespace, f.display_name, f.name, f.version))
+        .collect();
+    assert_eq!(
+        listed,
+        [
+            ("zeta", "Zeta", "tone", "v0"),
+            ("alpha", "Alpha", "mark", "v1"),
+            ("alpha", "Alpha", "b", "v2"),
+        ]
+    );
+    assert_eq!(registry.stencil_display_name("demo.sketch"), None);
+}
+
+/// A definition published: the dialect's members gone at every depth, and a
+/// reference replaced by the definition it names in its own contract (itself
+/// published), never by the same name in another loaded contract.
+#[test]
+fn a_published_definition_drops_the_dialect_and_inlines_its_own_contracts_references() {
+    let parse = |text: &str| whiteboard_model::json::parse(text).expect("JSON");
+    let other = parse(r#"{"$schema": "x", "$defs": {"Id": {"type": "number"}}}"#);
+    let contract = parse(
+        r##"{"$schema": "x", "$defs": {
+            "Id": {"type": "string", "x-wb-minUtf16": 1, "description": "an id"},
+            "Pair": {"type": "object",
+                "properties": {"id": {"$ref": "#/$defs/Id"},
+                    "ids": {"type": "array", "items": {"$ref": "#/$defs/Id"}}},
+                "required": ["id"], "x-wb-order": ["id", "ids"], "x-wb-unknownKeys": "strip"}
+        }}"##,
+    );
+    let host = Host { matchers: &[], checks: &[], externals: &[] };
+    let loaded = [("facets/other.schema.json", &other), (PATH, &contract)];
+    let contracts = Contracts::load(&loaded, &host).expect("it compiles");
+    let pair = contracts.resolve(&format!("{PATH}#/$defs/Pair")).expect("Pair");
+    let published = parse(
+        r#"{"type": "object",
+            "properties": {"id": {"type": "string", "description": "an id"},
+                "ids": {"type": "array", "items": {"type": "string", "description": "an id"}}},
+            "required": ["id"]}"#,
+    );
+    assert_eq!(contracts.published(pair), Some(published));
+    let other_id = contracts.resolve("facets/other.schema.json#/$defs/Id").expect("Id");
+    assert_eq!(contracts.published(other_id), Some(parse(r#"{"type": "number"}"#)));
+    let foreign = Contracts::load(&[], &host).expect("nothing loads");
+    assert_eq!(foreign.published(pair), None);
+}
