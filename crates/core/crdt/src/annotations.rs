@@ -9,6 +9,7 @@
 
 use crate::anchor::annotation_anchor;
 use crate::content::{Refusal, map_of, text_of, value_of};
+use crate::key_order;
 use crate::plain::{object_of, plain};
 use crate::stored::{field, map_of as value_map, names_only, node_id, optional, required, text};
 use loro::{Container, LoroDoc, LoroMap, LoroValue, TextDelta, ValueOrContainer};
@@ -133,7 +134,7 @@ pub(crate) fn read_thread(threads: &LoroMap, id: &str) -> Option<Value> {
     if let Some(at) = created_at {
         entries.push(("createdAt".to_owned(), plain(&at)?));
     }
-    Some(object_of(entries))
+    Some(key_order::thread(object_of(entries)))
 }
 
 /// `commentThreads`: every thread the document holds, ordered by id.

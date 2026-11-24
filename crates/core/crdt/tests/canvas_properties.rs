@@ -152,9 +152,28 @@ fn doc_of(nodes: &[Json]) -> LoroDoc {
 
 #[cfg(test)]
 fn canvas_answer(doc: &LoroDoc) -> Value {
-    answer_content_query(doc, &Query { query: QueryName::SpatialCanvas, args: None })
-        .expect("answered")
-        .value
+    sorted(
+        answer_content_query(doc, &Query { query: QueryName::SpatialCanvas, args: None })
+            .expect("answered")
+            .value,
+    )
+}
+
+/// A value with every map's keys ascending, as `model_of` writes the expected
+/// one: the order a read answers in is held by `engine_oracle.rs`, against what
+/// the TypeScript recorded, so these compare what is answered, not its order.
+#[cfg(test)]
+fn sorted(value: Value) -> Value {
+    match value {
+        Value::Seq(items) => Value::Seq(items.into_iter().map(sorted).collect()),
+        Value::Map(entries) => {
+            let mut entries: Vec<(String, Value)> =
+                entries.into_iter().map(|(k, v)| (k, sorted(v))).collect();
+            entries.sort_by(|a, b| a.0.cmp(&b.0));
+            Value::Map(entries)
+        }
+        other => other,
+    }
 }
 
 #[test]

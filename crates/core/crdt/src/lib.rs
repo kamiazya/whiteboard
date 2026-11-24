@@ -37,6 +37,7 @@ mod frontiers;
 mod host;
 mod image_refs;
 mod judgement;
+mod key_order;
 mod node_content;
 mod ops_since;
 mod patch;

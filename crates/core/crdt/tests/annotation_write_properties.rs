@@ -102,13 +102,14 @@ fn a_thread_and_a_reply_read_back_as_written_and_restating_them_writes_nothing()
         expected.insert("m0".to_owned(), "edited".to_owned());
         let messages = expected
             .iter()
-            .map(|(id, body)| object(vec![("body", text(body)), ("id", text(id))]))
+            .map(|(id, body)| object(vec![("id", text(id)), ("body", text(body))]))
             .collect();
+        // `commentThreadSchema`'s order, which the TypeScript's reader parses through.
         let read_back = Value::Seq(vec![object(vec![
-            ("anchor", object(vec![("kind", text("document"))])),
             ("id", text("t")),
-            ("messages", Value::Seq(messages)),
+            ("anchor", object(vec![("kind", text("document"))])),
             ("status", text(status)),
+            ("messages", Value::Seq(messages)),
         ])]);
         prop_assert_eq!(read(&after, QueryName::CommentThreads), read_back);
         let restated = vec![

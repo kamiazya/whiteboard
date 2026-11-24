@@ -12,6 +12,7 @@ use crate::annotations::{
     accepted_entries, actor, by_code_unit, child_map, optional_field, timestamp,
 };
 use crate::content::map_of;
+use crate::key_order;
 use crate::patch::{edge_patch, emit_patch, line_patch, node_patch};
 use crate::plain::{object_of, plain};
 use crate::stored::{
@@ -153,7 +154,7 @@ fn proposal_value(proposal: &Proposal) -> Option<Value> {
             entries.push((key.to_owned(), plain(held)?));
         }
     }
-    Some(object_of(entries))
+    Some(key_order::proposal(object_of(entries)))
 }
 
 /// `proposals`: every proposal the document holds. `None` for a payload the

@@ -12,6 +12,7 @@ use crate::content::{
     retired_markdown_canvas_shape, value_of,
 };
 use crate::envelope::{Core, core_facets};
+use crate::key_order;
 use crate::plain::plain;
 use crate::stored;
 use loro::{LoroDoc, LoroValue};
@@ -115,8 +116,7 @@ impl Canvas {
         if let Some(tags) = &self.tags {
             entries.push(("tags".to_owned(), plain(tags)?));
         }
-        entries.sort_by(|a, b| a.0.cmp(&b.0));
-        Some(Value::Map(entries))
+        Some(key_order::canvas(Value::Map(entries)))
     }
 }
 
