@@ -274,6 +274,7 @@ describe('the Cargo workspace is scoped by path, not by the pnpm graph', () => {
     expect(result.everything, result.reasons.join('\n')).toBe(false)
     expect(result.jobs.rust?.run).toBe(true)
     expect(result.jobs['rust-fuzz-pr']?.run).toBe(true)
+    expect(result.jobs['rust-cross-target']?.run).toBe(true)
     expect(result.jobs.rust?.reason).toContain(path)
     for (const id of ['test-unit', 'test-jsdom', 'test-browser']) {
       expect(result.jobs[id]?.run, id).toBe(false)
@@ -282,7 +283,7 @@ describe('the Cargo workspace is scoped by path, not by the pnpm graph', () => {
 
   it('skips the Rust jobs for a change that reaches no Rust path, and says why', () => {
     const result = plan(['apps/web/src/App.tsx', 'docs/reference/x.md'])
-    for (const id of ['rust', 'rust-fuzz-pr']) {
+    for (const id of ['rust', 'rust-cross-target', 'rust-fuzz-pr']) {
       expect(result.jobs[id]?.run, id).toBe(false)
       expect(result.jobs[id]?.projects).toBeNull()
       expect(result.jobs[id]?.reason).toMatch(/none of .*crates.* changed/)
