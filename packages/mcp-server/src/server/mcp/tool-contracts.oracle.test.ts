@@ -2,7 +2,10 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { base64ToBytes } from '@kamiazya/whiteboard-model'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
-import { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
+import {
+  LoroWorkspaceDocumentIndex,
+  type WorkspaceRegistry,
+} from '@kamiazya/whiteboard-workspace-index'
 import { InMemoryTransport, type McpServer } from '@modelcontextprotocol/server'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -92,18 +95,23 @@ async function records(): Promise<{ case: string; snapshot: string | null }[]> {
 
 /** The index over one record, its registry holding the workspace only when the record exists. */
 function indexOver(snapshot: string | null): LoroWorkspaceDocumentIndex {
+  const bytes = snapshot === null ? null : base64ToBytes(snapshot)
+  if (snapshot !== null && bytes === null)
+    throw new Error(`a snapshot that is not base64: ${snapshot}`)
   const docs = {
-    open: async () => (snapshot === null ? null : LoroDoc.fromSnapshot(base64ToBytes(snapshot))),
+    open: async () => (bytes === null ? null : LoroDoc.fromSnapshot(bytes)),
     create: () => Promise.reject(new Error('a read creates nothing')),
     save: () => Promise.reject(new Error('a read saves nothing')),
     readCursor: () => Promise.reject(new Error('not read')),
     catchUp: () => Promise.reject(new Error('not read')),
     storedVersion: () => Promise.reject(new Error('not read')),
   }
-  const registry = {
+  const registry: WorkspaceRegistry = {
     listWorkspaces: async () => (snapshot === null ? [] : [{ workspaceId: W }]),
-    findWorkspace: async (lookup: { workspaceId?: string }) =>
-      snapshot !== null && lookup.workspaceId === W ? { workspaceId: W } : null,
+    findWorkspace: async (lookup) =>
+      snapshot !== null && 'workspaceId' in lookup && lookup.workspaceId === W
+        ? { workspaceId: W }
+        : null,
     renameWorkspace: () => Promise.reject(new Error('a read renames nothing')),
   }
   return new LoroWorkspaceDocumentIndex(docs, {} as never, registry)
