@@ -6,7 +6,7 @@
 use whiteboard_model::{Value, json};
 
 use super::super::{CompileError, Contracts, External, Host, Refusal};
-use super::lower;
+use super::{lower, shout};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 
@@ -82,7 +82,7 @@ fn published(contract: &str, name: &str) -> Option<Value> {
         matchers: &[("lower", lower)],
         checks: &[("even", even)],
         externals: &[
-            ("Color", External::Defined { contract: MODEL, validator: None }),
+            ("Color", External::Defined { contract: MODEL, validator: Some(shout) }),
             // Supplied for a definition that is not external: never read.
             ("Key", External::Defined { contract: MODEL, validator: None }),
         ],
@@ -180,7 +180,10 @@ fn a_definition_left_to_an_uncompiled_contract_is_published_as_written() {
         "Afar": {"type": "object", "propertyNames": {"$ref": "elsewhere"},
             "additionalProperties": {"$ref": "#/$defs/Nowhere"}},
         "Twice": {"type": "object", "properties": {
-            "l": {"$ref": "#/$defs/Twice"}, "r": {"$ref": "#/$defs/Twice"}}}
+            "l": {"$ref": "#/$defs/Twice"}, "r": {"$ref": "#/$defs/Twice"}}},
+        "Tree": {"type": "object", "properties": {"child": {"$ref": "#/$defs/Tree"}}},
+        "Root": {"type": "object", "required": ["t"],
+            "properties": {"again": {"$ref": "#/$defs/Root"}, "t": {"$ref": "#/$defs/Tree"}}}
     }}"##;
     const LEFT: External = External::Defined { contract: OTHER, validator: None };
     let host = Host {
@@ -193,10 +196,11 @@ fn a_definition_left_to_an_uncompiled_contract_is_published_as_written() {
             ("Twice", LEFT),
             ("Lost", LEFT),
             ("Afar", LEFT),
+            ("Root", LEFT),
         ],
     };
     let left = |name: &str| format!(r#""{name}": {{"type": "string", "x-wb-external": "m"}}"#);
-    let names = ["Odd", "Listed", "Ordered", "Twice", "Lost", "Afar"];
+    let names = ["Odd", "Listed", "Ordered", "Twice", "Lost", "Afar", "Root"];
     let defs: Vec<String> = names.iter().map(|name| left(name)).collect();
     let contract = parse(&format!(r#"{{"$defs": {{{}}}}}"#, defs.join(",")));
     let contracts = Contracts::load(&[("c.json", &contract)], &host).expect("it compiles");
@@ -224,4 +228,10 @@ fn a_definition_left_to_an_uncompiled_contract_is_published_as_written() {
     assert_eq!(published("Lost"), Some(parse(&open)));
     assert_eq!(published("Afar"), Some(parse(&open)));
     assert_eq!(published("Twice"), Some(object(r##"{"l":{"$ref":"#"},"r":{"$ref":"#"}}"##)));
+    // A recursion into the root is `#` and takes no `__schema<n>` number
+    // (`registry.rs` holds the same shapes to Zod's output).
+    let root = format!(
+        r##"{{{dialect},"type":"object","properties":{{"again":{{"$ref":"#"}},"t":{{"$ref":"#/$defs/__schema0"}}}},"required":["t"],"additionalProperties":false,"$defs":{{"__schema0":{{"type":"object","properties":{{"child":{{"$ref":"#/$defs/__schema0"}}}},"additionalProperties":false}}}}}}"##
+    );
+    assert_eq!(published("Root"), Some(parse(&root)));
 }
