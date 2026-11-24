@@ -1,8 +1,9 @@
 //! Compiling a contract: its definitions into nodes, every construct this
 //! walk does not implement refused by name rather than dropped.
 
-use whiteboard_model::{Map, Value};
+use whiteboard_model::{Map, Value, json};
 
+use super::zod_json::Scope as Written;
 use super::{Contracts, Def, DefId, External, Field, Host, Node, Pattern, Predicate};
 
 /// A contract that cannot be compiled, and where.
@@ -198,6 +199,7 @@ struct Compiler<'a> {
     nodes: Vec<Node>,
     defs: Vec<Def>,
     edges: Vec<(DefId, DefId)>,
+    scopes: Vec<Written>,
 }
 
 /// What a contract's definitions are called, with where each is written.
@@ -207,7 +209,13 @@ struct Scope<'v> {
 }
 
 pub(super) fn load(contracts: &[(&str, &Value)], host: &Host<'_>) -> Compiled<Contracts> {
-    let mut compiler = Compiler { host, nodes: Vec::new(), defs: Vec::new(), edges: Vec::new() };
+    let mut compiler = Compiler {
+        host,
+        nodes: Vec::new(),
+        defs: Vec::new(),
+        edges: Vec::new(),
+        scopes: Vec::new(),
+    };
     for (index, (path, contract)) in contracts.iter().enumerate() {
         if contracts.iter().take(index).any(|(earlier, _)| earlier == path) {
             return malformed(path, "a contract is loaded twice");
@@ -215,7 +223,7 @@ pub(super) fn load(contracts: &[(&str, &Value)], host: &Host<'_>) -> Compiled<Co
         compiler.contract(path, contract)?;
     }
     compiler.refuse_cycles()?;
-    Ok(Contracts { nodes: compiler.nodes, defs: compiler.defs })
+    Ok(Contracts { nodes: compiler.nodes, defs: compiler.defs, scopes: compiler.scopes })
 }
 
 impl Compiler<'_> {
@@ -249,13 +257,43 @@ impl Compiler<'_> {
         }
         // A definition's id is its place in this list, which is how the
         // references compiled above name it.
+        let scope = self.scopes.len();
+        self.scopes.push(Written::of(contract));
+        self.left_to_others(scope, written, path)?;
         let contract = path.to_owned();
-        self.defs.extend(written.iter().zip(roots).map(|((name, node), root)| Def {
+        self.defs.extend(written.iter().zip(roots).map(|((name, _), root)| Def {
             contract: contract.clone(),
             name: name.clone(),
             root,
-            written: node.clone(),
+            scope,
         }));
+        Ok(())
+    }
+
+    /// Each external definition of the contract at `scope` that the host
+    /// leaves to another contract, that contract read for it.
+    ///
+    /// ponytail: a contract read once per definition left to it; key them by
+    /// text if a host ever leaves many.
+    fn left_to_others(&mut self, scope: usize, written: &Map, path: &str) -> Compiled<()> {
+        for (name, node) in written {
+            let source = match supplied(self.host.externals, name) {
+                Some(External::Defined { contract, .. })
+                    if child(Some(node), "x-wb-external").is_some() =>
+                {
+                    contract
+                }
+                _ => continue,
+            };
+            let Ok(parsed) = json::parse(source) else {
+                return malformed(path, "an external's contract is not JSON");
+            };
+            let other = self.scopes.len();
+            self.scopes.push(Written::of(&parsed));
+            if let Some(held) = self.scopes.get_mut(scope) {
+                held.externals.push((name.clone(), other));
+            }
+        }
         Ok(())
     }
 
@@ -273,10 +311,13 @@ impl Compiler<'_> {
         if get(written, "x-wb-external").is_some() {
             match supplied(self.host.externals, name) {
                 None => return refuse(at, Refusal::UnsuppliedExternal(name.to_owned())),
-                Some(External::Validator(validator)) => {
+                Some(
+                    External::Validator(validator)
+                    | External::Defined { validator: Some(validator), .. },
+                ) => {
                     return Ok(self.push(Node::External(validator)));
                 }
-                Some(External::AsWritten) => {}
+                Some(External::AsWritten | External::Defined { validator: None, .. }) => {}
             }
         }
         self.node(scope, id, node, at)

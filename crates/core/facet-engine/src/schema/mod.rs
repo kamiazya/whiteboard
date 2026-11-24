@@ -14,6 +14,7 @@
 mod compile;
 pub mod issue;
 mod run;
+mod zod_json;
 
 use whiteboard_model::Value;
 
@@ -33,6 +34,11 @@ pub enum External {
     AsWritten,
     /// The host's validator replaces the shape.
     Validator(Validator),
+    /// Its generated Zod is the definition of the same name in another
+    /// contract, `contract` being that contract's JSON text: judged by
+    /// `validator`, or by this contract's own shape without one, and
+    /// published as that contract's definition.
+    Defined { contract: &'static str, validator: Option<Validator> },
 }
 
 /// What a contract leaves to the host, each by the name the contract gives it.
@@ -79,14 +85,17 @@ struct Def {
     contract: String,
     name: String,
     root: usize,
-    /// The definition as its contract writes it.
-    written: Value,
+    /// Its contract's place in [`Contracts::scopes`].
+    scope: usize,
 }
 
 /// Contracts compiled and ready to judge values.
 pub struct Contracts {
     nodes: Vec<Node>,
     defs: Vec<Def>,
+    /// Each loaded contract as written, then each contract an external
+    /// definition is left to.
+    scopes: Vec<zod_json::Scope>,
 }
 
 impl Contracts {
@@ -114,44 +123,13 @@ impl Contracts {
         self.defs.get(def.0).map(|d| d.name.as_str())
     }
 
-    /// The definition as a JSON Schema reader reads it: as its contract
-    /// writes it, every `x-wb-*` member dropped at any depth and each
-    /// `#/$defs/<name>` reference replaced by the definition it names in the
-    /// same contract, so the answer stands alone. A reference the contract
-    /// does not hold is kept as written; references cannot cycle, since a
-    /// contract whose definitions do is refused when it loads.
+    /// The definition as a JSON Schema reader reads it, byte for byte what
+    /// `z.toJSONSchema` answers for the Zod `cargo xtask codegen` generates
+    /// from it (see `zod_json`'s rules), so either server publishes one text.
     #[must_use]
     pub fn published(&self, def: DefId) -> Option<Value> {
         let held = self.defs.get(def.0)?;
-        Some(self.publish(&held.contract, &held.written))
-    }
-
-    fn publish(&self, contract: &str, written: &Value) -> Value {
-        match written {
-            Value::Map(members) => {
-                let local = members.iter().find_map(|(key, value)| match value {
-                    Value::String(pointer) if key == "$ref" => pointer.strip_prefix("#/$defs/"),
-                    _ => None,
-                });
-                let named = local.and_then(|name| {
-                    self.defs.iter().find(|d| d.contract == contract && d.name == name)
-                });
-                if let Some(target) = named {
-                    return self.publish(contract, &target.written);
-                }
-                Value::Map(
-                    members
-                        .iter()
-                        .filter(|(key, _)| !key.starts_with("x-wb-"))
-                        .map(|(key, value)| (key.clone(), self.publish(contract, value)))
-                        .collect(),
-                )
-            }
-            Value::Seq(items) => {
-                Value::Seq(items.iter().map(|item| self.publish(contract, item)).collect())
-            }
-            other => other.clone(),
-        }
+        zod_json::publish(&self.scopes, held.scope, &held.name)
     }
 
     /// Whether the definition is an object that declares `field`: what an

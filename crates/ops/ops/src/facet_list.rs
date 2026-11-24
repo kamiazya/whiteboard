@@ -1,11 +1,11 @@
 //! `wb_facet_list`: what a write may name — the deployment's facets and
 //! assets, filtered to one target or one asset kind.
 //!
-//! A facet's payload schema is served as its contract writes it, every
-//! `x-wb-*` member dropped and its local references inlined (owner decision
-//! q48), where the TypeScript serves `z.toJSONSchema` of the generated Zod:
-//! the same constraints in another JSON Schema, which the replay declares
-//! as a difference rather than reproducing.
+//! A facet's payload schema is served as `z.toJSONSchema` writes the Zod
+//! generated from its contract ([`Contracts::published`]), so a model reads
+//! the same bytes from either server (owner decision q136).
+//!
+//! [`Contracts::published`]: whiteboard_facet_engine::schema::Contracts::published
 
 use whiteboard_api_contracts::Refusal;
 use whiteboard_facet_engine::plugin_manifest::{AssetKind, FacetTarget};
