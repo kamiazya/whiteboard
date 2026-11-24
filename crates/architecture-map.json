@@ -253,7 +253,7 @@
       "path": "crates/ops/ops",
       "layer": "ops",
       "status": "present",
-      "description": "every /api/v1 operation and MCP tool as a transport-neutral execute over a ports bundle, answering a refusal in the TypeScript's words; the operation table as data (a row per operation naming its tool, route and contracts); today a workspace address resolved through the registry and the caller's namespace, refused in the caller's words, and the document listing and the resolve by id over a workspace record's bytes",
+      "description": "every /api/v1 operation and MCP tool as a transport-neutral execute over a ports bundle, answering a refusal in the TypeScript's words; the operation table as data (a row per operation naming its tool, route and contracts); today a workspace address resolved through the registry and the caller's namespace, refused in the caller's words, and the document listing and the resolve by id over a workspace record's bytes, and one or more documents read in their own format with their annotation layer inside the response budget (markdown as OKF Markdown; a spatial document's JSON Canvas pending)",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": [
         "whiteboard-det",
@@ -297,12 +297,13 @@
       "path": "crates/adapters/mcp",
       "layer": "adapters",
       "status": "present",
-      "description": "a transport-agnostic JSON-RPC dispatcher over the ops tool table: today the 2025-era lifecycle (initialize, ping, logging/setLevel) and tools/list and tools/call routed to a tool catalogue seam, answering as the TypeScript SDK's server does; the catalogue over the ops table lists each ported tool as contracts/tools publishes it and calls it as the TypeScript's tool wrapper does, its workspace address resolved first",
+      "description": "a transport-agnostic JSON-RPC dispatcher over the ops tool table: today the 2025-era lifecycle (initialize, ping, logging/setLevel) and tools/list and tools/call routed to a tool catalogue seam, answering as the TypeScript SDK's server does; the catalogue over the ops table lists each ported tool as contracts/tools publishes it and calls it as the TypeScript's tool wrapper does, its workspace address resolved first; today wb_document_list and wb_document_get, the input judged as arrays, strict objects and booleans as well as refined strings",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": [
         "whiteboard-det",
         "whiteboard-log",
         "whiteboard-model",
+        "whiteboard-codec",
         "whiteboard-ports",
         "whiteboard-api-contracts",
         "whiteboard-ops"

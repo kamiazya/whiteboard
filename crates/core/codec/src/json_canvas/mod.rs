@@ -79,6 +79,14 @@ pub fn serialize(canvas: &SpatialCanvas, mode: Mode) -> Result<String, WriteFail
     })
 }
 
+/// `JSON.stringify` of a value tree, compact, keys in the order a JavaScript
+/// object enumerates them; `None` where it throws (a bigint) or nests past
+/// [`MAX_WRITE_DEPTH`].
+#[must_use]
+pub fn json_text(value: &Value) -> Option<String> {
+    stringify::stringify(value).ok()
+}
+
 /// Whether `URL.canParse` accepts `text`: the check a node resource's
 /// `text/uri-list` location is held to, with the deviation [`url`] states for
 /// a host UTS 46 would refuse.

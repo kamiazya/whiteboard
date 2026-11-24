@@ -125,35 +125,41 @@ facets:
 Body with **marks** and a [[link]].
 `
 
-/** Creates the documents through the tools, then edits what no tool writes. */
-async function buildRecord(): Promise<Message> {
-  const deps = await freshDeps()
-  const call = await caller(deps)
+/** The documents the record holds, by path. */
+const DOCUMENTS: Message[] = [
+  { op: 'document.create', path: 'plan', kind: 'markdown', name: 'Plan', markdown: NOTE },
+  { op: 'document.create', path: 'bare', kind: 'markdown', markdown: 'just a body\n' },
+  { op: 'document.create', path: 'empty', kind: 'markdown' },
+  { op: 'document.create', path: 'commented', kind: 'markdown', markdown: 'Alpha beta gamma.' },
+  { op: 'document.create', path: 'big-1', kind: 'markdown', markdown: repeat('a', 262144) },
+  { op: 'document.create', path: 'big-2', kind: 'markdown', markdown: repeat('b', 262144) },
+  { op: 'document.create', path: 'big-3', kind: 'markdown', markdown: repeat('c', 262144) },
+  { op: 'document.create', path: 'big-4', kind: 'markdown', markdown: repeat('d', 262144) },
+  { op: 'document.create', path: 'talkative', kind: 'markdown', markdown: repeat('t', 262144) },
+  { op: 'document.create', path: 'retired', kind: 'markdown' },
+  { op: 'document.create', path: 'old-comments', kind: 'markdown', markdown: 'said' },
+  { op: 'document.create', path: 'kindless', kind: 'markdown' },
+  { op: 'document.create', path: 'kindless-retired', kind: 'markdown' },
+  { op: 'document.create', path: 'stripped', kind: 'markdown', markdown: 'no envelope' },
+  { op: 'document.create', path: 'board', kind: 'spatial', name: 'Board' },
+]
+
+/** Creates every document through the tool, answering their ids by path. */
+async function createDocuments(call: Call): Promise<Record<string, string>> {
   const created = await ok(call, 'wb_workspace_edit', {
     workspaceId: W,
     actor: 'claude-code/2.1',
-    ops: [
-      { op: 'document.create', path: 'plan', kind: 'markdown', name: 'Plan', markdown: NOTE },
-      { op: 'document.create', path: 'bare', kind: 'markdown', markdown: 'just a body\n' },
-      { op: 'document.create', path: 'empty', kind: 'markdown' },
-      { op: 'document.create', path: 'commented', kind: 'markdown', markdown: 'Alpha beta gamma.' },
-      { op: 'document.create', path: 'big-1', kind: 'markdown', markdown: repeat('a', 262144) },
-      { op: 'document.create', path: 'big-2', kind: 'markdown', markdown: repeat('b', 262144) },
-      { op: 'document.create', path: 'big-3', kind: 'markdown', markdown: repeat('c', 262144) },
-      { op: 'document.create', path: 'big-4', kind: 'markdown', markdown: repeat('d', 262144) },
-      { op: 'document.create', path: 'talkative', kind: 'markdown', markdown: repeat('t', 262144) },
-      { op: 'document.create', path: 'retired', kind: 'markdown' },
-      { op: 'document.create', path: 'old-comments', kind: 'markdown', markdown: 'said' },
-      { op: 'document.create', path: 'kindless', kind: 'markdown' },
-      { op: 'document.create', path: 'kindless-retired', kind: 'markdown' },
-      { op: 'document.create', path: 'stripped', kind: 'markdown', markdown: 'no envelope' },
-      { op: 'document.create', path: 'board', kind: 'spatial', name: 'Board' },
-    ],
+    ops: DOCUMENTS,
   })
   const ids: Record<string, string> = {}
   for (const result of created.results as { path: string; documentId: string }[]) {
     ids[result.path] = result.documentId
   }
+  return ids
+}
+
+/** Comments and proposals through the tools. */
+async function annotate(call: Call, ids: Record<string, string>): Promise<void> {
   await ok(call, 'wb_thread_edit', {
     workspaceId: W,
     documentId: ids.commented,
@@ -191,7 +197,11 @@ async function buildRecord(): Promise<Message> {
       },
     ],
   })
-  // Enough comment to put `talkative` alone over the response budget.
+  await crowd(call, ids)
+}
+
+/** Enough comment to put `talkative` alone over the response budget, and a board's node. */
+async function crowd(call: Call, ids: Record<string, string>): Promise<void> {
   const threads = Array.from({ length: 200 }, (_, n) => ({
     op: 'thread.add',
     threadId: `long-${n}`,
@@ -205,6 +215,14 @@ async function buildRecord(): Promise<Message> {
     documentId: ids.board,
     ops: [{ op: 'node.add', node: { id: 'n1', type: 'text', text: 'hello', x: 0, y: 0 } }],
   })
+}
+
+/** Creates the documents through the tools, then edits what no tool writes. */
+async function buildRecord(): Promise<Message> {
+  const deps = await freshDeps()
+  const call = await caller(deps)
+  const ids = await createDocuments(call)
+  await annotate(call, ids)
   await editWorkspaceRecord(W, (copy) => retireAndForget(copy, ids))
   const record = await workspaceRecordCopy(W)
   const registry = (await deps.documentIndex.listWorkspaces()).filter(
@@ -278,9 +296,8 @@ async function rowsOf(file: URL): Promise<Message[]> {
     .map((line) => JSON.parse(line) as Message)
 }
 
-/** The calls the recording answers, by what each one is about. */
-function callsOver(ids: Record<string, string>): [string, Message | undefined][] {
-  const many = Array.from({ length: 21 }, () => ids.plan)
+/** The reads the recording answers, by what each one is about. */
+function readCalls(ids: Record<string, string>): [string, Message | undefined][] {
   return [
     ['one markdown document with everything', { workspaceId: W, documentIds: [ids.plan] }],
     ['by segment', { workspaceId: SEGMENT, documentIds: [ids.bare] }],
@@ -324,6 +341,13 @@ function callsOver(ids: Record<string, string>): [string, Message | undefined][]
       { workspaceId: W, documentIds: [ids.board], options: { strict: true } },
     ],
     ['a workspace nothing answers to', { workspaceId: 'nope', documentIds: [ids.bare] }],
+  ]
+}
+
+/** Arguments the SDK refuses before the tool runs, and one it lets through. */
+function validationCalls(ids: Record<string, string>): [string, Message | undefined][] {
+  const many = Array.from({ length: 21 }, () => ids.plan)
+  return [
     ['no arguments', undefined],
     ['no documents', { workspaceId: W }],
     ['an empty list', { workspaceId: W, documentIds: [] }],
@@ -374,7 +398,8 @@ async function answer(record: Message): Promise<Message[]> {
   )
   const call = await caller(deps)
   const rows: Message[] = [record]
-  for (const [about, args] of callsOver(record.ids as Record<string, string>)) {
+  const ids = record.ids as Record<string, string>
+  for (const [about, args] of [...readCalls(ids), ...validationCalls(ids)]) {
     const params =
       args === undefined
         ? { name: 'wb_document_get' }

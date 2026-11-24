@@ -29,6 +29,7 @@ const CASES: &str =
 const READS: &str =
     include_str!("../../../../packages/mcp-server/src/server/mcp/oracle/document-reads.jsonl");
 const DOCUMENT_LIST: &str = include_str!("../../../../contracts/tools/wb_document_list.json");
+const DOCUMENT_GET: &str = include_str!("../../../../contracts/tools/wb_document_get.json");
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
 /// The ports the ported tools read: the record store, the registry and the
@@ -161,8 +162,8 @@ fn the_listing_is_the_contract_of_each_ported_tool() {
         server(nothing()).handle(&json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" })),
     )
     .expect("an answer");
-    let contract: Value = serde_json::from_str(DOCUMENT_LIST).expect("the contract parses");
-    assert_eq!(answer["result"]["tools"], json!([contract]));
+    let contract = |text: &str| serde_json::from_str::<Value>(text).expect("the contract parses");
+    assert_eq!(answer["result"]["tools"], json!([contract(DOCUMENT_LIST), contract(DOCUMENT_GET)]));
 }
 
 #[test]

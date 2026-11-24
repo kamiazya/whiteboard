@@ -4,6 +4,8 @@
 //! from the tree, in the order the TypeScript builds its object.
 
 use serde_json::{Map, Value};
+use whiteboard_codec::json_canvas::json_text;
+use whiteboard_model::Value as Plain;
 
 /// A JSON value whose objects keep their members in the order written.
 pub(crate) enum Json {
@@ -11,6 +13,9 @@ pub(crate) enum Json {
     Bool(bool),
     List(Vec<Json>),
     Object(Vec<(&'static str, Json)>),
+    /// A value an operation answers as it was read, objects in their stored
+    /// order.
+    Plain(Plain),
 }
 
 impl Json {
@@ -26,6 +31,10 @@ impl Json {
                     .map(|(key, value)| ((*key).to_owned(), value.value()))
                     .collect::<Map<_, _>>(),
             ),
+            // What `JSON.parse` of its text reads back, which is what a
+            // client of the TypeScript reads: a whole double past 2^53 an
+            // integer, a number JSON cannot spell `null`.
+            Self::Plain(_) => serde_json::from_str(&self.text()).unwrap_or(Value::Null),
         }
     }
 
@@ -46,6 +55,9 @@ impl Json {
                     .collect();
                 format!("{{{}}}", members.join(","))
             }
+            // An operation's value is plain JSON, which the writer always
+            // spells.
+            Self::Plain(plain) => json_text(plain).unwrap_or_default(),
         }
     }
 }

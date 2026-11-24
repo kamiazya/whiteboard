@@ -37,6 +37,7 @@
 //!   with the first operation that writes.
 
 mod address;
+mod document_get;
 mod document_list;
 mod document_resolve;
 mod operation;
@@ -46,6 +47,10 @@ mod table;
 
 pub use address::{
     WorkspaceAddress, parse_workspace_address, resolve_workspace, with_resolved_workspace,
+};
+pub use document_get::{
+    DocumentGet, DocumentGetAnswer, DocumentGetInput, DocumentGetOutput, FailedRead, Pending,
+    ReadDocument,
 };
 pub use document_list::{
     DocumentList, DocumentListInput, DocumentListOutput, FolderName, ListedDocument,
