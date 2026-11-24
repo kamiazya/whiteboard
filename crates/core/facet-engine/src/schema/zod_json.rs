@@ -160,7 +160,9 @@ impl<'s> Writer<'s> {
             return Some(reference);
         }
         let key = (scope, name.to_owned());
-        if self.open.contains(&key) {
+        // A recursion is named by its pointer whether it is still being
+        // written or was written already, so its body is written once.
+        if self.open.contains(&key) || self.cyclic.iter().any(|(held, _)| *held == key) {
             return Some(self.recursion(key));
         }
         self.open.push(key.clone());

@@ -359,3 +359,26 @@ fn a_closed_key_set_requires_each_key_once() {
     );
     assert_eq!(published(keys, "Keys"), Some(parse(&zod)));
 }
+
+/// A recursion met again once written is the same `$defs` entry: Zod 4.6.7
+/// writes `__schema0` once and names it from both places.
+#[test]
+fn a_recursion_used_twice_is_written_once() {
+    const TREE: External = External::Defined { contract: UNCOMPILED, validator: None };
+    let host = Host { matchers: &[], checks: &[], externals: &[("Tree", TREE)] };
+    let contract = parse(
+        r##"{"$defs": {
+            "Tree": {"type": "string", "x-wb-external": "m"},
+            "Holder": {"type": "object", "properties": {"left": {"$ref": "#/$defs/Tree"},
+                "right": {"$ref": "#/$defs/Tree"}}, "required": ["left", "right"],
+                "x-wb-order": ["left", "right"], "additionalProperties": true,
+                "x-wb-unknownKeys": "strip"}
+        }}"##,
+    );
+    let contracts = Contracts::load(&[("c.json", &contract)], &host).expect("it compiles");
+    let holder = contracts.resolve("c.json#/$defs/Holder").expect("held");
+    let zod = format!(
+        r##"{{{DIALECT},"type":"object","properties":{{"left":{{"$ref":"#/$defs/__schema0"}},"right":{{"$ref":"#/$defs/__schema0"}}}},"required":["left","right"],"additionalProperties":false,"$defs":{{"__schema0":{{"type":"object","properties":{{"child":{{"$ref":"#/$defs/__schema0"}}}},"additionalProperties":false}}}}}}"##
+    );
+    assert_eq!(contracts.published(holder), Some(parse(&zod)));
+}
