@@ -12,9 +12,11 @@ pub mod error;
 pub mod id_mint;
 pub mod lock;
 pub mod maybe_send;
+pub mod record_store;
 
 pub use clock::Clock;
 pub use error::{PortError, PortErrorKind, SnapshotReassemblyCode, StoredUnreadableCode};
 pub use id_mint::IdMint;
 pub use lock::WorkspaceLock;
-pub use maybe_send::MaybeSend;
+pub use maybe_send::{MaybeSend, MaybeSync};
+pub use record_store::WorkspaceRecordStore;

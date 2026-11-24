@@ -1836,6 +1836,19 @@ name = "whiteboard-native-fixture"
 version = "0.0.0"
 
 [[package]]
+name = "whiteboard-ops"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "wasm-bindgen-test",
+ "whiteboard-api-contracts",
+ "whiteboard-model",
+ "whiteboard-port-fakes",
+ "whiteboard-ports",
+ "whiteboard-workspace-index",
+]
+
+[[package]]
 name = "whiteboard-plugin-visual"
 version = "0.0.0"
 dependencies = [

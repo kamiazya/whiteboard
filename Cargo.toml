@@ -21,6 +21,7 @@ members = [
   "crates/core/history",
   "crates/ports/ports",
   "crates/ops/api-contracts",
+  "crates/ops/ops",
   "crates/bindings/wasm",
   "crates/bindings/native-fixture",
   "crates/xtask",
