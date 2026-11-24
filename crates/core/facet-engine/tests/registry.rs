@@ -354,12 +354,17 @@ fn a_published_external_definition_that_names_itself_ends() {
         r##"{"$schema": "x", "$defs": {"Tree": {"x-wb-external": true, "type": "object",
             "properties": {"child": {"$ref": "#/$defs/Tree"}, "name": {"type": "string"}}},
             "Holder": {"type": "object", "properties": {"t": {"$ref": "#/$defs/Tree"}},
-                "required": ["t"], "x-wb-order": ["t"], "x-wb-unknownKeys": "strip"}}}"##,
+                "required": ["t"], "x-wb-order": ["t"], "x-wb-unknownKeys": "strip"},
+            "Root": {"x-wb-external": true, "type": "object", "required": ["t"],
+                "properties": {"again": {"$ref": "#/$defs/Root"}, "t": {"$ref": "#/$defs/Tree"}}}}}"##,
     );
     let host = Host {
         matchers: &[],
         checks: &[],
-        externals: &[("Tree", whiteboard_facet_engine::schema::External::Validator(accept))],
+        externals: &[
+            ("Tree", whiteboard_facet_engine::schema::External::Validator(accept)),
+            ("Root", whiteboard_facet_engine::schema::External::Validator(accept)),
+        ],
     };
     let contracts = Contracts::load(&[(PATH, &contract)], &host).expect("it compiles");
     let tree = contracts.resolve(&format!("{PATH}#/$defs/Tree")).expect("Tree");
@@ -378,4 +383,14 @@ fn a_published_external_definition_that_names_itself_ends() {
                     "name": {"type": "string"}}, "additionalProperties": false}}}"##,
     );
     assert_eq!(contracts.published(holder), Some(published));
+    // A recursion into the root is `#` and takes no `__schema<n>` number.
+    let root = contracts.resolve(&format!("{PATH}#/$defs/Root")).expect("Root");
+    let published = parse(
+        r##"{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
+            "properties": {"again": {"$ref": "#"}, "t": {"$ref": "#/$defs/__schema0"}},
+            "required": ["t"], "additionalProperties": false, "$defs": {"__schema0": {
+                "type": "object", "properties": {"child": {"$ref": "#/$defs/__schema0"},
+                    "name": {"type": "string"}}, "additionalProperties": false}}}"##,
+    );
+    assert_eq!(contracts.published(root), Some(published));
 }
