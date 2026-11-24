@@ -1075,7 +1075,8 @@ jobs:
 
   # The Cargo workspace (crates/, ADR-0054): every merge gate `pnpm
   # rust:check` runs, the wasm release build, and the Linux leg of the release
-  # gates. Scoped by PATH (affected.mjs's PATH_JOBS): a change to no Cargo
+  # gates. The wasm32 cross-target tests are `rust-cross-target`, beside it.
+  # Scoped by PATH (affected.mjs's PATH_JOBS): a change to no Cargo
   # file or crate skips it, and a crates-only change runs it and not the
   # vitest matrix.
   #
@@ -1194,6 +1195,76 @@ jobs:
       - name: Rust release gates (dist native, harden-check, repro-check, notices)
         if: steps.scope.outputs.run == 'true'
         run: pnpm rust:release:check
+
+  # QR-21 layer 3: every core, ports, ops and adapters crate's tests on
+  # wasm32 under Node beside native, the two counts compared (`cargo xtask
+  # cross-target`, `pnpm rust:cross-target` locally). Its own job because it
+  # is the slowest Rust gate and grows with every crate: inside `rust` it took
+  # 24m38s of a 37m40s `rust:check` and pushed that job past its timeout.
+  # Same scope as `rust`. RUSTFLAGS is left unset for the reason given there.
+  rust-cross-target:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: '0'
+    steps:
+      # Two commits, so the merge commit's first parent (the base tip) is
+      # there to diff against.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      # This job's share of the change scope, computed here rather than read
+      # from the `scope` job: see that job's comment for why there is no hop.
+      - name: Detect change scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node tools/checks/src/affected-cli.mjs job rust-cross-target --event "$EVENT"
+
+      - name: Not affected by this change
+        if: steps.scope.outputs.run != 'true'
+        env:
+          REASON: ${{ steps.scope.outputs.reason }}
+        # An annotation, so the skip and its reason show on the run summary.
+        run: echo "::notice title=Not affected by this change::$REASON"
+
+      # wasm-bindgen-test-runner runs the wasm32 tests under Node: the Node
+      # .node-version names, as in the `rust` job. No pnpm: the xtask is Cargo.
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        if: steps.scope.outputs.run == 'true'
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      # rust-toolchain.toml pins the channel, its components and the wasm32
+      # target; a bare `toolchain install` reads it.
+      - name: Rust toolchain (rust-toolchain.toml)
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          rustup toolchain install
+          rustup show
+
+      # wasm-bindgen-test-runner, the wasm32 runner .cargo/config.toml names,
+      # at the version Cargo.toml pins; `fallback: none` as in `rust`.
+      - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        if: steps.scope.outputs.run == 'true'
+        with:
+          tool: wasm-bindgen@0.2.130
+          fallback: none
+
+      # Saved from main only, as in `rust`.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: steps.scope.outputs.run == 'true'
+        with:
+          workspaces: . -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Cross-target tests (cargo xtask cross-target)
+        if: steps.scope.outputs.run == 'true'
+        run: cargo xtask cross-target
 
   # The fuzz targets a change can reach, about 30 s each without a sanitizer
   # (`pnpm rust:fuzz:pr`); rust-fuzz-nightly.yml runs every target for
@@ -1565,6 +1636,7 @@ jobs:
       - verify
       - dry-run-docker
       - rust
+      - rust-cross-target
       - rust-fuzz-pr
       - rust-mutants-plan
       - rust-mutants

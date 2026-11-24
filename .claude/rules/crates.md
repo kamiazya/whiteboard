@@ -78,8 +78,11 @@ imports ANYTHING (one ledgered exception, `CORE_IMPORT_ALLOWANCES`: `whiteboard-
 
 `pnpm rust:check` is the merge gate and `pnpm rust:release:check` the
 release one; `tools/checks/src/rust-check.mjs` and `rust-release-check.mjs`
-list the steps. CI's `rust` job runs both plus `pnpm rust:build:wasm`, and
-`rust-fuzz-pr` runs `pnpm rust:fuzz:pr`; both are scoped by PATH
+list the steps. `cargo xtask cross-target` is the one merge gate outside
+`rust:check`: it is the slowest by far and grows with every crate, so it is
+`pnpm rust:cross-target` locally and its own CI job, `rust-cross-target`,
+running beside `rust`. CI's `rust` job runs both scripts plus `pnpm rust:build:wasm`, and
+`rust-fuzz-pr` runs `pnpm rust:fuzz:pr`; all three are scoped by PATH
 (`PATH_JOBS` in `tools/checks/src/affected.mjs`), so a change to the Cargo
 root files, `.cargo/` or `crates/` runs them and not the vitest matrix, and
 any other change skips them as a declared skip. The per-module layer-2 exports
