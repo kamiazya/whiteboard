@@ -277,8 +277,8 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         answered += 1;
         updated += usize::from(row["answer"].get("structuredContent").is_some());
     }
-    assert_eq!((answered, pending), (128, 6), "the recording's calls, answered and pending");
-    assert_eq!(updated, 52, "the calls answered with documents");
+    assert_eq!((answered, pending), (150, 6), "the recording's calls, answered and pending");
+    assert_eq!(updated, 53, "the calls answered with documents");
 }
 
 /// The recording reaches every refusal the operation owns, and every site a

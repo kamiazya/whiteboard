@@ -136,16 +136,13 @@ const NODE_ID: Checked = Checked {
         Some(Value::String(_)) => vec![at(path, "node id must not be empty")],
         Some(_) => vec![expected(path, "string", value)],
     },
-    aborts: |value| value.is_some_and(|held| !held.is_string()),
+    aborts: None,
 };
 
 /// The `tags` change: a strict object of three optional lists, which must
 /// name at least one tag. Zod judges that refinement only when no member
 /// aborted the parse.
-const TAGS: Checked = Checked {
-    issues: tags_issues,
-    aborts: |value| value.is_some_and(|held| aborts(&Kind::Object(TAG_FIELDS), Some(held))),
-};
+const TAGS: Checked = Checked { issues: tags_issues, aborts: None };
 
 const TAG_FIELDS: &[Field] = &[
     Field { name: "add", kind: Kind::Checked(TAG_LIST_ADD) },
@@ -196,12 +193,11 @@ fn list_issues(
     }
 }
 
-/// Whether an optional array is past `max` or holds anything but what `item`
-/// reads: the type errors that abort a refinement.
-fn list_aborts(value: Option<&Value>, item: fn(&Value) -> bool) -> bool {
-    value.is_some_and(|held| {
-        held.as_array().is_none_or(|items| items.len() > TAG_MAX || items.iter().any(item))
-    })
+/// Whether a member is given and is no array: the type error that stops Zod
+/// judging the refinement. An array's own faults need no say, since a list
+/// naming a tag is what the refinement asks for.
+fn not_a_list(value: Option<&Value>) -> bool {
+    value.is_some_and(|held| !held.is_array())
 }
 
 /// A tag as it is written: bounded, and a colon makes it a scoped tag that
@@ -224,12 +220,12 @@ fn stored_tag(path: &str, value: &Value) -> Vec<String> {
 
 const TAG_LIST_ADD: Checked = Checked {
     issues: |path, value| list_issues(path, value, TOO_MANY_ADDED, written_tag),
-    aborts: |value| list_aborts(value, |item| !item.is_string()),
+    aborts: Some(not_a_list),
 };
 
 const TAG_LIST_REMOVE: Checked = Checked {
     issues: |path, value| list_issues(path, value, TOO_MANY_REMOVED, stored_tag),
-    aborts: |value| list_aborts(value, |item| !item.is_string()),
+    aborts: Some(not_a_list),
 };
 
 const RENAME_FIELDS: &[Field] = &[
@@ -243,7 +239,7 @@ const RENAME_FROM: Checked = Checked {
         None => vec![expected(path, "string", None)],
         Some(held) => stored_tag(path, held),
     },
-    aborts: |value| value.is_none_or(|held| !held.is_string()),
+    aborts: None,
 };
 
 /// `to`: a tag as written, required.
@@ -252,7 +248,7 @@ const RENAME_TO: Checked = Checked {
         None => vec![expected(path, "string", None)],
         Some(held) => written_tag(path, held),
     },
-    aborts: |value| value.is_none_or(|held| !held.is_string()),
+    aborts: None,
 };
 
 fn rename_entry(path: &str, value: &Value) -> Vec<String> {
@@ -264,7 +260,7 @@ fn rename_entry(path: &str, value: &Value) -> Vec<String> {
 
 const RENAMES: Checked = Checked {
     issues: |path, value| list_issues(path, value, TOO_MANY_RENAMED, rename_entry),
-    aborts: |value| list_aborts(value, |item| aborts(&Kind::Object(RENAME_FIELDS), Some(item))),
+    aborts: Some(not_a_list),
 };
 
 /// `extensionFacetsSchema`: a record whose every key matches
@@ -283,7 +279,7 @@ const FACETS: Checked = Checked {
         Some(_) => vec![expected(path, "record", value)],
     }
     },
-    aborts: |value| value.is_some_and(|held| !held.is_object()),
+    aborts: None,
 };
 
 /// `EXTENSION_FACET_KEY_PATTERN`: `/^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*\/v[0-9]+$/`.

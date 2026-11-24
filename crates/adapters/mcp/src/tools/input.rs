@@ -76,8 +76,9 @@ pub(crate) struct Checked {
     /// The member's issues at `path`, as the SDK words them.
     pub(crate) issues: fn(&str, Option<&Value>) -> Vec<String>,
     /// Whether a value of the member's stops Zod judging a refinement over
-    /// the object holding it ([`aborts`]).
-    pub(crate) aborts: fn(Option<&Value>) -> bool,
+    /// the object holding it ([`aborts`]); none for a member no refinement
+    /// of the object holding it reads.
+    pub(crate) aborts: Option<fn(Option<&Value>) -> bool>,
 }
 
 /// `Number.MAX_SAFE_INTEGER`, which Zod's `int()` holds a number to.
@@ -333,7 +334,7 @@ fn real_issues(path: &str, (min, max): (f64, f64), value: Option<&Value>) -> Vec
 pub(crate) fn aborts(kind: &Kind, value: Option<&Value>) -> bool {
     let not_text = |value: &Value| !value.is_string();
     match (kind, value) {
-        (Kind::Checked(checked), value) => (checked.aborts)(value),
+        (Kind::Checked(checked), value) => checked.aborts.is_some_and(|aborts| aborts(value)),
         (
             Kind::Text(_) | Kind::Sized { .. } | Kind::RequiredBounded { .. } | Kind::List { .. },
             None,
