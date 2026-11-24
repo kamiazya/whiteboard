@@ -605,6 +605,37 @@ export const DatabaseBusy = () => 'The database is busy; retry shortly.'
  */
 export const InternalError = () => 'The server failed to handle this request.'
 
+/**
+ * A restore naming a version the document's own history does not hold: none by that id, or
+ * another document's.
+ */
+export const VersionNotFound = (versionId: string, documentId: string) =>
+  `version not found: ${versionId} in document ${documentId}`
+
+/** A restore into a targetPath that already holds a document, without overwrite. */
+export const RestoreTargetExists = (targetPath: string) =>
+  `target already exists: ${targetPath} — pass overwrite: true to restore onto it`
+
+/** A subtree rollback to a version that does not carry the whole workspace at that point. */
+export const SubtreeNeedsWorkspaceVersion = (versionId: string) =>
+  `subtree rollback needs a workspace-scoped version: ${versionId}`
+
+/** A subtree rollback asked to land at a targetPath other than where it rolls back. */
+export const SubtreeTakesNoTarget = () => 'subtree rollback cannot take a targetPath'
+
+/**
+ * A restore targetPath that is not a document path, refused by the operation as the backstop
+ * no surface can skip.
+ */
+export const InvalidRestoreTargetPath = (targetPath: string) => `invalid targetPath: ${targetPath}`
+
+/**
+ * A restore that landed at a path whose row lists no document id, so the caller cannot be told
+ * which document holds it.
+ */
+export const RestoredDocumentIdMissing = (targetPath: string) =>
+  `restored document has no id: ${targetPath}`
+
 // One export per code, so a bundle carries only the codes it answers with.
 export const REFUSAL_CODE_MARKDOWN_TOO_LARGE = 'markdown_too_large'
 export const REFUSAL_CODE_NODE_TEXT_TOO_LARGE = 'node_text_too_large'
@@ -659,6 +690,7 @@ export const REFUSAL_CODE_INVALID_BODY = 'invalid_body'
 export const REFUSAL_CODE_INVALID_REQUEST = 'invalid_request'
 export const REFUSAL_CODE_DATABASE_BUSY = 'database_busy'
 export const REFUSAL_CODE_INTERNAL_ERROR = 'internal_error'
+export const REFUSAL_CODE_VERSION_NOT_FOUND = 'version_not_found'
 
 /** Every code a refusal carries, keyed by the camelCase of the code. */
 export const REFUSAL_CODES = {
@@ -714,6 +746,7 @@ export const REFUSAL_CODES = {
   invalidRequest: REFUSAL_CODE_INVALID_REQUEST,
   databaseBusy: REFUSAL_CODE_DATABASE_BUSY,
   internalError: REFUSAL_CODE_INTERNAL_ERROR,
+  versionNotFound: REFUSAL_CODE_VERSION_NOT_FOUND,
 } as const
 
 /** A code a refusal carries. */

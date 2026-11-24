@@ -23,6 +23,7 @@ import {
 import { ReferenceRewriteTooLargeError } from '@kamiazya/whiteboard-reference-graph'
 import { describe, expect, it } from 'vitest'
 import { DocumentEngineTrapError, SnapshotNotFoundError } from './document-io.js'
+import { RestoredDocumentIdMissingError } from './operations/restore-version.js'
 import {
   CausalGapError,
   DocumentKindChangedError,
@@ -47,6 +48,13 @@ import {
 } from './tools/errors.js'
 import { NamelessLinkifyTargetError } from './tools/linkify-mentions.js'
 import { refuseAgainstLibrary } from './tools/tag-library.js'
+import {
+  InvalidRestoreTargetPathError,
+  RestoreTargetExistsError,
+  SubtreeNeedsWorkspaceVersionError,
+  SubtreeTakesNoTargetError,
+  VersionNotFoundError,
+} from './tools/version-restore.js'
 import { TooManyVersionsError } from './versions/version-refusal.js'
 
 const contract = JSON.parse(
@@ -401,6 +409,12 @@ const FACTORIES: Factories = {
   FacetWriteRejected: (p) => new FacetWriteRejectedError(p.facetKey, p.reason),
   SearchNeedsQueryOrFilter: () => new SearchNeedsQueryOrFilterError(),
   NamelessLinkifyTarget: (p) => new NamelessLinkifyTargetError(p.targetDocumentId),
+  VersionNotFound: (p) => new VersionNotFoundError(p.documentId, p.versionId),
+  RestoreTargetExists: (p) => new RestoreTargetExistsError(p.targetPath),
+  SubtreeNeedsWorkspaceVersion: (p) => new SubtreeNeedsWorkspaceVersionError(p.versionId),
+  SubtreeTakesNoTarget: () => new SubtreeTakesNoTargetError(),
+  InvalidRestoreTargetPath: (p) => new InvalidRestoreTargetPathError(p.targetPath),
+  RestoredDocumentIdMissing: (p) => new RestoredDocumentIdMissingError(p.targetPath),
 }
 
 describe('the refusal contract and the TypeScript that raises it', () => {

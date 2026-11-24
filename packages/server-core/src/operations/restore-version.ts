@@ -11,6 +11,7 @@ import {
   documentPathSchema,
   isSelfOrDescendant,
   messageOf,
+  RestoredDocumentIdMissing,
 } from '@kamiazya/whiteboard-model'
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import { getLogger } from '../log.js'
@@ -295,9 +296,9 @@ async function createTarget(
  * caller cannot be told which document now holds it. Named, so a server-mode
  * caller reads this rather than a bare internal error.
  */
-class RestoredDocumentIdMissingError extends Error {
+export class RestoredDocumentIdMissingError extends Error {
   constructor(public readonly targetPath: string) {
-    super(`restored document has no id: ${targetPath}`)
+    super(RestoredDocumentIdMissing(targetPath))
     this.name = 'RestoredDocumentIdMissingError'
   }
 }

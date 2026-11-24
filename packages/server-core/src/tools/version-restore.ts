@@ -4,7 +4,12 @@ import {
   documentPathSchema,
   ID_LIMIT_PHRASE,
   ID_MAX_CHARS,
+  InvalidRestoreTargetPath,
+  RestoreTargetExists,
+  SubtreeNeedsWorkspaceVersion,
+  SubtreeTakesNoTarget,
   utf16Max,
+  VersionNotFound,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { type RestoreVersionResult, restoreVersion } from '../operations/restore-version.js'
@@ -66,7 +71,7 @@ export class VersionNotFoundError extends Error {
     public readonly documentId: string,
     public readonly versionId: string,
   ) {
-    super(`version not found: ${versionId} in document ${documentId}`)
+    super(VersionNotFound(versionId, documentId))
     this.name = 'VersionNotFoundError'
   }
 }
@@ -74,7 +79,7 @@ export class VersionNotFoundError extends Error {
 /** The targetPath already holds a document and the caller did not pass `overwrite`. */
 export class RestoreTargetExistsError extends Error {
   constructor(public readonly targetPath: string) {
-    super(`target already exists: ${targetPath} — pass overwrite: true to restore onto it`)
+    super(RestoreTargetExists(targetPath))
     this.name = 'RestoreTargetExistsError'
   }
 }
@@ -82,7 +87,7 @@ export class RestoreTargetExistsError extends Error {
 /** A subtree rollback needs the whole workspace at that point, and this version does not carry it. */
 export class SubtreeNeedsWorkspaceVersionError extends Error {
   constructor(public readonly versionId: string) {
-    super(`subtree rollback needs a workspace-scoped version: ${versionId}`)
+    super(SubtreeNeedsWorkspaceVersion(versionId))
     this.name = 'SubtreeNeedsWorkspaceVersionError'
   }
 }
@@ -90,15 +95,15 @@ export class SubtreeNeedsWorkspaceVersionError extends Error {
 /** A subtree rollback was asked to land somewhere other than where it rolls back. */
 export class SubtreeTakesNoTargetError extends Error {
   constructor() {
-    super('subtree rollback cannot take a targetPath')
+    super(SubtreeTakesNoTarget())
     this.name = 'SubtreeTakesNoTargetError'
   }
 }
 
 /** A `targetPath` that is not a document path. */
-class InvalidRestoreTargetPathError extends Error {
+export class InvalidRestoreTargetPathError extends Error {
   constructor(public readonly targetPath: string | undefined) {
-    super(`invalid targetPath: ${targetPath}`)
+    super(InvalidRestoreTargetPath(String(targetPath)))
     this.name = 'InvalidRestoreTargetPathError'
   }
 }

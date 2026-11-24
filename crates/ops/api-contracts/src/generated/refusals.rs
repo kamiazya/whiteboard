@@ -279,6 +279,21 @@ pub enum Refusal {
     /// An uncaught throw. The body carries no part of the error: its message can hold a path, a
     /// statement or a secret.
     InternalError,
+    /// A restore naming a version the document's own history does not hold: none by that id, or
+    /// another document's.
+    VersionNotFound { document_id: String, version_id: String },
+    /// A restore into a targetPath that already holds a document, without overwrite.
+    RestoreTargetExists { target_path: String },
+    /// A subtree rollback to a version that does not carry the whole workspace at that point.
+    SubtreeNeedsWorkspaceVersion { version_id: String },
+    /// A subtree rollback asked to land at a targetPath other than where it rolls back.
+    SubtreeTakesNoTarget,
+    /// A restore targetPath that is not a document path, refused by the operation as the
+    /// backstop no surface can skip.
+    InvalidRestoreTargetPath { target_path: String },
+    /// A restore that landed at a path whose row lists no document id, so the caller cannot be
+    /// told which document holds it.
+    RestoredDocumentIdMissing { target_path: String },
 }
 
 /// Every code a refusal carries, as a constant.
@@ -335,6 +350,7 @@ pub mod code {
     pub const INVALID_REQUEST: &str = "invalid_request";
     pub const DATABASE_BUSY: &str = "database_busy";
     pub const INTERNAL_ERROR: &str = "internal_error";
+    pub const VERSION_NOT_FOUND: &str = "version_not_found";
 }
 
 /// Every code, once, in the order the contract first names it.
@@ -391,6 +407,7 @@ pub const CODES: &[&str] = &[
     code::INVALID_REQUEST,
     code::DATABASE_BUSY,
     code::INTERNAL_ERROR,
+    code::VERSION_NOT_FOUND,
 ];
 
 /// The codes a keeper refuses a sync write with.
@@ -520,7 +537,9 @@ impl Refusal {
             | Self::WorkspaceNotFoundForCallerCreateKnown { .. }
             | Self::WorkspaceNotFoundInIndex { .. }
             | Self::WorkspaceNotFoundByHandle { .. } => code::WORKSPACE_NOT_FOUND,
-            Self::DocumentPathTaken { .. } => code::DOCUMENT_PATH_TAKEN,
+            Self::DocumentPathTaken { .. } | Self::RestoreTargetExists { .. } => {
+                code::DOCUMENT_PATH_TAKEN
+            }
             Self::DisplayNameTaken { .. } => code::DISPLAY_NAME_TAKEN,
             Self::WorkspaceSegmentTaken { .. } | Self::WorkspaceSegmentTakenInNamespace { .. } => {
                 code::WORKSPACE_SEGMENT_TAKEN
@@ -546,9 +565,13 @@ impl Refusal {
             }
             Self::NamelessLinkifyTarget { .. } => code::NAMELESS_LINK_TARGET,
             Self::InvalidBodyNotJson => code::INVALID_BODY,
-            Self::InvalidRequest { .. } => code::INVALID_REQUEST,
+            Self::InvalidRequest { .. }
+            | Self::SubtreeNeedsWorkspaceVersion { .. }
+            | Self::SubtreeTakesNoTarget
+            | Self::InvalidRestoreTargetPath { .. } => code::INVALID_REQUEST,
             Self::DatabaseBusy => code::DATABASE_BUSY,
-            Self::InternalError => code::INTERNAL_ERROR,
+            Self::InternalError | Self::RestoredDocumentIdMissing { .. } => code::INTERNAL_ERROR,
+            Self::VersionNotFound { .. } => code::VERSION_NOT_FOUND,
         }
     }
 
@@ -632,7 +655,10 @@ impl Refusal {
             | Self::SearchNeedsQueryOrFilterRoute
             | Self::NamelessLinkifyTarget { .. }
             | Self::InvalidBodyNotJson
-            | Self::InvalidRequest { .. } => 400,
+            | Self::InvalidRequest { .. }
+            | Self::SubtreeNeedsWorkspaceVersion { .. }
+            | Self::SubtreeTakesNoTarget
+            | Self::InvalidRestoreTargetPath { .. } => 400,
             Self::UnattachedContainerUpdate { .. }
             | Self::UnattachedContainerDocument { .. }
             | Self::CausalGap
@@ -646,7 +672,8 @@ impl Refusal {
             | Self::CannotPlaceCopyNoRoom { .. }
             | Self::DocumentSerializeFailed { .. }
             | Self::RetiredCommentPlane { .. }
-            | Self::RetiredStoredShape { .. } => 409,
+            | Self::RetiredStoredShape { .. }
+            | Self::RestoreTargetExists { .. } => 409,
             Self::DocumentNotFound { .. }
             | Self::DocumentNotFoundInIndex { .. }
             | Self::DocumentSnapshotNotFound { .. }
@@ -655,7 +682,8 @@ impl Refusal {
             | Self::WorkspaceNotFoundForCallerCreate { .. }
             | Self::WorkspaceNotFoundForCallerCreateKnown { .. }
             | Self::WorkspaceNotFoundInIndex { .. }
-            | Self::WorkspaceNotFoundByHandle { .. } => 404,
+            | Self::WorkspaceNotFoundByHandle { .. }
+            | Self::VersionNotFound { .. } => 404,
             Self::DocumentEngineTrapLoading { .. }
             | Self::DocumentEngineTrapSaving { .. }
             | Self::DocumentEngineTrapImporting { .. }
@@ -663,7 +691,8 @@ impl Refusal {
             | Self::DocumentEngineTrapRunningUnrecoverable { .. }
             | Self::StoredDocumentUnsupportedVersion { .. }
             | Self::CorruptStoredData { .. }
-            | Self::InternalError => 500,
+            | Self::InternalError
+            | Self::RestoredDocumentIdMissing { .. } => 500,
             Self::DatabaseBusy => 503,
         }
     }
@@ -779,6 +808,12 @@ impl Refusal {
             Self::InvalidRequest { reason } => reason.clone(),
             Self::DatabaseBusy => "The database is busy; retry shortly.".to_owned(),
             Self::InternalError => "The server failed to handle this request.".to_owned(),
+            Self::VersionNotFound { document_id, version_id } => format!("version not found: {version_id} in document {document_id}"),
+            Self::RestoreTargetExists { target_path } => format!("target already exists: {target_path} — pass overwrite: true to restore onto it"),
+            Self::SubtreeNeedsWorkspaceVersion { version_id } => format!("subtree rollback needs a workspace-scoped version: {version_id}"),
+            Self::SubtreeTakesNoTarget => "subtree rollback cannot take a targetPath".to_owned(),
+            Self::InvalidRestoreTargetPath { target_path } => format!("invalid targetPath: {target_path}"),
+            Self::RestoredDocumentIdMissing { target_path } => format!("restored document has no id: {target_path}"),
         }
     }
 }
@@ -902,5 +937,11 @@ pub(crate) fn examples() -> Vec<(&'static str, Refusal)> {
         ("InvalidRequest", Refusal::InvalidRequest { reason: "unknown query parameter \"x\"; it reads q".to_owned() }),
         ("DatabaseBusy", Refusal::DatabaseBusy),
         ("InternalError", Refusal::InternalError),
+        ("VersionNotFound", Refusal::VersionNotFound { document_id: "d1".to_owned(), version_id: "v1".to_owned() }),
+        ("RestoreTargetExists", Refusal::RestoreTargetExists { target_path: "a/b".to_owned() }),
+        ("SubtreeNeedsWorkspaceVersion", Refusal::SubtreeNeedsWorkspaceVersion { version_id: "v1".to_owned() }),
+        ("SubtreeTakesNoTarget", Refusal::SubtreeTakesNoTarget),
+        ("InvalidRestoreTargetPath", Refusal::InvalidRestoreTargetPath { target_path: "a//b".to_owned() }),
+        ("RestoredDocumentIdMissing", Refusal::RestoredDocumentIdMissing { target_path: "a/b".to_owned() }),
     ]
 }
