@@ -265,7 +265,11 @@ async function saved(deps: ServerDeps, path: string, label: string): Promise<str
  * saved in states no sync write would keep (a node under the reserved key
  * `__proto__`, an envelope naming the other kind) and put right after.
  */
-async function historyOf(deps: ServerDeps, call: Call, ids: Record<string, string>) {
+async function historyOf(
+  deps: ServerDeps,
+  call: Call,
+  ids: Record<string, string>,
+): Promise<Record<string, string>> {
   await landed(call, 'wb_canvas_edit', draw(ids.board, [textNode('a', 0, 'A')]))
   await landed(
     call,
@@ -685,9 +689,11 @@ async function stored(): Promise<Message> {
 
 /**
  * Every record the daemon opens writes as `peer`: its replica id is the one
- * draw of two 32-bit words the engine makes. Every other draw is a count from
- * the start of the call (`drawn.next` is reset before each), so a document a
- * pending restore creates is given the same id on every run.
+ * draw of two 32-bit words the engine makes. Every other draw is a count that
+ * starts at the call's position in the recording (`drawn.next` is set before
+ * each), so a document a pending restore creates is given the same id on every
+ * run, and a different one from every other call's: the calls share one
+ * workspace, so two creates drawing alike would put two documents under one id.
  */
 const drawn = { next: 0 }
 
@@ -726,10 +732,10 @@ async function answer(record: Message): Promise<Message[]> {
   mint.ids = [...scripted.ids]
   let last = await stored()
   const rows: Message[] = [record, { case: 'before any call', record: last }]
-  for (const [about, name, args] of calls(ids, versionIds)) {
+  for (const [position, [about, name, args]] of calls(ids, versionIds).entries()) {
     heard.progress.length = 0
     heard.written.length = 0
-    drawn.next = 0
+    drawn.next = position
     const params = args === undefined ? { name } : { name, arguments: args }
     const answered = await call(name, args)
     // The stored record is written only when the call moved it, so a row
@@ -746,7 +752,20 @@ async function answer(record: Message): Promise<Message[]> {
       ...(moved ? { record: now } : {}),
     })
   }
+  expectDistinctCreations(rows)
   return rows
+}
+
+/** The two pending restores that create a document each landed under a document id of their own. */
+function expectDistinctCreations(rows: Message[]): void {
+  const created = ['into a path nothing holds', 'into a path of 1024 characters'].map((about) => {
+    const row = rows.find((candidate) => candidate.case === about)
+    const content = (row?.answer as { structuredContent?: { documentId?: string } } | undefined)
+      ?.structuredContent
+    return content?.documentId
+  })
+  expect(created.every((id) => typeof id === 'string')).toBe(true)
+  expect(new Set(created).size).toBe(created.length)
 }
 
 describe('wb_version_restore over a document history', () => {
