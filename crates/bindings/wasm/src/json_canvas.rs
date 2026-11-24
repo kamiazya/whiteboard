@@ -19,7 +19,7 @@ use crate::json_canvas_wire::{canvas_from, canvas_json};
 use serde_json::{Value as Json, json};
 use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_codec::json_canvas::{
-    Code, Decline, Failure, Issue, Mode, PathStep, WriteFailure, parse, serialize,
+    Decline, Failure, Issue, Mode, PathStep, WriteFailure, parse, serialize,
 };
 
 fn refused(code: &str, class: &str) -> Json {
@@ -37,18 +37,6 @@ fn declined(why: Decline) -> Json {
     }
 }
 
-fn code(code: Code) -> &'static str {
-    match code {
-        Code::InvalidType => "invalid_type",
-        Code::TooSmall => "too_small",
-        Code::TooBig => "too_big",
-        Code::InvalidFormat => "invalid_format",
-        Code::InvalidValue => "invalid_value",
-        Code::InvalidUnion => "invalid_union",
-        Code::Custom => "custom",
-    }
-}
-
 fn issues(issues: &[Issue]) -> Json {
     Json::Array(
         issues
@@ -63,8 +51,8 @@ fn issues(issues: &[Issue]) -> Json {
                     })
                     .collect();
                 match &issue.message {
-                    Some(message) => json!([path, code(issue.code), message]),
-                    None => json!([path, code(issue.code)]),
+                    Some(message) => json!([path, issue.code.as_str(), message]),
+                    None => json!([path, issue.code.as_str()]),
                 }
             })
             .collect(),

@@ -766,3 +766,19 @@ fn a_value_nested_past_the_writers_cap_is_declined() {
         Err(WriteFailure::Declined(Decline::Unwritable))
     );
 }
+
+#[test]
+fn each_issue_code_is_named_as_zod_names_it() {
+    let named = [
+        (Code::InvalidType, "invalid_type"),
+        (Code::TooSmall, "too_small"),
+        (Code::TooBig, "too_big"),
+        (Code::InvalidFormat, "invalid_format"),
+        (Code::InvalidValue, "invalid_value"),
+        (Code::InvalidUnion, "invalid_union"),
+        (Code::Custom, "custom"),
+    ];
+    for (code, name) in named {
+        assert_eq!(code.as_str(), name);
+    }
+}

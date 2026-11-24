@@ -188,6 +188,12 @@
       "reason": "the upstream state machine and tree builder are long functions by design (`state::call` is one match arm per state, 400 lines); they are kept as they are so a later upstream fix can be compared against them, and arch-lint's function-size ledger records each one"
     },
     {
+      "crate": "crates/core/model",
+      "lint": "clippy::inline_always",
+      "count": 1,
+      "reason": "canvas_value's Fields::field, the generic glue instantiated once per field reader over the one non-generic key search: left to the inliner across the crate boundary, its copies measured 12 to 20 KB more of the shipped wasm artifact, past its size ceiling"
+    },
+    {
       "crate": "crates/core/search",
       "lint": "clippy::disallowed_methods",
       "count": 1,

@@ -9,16 +9,14 @@
 //! `describeThrown`, and server mode's, which passes a named refusal
 //! verbatim), so no root supplies it.
 //!
-//! What this crate cannot answer yet is [`Pending`]: a spatial document's
-//! JSON Canvas (the stored canvas is answered as a value, and the lift of
-//! that value into the model's canvas the codec writes lives in
-//! `whiteboard-wasm`, a layer above), a frontmatter the OKF
-//! writer refuses (whose words are the TypeScript shim's) and a read the
-//! record leaves to its caller.
+//! What this crate cannot answer yet is [`Pending`]: a canvas the JSON Canvas
+//! writer declines and a frontmatter the OKF writer refuses (whose words are
+//! the TypeScript shim's), and a read the record leaves to its caller.
 
 mod budget;
 mod engine;
 mod markdown;
+mod spatial;
 
 use std::collections::BTreeSet;
 
@@ -39,8 +37,10 @@ pub struct DocumentGetInput {
     pub workspace_id: String,
     /// In the order asked; a repeat is read once, where it first appears.
     pub document_ids: Vec<String>,
-    // `options.strict` joins with the JSON Canvas half: it chooses that
-    // writer's mode and nothing else, so a markdown read never sees it.
+    /// `options.strict`: a spatial document as JSON Canvas 1.0 alone. It
+    /// chooses that writer's mode and nothing else, so a markdown read never
+    /// sees it.
+    pub strict: bool,
 }
 
 /// One document as read: its content in its own format and its annotation
@@ -75,8 +75,10 @@ pub struct DocumentGetOutput {
 /// What this crate does not answer yet, naming the document it met it at.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Pending {
-    /// A spatial document's content as JSON Canvas.
-    JsonCanvas(String),
+    /// A spatial document's canvas the JSON Canvas writer declines: past the
+    /// wire's cap or depth, no canvas once lifted, or a value the writer has
+    /// no spelling for.
+    JsonCanvasDeclined(String),
     /// A frontmatter the OKF writer has no spelling for.
     OkfUnwritable(String),
     /// A content read the workspace record leaves to its caller.
@@ -120,7 +122,7 @@ impl Operation for DocumentGet {
         let record = open_record(ports.records(), &input.workspace_id)
             .await
             .map_err(|error| Refusal::from(&error))?;
-        match read_all(&record, input.document_ids) {
+        match read_all(&record, input.document_ids, input.strict) {
             Ok(output) => Ok(DocumentGetAnswer::Read(output)),
             Err(Stop::Pending(pending)) => Ok(DocumentGetAnswer::Pending(pending)),
             Err(Stop::Refused(refusal)) => Err(refusal),
@@ -130,7 +132,11 @@ impl Operation for DocumentGet {
 
 /// Each document once, in order, until the budget is spent; every one after
 /// that is reported unread without being read.
-fn read_all(record: &WorkspaceRecord, ids: Vec<String>) -> Result<DocumentGetOutput, Stop> {
+fn read_all(
+    record: &WorkspaceRecord,
+    ids: Vec<String>,
+    strict: bool,
+) -> Result<DocumentGetOutput, Stop> {
     let mut seen = BTreeSet::new();
     let mut budget = Budget::default();
     for document_id in ids {
@@ -141,7 +147,7 @@ fn read_all(record: &WorkspaceRecord, ids: Vec<String>) -> Result<DocumentGetOut
             budget.unread(document_id);
             continue;
         }
-        match read_one(Hosted { record, document_id: &document_id })? {
+        match read_one(Hosted { record, document_id: &document_id }, strict)? {
             Ok(read) => budget.offer(read),
             Err(reason) => budget.fail(FailedRead { document_id, reason }),
         }
@@ -150,7 +156,7 @@ fn read_all(record: &WorkspaceRecord, ids: Vec<String>) -> Result<DocumentGetOut
 }
 
 /// One document, or the reason it was not read.
-fn read_one(hosted: Hosted<'_>) -> Result<Result<ReadDocument, String>, Stop> {
+fn read_one(hosted: Hosted<'_>, strict: bool) -> Result<Result<ReadDocument, String>, Stop> {
     let id = hosted.document_id;
     // A stamp no `Date` holds throws from `toISOString` there.
     let found = resolve_document_by_id(hosted.record, id)
@@ -160,7 +166,7 @@ fn read_one(hosted: Hosted<'_>) -> Result<Result<ReadDocument, String>, Stop> {
             "Document not found: {id}. This workspace holds no document with that id; wb_document_list shows the ones it does."
         )));
     };
-    match read_known(hosted, entry.kind, entry.name.as_deref()) {
+    match read_known(hosted, entry.kind, entry.name.as_deref(), strict) {
         Ok(read) => Ok(read),
         Err(Fault::Retired(found)) => Ok(Err(Refusal::RetiredStoredShape { found }.message())),
         Err(Fault::Stop(stop)) => Err(stop),
@@ -168,11 +174,13 @@ fn read_one(hosted: Hosted<'_>) -> Result<Result<ReadDocument, String>, Stop> {
 }
 
 /// The document read in the format its kind names, the kind its own content
-/// records or, failing that, its index row's.
+/// records or, failing that, its index row's: a markdown document as OKF
+/// Markdown, any other as JSON Canvas.
 fn read_known(
     hosted: Hosted<'_>,
     indexed_kind: Option<String>,
     name: Option<&str>,
+    strict: bool,
 ) -> Result<Result<ReadDocument, String>, Fault> {
     let stated = defined(hosted.read(QueryName::DocumentKind, &[])?);
     let threads = items(hosted.read(QueryName::Annotations, &[])?);
@@ -180,16 +188,20 @@ fn read_known(
     let Some(kind) = kind_of(stated, indexed_kind) else {
         return Ok(Err(kind_unknown(hosted.document_id)));
     };
-    if kind != "markdown" {
-        let pending = Pending::JsonCanvas(hosted.document_id.to_owned());
-        return Err(Fault::Stop(Stop::Pending(pending)));
-    }
-    let exported = markdown::export(hosted, name)?;
+    let (content, frontmatter) = if kind == "markdown" {
+        let exported = markdown::export(hosted, name)?;
+        (exported.markdown, Some(exported.frontmatter))
+    } else {
+        match spatial::export(hosted, strict)? {
+            Ok(json) => (json, None),
+            Err(reason) => return Ok(Err(reason)),
+        }
+    };
     Ok(Ok(ReadDocument {
         document_id: hosted.document_id.to_owned(),
         kind,
-        content: exported.markdown,
-        frontmatter: Some(exported.frontmatter),
+        content,
+        frontmatter,
         threads,
         proposals,
         annotations_truncated: false,

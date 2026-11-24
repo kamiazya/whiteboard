@@ -21,6 +21,22 @@ pub enum Code {
     Custom,
 }
 
+impl Code {
+    /// The code as Zod names it.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::InvalidType => "invalid_type",
+            Self::TooSmall => "too_small",
+            Self::TooBig => "too_big",
+            Self::InvalidFormat => "invalid_format",
+            Self::InvalidValue => "invalid_value",
+            Self::InvalidUnion => "invalid_union",
+            Self::Custom => "custom",
+        }
+    }
+}
+
 /// One place the schema refused, as Zod reports it: where and why.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Issue {

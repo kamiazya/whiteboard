@@ -40,7 +40,12 @@ impl Binding for DocumentGet {
             .and_then(Value::as_array)
             .map(|ids| ids.iter().filter_map(Value::as_str).map(str::to_owned).collect())
             .unwrap_or_default();
-        DocumentGetInput { workspace_id, document_ids }
+        let strict = arguments
+            .get("options")
+            .and_then(|options| options.get("strict"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        DocumentGetInput { workspace_id, document_ids, strict }
     }
 
     fn output(answer: &DocumentGetAnswer) -> Option<Json> {

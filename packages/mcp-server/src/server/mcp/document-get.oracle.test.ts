@@ -142,6 +142,10 @@ const DOCUMENTS: Message[] = [
   { op: 'document.create', path: 'kindless-retired', kind: 'markdown' },
   { op: 'document.create', path: 'stripped', kind: 'markdown', markdown: 'no envelope' },
   { op: 'document.create', path: 'board', kind: 'spatial', name: 'Board' },
+  { op: 'document.create', path: 'drawn', kind: 'spatial', name: 'Drawn' },
+  { op: 'document.create', path: 'dangling', kind: 'spatial' },
+  { op: 'document.create', path: 'blank', kind: 'spatial' },
+  { op: 'document.create', path: 'tangled', kind: 'spatial' },
 ]
 
 /** Creates every document through the tool, answering their ids by path. */
@@ -198,6 +202,143 @@ async function annotate(call: Call, ids: Record<string, string>): Promise<void> 
     ],
   })
   await crowd(call, ids)
+  await draw(call, ids)
+}
+
+/** Every node kind, an edge and a line with each optional field, and facets on a node and an edge. */
+const DRAWN: Message[] = [
+  {
+    op: 'node.add',
+    node: {
+      id: 't1',
+      type: 'text',
+      text: '# Hi\n\nthere',
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+      color: '2',
+      facets: { 'visual.shape/v0': { kind: 'ellipse' } },
+    },
+  },
+  {
+    op: 'node.add',
+    node: {
+      id: 'f1',
+      type: 'file',
+      file: 'notes/plan.md',
+      subpath: '#Plan',
+      x: 300,
+      y: 0,
+      width: 200,
+      height: 100,
+    },
+  },
+  {
+    op: 'node.add',
+    node: {
+      id: 'k1',
+      type: 'link',
+      url: 'https://example.com/a?b=1',
+      x: 600,
+      y: 0,
+      width: 200,
+      height: 100,
+      color: '#00ff00',
+    },
+  },
+  {
+    op: 'node.add',
+    node: { id: 'g1', type: 'group', label: 'Group', x: -50, y: 200, width: 900, height: 300 },
+  },
+  {
+    op: 'node.add',
+    node: { id: 't2', type: 'text', text: 'inside', x: 0, y: 250, width: 120, height: 60 },
+  },
+  {
+    op: 'edge.add',
+    edge: {
+      id: 'e1',
+      from: { node: 't1', side: 'right', end: 'none' },
+      to: { node: 'f1', side: 'left', end: 'arrow' },
+      label: 'goes',
+      color: '4',
+      bends: [{ x: 250, y: 25.5 }],
+      facets: { 'x.note/v1': { text: 'why' } },
+    },
+  },
+  { op: 'edge.add', edge: { id: 'e2', from: { node: 'f1' }, to: { node: 'k1' } } },
+  {
+    op: 'line.add',
+    line: {
+      id: 'l1',
+      from: { kind: 'point', point: { x: -100, y: -50 } },
+      to: { kind: 'node', node: 'g1', side: 'top' },
+      label: 'ink',
+      color: '#ff0000',
+    },
+  },
+]
+
+/** Two nodes and an edge between them; `b` is later removed from the record. */
+const DANGLING: Message[] = [
+  {
+    op: 'node.add',
+    node: { id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 100, height: 50 },
+  },
+  {
+    op: 'node.add',
+    node: { id: 'b', type: 'text', text: 'b', x: 200, y: 0, width: 100, height: 50 },
+  },
+  { op: 'edge.add', edge: { id: 'e', from: { node: 'a' }, to: { node: 'b' } } },
+]
+
+/** Four edges at a node that is later removed from the record. */
+const TANGLED: Message[] = [
+  {
+    op: 'node.add',
+    node: { id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 100, height: 50 },
+  },
+  {
+    op: 'node.add',
+    node: { id: 'gone', type: 'text', text: 'b', x: 200, y: 0, width: 100, height: 50 },
+  },
+  ...['é1', 'é2', 'é3', 'é4'].map((id) => ({
+    op: 'edge.add',
+    edge: { id, from: { node: 'gone' }, to: { node: 'gone' } },
+  })),
+]
+
+/** Applies `ops` to a board as a person drawing would, not as a proposal. */
+async function apply(call: Call, documentId: string, ops: Message[]): Promise<void> {
+  await ok(call, 'wb_canvas_edit', { workspaceId: W, documentId, mode: 'apply', ops })
+}
+
+/**
+ * Every node kind, an edge and a line with each optional field, facets on a
+ * node and an edge (one key each, for the reason `NOTE`'s payloads hold one),
+ * and a thread on the board: `drawn`. `dangling` is two nodes and an edge
+ * between them, one node later removed from the record, which the strict mode
+ * refuses; `tangled` is four such edges, whose refusal is long enough to be
+ * cut where the reason is capped.
+ */
+async function draw(call: Call, ids: Record<string, string>): Promise<void> {
+  await apply(call, ids.drawn, DRAWN)
+  await ok(call, 'wb_thread_edit', {
+    workspaceId: W,
+    documentId: ids.drawn,
+    ops: [
+      {
+        op: 'thread.add',
+        threadId: 'd1',
+        anchor: { kind: 'document' },
+        body: 'Nice board.',
+        author: 'human:ana',
+      },
+    ],
+  })
+  await apply(call, ids.dangling, DANGLING)
+  await apply(call, ids.tangled, TANGLED)
 }
 
 /** Enough comment to put `talkative` alone over the response budget, and a board's node. */
@@ -268,6 +409,12 @@ function retireAndForget(copy: LoroDoc, ids: Record<string, string>): void {
   const stripped = hostOf(copy, ids.stripped)
   stripped.delete('core')
   stripped.delete('trust')
+  const nodes = hostOf(copy, ids.dangling).get('nodes')
+  if (!(nodes instanceof LoroMap)) throw new Error('dangling holds no nodes')
+  nodes.delete('b')
+  const tangled = hostOf(copy, ids.tangled).get('nodes')
+  if (!(tangled instanceof LoroMap)) throw new Error('tangled holds no nodes')
+  tangled.delete('gone')
 }
 
 /**
@@ -338,10 +485,48 @@ function readCalls(ids: Record<string, string>): [string, Message | undefined][]
       'comments in the retired plane',
       { workspaceId: W, documentIds: [ids.bare, ids['old-comments']] },
     ],
+    ...spatialReadCalls(ids),
+  ]
+}
+
+/** The reads of a spatial document, and one of a workspace nothing answers to. */
+function spatialReadCalls(ids: Record<string, string>): [string, Message | undefined][] {
+  return [
     ['a spatial document', { workspaceId: W, documentIds: [ids.board] }],
     [
       'a spatial document, strict',
       { workspaceId: W, documentIds: [ids.board], options: { strict: true } },
+    ],
+    ['every node kind, an edge and a line', { workspaceId: W, documentIds: [ids.drawn] }],
+    [
+      'every node kind, strict',
+      { workspaceId: W, documentIds: [ids.drawn], options: { strict: true } },
+    ],
+    [
+      'every node kind, strict false',
+      { workspaceId: W, documentIds: [ids.drawn], options: { strict: false } },
+    ],
+    ['an edge to a removed node', { workspaceId: W, documentIds: [ids.dangling] }],
+    [
+      'an edge to a removed node, strict',
+      { workspaceId: W, documentIds: [ids.dangling], options: { strict: true } },
+    ],
+    [
+      'a strict refusal beside the documents that read',
+      {
+        workspaceId: W,
+        documentIds: [ids.bare, ids.dangling, ids.blank, ids.drawn],
+        options: { strict: true },
+      },
+    ],
+    [
+      'a strict refusal past the reason cap',
+      { workspaceId: W, documentIds: [ids.tangled], options: { strict: true } },
+    ],
+    ['an empty board', { workspaceId: W, documentIds: [ids.blank] }],
+    [
+      'an empty board, strict',
+      { workspaceId: W, documentIds: [ids.blank], options: { strict: true } },
     ],
     ['a workspace nothing answers to', { workspaceId: 'nope', documentIds: [ids.bare] }],
   ]

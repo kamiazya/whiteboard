@@ -11,6 +11,7 @@
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
 pub mod annotation;
+pub mod canvas_value;
 pub mod checks;
 #[path = "generated/crdt.rs"]
 pub mod crdt;

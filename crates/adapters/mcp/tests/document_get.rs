@@ -17,11 +17,9 @@
 //! text is compared byte for byte where it can be, and otherwise as the same
 //! JSON with each markdown document's OKF text compared as the same document
 //! ([`same_document`]); [`KEY_ORDER`] counts the calls that need it, and
-//! falls to none when the engine answers in the TypeScript's order.
-//!
-//! The calls that reach a spatial document's JSON Canvas are answered as a
-//! pending tool is ([`PENDING`]), the part of `DocumentGet` that is not ported
-//! yet.
+//! falls to none when the engine answers in the TypeScript's order. A spatial
+//! document's JSON Canvas is compared byte for byte: the codec writes it in
+//! its own order whichever order the engine read it in.
 
 use serde_json::{Value, json};
 #[cfg(target_arch = "wasm32")]
@@ -37,13 +35,11 @@ const CASES: &str =
     include_str!("../../../../packages/mcp-server/src/server/mcp/oracle/document-get.jsonl");
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
-/// The recorded calls that read a spatial document, whose JSON Canvas is not
-/// ported yet.
-const PENDING: [&str; 2] = ["a spatial document", "a spatial document, strict"];
-
 /// How many recorded calls are answered with the same JSON in another key
-/// order (see the module's note).
-const KEY_ORDER: usize = 12;
+/// order (see the module's note): twelve over markdown documents, and six
+/// reading a spatial document that holds a thread or a proposal, whose JSON
+/// Canvas is byte for byte the TypeScript's.
+const KEY_ORDER: usize = 18;
 
 struct Fakes(MemoryRecordStore, MemoryRegistry, FixedCaller);
 
@@ -165,22 +161,13 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
     let mut lines = CASES.lines();
     let record: Value = serde_json::from_str(lines.next().expect("a record")).expect("JSON");
     let server = server(&record);
-    let (mut replayed, mut pending, mut reordered) = (0, 0, 0);
+    let (mut replayed, mut reordered) = (0, 0);
     for (id, line) in lines.enumerate() {
         let row: Value = serde_json::from_str(line).expect("a JSON row");
         let message =
             json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call", "params": row["params"] });
         let answer = block_on(server.handle(&message)).expect("an answer");
         let case = row["case"].as_str().expect("a case");
-        if PENDING.contains(&case) {
-            assert_eq!(
-                answer["error"]["message"],
-                json!("Tool wb_document_get not found"),
-                "{case}"
-            );
-            pending += 1;
-            continue;
-        }
         let expected = expected(&row["answer"]);
         let result = &answer["result"];
         if expected.get("structuredContent").is_some() {
@@ -202,10 +189,6 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         }
         replayed += 1;
     }
-    assert_eq!(
-        (replayed, pending),
-        (37, PENDING.len()),
-        "the recording's calls, every one answered"
-    );
+    assert_eq!(replayed, 48, "the recording's calls, every one answered");
     assert_eq!(reordered, KEY_ORDER, "the calls answered in another key order");
 }
