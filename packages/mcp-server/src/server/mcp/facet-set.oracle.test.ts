@@ -169,6 +169,12 @@ const DOCUMENTS: Message[] = [
   },
   { op: 'document.create', path: 'loose', kind: 'markdown', markdown: '---\ntype: note\n---\nl\n' },
   { op: 'document.create', path: 'tags', kind: 'markdown', markdown: '---\ntype: note\n---\nl\n' },
+  {
+    op: 'document.create',
+    path: 'oldnote',
+    kind: 'markdown',
+    markdown: '---\ntype: note\n---\no\n',
+  },
   { op: 'document.create', path: 'board', kind: 'spatial' },
   { op: 'document.create', path: 'empty', kind: 'spatial' },
   { op: 'document.create', path: 'elderly', kind: 'spatial' },
@@ -236,8 +242,10 @@ function hostOf(copy: LoroDoc, documentId: string): LoroMap {
 
 /** What no tool writes any more: `elderly` holds its elements in the retired `elements` list. */
 function retire(copy: LoroDoc, ids: Record<string, string>): void {
-  const elements = hostOf(copy, ids.elderly ?? '').setContainer('elements', new LoroList())
-  elements.push({ id: 'e1', type: 'rectangle' })
+  for (const path of ['elderly', 'oldnote']) {
+    const elements = hostOf(copy, ids[path] ?? '').setContainer('elements', new LoroList())
+    elements.push({ id: 'e1', type: 'rectangle' })
+  }
 }
 
 async function buildRecord(): Promise<Message> {
@@ -432,6 +440,10 @@ function refusedCalls(ids: Ids): Asked[] {
       note({ target: 'canvas', facets: { 'visual.theme/v0': { theme: 'visual.neon' } } }),
     ],
     ['a node of a note', note({ nodeId: 'pad', tags: { add: ['x'] } })],
+    [
+      'a node of a note holding the retired list',
+      { workspaceId: W, documentIds: [ids.oldnote], nodeId: 'pad', tags: { add: ['x'] } },
+    ],
     ['an edge of a note', note({ edgeId: 'fuels', tags: { add: ['x'] } })],
     ['a node the board lacks', board({ nodeId: 'ghost', tags: { add: ['x'] } })],
     ['an edge the board lacks', board({ edgeId: 'ghost', tags: { add: ['x'] } })],
@@ -625,6 +637,23 @@ function libraryCalls(ids: Ids): Asked[] {
       { workspaceId: W, documentIds: [ids.second, ids.board], tags: { add: ['region:asia'] } },
     ],
     ['a plain tag against the library', board({ nodeId: 'pad', tags: { add: ['anything'] } })],
+    ['a removal under the library', board({ nodeId: 'pad', tags: { remove: ['anything'] } })],
+    [
+      'a rename into a value the library does not admit',
+      {
+        workspaceId: W,
+        documentIds: [ids.second],
+        tags: { rename: [{ from: 'segment', to: 'region:asia' }] },
+      },
+    ],
+    [
+      'a board tag the library does not admit',
+      { workspaceId: W, documentIds: [ids.empty], tags: { add: ['region:asia'] } },
+    ],
+    [
+      'two values under an exclusive key on a board',
+      { workspaceId: W, documentIds: [ids.empty], tags: { add: ['health:ok', 'health:failing'] } },
+    ],
   ]
 }
 

@@ -270,3 +270,88 @@ fn which_site_a_write_lands_on_follows_the_element_then_the_target_then_the_kind
     );
     assert_eq!(required_target(&input(false, false, None)), FacetTarget::Document);
 }
+
+/// The record with `core` of `document_id` rewritten to carry `tags`, as a
+/// keeper holding a set stored before the bound would.
+#[cfg(test)]
+fn snapshot_with_stored_tags(document_id: &str, tags: Vec<String>) -> Vec<u8> {
+    let held = base64_to_bytes(record()["snapshot"].as_str().expect("base64")).expect("base64");
+    let opened = WorkspaceRecord::open_as(&held, 9).expect("a record");
+    let doc = Doc { record: &opened, id: document_id };
+    let core = doc.core().ok().flatten().expect("frontmatter");
+    let mut next: Map = core.iter().filter(|(key, _)| key != "tags").cloned().collect();
+    next.push(("tags".to_owned(), Value::Seq(tags.into_iter().map(Value::String).collect())));
+    let args = Value::Map(vec![
+        ("documentId".to_owned(), Value::String(document_id.to_owned())),
+        ("prev".to_owned(), Value::Map(core)),
+        ("next".to_owned(), Value::Map(next)),
+    ]);
+    let step = WorkspaceWriters { now_ms: 1.0 }.apply(
+        opened.doc(),
+        WriterName::ReconcileCoreFacets,
+        &args,
+    );
+    assert!(matches!(step, Some(Ok(()))), "{step:?}");
+    opened.doc().commit();
+    opened.doc().export(ExportMode::Snapshot).expect("a snapshot")
+}
+
+#[test]
+fn a_set_stored_past_the_bound_takes_a_change_that_does_not_grow_it() {
+    let stored: Vec<String> = (0..1030).map(|at| format!("t{at}")).collect();
+    let mut fakes = fakes(MemoryRecordStore::new().merging_with(merging));
+    fakes.records = MemoryRecordStore::new()
+        .merging_with(merging)
+        .holding(W, snapshot_with_stored_tags(&id("note"), stored));
+    let same_size =
+        |change: TagChange| FacetSetInput { tags: Some(change), ..tagging(&[id("note")]) };
+    let renamed = TagChange { rename: vec![("t0".into(), "u0".into())], ..TagChange::default() };
+    assert!(matches!(run(&fakes, same_size(renamed)), Ok(FacetSetAnswer::Updated(_))));
+    let shrunk = TagChange { remove: vec!["t1".into()], ..TagChange::default() };
+    assert!(matches!(run(&fakes, same_size(shrunk)), Ok(FacetSetAnswer::Updated(_))));
+    let grown = TagChange { add: vec!["more".into()], ..TagChange::default() };
+    let refusal = run(&fakes, same_size(grown)).expect_err("a refusal");
+    assert_eq!(
+        refusal,
+        Refusal::TooManyTagsOnElement { count: 1030, what: format!("document {}", id("note")) }
+    );
+}
+
+/// The record with the kind `document_id` states rewritten to `kind`.
+#[cfg(test)]
+fn snapshot_stating(document_id: &str, kind: &str) -> Vec<u8> {
+    let held = base64_to_bytes(record()["snapshot"].as_str().expect("base64")).expect("base64");
+    let opened = WorkspaceRecord::open_as(&held, 9).expect("a record");
+    let node = opened.document_node(document_id).expect("a node").id;
+    let tree_id = whiteboard_crdt::TreeID::try_from(node.to_string().as_str()).expect("a tree id");
+    let meta = opened.doc().get_tree("tree").get_meta(tree_id).expect("a meta map");
+    let stated = meta.insert_container("document", whiteboard_crdt::LoroMap::new()).expect("a map");
+    stated.insert("kind", kind).expect("a kind");
+    opened.doc().commit();
+    opened.doc().export(ExportMode::Snapshot).expect("a snapshot")
+}
+
+#[test]
+fn a_kind_this_build_does_not_recognise_is_no_kind() {
+    let mut fakes = fakes(MemoryRecordStore::new());
+    fakes.records =
+        MemoryRecordStore::new().holding(W, snapshot_stating(&id("second"), "from-a-newer-build"));
+    let at = FacetSetInput { node_id: Some("pad".to_owned()), ..tagging(&[id("second")]) };
+    let refusal = run(&fakes, at).expect_err("a refusal");
+    assert_eq!(
+        refusal,
+        Refusal::NodeNotFound { document_id: id("second"), node_id: "pad".to_owned() },
+        "a document stating no kind has no canvas, so no node"
+    );
+}
+
+#[test]
+fn a_document_that_holds_no_content_reports_the_node_missing_not_a_fabricated_kind() {
+    let fakes = fakes(MemoryRecordStore::new());
+    let at = FacetSetInput { node_id: Some("pad".to_owned()), ..tagging(&[BARE.to_owned()]) };
+    let refusal = run(&fakes, at).expect_err("a refusal");
+    assert_eq!(
+        refusal,
+        Refusal::NodeNotFound { document_id: BARE.to_owned(), node_id: "pad".to_owned() }
+    );
+}

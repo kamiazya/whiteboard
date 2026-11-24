@@ -367,3 +367,6 @@ pub(super) fn apply(
     }
     record.doc().export(ExportMode::updates(&from)).map(Some).map_err(|_| declined())
 }
+
+#[cfg(test)]
+mod tests;

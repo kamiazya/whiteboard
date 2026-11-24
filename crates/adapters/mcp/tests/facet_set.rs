@@ -277,6 +277,64 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         answered += 1;
         updated += usize::from(row["answer"].get("structuredContent").is_some());
     }
-    assert_eq!((answered, pending), (123, 6), "the recording's calls, answered and pending");
-    assert_eq!(updated, 51, "the calls answered with documents");
+    assert_eq!((answered, pending), (128, 6), "the recording's calls, answered and pending");
+    assert_eq!(updated, 52, "the calls answered with documents");
+}
+
+/// The recording reaches every refusal the operation owns, and every site a
+/// write lands on: a count far below this is a recording that stopped
+/// reaching them, which reads as a replay that checked.
+#[test]
+fn the_recording_reaches_every_refusal_and_every_site() {
+    let rows: Vec<Value> =
+        CASES.lines().skip(2).map(|line| serde_json::from_str(line).expect("JSON")).collect();
+    let said = |phrase: &str| {
+        rows.iter()
+            .filter(|row| {
+                row["answer"]["content"][0]["text"].as_str().is_some_and(|t| t.contains(phrase))
+            })
+            .count()
+    };
+    for phrase in [
+        "Nothing to set",
+        "nodeId targets a node and edgeId targets an edge",
+        "names a node of ONE document",
+        "targets the canvas envelope",
+        "is a markdown document. Canvas-target facets",
+        "is a markdown document. Node-target facets",
+        "is a markdown document. Edge-target facets",
+        "is a spatial document. Facets are OKF frontmatter",
+        "node not found",
+        "edge not found",
+        "node \"vault\" is locked",
+        "edge \"sealed\" is locked",
+        "would carry 1025 tags",
+        "is not admitted",
+        "is one value at a time",
+        "is not the current version",
+        "its targets are [",
+        "which no plugin registered",
+        "Unrecognized key: \"extra\"",
+        "retired Excalidraw",
+        "Document not found",
+        "Workspace not found",
+    ] {
+        assert!(said(phrase) > 0, "no call was refused with: {phrase}");
+    }
+    let told = |summary: &str| {
+        rows.iter()
+            .filter(|row| {
+                row["activity"]
+                    .as_array()
+                    .is_some_and(|a| a.iter().any(|t| t["summary"] == summary))
+            })
+            .count()
+    };
+    assert!(told("changed the canvas") >= 4 && told("changed 1") >= 12);
+    let touched = |kind: &str| {
+        rows.iter().filter(|row| row["activity"][0]["touched"][kind][0].is_string()).count()
+    };
+    assert!(touched("nodes") >= 8 && touched("edges") >= 3);
+    let batches = rows.iter().filter(|row| row["written"].as_array().is_some_and(|w| w.len() > 1));
+    assert!(batches.count() >= 3, "a batch of several documents");
 }

@@ -202,7 +202,8 @@ fn tag_sets_after(
             at_element(&doc.canvas()?, input, edit)
         }
         Site::Node | Site::Edge => Vec::new(),
-        Site::Canvas if kind == Some(Kind::Markdown) => Vec::new(),
+        // A note asked for its canvas was refused by `kinds` already, so a
+        // board's envelope is what a canvas site holds here.
         Site::Canvas => at_canvas(&doc.canvas()?, edit),
         Site::Document => match doc.core()? {
             None => Vec::new(),
