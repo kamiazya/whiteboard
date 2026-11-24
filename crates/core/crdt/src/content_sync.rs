@@ -21,14 +21,14 @@ use whiteboard_model::encoding::base64_to_bytes;
 use whiteboard_model::enumeration_order;
 
 /// A root as `projectedKind` reads its projection: a text, or a map.
-enum Root {
+pub(crate) enum Root {
     Text(String),
     Map,
 }
 
 /// The roots a document projects, in the order its deep value holds them; a
 /// scalar projection (a counter) is no root a sync reaches.
-fn roots_of(doc: &LoroDoc) -> Result<Vec<(String, Root)>, Fault> {
+pub(crate) fn roots_of(doc: &LoroDoc) -> Result<Vec<(String, Root)>, Fault> {
     let LoroValue::Map(roots) = doc.get_deep_value() else { return Err(Fault::Declined) };
     let mut found = Vec::new();
     for (key, value) in roots.iter() {
@@ -67,7 +67,7 @@ fn number(value: &LoroValue) -> Option<f64> {
 /// `jsonEqual` over two plain values as npm loro-crdt hands them over. Bytes
 /// reach JavaScript as a typed array, compared there by index, and are not
 /// answered.
-fn json_equal(a: &LoroValue, b: &LoroValue) -> Result<bool, Fault> {
+pub(crate) fn json_equal(a: &LoroValue, b: &LoroValue) -> Result<bool, Fault> {
     if let (Some(x), Some(y)) = (number(a), number(b)) {
         return Ok(same_number(x, y));
     }
@@ -178,7 +178,7 @@ fn sync_entry(target: &LoroMap, key: &str, wanted: ValueOrContainer) -> Result<b
 
 /// `syncMapEntries`: every source entry synced, then every key the source
 /// lacks deleted; whether anything changed.
-fn sync_entries(target: &LoroMap, source: &LoroMap) -> Result<bool, Fault> {
+pub(crate) fn sync_entries(target: &LoroMap, source: &LoroMap) -> Result<bool, Fault> {
     let mut changed = false;
     for key in source.keys() {
         if let Some(wanted) = source.get(&key) {

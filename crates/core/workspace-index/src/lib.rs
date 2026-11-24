@@ -28,12 +28,14 @@ pub mod index_reads;
 pub mod index_rules;
 pub mod index_writes;
 pub mod move_collision;
+mod name_seed;
 pub mod node_meta;
 pub mod record;
 pub mod restore_judgement;
 pub mod subtree;
 #[cfg(test)]
 mod test_record;
+pub mod title_from_body;
 pub mod touched;
 pub mod trash;
 pub mod tree_write;
@@ -67,5 +69,5 @@ pub use index_writes::{
 pub use move_collision::move_collision;
 pub use record::{PlacedDocument, WorkspaceRecord};
 pub use restore_judgement::{Placement, restorable_trash_documents};
-pub use touched::documents_touched_since;
+pub use touched::{Touched, documents_touched_since, touched_documents};
 pub use trash::TrashRow;

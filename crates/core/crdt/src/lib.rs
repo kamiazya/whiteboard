@@ -34,6 +34,7 @@ mod envelope;
 mod frontiers;
 mod image_refs;
 mod judgement;
+mod node_content;
 mod ops_since;
 mod patch;
 mod plain;
@@ -67,8 +68,9 @@ pub use loro::{
     ExpandType, ExportMode, LoroDoc, LoroList, LoroMap, LoroMovableList, LoroText, LoroValue,
     StyleConfig, StyleConfigMap, TreeID, VersionVector, loro_value,
 };
-pub use ops_since::nodes_written_since;
-pub use projection::project_node;
+pub use node_content::sync_node_content;
+pub use ops_since::{node_writes_since, nodes_written_since};
+pub use projection::{project_node, project_node_without};
 pub use read::{
     ImportError, deep_value, frontier_pairs, import_bytes, loro_value_to_value, version_pairs,
 };

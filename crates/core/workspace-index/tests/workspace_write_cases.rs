@@ -50,7 +50,10 @@ fn every_case_is_answered_as_the_typescript_answered_it() {
                 .unwrap_or_else(|| panic!("{name}: not answered"));
         let expected = &row["result"];
         match written.answer {
-            WriteAnswer::Thrown(class) => assert_eq!(expected["err"], class, "{name}"),
+            WriteAnswer::Thrown(class) => {
+                assert_eq!(expected["err"], class, "{name}");
+                assert_rolled_back(name, before, &written.doc);
+            }
             WriteAnswer::Applied(applied) => {
                 assert_eq!(expected["changed"], serde_json::json!(applied.changed), "{name}");
                 assert_eq!(expected["update"], applied.local_update.is_some(), "{name} update");
@@ -60,6 +63,34 @@ fn every_case_is_answered_as_the_typescript_answered_it() {
             }
         }
     }
+}
+
+/// The whole batch undone: what a throw leaves is the record as it was given.
+#[cfg(test)]
+fn assert_rolled_back(name: &str, before: &[u8], after: &LoroDoc) {
+    let given = import_bytes(before).expect("the record");
+    assert_same(name, &deep_value(after), &deep_value(&given));
+    assert_eq!(after.oplog_vv(), given.oplog_vv(), "{name} version");
+}
+
+#[test]
+fn a_throw_part_way_through_a_batch_keeps_none_of_its_writes() {
+    let rows = rows_of(CASES);
+    let record = base64_decode(rows[0]["snapshot"].as_str().expect("the record"));
+    let held = whiteboard_workspace_index::WorkspaceRecord::over(
+        &import_bytes(&record).expect("a record"),
+    )
+    .documents();
+    let id = held.first().expect("a document").document_id.clone();
+    let rename = |id: &str| Write {
+        op: WriterName::SetWorkspaceDocumentName,
+        args: model_of(&serde_json::json!({ "documentId": id, "name": "Renamed" })),
+    };
+    let batch = [rename(&id), rename("01ARZ3NDEKTSV4RRFFQ69G5FZZ")];
+    let written = write_workspace_batch(&record, 1, &batch, WriteJudge::None, RECORDED_NOW)
+        .expect("answered");
+    assert_eq!(written.answer, WriteAnswer::Thrown("Error"));
+    assert_rolled_back("rename then an absent rename", &record, &written.doc);
 }
 
 #[test]
@@ -99,9 +130,5 @@ fn a_write_the_record_does_not_answer_is_left_to_the_caller() {
     let record = LoroDoc::new().export(ExportMode::Snapshot).expect("bytes");
     let hosted = whiteboard_model::json::parse(r#"{"documentId":"x","body":"b"}"#).expect("args");
     let write = Write { op: WriterName::WriteMarkdownBody, args: hosted };
-    assert!(write_workspace_batch(&record, 1, &[write], WriteJudge::None, 0.0).is_none());
-    let pinned =
-        whiteboard_model::json::parse(r#"{"documentId":"x","pinned":true}"#).expect("args");
-    let write = Write { op: WriterName::SetWorkspacePinned, args: pinned };
     assert!(write_workspace_batch(&record, 1, &[write], WriteJudge::None, 0.0).is_none());
 }

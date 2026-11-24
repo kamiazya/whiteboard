@@ -18,11 +18,16 @@ const STORED_PLANE_KEY_PREFIX: &str = "plane:";
 /// map (segment, kind, name, documentId) is tree bookkeeping and stays behind.
 /// Text keeps its marks, so a mark read from the projection is the node's own.
 pub fn project_node(at: NodeAt<'_>) -> Result<LoroDoc, WriteError> {
+    project_node_without(at, &[])
+}
+
+/// [`project_node`], the containers at the keys `omit` names left behind.
+pub fn project_node_without(at: NodeAt<'_>, omit: &[&str]) -> Result<LoroDoc, WriteError> {
     let meta = at.doc.get_tree(at.tree).get_meta(at.node.0).map_err(refused)?;
     let out = LoroDoc::new();
     let mut bodies: Vec<(String, LoroText)> = Vec::new();
     for key in meta.keys().map(|key| key.to_string()) {
-        if key.starts_with(STORED_PLANE_KEY_PREFIX) {
+        if key.starts_with(STORED_PLANE_KEY_PREFIX) || omit.contains(&key.as_str()) {
             continue;
         }
         let Some(ValueOrContainer::Container(held)) = meta.get(&key) else { continue };

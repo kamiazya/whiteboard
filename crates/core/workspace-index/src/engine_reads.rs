@@ -9,9 +9,10 @@
 use crate::hosted_reads::{answer_hosted, hosted, is_safe_integer};
 use crate::node_meta::{DocumentMeta, NodeRead, WORKSPACE_TREE_KEY};
 use crate::record::{PlacedDocument, WorkspaceRecord};
+use crate::touched::{Touched, touched_documents};
 use crate::trash::TrashRow;
 use crate::walk::{Walked, walk, walk_naming_unreadable};
-use whiteboard_crdt::{Entry, LoroDoc, peek, tree};
+use whiteboard_crdt::{Entry, LoroDoc, VersionVector, peek, tree};
 use whiteboard_model::Value;
 use whiteboard_model::crdt::{Query, QueryName, ReadResponse};
 
@@ -127,6 +128,15 @@ fn unreadable_nodes(doc: &LoroDoc) -> Value {
     Value::Seq(skipped.iter().map(|node| text(&node.to_string())).collect())
 }
 
+fn touched_entry(touched: &Touched) -> Value {
+    map([
+        ("documentId", text(&touched.document_id)),
+        ("node", text(&touched.node.to_string())),
+        ("path", text(&touched.path)),
+        ("contentWritten", Value::Bool(touched.content_written)),
+    ])
+}
+
 fn seq<T>(rows: impl IntoIterator<Item = T>, show: impl Fn(T) -> Value) -> Value {
     Value::Seq(rows.into_iter().map(show).collect())
 }
@@ -144,6 +154,10 @@ fn answer_record_query(doc: &LoroDoc, name: QueryName) -> Option<ReadResponse> {
             map([("path", text(&path)), ("name", text(&name))])
         }),
         QueryName::UnreadableNodes => unreadable_nodes(doc),
+        // With no version named, every operation the record kept.
+        QueryName::TouchedSince => {
+            seq(touched_documents(doc, &VersionVector::new()).iter(), touched_entry)
+        }
         _ => return None,
     }))
 }

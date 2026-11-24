@@ -5,15 +5,18 @@
 use crate::tree::NodeId;
 use loro::{ContainerID, ContainerType, IdSpan, Index, LoroDoc, VersionVector};
 
-/// The node a container sits under: a node's own map is at `[tree, node]`
-/// and each content container one level further down. A container below no
-/// node of `tree` (another root, the tree itself, one under a node a delete
-/// took) answers `None`. A root is compared by its id, which carries its kind:
-/// a map root also named `tree` is no node's.
-fn node_of(doc: &LoroDoc, tree: &ContainerID, container: &ContainerID) -> Option<NodeId> {
+/// The node a container sits under, and whether the container is below the
+/// node's own map: a node's map is at `[tree, node]` and each content
+/// container one level further down. A container below no node of `tree`
+/// (another root, the tree itself, one under a node a delete took) answers
+/// `None`. A root is compared by its id, which carries its kind: a map root
+/// also named `tree` is no node's.
+fn node_of(doc: &LoroDoc, tree: &ContainerID, container: &ContainerID) -> Option<(NodeId, bool)> {
     let path = doc.get_path_to_container(container)?;
     match path.as_slice() {
-        [(root, _), (_, Index::Node(node)), ..] if root == tree => Some(NodeId(*node)),
+        [(root, _), (_, Index::Node(node)), rest @ ..] if root == tree => {
+            Some((NodeId(*node), !rest.is_empty()))
+        }
         _ => None,
     }
 }
@@ -24,9 +27,17 @@ fn node_of(doc: &LoroDoc, tree: &ContainerID, container: &ContainerID) -> Option
 /// starts: a compacted document no longer holds its earliest operations.
 #[must_use]
 pub fn nodes_written_since(doc: &LoroDoc, tree: &str, since: &VersionVector) -> Vec<NodeId> {
+    node_writes_since(doc, tree, since).into_iter().map(|(node, _)| node).collect()
+}
+
+/// [`nodes_written_since`], each node with whether an operation landed inside
+/// one of its containers rather than only on its own map: a write to the
+/// document's content, where a rename or a stamp writes only the node.
+#[must_use]
+pub fn node_writes_since(doc: &LoroDoc, tree: &str, since: &VersionVector) -> Vec<(NodeId, bool)> {
     let root = ContainerID::new_root(tree, ContainerType::Tree);
     let kept = doc.shallow_since_vv();
-    let mut nodes: Vec<NodeId> = Vec::new();
+    let mut nodes: Vec<(NodeId, bool)> = Vec::new();
     for (&peer, &end) in doc.oplog_vv().iter() {
         let start =
             since.get(&peer).copied().unwrap_or(0).max(kept.get(&peer).copied().unwrap_or(0));
@@ -35,10 +46,10 @@ pub fn nodes_written_since(doc: &LoroDoc, tree: &str, since: &VersionVector) -> 
         }
         for change in doc.export_json_in_id_span(IdSpan::new(peer, start, end)) {
             for op in change.ops {
-                if let Some(node) = node_of(doc, &root, &op.container)
-                    && !nodes.contains(&node)
-                {
-                    nodes.push(node);
+                let Some((node, inside)) = node_of(doc, &root, &op.container) else { continue };
+                match nodes.iter_mut().find(|(held, _)| *held == node) {
+                    Some((_, content)) => *content |= inside,
+                    None => nodes.push((node, inside)),
                 }
             }
         }

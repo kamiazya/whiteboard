@@ -175,7 +175,15 @@ mod tests {
         for good in ["untitled", "x/untitled", "untitled-2", "untitled-9", "untitled-10"] {
             assert!(is_generated_document_path(good), "{good}");
         }
-        for bad in ["untitled-1", "untitled-0", "untitled-02", "untitled-", "untitled2", "x"] {
+        for bad in [
+            "untitled-1",
+            "untitled-0",
+            "untitled-02",
+            "untitled-",
+            "untitled2",
+            "untitled-2a",
+            "x",
+        ] {
             assert!(!is_generated_document_path(bad), "{bad}");
         }
     }

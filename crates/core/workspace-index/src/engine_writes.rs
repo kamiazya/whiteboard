@@ -44,21 +44,38 @@ pub const WORKSPACE_WRITERS: &[WriterName] = &[
     WriterName::DeleteWorkspaceDocument,
     WriterName::DeleteWorkspaceNode,
     WriterName::DeleteWorkspaceNodeAtPath,
+    WriterName::WriteWorkspaceDocumentContent,
+    WriterName::WriteDocumentContentAndName,
+    WriterName::SeedNameFromTitle,
+    WriterName::SeedNamesFromTitles,
+    WriterName::StampEditedDocuments,
+    WriterName::SetWorkspaceLastCompactedAt,
+    WriterName::SetWorkspacePinned,
+    WriterName::RecordTrashEntry,
+    WriterName::UpdateWorkspaceDocumentMeta,
+    WriterName::PruneEmptyFolders,
+    WriterName::DuplicateWorkspaceDocument,
+    WriterName::ForgetTrashEntry,
+    WriterName::ReapplyFolderNames,
 ];
 
+mod content;
+mod record;
+
 const ERROR: Fault = Fault::Thrown("Error");
+const ERROR_TYPE: Fault = Fault::Thrown("TypeError");
 const ZOD_ERROR: Fault = Fault::Thrown("ZodError");
 
 /// A refusal of the tree's, which npm loro-crdt throws as a plain string.
 const LORO: Fault = Fault::Thrown("string");
 
-fn field<'a>(args: &'a Value, key: &str) -> Option<&'a Value> {
+pub(super) fn field<'a>(args: &'a Value, key: &str) -> Option<&'a Value> {
     let Value::Map(entries) = args else { return None };
     entries.iter().find(|(k, _)| k == key).map(|(_, v)| v)
 }
 
 /// The string argument `key`, which the writer's types require.
-fn text<'a>(args: &'a Value, key: &str) -> Result<&'a str, Fault> {
+pub(super) fn text<'a>(args: &'a Value, key: &str) -> Result<&'a str, Fault> {
     optional_text(args, key)?.ok_or(Fault::Declined)
 }
 
@@ -70,7 +87,7 @@ fn optional_text<'a>(args: &'a Value, key: &str) -> Result<Option<&'a str>, Faul
     }
 }
 
-fn optional_number(args: &Value, key: &str) -> Result<Option<f64>, Fault> {
+pub(super) fn optional_number(args: &Value, key: &str) -> Result<Option<f64>, Fault> {
     match field(args, key) {
         None => Ok(None),
         Some(Value::Number(n)) => Ok(Some(*n)),
@@ -79,52 +96,57 @@ fn optional_number(args: &Value, key: &str) -> Result<Option<f64>, Fault> {
 }
 
 /// A created document's meta as `workspaceNodeMetaSchema` parses it, the
-/// stamps defaulted to `now_ms`, and whether the schema accepts it.
-fn new_document<'a>(
-    args: &'a Value,
-    segment: &str,
-    now_ms: f64,
-) -> Result<(NewDocument<'a>, bool), Fault> {
+/// stamps defaulted to `now_ms`.
+fn new_document(args: &Value, now_ms: f64) -> Result<NewDocument<'_>, Fault> {
     let (created, updated) =
         (optional_number(args, "createdAt")?, optional_number(args, "updatedAt")?);
-    let document = NewDocument {
+    Ok(NewDocument {
         document_id: text(args, "documentId")?,
         kind: text(args, "kind")?,
         name: optional_text(args, "name")?,
         created_at: created.unwrap_or(now_ms),
         updated_at: updated.or(created).unwrap_or(now_ms),
-    };
-    let valid = canonical_ulid(document.document_id)
+    })
+}
+
+/// Whether `workspaceNodeMetaSchema` accepts a created document's meta at its
+/// own path part `segment`.
+fn accepted(document: &NewDocument<'_>, segment: &str) -> bool {
+    canonical_ulid(document.document_id)
         && !segment.is_empty()
         && matches!(document.kind, "spatial" | "markdown")
         && document.name.is_none_or(|name| !name.is_empty())
         && is_safe_integer(document.created_at)
-        && is_safe_integer(document.updated_at);
-    Ok((document, valid))
+        && is_safe_integer(document.updated_at)
+}
+
+/// `createWorkspaceDocumentAtPath`: whether it created. The meta is parsed
+/// only once no document owns the path, after the folders above it are made;
+/// a refusal then undoes them with the batch.
+fn create_at(doc: &LoroDoc, path: &str, document: &NewDocument<'_>) -> Result<bool, Fault> {
+    let own = path.rsplit('/').next().unwrap_or(path);
+    let created = create_document_at_path(doc, path, document).map_err(|_| LORO)?;
+    if created && !accepted(document, own) {
+        return Err(ZOD_ERROR);
+    }
+    Ok(created)
 }
 
 /// The node of the document `id` names, first in tree order.
-fn document_node(doc: &LoroDoc, id: &str) -> Option<NodeId> {
+pub(super) fn document_node(doc: &LoroDoc, id: &str) -> Option<NodeId> {
     WorkspaceRecord::over(doc).document_node(id).map(|walked| walked.id)
 }
 
 fn create_at_path(doc: &LoroDoc, args: &Value, now_ms: f64) -> Step {
     let path = text(args, "path")?;
-    let own = path.rsplit('/').next().unwrap_or(path);
-    let (document, valid) = new_document(args, own, now_ms)?;
-    // The meta is parsed only once no document owns the path, after the folders
-    // above it are made; a refusal then undoes them with the batch.
-    if create_document_at_path(doc, path, &document).map_err(|_| LORO)? && !valid {
-        return Err(ZOD_ERROR);
-    }
-    Ok(())
+    create_at(doc, path, &new_document(args, now_ms)?).map(|_| ())
 }
 
 fn create(doc: &LoroDoc, args: &Value, now_ms: f64) -> Step {
     let segment = text(args, "segment")?;
-    let (document, valid) = new_document(args, segment, now_ms)?;
+    let document = new_document(args, now_ms)?;
     let parent_id = optional_text(args, "parentId")?;
-    if !valid {
+    if !accepted(&document, segment) {
         return Err(ZOD_ERROR);
     }
     let parent = match parent_id {
@@ -206,7 +228,20 @@ fn delete_at_path(doc: &LoroDoc, args: &Value, _: f64) -> Step {
 
 type Writer = fn(&LoroDoc, &Value, f64) -> Step;
 
-fn writer_of(op: WriterName) -> Option<Writer> {
+/// The writer of `op`, and whether its TypeScript opens the tree root, as every
+/// `getTree` does: a writer of the planes beside the tree never asks for it.
+fn writer_of(op: WriterName) -> Option<(Writer, bool)> {
+    let beside: Writer = match op {
+        WriterName::SetWorkspaceLastCompactedAt => record::last_compacted_at,
+        WriterName::SetWorkspacePinned => record::pinned,
+        WriterName::RecordTrashEntry => record::record_trash,
+        WriterName::ForgetTrashEntry => record::forget_trash,
+        _ => return tree_writer_of(op).map(|write| (write, true)),
+    };
+    Some((beside, false))
+}
+
+fn tree_writer_of(op: WriterName) -> Option<Writer> {
     Some(match op {
         WriterName::CreateWorkspaceDocumentAtPath => create_at_path,
         WriterName::CreateWorkspaceDocument => create,
@@ -218,6 +253,15 @@ fn writer_of(op: WriterName) -> Option<Writer> {
         WriterName::DeleteWorkspaceDocument => delete_document,
         WriterName::DeleteWorkspaceNode => delete_by_id,
         WriterName::DeleteWorkspaceNodeAtPath => delete_at_path,
+        WriterName::UpdateWorkspaceDocumentMeta => record::update_meta,
+        WriterName::PruneEmptyFolders => record::prune,
+        WriterName::ReapplyFolderNames => record::reapply_names,
+        WriterName::WriteWorkspaceDocumentContent => content::write_content,
+        WriterName::WriteDocumentContentAndName => content::write_content_and_name,
+        WriterName::SeedNameFromTitle => content::seed_name,
+        WriterName::SeedNamesFromTitles => content::seed_names,
+        WriterName::StampEditedDocuments => content::stamp_edited,
+        WriterName::DuplicateWorkspaceDocument => content::duplicate,
         _ => return None,
     })
 }
@@ -229,8 +273,10 @@ pub struct WorkspaceWriters {
 
 impl MoreWriters for WorkspaceWriters {
     fn apply(&self, doc: &LoroDoc, op: WriterName, args: &Value) -> Option<Step> {
-        let write = writer_of(op)?;
-        open_tree(doc, WORKSPACE_TREE_KEY);
+        let (write, opens_tree) = writer_of(op)?;
+        if opens_tree {
+            open_tree(doc, WORKSPACE_TREE_KEY);
+        }
         Some(write(doc, args, self.now_ms))
     }
 
