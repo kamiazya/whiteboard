@@ -2,283 +2,567 @@
 
 use std::fmt;
 
-/// A refusal: the code and status a request is answered with, and its sentence.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Refusal {
+/// Writes the `Refusal` enum, its `code`, `status` and `message`, and the
+/// test-only `examples` from one row per refusal: its doc, its variant, its
+/// code, status and sentence, and the example the contract pins for it.
+macro_rules! refusals {
+    ($(
+        $(#[$doc:meta])*
+        $name:ident $({ $($field:ident: $ty:ty),* $(,)? })? => $code:expr, $status:expr, $message:expr;
+        example $({ $($given:ident: $value:expr),* $(,)? })?;
+    )*) => {
+        /// A refusal: the code and status a request is answered with, and its sentence.
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        pub enum Refusal {
+            $($(#[$doc])* $name $({ $($field: $ty),* })?,)*
+        }
+
+        impl Refusal {
+            /// The stable code a caller branches on.
+            #[must_use]
+            pub const fn code(&self) -> &'static str {
+                match self {
+                    $(Self::$name { .. } => $code,)*
+                }
+            }
+
+            /// The HTTP status the refusal travels with.
+            #[must_use]
+            pub const fn status(&self) -> u16 {
+                match self {
+                    $(Self::$name { .. } => $status,)*
+                }
+            }
+
+            /// The sentence, as the TypeScript says it.
+            #[must_use]
+            pub fn message(&self) -> String {
+                match self {
+                    $(Self::$name $({ $($field),* })? => $message,)*
+                }
+            }
+        }
+
+        /// Each refusal built from the example the contract pins for it, by name.
+        #[cfg(test)]
+        pub(crate) fn examples() -> Vec<(&'static str, Refusal)> {
+            vec![$((stringify!($name), Refusal::$name $({ $($given: $value),* })?),)*]
+        }
+    };
+}
+
+refusals! {
     /// One insert longer than a markdown body may be, in an update.
-    MarkdownRunUpdate { chars: u64, limit: String },
+    MarkdownRunUpdate { chars: u64, limit: String }
+        => code::MARKDOWN_TOO_LARGE, 413, format!("This update inserts {chars} characters in one piece, past {limit}");
+    example { chars: 300_000, limit: "the 262144-character limit for one document; split the content across documents".to_owned() };
     /// A markdown body an update would leave longer than the limit and longer than it was.
-    MarkdownBodyUpdate { chars: u64, limit: String },
+    MarkdownBodyUpdate { chars: u64, limit: String }
+        => code::MARKDOWN_TOO_LARGE, 413, format!("This update would make a document body {chars} characters long, past {limit}");
+    example { chars: 300_000, limit: "the 262144-character limit for one document; split the content across documents".to_owned() };
     /// Separate inserts that together cost more to apply than one at the limit, in an update.
-    MarkdownRunsUpdate { chars: u64, max_chars: u64, runs: u64 },
+    MarkdownRunsUpdate { chars: u64, max_chars: u64, runs: u64 }
+        => code::MARKDOWN_TOO_LARGE, 413, format!("This update makes {runs} separate inserts of {chars} characters in all, which together cost more to apply than one insert at the {max_chars}-character limit for one write");
+    example { chars: 400_000, max_chars: 262_144, runs: 3 };
     /// A resolved document whose body is past the limit.
-    MarkdownBodyDocument { chars: u64, limit: String, path: String },
+    MarkdownBodyDocument { chars: u64, limit: String, path: String }
+        => code::MARKDOWN_TOO_LARGE, 413, format!("The document at {0} has a body of {chars} characters, past {limit}", crate::refusal_text::json(path));
+    example { chars: 300_000, limit: "the 262144-character limit for one document; split the content across documents".to_owned(), path: "notes/a".to_owned() };
     /// A resolved document holding in its history one insert past the limit for one write, its
     /// current body length unknown.
-    MarkdownRunDocument { chars: u64, max_chars: u64, path: String },
+    MarkdownRunDocument { chars: u64, max_chars: u64, path: String }
+        => code::MARKDOWN_TOO_LARGE, 413, format!("The document at {0} holds in its history one insert of {chars} characters, past the {max_chars}-character limit for one write. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole", crate::refusal_text::json(path));
+    example { chars: 300_000, max_chars: 262_144, path: "notes/a".to_owned() };
     /// The same, naming the body length the document has today.
-    MarkdownRunDocumentWithBody { body_chars: u64, chars: u64, max_chars: u64, path: String },
+    MarkdownRunDocumentWithBody { body_chars: u64, chars: u64, max_chars: u64, path: String }
+        => code::MARKDOWN_TOO_LARGE, 413, format!("The document at {0} holds in its history one insert of {chars} characters, past the {max_chars}-character limit for one write, though its body is {body_chars} characters now. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole", crate::refusal_text::json(path));
+    example { body_chars: 120, chars: 300_000, max_chars: 262_144, path: "notes/a".to_owned() };
     /// A resolved document holding in its history separate inserts that together cost more than
     /// one at the limit.
-    MarkdownRunsDocument { chars: u64, max_chars: u64, path: String, runs: u64 },
+    MarkdownRunsDocument { chars: u64, max_chars: u64, path: String, runs: u64 }
+        => code::MARKDOWN_TOO_LARGE, 413, format!("The document at {0} holds in its history {runs} separate inserts of {chars} characters in all, which together cost more to apply than one insert at the {max_chars}-character limit for one write. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole", crate::refusal_text::json(path));
+    example { chars: 400_000, max_chars: 262_144, path: "notes/a".to_owned(), runs: 3 };
     /// A node's text past its limit, said of an update that has not been resolved to a
     /// document.
-    NodeTextTooLargeUpdate { chars: u64, limit: String, node_id: String },
+    NodeTextTooLargeUpdate { chars: u64, limit: String, node_id: String }
+        => code::NODE_TEXT_TOO_LARGE, 413, format!("This update would give node {0} {chars} characters of text, past {limit}", crate::refusal_text::json(node_id));
+    example { chars: 70_000, limit: "the 8192-character limit for one node; split it across nodes, or put it in a markdown document and embed that".to_owned(), node_id: "n1".to_owned() };
     /// A node's text past its limit, said of the document the caller resolved the refused text
     /// to.
-    NodeTextTooLargeDocument { chars: u64, limit: String, node_id: String, path: String },
+    NodeTextTooLargeDocument { chars: u64, limit: String, node_id: String, path: String }
+        => code::NODE_TEXT_TOO_LARGE, 413, format!("The document at {0} has node {1} with {chars} characters of text, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(node_id));
+    example { chars: 70_000, limit: "the 8192-character limit for one node; split it across nodes, or put it in a markdown document and embed that".to_owned(), node_id: "n1".to_owned(), path: "notes/a".to_owned() };
     /// A link's URL, a file's path or a group's background past its limit, said of an update
     /// that has not been resolved to a document.
-    NodeLocationTooLargeUpdate { chars: u64, limit: String, node_id: String },
+    NodeLocationTooLargeUpdate { chars: u64, limit: String, node_id: String }
+        => code::NODE_LOCATION_TOO_LARGE, 413, format!("This update would give node {0} a location of {chars} characters, past {limit}", crate::refusal_text::json(node_id));
+    example { chars: 8193, limit: "the 8192-character limit".to_owned(), node_id: "n1".to_owned() };
     /// A link's URL, a file's path or a group's background past its limit, said of the document
     /// the caller resolved the refused text to.
-    NodeLocationTooLargeDocument { chars: u64, limit: String, node_id: String, path: String },
+    NodeLocationTooLargeDocument { chars: u64, limit: String, node_id: String, path: String }
+        => code::NODE_LOCATION_TOO_LARGE, 413, format!("The document at {0} gives node {1} a location of {chars} characters, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(node_id));
+    example { chars: 8193, limit: "the 8192-character limit".to_owned(), node_id: "n1".to_owned(), path: "notes/a".to_owned() };
     /// An edge's, line's or group's label past its limit, said of an update that has not been
     /// resolved to a document.
-    LabelTooLargeUpdate { chars: u64, element_id: String, limit: String },
+    LabelTooLargeUpdate { chars: u64, element_id: String, limit: String }
+        => code::LABEL_TOO_LARGE, 413, format!("This update would give {0} a label of {chars} characters, past {limit}", crate::refusal_text::json(element_id));
+    example { chars: 9000, element_id: "e1".to_owned(), limit: "the 1024-character limit; a longer text belongs in a text node".to_owned() };
     /// An edge's, line's or group's label past its limit, said of the document the caller
     /// resolved the refused text to.
-    LabelTooLargeDocument { chars: u64, element_id: String, limit: String, path: String },
+    LabelTooLargeDocument { chars: u64, element_id: String, limit: String, path: String }
+        => code::LABEL_TOO_LARGE, 413, format!("The document at {0} gives {1} a label of {chars} characters, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(element_id));
+    example { chars: 9000, element_id: "e1".to_owned(), limit: "the 1024-character limit; a longer text belongs in a text node".to_owned(), path: "notes/a".to_owned() };
     /// A comment message past its limit, said of an update that has not been resolved to a
     /// document.
-    CommentMessageTooLargeUpdate { chars: u64, limit: String, message_id: String },
+    CommentMessageTooLargeUpdate { chars: u64, limit: String, message_id: String }
+        => code::COMMENT_TOO_LARGE, 413, format!("This update would make comment message {0} {chars} characters long, past {limit}", crate::refusal_text::json(message_id));
+    example { chars: 9000, limit: "the 4096-character limit; split it across replies".to_owned(), message_id: "m1".to_owned() };
     /// A comment message past its limit, said of the document the caller resolved the refused
     /// text to.
-    CommentMessageTooLargeDocument { chars: u64, limit: String, message_id: String, path: String },
+    CommentMessageTooLargeDocument { chars: u64, limit: String, message_id: String, path: String }
+        => code::COMMENT_TOO_LARGE, 413, format!("The document at {0} has comment message {1} {chars} characters long, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(message_id));
+    example { chars: 9000, limit: "the 4096-character limit; split it across replies".to_owned(), message_id: "m1".to_owned(), path: "notes/a".to_owned() };
     /// A container named past its limit; the name is never repeated, only its length, said of
     /// an update that has not been resolved to a document.
-    ContainerNameTooLongUpdate { chars: u64, limit: String },
+    ContainerNameTooLongUpdate { chars: u64, limit: String }
+        => code::CONTAINER_NAME_TOO_LONG, 413, format!("This update would bring in a container named with {chars} characters, past {limit}");
+    example { chars: 5000, limit: "the 1024-character limit for the name of one container; a thread or a proposal is named by its id".to_owned() };
     /// A container named past its limit; the name is never repeated, only its length, said of
     /// the document the caller resolved the refused text to.
-    ContainerNameTooLongDocument { chars: u64, limit: String, path: String },
+    ContainerNameTooLongDocument { chars: u64, limit: String, path: String }
+        => code::CONTAINER_NAME_TOO_LONG, 413, format!("The document at {0} holds a container named with {chars} characters, past {limit}", crate::refusal_text::json(path));
+    example { chars: 5000, limit: "the 1024-character limit for the name of one container; a thread or a proposal is named by its id".to_owned(), path: "notes/a".to_owned() };
     /// A comment thread anchored to more nodes than a canvas may hold, said of an update that
     /// has not been resolved to a document.
-    CommentAnchorTooLargeUpdate { count: u64, limit: String, thread_id: String },
+    CommentAnchorTooLargeUpdate { count: u64, limit: String, thread_id: String }
+        => code::COMMENT_ANCHOR_TOO_LARGE, 413, format!("This update would leave comment thread {0} anchored to {count} nodes, past {limit}", crate::refusal_text::json(thread_id));
+    example { count: 3000, limit: "the 2000-node limit for one comment anchor, a whole canvas's worth".to_owned(), thread_id: "t1".to_owned() };
     /// A comment thread anchored to more nodes than a canvas may hold, said of the document the
     /// caller resolved the refused text to.
-    CommentAnchorTooLargeDocument { count: u64, limit: String, path: String, thread_id: String },
+    CommentAnchorTooLargeDocument { count: u64, limit: String, path: String, thread_id: String }
+        => code::COMMENT_ANCHOR_TOO_LARGE, 413, format!("The document at {0} holds comment thread {1} anchored to {count} nodes, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(thread_id));
+    example { count: 3000, limit: "the 2000-node limit for one comment anchor, a whole canvas's worth".to_owned(), path: "notes/a".to_owned(), thread_id: "t1".to_owned() };
     /// A thread or a proposed passage anchored by a quote past its limit, said of an update
     /// that has not been resolved to a document.
-    AnchorQuoteTooLongUpdate { chars: u64, element_id: String, limit: String },
+    AnchorQuoteTooLongUpdate { chars: u64, element_id: String, limit: String }
+        => code::ANCHOR_QUOTE_TOO_LONG, 413, format!("This update would give {0} an anchor quoting {chars} characters, past {limit}", crate::refusal_text::json(element_id));
+    example { chars: 5000, element_id: "t1".to_owned(), limit: "the 1024-character limit for the passage one anchor quotes; quote a shorter passage, or split a replacement across changes".to_owned() };
     /// A thread or a proposed passage anchored by a quote past its limit, said of the document
     /// the caller resolved the refused text to.
-    AnchorQuoteTooLongDocument { chars: u64, element_id: String, limit: String, path: String },
+    AnchorQuoteTooLongDocument { chars: u64, element_id: String, limit: String, path: String }
+        => code::ANCHOR_QUOTE_TOO_LONG, 413, format!("The document at {0} gives {1} an anchor quoting {chars} characters, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(element_id));
+    example { chars: 5000, element_id: "t1".to_owned(), limit: "the 1024-character limit for the passage one anchor quotes; quote a shorter passage, or split a replacement across changes".to_owned(), path: "notes/a".to_owned() };
     /// More open comment threads than one document keeps, said of an update that has not been
     /// resolved to a document.
-    TooManyOpenThreadsUpdate { count: u64, limit: String },
+    TooManyOpenThreadsUpdate { count: u64, limit: String }
+        => code::TOO_MANY_OPEN_THREADS, 413, format!("This update would leave {count} open comment threads on a document, past {limit}");
+    example { count: 600, limit: "the limit of 500 open comment threads for one document; resolve some first".to_owned() };
     /// More open comment threads than one document keeps, said of the document the caller
     /// resolved the refused text to.
-    TooManyOpenThreadsDocument { count: u64, limit: String, path: String },
+    TooManyOpenThreadsDocument { count: u64, limit: String, path: String }
+        => code::TOO_MANY_OPEN_THREADS, 413, format!("The document at {0} holds {count} open comment threads, past {limit}", crate::refusal_text::json(path));
+    example { count: 600, limit: "the limit of 500 open comment threads for one document; resolve some first".to_owned(), path: "notes/a".to_owned() };
     /// More open proposed changes than one document keeps, said of an update that has not been
     /// resolved to a document.
-    TooManyOpenChangesUpdate { count: u64, limit: String },
+    TooManyOpenChangesUpdate { count: u64, limit: String }
+        => code::TOO_MANY_OPEN_CHANGES, 413, format!("This update would leave {count} open proposed changes on a document, past {limit}");
+    example { count: 1001, limit: "the limit of 1000 open proposed changes for one document; adopt or dismiss some first".to_owned() };
     /// More open proposed changes than one document keeps, said of the document the caller
     /// resolved the refused text to.
-    TooManyOpenChangesDocument { count: u64, limit: String, path: String },
+    TooManyOpenChangesDocument { count: u64, limit: String, path: String }
+        => code::TOO_MANY_OPEN_CHANGES, 413, format!("The document at {0} holds {count} open proposed changes, past {limit}", crate::refusal_text::json(path));
+    example { count: 1001, limit: "the limit of 1000 open proposed changes for one document; adopt or dismiss some first".to_owned(), path: "notes/a".to_owned() };
     /// A comment thread holding more messages than one thread keeps, said of an update that has
     /// not been resolved to a document.
-    TooManyThreadMessagesUpdate { count: u64, limit: String },
+    TooManyThreadMessagesUpdate { count: u64, limit: String }
+        => code::TOO_MANY_THREAD_MESSAGES, 413, format!("This update would leave a comment thread of {count} messages, past {limit}");
+    example { count: 1001, limit: "the limit of 1000 messages in one comment thread; open a new thread to continue".to_owned() };
     /// A comment thread holding more messages than one thread keeps, said of the document the
     /// caller resolved the refused text to.
-    TooManyThreadMessagesDocument { count: u64, limit: String, path: String },
+    TooManyThreadMessagesDocument { count: u64, limit: String, path: String }
+        => code::TOO_MANY_THREAD_MESSAGES, 413, format!("The document at {0} holds a comment thread of {count} messages, past {limit}", crate::refusal_text::json(path));
+    example { count: 1001, limit: "the limit of 1000 messages in one comment thread; open a new thread to continue".to_owned(), path: "notes/a".to_owned() };
     /// A board given more tags than it may carry, in an update.
-    TagsCountBoardUpdate { amount: u64, limit: String },
+    TagsCountBoardUpdate { amount: u64, limit: String }
+        => code::TAGS_TOO_LARGE, 413, format!("This update would give the board {amount} tags, past {limit}");
+    example { amount: 1025, limit: "the 1024-tag limit for one document, board, node or edge".to_owned() };
     /// A board carrying more tags than it may, in a resolved document.
-    TagsCountBoardDocument { amount: u64, limit: String, path: String },
+    TagsCountBoardDocument { amount: u64, limit: String, path: String }
+        => code::TAGS_TOO_LARGE, 413, format!("The document at {0} gives the board {amount} tags, past {limit}", crate::refusal_text::json(path));
+    example { amount: 1025, limit: "the 1024-tag limit for one document, board, node or edge".to_owned(), path: "notes/a".to_owned() };
     /// A node or edge given more tags than it may carry, in an update.
-    TagsCountElementUpdate { amount: u64, element_id: String, limit: String },
+    TagsCountElementUpdate { amount: u64, element_id: String, limit: String }
+        => code::TAGS_TOO_LARGE, 413, format!("This update would give element {0} {amount} tags, past {limit}", crate::refusal_text::json(element_id));
+    example { amount: 1025, element_id: "n1".to_owned(), limit: "the 1024-tag limit for one document, board, node or edge".to_owned() };
     /// A node or edge carrying more tags than it may, in a resolved document.
-    TagsCountElementDocument { amount: u64, element_id: String, limit: String, path: String },
+    TagsCountElementDocument { amount: u64, element_id: String, limit: String, path: String }
+        => code::TAGS_TOO_LARGE, 413, format!("The document at {0} gives element {1} {amount} tags, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(element_id));
+    example { amount: 1025, element_id: "n1".to_owned(), limit: "the 1024-tag limit for one document, board, node or edge".to_owned(), path: "notes/a".to_owned() };
     /// A board given a tag longer than a tag may be, in an update.
-    TagsLengthBoardUpdate { amount: u64, limit: String },
+    TagsLengthBoardUpdate { amount: u64, limit: String }
+        => code::TAGS_TOO_LARGE, 413, format!("This update would give the board a tag of {amount} characters, past {limit}");
+    example { amount: 1025, limit: "the 1024-character limit for one tag".to_owned() };
     /// A board carrying a tag longer than a tag may be, in a resolved document.
-    TagsLengthBoardDocument { amount: u64, limit: String, path: String },
+    TagsLengthBoardDocument { amount: u64, limit: String, path: String }
+        => code::TAGS_TOO_LARGE, 413, format!("The document at {0} gives the board a tag of {amount} characters, past {limit}", crate::refusal_text::json(path));
+    example { amount: 1025, limit: "the 1024-character limit for one tag".to_owned(), path: "notes/a".to_owned() };
     /// A node or edge given a tag longer than a tag may be, in an update.
-    TagsLengthElementUpdate { amount: u64, element_id: String, limit: String },
+    TagsLengthElementUpdate { amount: u64, element_id: String, limit: String }
+        => code::TAGS_TOO_LARGE, 413, format!("This update would give element {0} a tag of {amount} characters, past {limit}", crate::refusal_text::json(element_id));
+    example { amount: 1025, element_id: "n1".to_owned(), limit: "the 1024-character limit for one tag".to_owned() };
     /// A node or edge carrying a tag longer than a tag may be, in a resolved document.
-    TagsLengthElementDocument { amount: u64, element_id: String, limit: String, path: String },
+    TagsLengthElementDocument { amount: u64, element_id: String, limit: String, path: String }
+        => code::TAGS_TOO_LARGE, 413, format!("The document at {0} gives element {1} a tag of {amount} characters, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(element_id));
+    example { amount: 1025, element_id: "n1".to_owned(), limit: "the 1024-character limit for one tag".to_owned(), path: "notes/a".to_owned() };
     /// A canvas an update would leave with more nodes than one canvas may hold.
-    CanvasTooLargeNodesUpdate { count: u64, limit: String },
+    CanvasTooLargeNodesUpdate { count: u64, limit: String }
+        => code::TOO_MANY_NODES_OR_EDGES, 413, format!("This update would leave a canvas of {count} nodes, past {limit}");
+    example { count: 3000, limit: "the 2000-node limit for one canvas; remove nodes first, or split the board across canvases".to_owned() };
     /// A resolved document whose canvas holds more nodes than one canvas may.
-    CanvasTooLargeNodesDocument { count: u64, limit: String, path: String },
+    CanvasTooLargeNodesDocument { count: u64, limit: String, path: String }
+        => code::TOO_MANY_NODES_OR_EDGES, 413, format!("The document at {0} is a canvas of {count} nodes, past {limit}", crate::refusal_text::json(path));
+    example { count: 3000, limit: "the 2000-node limit for one canvas; remove nodes first, or split the board across canvases".to_owned(), path: "notes/a".to_owned() };
     /// A canvas an update would leave with more edges and lines than one canvas may hold.
-    CanvasTooLargeEdgesAndLinesUpdate { count: u64, limit: String },
+    CanvasTooLargeEdgesAndLinesUpdate { count: u64, limit: String }
+        => code::TOO_MANY_NODES_OR_EDGES, 413, format!("This update would leave a canvas of {count} edges and lines, past {limit}");
+    example { count: 3000, limit: "the limit of 2000 edges and lines together for one canvas; remove edges or lines first, or split the board across canvases".to_owned() };
     /// A resolved document whose canvas holds more edges and lines than one canvas may.
-    CanvasTooLargeEdgesAndLinesDocument { count: u64, limit: String, path: String },
+    CanvasTooLargeEdgesAndLinesDocument { count: u64, limit: String, path: String }
+        => code::TOO_MANY_NODES_OR_EDGES, 413, format!("The document at {0} is a canvas of {count} edges and lines, past {limit}", crate::refusal_text::json(path));
+    example { count: 3000, limit: "the limit of 2000 edges and lines together for one canvas; remove edges or lines first, or split the board across canvases".to_owned(), path: "notes/a".to_owned() };
     /// A document node's content key an update would leave holding something other than its
     /// content container.
-    ContentRootKindUpdate { key: String },
+    ContentRootKindUpdate { key: String }
+        => code::INVALID_DOCUMENT_ROOT, 400, format!("This update would leave a document holding something other than its own content container at {0}, which leaves that document unreadable", crate::refusal_text::json(key));
+    example { key: "content".to_owned() };
     /// A resolved document whose content key holds something other than its content container.
-    ContentRootKindDocument { key: String, path: String },
+    ContentRootKindDocument { key: String, path: String }
+        => code::INVALID_DOCUMENT_ROOT, 400, format!("The document at {0} is holding something other than its own content container at {1}, which leaves that document unreadable", crate::refusal_text::json(path), crate::refusal_text::json(key));
+    example { key: "content".to_owned(), path: "notes/a".to_owned() };
     /// A write into a container whose creating change the write does not build on, in an
     /// update.
-    UnattachedContainerUpdate { container: String },
+    UnattachedContainerUpdate { container: String }
+        => code::CAUSAL_GAP, 409, format!("This update writes into a container ({container}) created by a change they do not build on, so nothing of it was kept. Send them built on the change that creates the container");
+    example { container: "cid:1@2:Map".to_owned() };
     /// The same, found in the history of a resolved document.
-    UnattachedContainerDocument { container: String, path: String },
+    UnattachedContainerDocument { container: String, path: String }
+        => code::CAUSAL_GAP, 409, format!("The document at {0} holds in its history writes into a container ({container}) created by a change they do not build on, so nothing of it was kept. Send them built on the change that creates the container", crate::refusal_text::json(path));
+    example { container: "cid:1@2:Map".to_owned(), path: "notes/a".to_owned() };
     /// A write naming `__proto__` as a map key, in an update.
-    ReservedMapKeyUpdate { container: String },
+    ReservedMapKeyUpdate { container: String }
+        => code::RESERVED_MAP_KEY, 400, format!("This update writes a key named \"__proto__\" (in {container}), which no document may hold, so nothing of it was kept");
+    example { container: "cid:1@2:Map".to_owned() };
     /// The same, found in the history of a resolved document.
-    ReservedMapKeyDocument { container: String, path: String },
+    ReservedMapKeyDocument { container: String, path: String }
+        => code::RESERVED_MAP_KEY, 400, format!("The document at {0} holds in its history a write of a key named \"__proto__\" (in {container}), which no document may hold, so nothing of it was kept", crate::refusal_text::json(path));
+    example { container: "cid:1@2:Map".to_owned(), path: "notes/a".to_owned() };
     /// A value write holding a key named `__proto__`, refused before its first operation.
-    ReservedKeyWrite { container: String },
+    ReservedKeyWrite { container: String }
+        => code::RESERVED_MAP_KEY, 400, format!("This write holds a key named \"__proto__\" (in {container}), which no document may hold, so nothing of it was kept");
+    example { container: "doc".to_owned() };
     /// A write of a shape an older version stored and no reader serves, in an update.
-    RetiredShapeWrittenUpdate { found: String },
+    RetiredShapeWrittenUpdate { found: String }
+        => code::RETIRED_STORED_SHAPE, 400, format!("This update would write {found}, a form an older version stored and this one no longer reads, so nothing of it was kept");
+    example { found: "node \"n1\" stored under the retired key".to_owned() };
     /// The same, found in the history of a resolved document.
-    RetiredShapeWrittenDocument { found: String, path: String },
+    RetiredShapeWrittenDocument { found: String, path: String }
+        => code::RETIRED_STORED_SHAPE, 400, format!("The document at {0} holds in its history {found}, a form an older version stored and this one no longer reads, so nothing of it was kept", crate::refusal_text::json(path));
+    example { found: "node \"n1\" stored under the retired key".to_owned(), path: "notes/a".to_owned() };
     /// A write of a row in the comment plane before threads, in an update.
-    RetiredCommentPlaneWrittenUpdate { rows: u64 },
+    RetiredCommentPlaneWrittenUpdate { rows: u64 }
+        => code::RETIRED_COMMENT_PLANE, 400, format!("This update would write a comment in the flat comments plane an older version kept comments in ({rows} there now), which this one no longer reads, so nothing of it was kept");
+    example { rows: 2 };
     /// The same, found in the history of a resolved document.
-    RetiredCommentPlaneWrittenDocument { path: String, rows: u64 },
+    RetiredCommentPlaneWrittenDocument { path: String, rows: u64 }
+        => code::RETIRED_COMMENT_PLANE, 400, format!("The document at {0} holds in its history a comment in the flat comments plane an older version kept comments in ({rows} there now), which this one no longer reads, so nothing of it was kept", crate::refusal_text::json(path));
+    example { path: "notes/a".to_owned(), rows: 2 };
     /// Documents or folders put at paths the path grammar refuses. The caller shortens each
     /// path to its first 120 characters and names at most three.
-    OffGrammarPath { max_length: u64, paths: Vec<String> },
+    OffGrammarPath { max_length: u64, paths: Vec<String> }
+        => code::INVALID_PATH, 400, format!("This update would put documents or folders at paths this keeper cannot store: {0}. A path may be at most {max_length} characters, and each segment may hold only ASCII letters, digits and interior hyphens", crate::refusal_text::json_list(paths));
+    example { max_length: 1024, paths: vec!["a b".to_owned(), "c".to_owned()] };
     /// The same with more paths than are named; `more` counts the ones left out.
-    OffGrammarPathMore { max_length: u64, more: u64, paths: Vec<String> },
+    OffGrammarPathMore { max_length: u64, more: u64, paths: Vec<String> }
+        => code::INVALID_PATH, 400, format!("This update would put documents or folders at paths this keeper cannot store: {0} and {more} more. A path may be at most {max_length} characters, and each segment may hold only ASCII letters, digits and interior hyphens", crate::refusal_text::json_list(paths));
+    example { max_length: 1024, more: 2, paths: vec!["a b".to_owned(), "c".to_owned(), "d e".to_owned()] };
     /// Workspace nodes an update would leave unreadable to this keeper.
-    UnreadableDocumentMeta { nodes: Vec<String> },
+    UnreadableDocumentMeta { nodes: Vec<String> }
+        => code::UNREADABLE_DOCUMENT_META, 400, format!("This update would leave workspace nodes this keeper cannot read ({0}), which hides the documents they hold and everything below them; a document needs a known kind, a segment, its id and whole-number timestamps, and a folder carries only its segment", crate::refusal_text::list(nodes));
+    example { nodes: vec!["a".to_owned(), "b/c".to_owned()] };
     /// An update leaving the envelope of a named document saying another kind than the document
     /// records.
-    DocumentKindChangedNamedKind { document_id: String, kind: String, recorded: String },
+    DocumentKindChangedNamedKind { document_id: String, kind: String, recorded: String }
+        => code::DOCUMENT_KIND_CHANGED, 400, format!("This update would leave the envelope of document {document_id} saying \"{kind}\" while the document is recorded as \"{recorded}\"; a document keeps the kind it was created as");
+    example { document_id: "d1".to_owned(), kind: "markdown".to_owned(), recorded: "spatial".to_owned() };
     /// An update leaving the envelope of a named document saying no kind than the document
     /// records.
-    DocumentKindChangedNamedNoKind { document_id: String, recorded: String },
+    DocumentKindChangedNamedNoKind { document_id: String, recorded: String }
+        => code::DOCUMENT_KIND_CHANGED, 400, format!("This update would leave the envelope of document {document_id} saying no kind while the document is recorded as \"{recorded}\"; a document keeps the kind it was created as");
+    example { document_id: "d1".to_owned(), recorded: "spatial".to_owned() };
     /// An update leaving the envelope of a document the keeper could not name saying another
     /// kind than the document records.
-    DocumentKindChangedUnnamedKind { kind: String, recorded: String },
+    DocumentKindChangedUnnamedKind { kind: String, recorded: String }
+        => code::DOCUMENT_KIND_CHANGED, 400, format!("This update would leave the envelope of a document saying \"{kind}\" while the document is recorded as \"{recorded}\"; a document keeps the kind it was created as");
+    example { kind: "markdown".to_owned(), recorded: "spatial".to_owned() };
     /// An update leaving the envelope of a document the keeper could not name saying no kind
     /// than the document records.
-    DocumentKindChangedUnnamedNoKind { recorded: String },
+    DocumentKindChangedUnnamedNoKind { recorded: String }
+        => code::DOCUMENT_KIND_CHANGED, 400, format!("This update would leave the envelope of a document saying no kind while the document is recorded as \"{recorded}\"; a document keeps the kind it was created as");
+    example { recorded: "spatial".to_owned() };
     /// Documents an update would give a display name past the limit.
-    DocumentNameTooLong { max_length: u64, paths: Vec<String> },
+    DocumentNameTooLong { max_length: u64, paths: Vec<String> }
+        => code::DOCUMENT_NAME_TOO_LONG, 400, format!("This update would give {0} a display name past {max_length} characters, the most a name may have", crate::refusal_text::json_list(paths));
+    example { max_length: 200, paths: vec!["a".to_owned(), "b".to_owned()] };
     /// Folders an update would give a display name no folder may have; the reason is the
     /// folder-name rule's own sentence.
-    FolderNameRefused { paths: Vec<String>, reason: String },
+    FolderNameRefused { paths: Vec<String>, reason: String }
+        => code::FOLDER_NAME_REFUSED, 400, format!("This update would give the folder {0} a name no folder may have. {reason}", crate::refusal_text::json_list(paths));
+    example { paths: vec!["a".to_owned()], reason: "A folder name cannot be blank.".to_owned() };
     /// An update building on changes this keeper has not received; sending again once it holds
     /// them lands.
-    CausalGap,
+    CausalGap
+        => code::CAUSAL_GAP, 409, "This update builds on changes this keeper has not received yet, so nothing of it was kept. Send the changes it builds on first".to_owned();
+    example;
     /// A write leaving the workspace record listing more documents than a workspace holds.
-    TooManyDocuments { documents: u64, limit: u64 },
+    TooManyDocuments { documents: u64, limit: u64 }
+        => code::TOO_MANY_DOCUMENTS, 413, format!("This write would leave the workspace holding {documents} documents; a workspace holds at most {limit}. Move some documents to another workspace first");
+    example { documents: 2001, limit: 2000 };
     /// A write leaving the workspace record listing more folders than a workspace holds.
-    TooManyFolders { folders: u64, limit: u64 },
+    TooManyFolders { folders: u64, limit: u64 }
+        => code::TOO_MANY_FOLDERS, 413, format!("This write would leave the workspace holding {folders} folders; a workspace holds at most {limit}. Move or delete some folders' documents first");
+    example { folders: 4001, limit: 4000 };
     /// A workspace create in a namespace already holding the most workspaces one person may
     /// hold on a shared keeper.
-    TooManyWorkspaces { limit: u64, namespace: String },
+    TooManyWorkspaces { limit: u64, namespace: String }
+        => code::TOO_MANY_WORKSPACES, 413, format!("\"{namespace}\" already holds {limit} workspaces, the most one person may hold on this server");
+    example { limit: 1000, namespace: "ns".to_owned() };
     /// A manual version save past the document's version ceiling, or a restore point past the
     /// same ceiling.
-    TooManyVersions { limit: u64 },
+    TooManyVersions { limit: u64 }
+        => code::TOO_MANY_VERSIONS, 413, format!("This document already keeps {limit} saved versions, the most one document keeps; no further version can be saved for it");
+    example { limit: 50 };
     /// A document the workspace does not hold, named for an MCP caller.
-    DocumentNotFound { document_id: String, workspace_id: String },
+    DocumentNotFound { document_id: String, workspace_id: String }
+        => code::DOCUMENT_NOT_FOUND, 404, format!("Document not found: {document_id} in workspace {workspace_id}");
+    example { document_id: "d1".to_owned(), workspace_id: "w1".to_owned() };
     /// A document the index does not hold, named by the path or id the caller gave.
-    DocumentNotFoundInIndex { target: String, workspace_id: String },
+    DocumentNotFoundInIndex { target: String, workspace_id: String }
+        => code::DOCUMENT_NOT_FOUND, 404, format!("No document \"{target}\" in workspace \"{workspace_id}\"");
+    example { target: "a/b".to_owned(), workspace_id: "w1".to_owned() };
     /// A document indexed but never written, so holding no stored bytes.
-    DocumentSnapshotNotFound { document_id: String },
+    DocumentSnapshotNotFound { document_id: String }
+        => code::DOCUMENT_NOT_FOUND, 404, format!("document has no saved snapshot: {document_id}");
+    example { document_id: "d1".to_owned() };
     /// The CRDT engine aborted while the CRDT engine loaded a document; the caller cannot fix
     /// it by rewording.
-    DocumentEngineTrapLoading { subject: String },
+    DocumentEngineTrapLoading { subject: String }
+        => code::DOCUMENT_ENGINE_TRAP, 500, format!("The CRDT engine aborted while loading {subject}; nothing from this write was stored. A very large document is the usual trigger. If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted.");
+    example { subject: "document d1".to_owned() };
     /// The CRDT engine aborted while the CRDT engine saved a document; the caller cannot fix it
     /// by rewording.
-    DocumentEngineTrapSaving { subject: String },
+    DocumentEngineTrapSaving { subject: String }
+        => code::DOCUMENT_ENGINE_TRAP, 500, format!("The CRDT engine aborted while saving {subject}; nothing from this write was stored. A very large document is the usual trigger. If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted.");
+    example { subject: "document d1".to_owned() };
     /// The CRDT engine aborted while the CRDT engine took a client's update; the caller cannot
     /// fix it by rewording.
-    DocumentEngineTrapImporting { subject: String },
+    DocumentEngineTrapImporting { subject: String }
+        => code::DOCUMENT_ENGINE_TRAP, 500, format!("The CRDT engine aborted while importing an update into {subject}; nothing from this write was stored. A very large document is the usual trigger. The in-memory copy was dropped, so the next request reloads what was stored; sending the same update again aborts the same way. After a trap this process may abort on other large writes too, until the daemon restarts.");
+    example { subject: "document d1".to_owned() };
     /// The Rust core aborted running an operation and was reset.
-    DocumentEngineTrapRunningRecovered { subject: String },
+    DocumentEngineTrapRunningRecovered { subject: String }
+        => code::DOCUMENT_ENGINE_TRAP, 500, format!("The Rust core aborted while running {subject}; nothing from this request was stored. The core was reset, so the next request runs on a fresh instance; sending the same input again may abort the same way.");
+    example { subject: "layout".to_owned() };
     /// The Rust core aborted running an operation and could not be reset.
-    DocumentEngineTrapRunningUnrecoverable { subject: String },
+    DocumentEngineTrapRunningUnrecoverable { subject: String }
+        => code::DOCUMENT_ENGINE_TRAP, 500, format!("The Rust core aborted while running {subject}; nothing from this request was stored. The core could not be reset and answers every request with this until the daemon restarts.");
+    example { subject: "layout".to_owned() };
     /// A write in a format the document is not in; `detail` carries the per-tool consequence
     /// and the tool to use instead.
-    DocumentKindMismatch { detail: String, document_id: String, kind: String },
+    DocumentKindMismatch { detail: String, document_id: String, kind: String }
+        => code::DOCUMENT_KIND_MISMATCH, 409, format!("Document {document_id} is a {kind} document. {detail}");
+    example { detail: "Use wb_body_edit.".to_owned(), document_id: "d1".to_owned(), kind: "markdown".to_owned() };
     /// A workspace nothing answers to, in the advice for a read, no other workspace known.
-    WorkspaceNotFoundForCallerRead { workspace_id: String },
+    WorkspaceNotFoundForCallerRead { workspace_id: String }
+        => code::WORKSPACE_NOT_FOUND, 404, format!("Workspace not found: \"{workspace_id}\". Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).");
+    example { workspace_id: "w1".to_owned() };
     /// The same, naming the workspaces that do exist.
-    WorkspaceNotFoundForCallerReadKnown { known: Vec<String>, workspace_id: String },
+    WorkspaceNotFoundForCallerReadKnown { known: Vec<String>, workspace_id: String }
+        => code::WORKSPACE_NOT_FOUND, 404, format!("Workspace not found: \"{workspace_id}\". Workspaces here: {0}. Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).", crate::refusal_text::quoted_list(known));
+    example { known: vec!["a".to_owned(), "b".to_owned()], workspace_id: "w1".to_owned() };
     /// A workspace nothing answers to, in the advice for a create, no other workspace known.
-    WorkspaceNotFoundForCallerCreate { workspace_id: String },
+    WorkspaceNotFoundForCallerCreate { workspace_id: String }
+        => code::WORKSPACE_NOT_FOUND, 404, format!("Workspace not found: \"{workspace_id}\". Pass createWorkspace: true on this wb_workspace_edit call to create it along with the document.");
+    example { workspace_id: "w1".to_owned() };
     /// The same, naming the workspaces that do exist.
-    WorkspaceNotFoundForCallerCreateKnown { known: Vec<String>, workspace_id: String },
+    WorkspaceNotFoundForCallerCreateKnown { known: Vec<String>, workspace_id: String }
+        => code::WORKSPACE_NOT_FOUND, 404, format!("Workspace not found: \"{workspace_id}\". Workspaces here: {0}. Pass createWorkspace: true on this wb_workspace_edit call to create it along with the document.", crate::refusal_text::quoted_list(known));
+    example { known: vec!["a".to_owned(), "b".to_owned()], workspace_id: "w1".to_owned() };
     /// A workspace the index does not hold; workspaces never materialize implicitly.
-    WorkspaceNotFoundInIndex { workspace_id: String },
+    WorkspaceNotFoundInIndex { workspace_id: String }
+        => code::WORKSPACE_NOT_FOUND, 404, format!("Workspace not found: \"{workspace_id}\". Create it before adding documents to it.");
+    example { workspace_id: "w1".to_owned() };
     /// A workspace nothing answers to, in the one voice the daemon's document routes answer it,
     /// naming the handle the caller typed.
-    WorkspaceNotFoundByHandle { handle: String },
+    WorkspaceNotFoundByHandle { handle: String }
+        => code::WORKSPACE_NOT_FOUND, 404, format!("Workspace \"{handle}\" not found");
+    example { handle: "w1".to_owned() };
     /// A create or move onto a path the workspace already holds.
-    DocumentPathTaken { path: String, workspace_id: String },
+    DocumentPathTaken { path: String, workspace_id: String }
+        => code::DOCUMENT_PATH_TAKEN, 409, format!("Document path \"{path}\" already exists in workspace \"{workspace_id}\"");
+    example { path: "a/b".to_owned(), workspace_id: "w1".to_owned() };
     /// A name a sibling of the same kind under the same parent already shows; the displayName
     /// is trimmed as the sentence quotes it.
-    DisplayNameTaken { display_name: String, kind: String },
+    DisplayNameTaken { display_name: String, kind: String }
+        => code::DISPLAY_NAME_TAKEN, 409, format!("Another {kind} here is already called \"{0}\". Choose a name no other {kind} here has.", crate::refusal_text::trim(display_name));
+    example { display_name: " Notes ".to_owned(), kind: "folder".to_owned() };
     /// A workspace segment another workspace in the registry already holds.
-    WorkspaceSegmentTaken { segment: String },
+    WorkspaceSegmentTaken { segment: String }
+        => code::WORKSPACE_SEGMENT_TAKEN, 409, format!("Workspace segment \"{segment}\" is already taken");
+    example { segment: "notes".to_owned() };
     /// The same, in a registry shared by several namespaces.
-    WorkspaceSegmentTakenInNamespace { namespace: String, segment: String },
+    WorkspaceSegmentTakenInNamespace { namespace: String, segment: String }
+        => code::WORKSPACE_SEGMENT_TAKEN, 409, format!("Workspace segment \"{segment}\" is already taken in namespace \"{namespace}\"");
+    example { namespace: "ns".to_owned(), segment: "notes".to_owned() };
     /// A create naming a handle that could never be a segment.
-    WorkspaceSegmentUnusable { handle: String },
+    WorkspaceSegmentUnusable { handle: String }
+        => code::WORKSPACE_SEGMENT_UNUSABLE, 400, format!("Cannot create workspace \"{handle}\": a new workspace is addressed by its segment, which must be ASCII letters, digits and interior hyphens, and must not itself be shaped like a canonical id. Choose a name that fits, or address an existing workspace by its id.");
+    example { handle: "no way!".to_owned() };
     /// A create given a display name twice, as `name` and as the frontmatter title, and the two
     /// disagree.
-    DocumentNameConflict { given: String, title: String },
+    DocumentNameConflict { given: String, title: String }
+        => code::DOCUMENT_NAME_CONFLICT, 400, format!("name \"{given}\" and the frontmatter title \"{title}\" are two display names for one document. Give one of them, or make them the same.");
+    example { given: "A".to_owned(), title: "B".to_owned() };
     /// A delete or move that would strand or swallow the documents below its target; `detail`
     /// says which to delete first.
-    DocumentHasDescendants { detail: String, path: String },
+    DocumentHasDescendants { detail: String, path: String }
+        => code::DOCUMENT_HAS_DESCENDANTS, 409, format!("Document \"{path}\" has descendants. {detail}");
+    example { detail: "Delete a/b first.".to_owned(), path: "a".to_owned() };
     /// A move whose destination lies inside the subtree being moved.
-    DocumentMoveIntoSelf { from: String, to: String },
+    DocumentMoveIntoSelf { from: String, to: String }
+        => code::DOCUMENT_MOVE_INTO_SELF, 400, format!("Cannot move \"{from}\" to \"{to}\": the destination is inside the subtree being moved");
+    example { from: "a".to_owned(), to: "a/b".to_owned() };
     /// A duplicate of a path that more than one document carries.
-    CannotPlaceCopyContested { path: String, workspace_id: String },
+    CannotPlaceCopyContested { path: String, workspace_id: String }
+        => code::CANNOT_PLACE_COPY, 409, format!("More than one document carries \"{path}\" in workspace \"{workspace_id}\". Resolve by documentId, or rename one of them.");
+    example { path: "a".to_owned(), workspace_id: "w1".to_owned() };
     /// A duplicate of a document whose folder is so deep that no copy segment fits beside it.
-    CannotPlaceCopyNoRoom { path: String },
+    CannotPlaceCopyNoRoom { path: String }
+        => code::CANNOT_PLACE_COPY, 409, format!("There is no room beside \"{path}\" for a copy: its folder's path is too long.");
+    example { path: "a/b".to_owned() };
     /// A stored value the document's format has no spelling for; `cause` is the thrown error as
     /// its reader words it.
-    DocumentSerializeFailed { cause: String, document_id: String, format: String },
+    DocumentSerializeFailed { cause: String, document_id: String, format: String }
+        => code::DOCUMENT_SERIALIZE_FAILED, 409, format!("Document {document_id} cannot be read as {format}: {cause}. Rewrite it with `wb_workspace_edit`'s `document.set` op to repair it.");
+    example { cause: "a value YAML cannot carry".to_owned(), document_id: "d1".to_owned(), format: "okf".to_owned() };
     /// A stored record intact in a shape this build does not know: the reader is old, the data
     /// is not damaged. The message is the keeper's own.
-    StoredDocumentUnsupportedVersion { message: String },
+    StoredDocumentUnsupportedVersion { message: String }
+        => code::STORED_DOCUMENT_UNSUPPORTED_VERSION, 500, message.clone();
+    example { message: "stored under version 9".to_owned() };
     /// A stored record the keeper holds and cannot read back, or a chunk set that does not
     /// reassemble. The message is the keeper's own.
-    CorruptStoredData { message: String },
+    CorruptStoredData { message: String }
+        => code::CORRUPT_STORED_DATA, 500, message.clone();
+    example { message: "does not parse".to_owned() };
     /// A document still holding comments in the plane before threads, which no reader serves;
     /// its data is untouched.
-    RetiredCommentPlane { rows: u64 },
+    RetiredCommentPlane { rows: u64 }
+        => code::RETIRED_COMMENT_PLANE, 409, format!("this document holds {rows} comment{0} saved by an older version in a form this version no longer reads (the flat comments plane before threads); its data has not been changed", crate::refusal_text::plural_s(*rows));
+    example { rows: 2 };
     /// A document still holding a shape an older version stored and no reader serves; its data
     /// is untouched.
-    RetiredStoredShape { found: String },
+    RetiredStoredShape { found: String }
+        => code::RETIRED_STORED_SHAPE, 409, format!("this document holds {found}, saved by an older version in a form this version no longer reads; its data has not been changed");
+    example { found: "node \"n1\" stored under the retired key".to_owned() };
     /// A reference rewrite that would leave a markdown body past the limit.
-    ReferenceRewriteBodyTooLarge { chars: u64, limit: String },
+    ReferenceRewriteBodyTooLarge { chars: u64, limit: String }
+        => code::MARKDOWN_TOO_LARGE, 413, format!("The links would make the document body {chars} characters long, past {limit}");
+    example { chars: 300_000, limit: "the 262144-character limit for one document; split the content across documents".to_owned() };
     /// A reference rewrite that would leave a node's text past the limit.
-    ReferenceRewriteNodeTextTooLarge { chars: u64, limit: String, node_id: String },
+    ReferenceRewriteNodeTextTooLarge { chars: u64, limit: String, node_id: String }
+        => code::NODE_TEXT_TOO_LARGE, 413, format!("The links would give node {0} {chars} characters of text, past {limit}", crate::refusal_text::json(node_id));
+    example { chars: 70_000, limit: "the 8192-character limit for one node; split it across nodes, or put it in a markdown document and embed that".to_owned(), node_id: "n1".to_owned() };
     /// A markdown body that OKF cannot parse; `detail` is empty or names up to three issues.
-    OkfParseFailed { detail: String, message: String, stage: String },
+    OkfParseFailed { detail: String, message: String, stage: String }
+        => code::OKF_PARSE_FAILED, 400, format!("OKF parse failed at {stage}: {message}{detail}");
+    example { detail: " — a.b: nope".to_owned(), message: "bad yaml".to_owned(), stage: "frontmatter".to_owned() };
     /// A value YAML has no spelling for, refused while the caller still holds the content; same
     /// sentence as a parse failure, its own code.
-    OkfNotYamlSafe { detail: String, message: String, stage: String },
+    OkfNotYamlSafe { detail: String, message: String, stage: String }
+        => code::OKF_NOT_YAML_SAFE, 400, format!("OKF parse failed at {stage}: {message}{detail}");
+    example { detail: String::new(), message: ".nan has no YAML spelling".to_owned(), stage: "yaml-safe".to_owned() };
     /// A tag value the workspace's own library does not admit under its key.
-    TagNotAdmitted {
-        admitted: Vec<String>,
-        key: String,
-        library_path: String,
-        tag: String,
-        what: String,
-    },
+    TagNotAdmitted { admitted: Vec<String>, key: String, library_path: String, tag: String, what: String }
+        => code::TAG_NOT_IN_LIBRARY, 400, format!("tag \"{tag}\" on {what} is not admitted: the workspace's tag library (the document at \"{library_path}\") declares {key} as one of {0}", crate::refusal_text::list(admitted));
+    example { admitted: vec!["dev".to_owned(), "prod".to_owned()], key: "env".to_owned(), library_path: "tags".to_owned(), tag: "env:qa".to_owned(), what: "the board".to_owned() };
     /// Two values under a key the library declares exclusive.
-    TagExclusive { carried: Vec<String>, key: String, library_path: String, what: String },
+    TagExclusive { carried: Vec<String>, key: String, library_path: String, what: String }
+        => code::TAG_NOT_IN_LIBRARY, 400, format!("{key} is one value at a time in the workspace's tag library (the document at \"{library_path}\"), and this write leaves {what} with {0}", crate::refusal_text::and_list(carried));
+    example { carried: vec!["env:dev".to_owned(), "env:prod".to_owned()], key: "env".to_owned(), library_path: "tags".to_owned(), what: "node redis".to_owned() };
     /// A registered facet's payload its own schema refuses, or one written where it does not
     /// belong; `reason` names what to change.
-    FacetWriteRejected { facet_key: String, reason: String },
+    FacetWriteRejected { facet_key: String, reason: String }
+        => code::FACET_WRITE_REJECTED, 400, format!("facet \"{facet_key}\" rejected: {reason}");
+    example { facet_key: "visual.shape/v1".to_owned(), reason: "bad payload".to_owned() };
     /// A search naming neither words nor a filter, in the tool's parameter names.
-    SearchNeedsQueryOrFilter,
+    SearchNeedsQueryOrFilter
+        => code::SEARCH_NEEDS_QUERY_OR_FILTER, 400, "Nothing to search for: pass `query` (words to match), or `tags` / `kind` (a filter to answer alone), or both. To list every document, use wb_document_list.".to_owned();
+    example;
     /// The same, in the query string's own parameter names.
-    SearchNeedsQueryOrFilterRoute,
+    SearchNeedsQueryOrFilterRoute
+        => code::SEARCH_NEEDS_QUERY_OR_FILTER, 400, "Nothing to search for: pass `q` (words to match), or `tag` / `kind` (a filter to answer alone), or both.".to_owned();
+    example;
     /// A link-mentions target carrying no display name, so nothing names it in prose.
-    NamelessLinkifyTarget { target_document_id: String },
+    NamelessLinkifyTarget { target_document_id: String }
+        => code::NAMELESS_LINK_TARGET, 400, format!("Document {target_document_id} has no display name — nothing names it in prose, so there is nothing to linkify.");
+    example { target_document_id: "d1".to_owned() };
     /// A write whose body is not JSON.
-    InvalidBodyNotJson,
+    InvalidBodyNotJson
+        => code::INVALID_BODY, 400, "the request body is not valid JSON".to_owned();
+    example;
     /// A request the schema or the route refuses; `reason` is composed by the caller (schema
     /// issues joined, an unknown query parameter, an identity named by the URL), which is the
     /// one place this contract does not own the sentence.
-    InvalidRequest { reason: String },
+    InvalidRequest { reason: String }
+        => code::INVALID_REQUEST, 400, reason.clone();
+    example { reason: "unknown query parameter \"x\"; it reads q".to_owned() };
     /// The database another process holds locked; the same request may succeed shortly
     /// (Retry-After: 1).
-    DatabaseBusy,
+    DatabaseBusy
+        => code::DATABASE_BUSY, 503, "The database is busy; retry shortly.".to_owned();
+    example;
     /// An uncaught throw. The body carries no part of the error: its message can hold a path, a
     /// statement or a secret.
-    InternalError,
+    InternalError
+        => code::INTERNAL_ERROR, 500, "The server failed to handle this request.".to_owned();
+    example;
+    /// A restore naming a version the document's own history does not hold: none by that id, or
+    /// another document's.
+    VersionNotFound { document_id: String, version_id: String }
+        => code::VERSION_NOT_FOUND, 404, format!("version not found: {version_id} in document {document_id}");
+    example { document_id: "d1".to_owned(), version_id: "v1".to_owned() };
+    /// A restore into a targetPath that already holds a document, without overwrite.
+    RestoreTargetExists { target_path: String }
+        => code::DOCUMENT_PATH_TAKEN, 409, format!("target already exists: {target_path} — pass overwrite: true to restore onto it");
+    example { target_path: "a/b".to_owned() };
+    /// A subtree rollback to a version that does not carry the whole workspace at that point.
+    SubtreeNeedsWorkspaceVersion { version_id: String }
+        => code::INVALID_REQUEST, 400, format!("subtree rollback needs a workspace-scoped version: {version_id}");
+    example { version_id: "v1".to_owned() };
+    /// A subtree rollback asked to land at a targetPath other than where it rolls back.
+    SubtreeTakesNoTarget
+        => code::INVALID_REQUEST, 400, "subtree rollback cannot take a targetPath".to_owned();
+    example;
+    /// A restore targetPath that is not a document path, refused by the operation as the
+    /// backstop no surface can skip.
+    InvalidRestoreTargetPath { target_path: String }
+        => code::INVALID_REQUEST, 400, format!("invalid targetPath: {target_path}");
+    example { target_path: "a//b".to_owned() };
+    /// A restore that landed at a path whose row lists no document id, so the caller cannot be
+    /// told which document holds it.
+    RestoredDocumentIdMissing { target_path: String }
+        => code::INTERNAL_ERROR, 500, format!("restored document has no id: {target_path}");
+    example { target_path: "a/b".to_owned() };
 }
 
 /// Every code a refusal carries, as a constant.
@@ -335,6 +619,7 @@ pub mod code {
     pub const INVALID_REQUEST: &str = "invalid_request";
     pub const DATABASE_BUSY: &str = "database_busy";
     pub const INTERNAL_ERROR: &str = "internal_error";
+    pub const VERSION_NOT_FOUND: &str = "version_not_found";
 }
 
 /// Every code, once, in the order the contract first names it.
@@ -391,6 +676,7 @@ pub const CODES: &[&str] = &[
     code::INVALID_REQUEST,
     code::DATABASE_BUSY,
     code::INTERNAL_ERROR,
+    code::VERSION_NOT_FOUND,
 ];
 
 /// The codes a keeper refuses a sync write with.
@@ -425,482 +711,8 @@ pub const SYNC_WRITE_CODES: &[&str] = &[
 /// The codes a keeper refuses a version save with.
 pub const VERSION_CODES: &[&str] = &[code::TOO_MANY_VERSIONS];
 
-impl Refusal {
-    /// The stable code a caller branches on.
-    #[expect(clippy::too_many_lines, reason = "one arm per refusal the contract lists")]
-    #[must_use]
-    pub const fn code(&self) -> &'static str {
-        match self {
-            Self::MarkdownRunUpdate { .. }
-            | Self::MarkdownBodyUpdate { .. }
-            | Self::MarkdownRunsUpdate { .. }
-            | Self::MarkdownBodyDocument { .. }
-            | Self::MarkdownRunDocument { .. }
-            | Self::MarkdownRunDocumentWithBody { .. }
-            | Self::MarkdownRunsDocument { .. }
-            | Self::ReferenceRewriteBodyTooLarge { .. } => code::MARKDOWN_TOO_LARGE,
-            Self::NodeTextTooLargeUpdate { .. }
-            | Self::NodeTextTooLargeDocument { .. }
-            | Self::ReferenceRewriteNodeTextTooLarge { .. } => code::NODE_TEXT_TOO_LARGE,
-            Self::NodeLocationTooLargeUpdate { .. } | Self::NodeLocationTooLargeDocument { .. } => {
-                code::NODE_LOCATION_TOO_LARGE
-            }
-            Self::LabelTooLargeUpdate { .. } | Self::LabelTooLargeDocument { .. } => {
-                code::LABEL_TOO_LARGE
-            }
-            Self::CommentMessageTooLargeUpdate { .. }
-            | Self::CommentMessageTooLargeDocument { .. } => code::COMMENT_TOO_LARGE,
-            Self::ContainerNameTooLongUpdate { .. } | Self::ContainerNameTooLongDocument { .. } => {
-                code::CONTAINER_NAME_TOO_LONG
-            }
-            Self::CommentAnchorTooLargeUpdate { .. }
-            | Self::CommentAnchorTooLargeDocument { .. } => code::COMMENT_ANCHOR_TOO_LARGE,
-            Self::AnchorQuoteTooLongUpdate { .. } | Self::AnchorQuoteTooLongDocument { .. } => {
-                code::ANCHOR_QUOTE_TOO_LONG
-            }
-            Self::TooManyOpenThreadsUpdate { .. } | Self::TooManyOpenThreadsDocument { .. } => {
-                code::TOO_MANY_OPEN_THREADS
-            }
-            Self::TooManyOpenChangesUpdate { .. } | Self::TooManyOpenChangesDocument { .. } => {
-                code::TOO_MANY_OPEN_CHANGES
-            }
-            Self::TooManyThreadMessagesUpdate { .. }
-            | Self::TooManyThreadMessagesDocument { .. } => code::TOO_MANY_THREAD_MESSAGES,
-            Self::TagsCountBoardUpdate { .. }
-            | Self::TagsCountBoardDocument { .. }
-            | Self::TagsCountElementUpdate { .. }
-            | Self::TagsCountElementDocument { .. }
-            | Self::TagsLengthBoardUpdate { .. }
-            | Self::TagsLengthBoardDocument { .. }
-            | Self::TagsLengthElementUpdate { .. }
-            | Self::TagsLengthElementDocument { .. } => code::TAGS_TOO_LARGE,
-            Self::CanvasTooLargeNodesUpdate { .. }
-            | Self::CanvasTooLargeNodesDocument { .. }
-            | Self::CanvasTooLargeEdgesAndLinesUpdate { .. }
-            | Self::CanvasTooLargeEdgesAndLinesDocument { .. } => code::TOO_MANY_NODES_OR_EDGES,
-            Self::ContentRootKindUpdate { .. } | Self::ContentRootKindDocument { .. } => {
-                code::INVALID_DOCUMENT_ROOT
-            }
-            Self::UnattachedContainerUpdate { .. }
-            | Self::UnattachedContainerDocument { .. }
-            | Self::CausalGap => code::CAUSAL_GAP,
-            Self::ReservedMapKeyUpdate { .. }
-            | Self::ReservedMapKeyDocument { .. }
-            | Self::ReservedKeyWrite { .. } => code::RESERVED_MAP_KEY,
-            Self::RetiredShapeWrittenUpdate { .. }
-            | Self::RetiredShapeWrittenDocument { .. }
-            | Self::RetiredStoredShape { .. } => code::RETIRED_STORED_SHAPE,
-            Self::RetiredCommentPlaneWrittenUpdate { .. }
-            | Self::RetiredCommentPlaneWrittenDocument { .. }
-            | Self::RetiredCommentPlane { .. } => code::RETIRED_COMMENT_PLANE,
-            Self::OffGrammarPath { .. } | Self::OffGrammarPathMore { .. } => code::INVALID_PATH,
-            Self::UnreadableDocumentMeta { .. } => code::UNREADABLE_DOCUMENT_META,
-            Self::DocumentKindChangedNamedKind { .. }
-            | Self::DocumentKindChangedNamedNoKind { .. }
-            | Self::DocumentKindChangedUnnamedKind { .. }
-            | Self::DocumentKindChangedUnnamedNoKind { .. } => code::DOCUMENT_KIND_CHANGED,
-            Self::DocumentNameTooLong { .. } => code::DOCUMENT_NAME_TOO_LONG,
-            Self::FolderNameRefused { .. } => code::FOLDER_NAME_REFUSED,
-            Self::TooManyDocuments { .. } => code::TOO_MANY_DOCUMENTS,
-            Self::TooManyFolders { .. } => code::TOO_MANY_FOLDERS,
-            Self::TooManyWorkspaces { .. } => code::TOO_MANY_WORKSPACES,
-            Self::TooManyVersions { .. } => code::TOO_MANY_VERSIONS,
-            Self::DocumentNotFound { .. }
-            | Self::DocumentNotFoundInIndex { .. }
-            | Self::DocumentSnapshotNotFound { .. } => code::DOCUMENT_NOT_FOUND,
-            Self::DocumentEngineTrapLoading { .. }
-            | Self::DocumentEngineTrapSaving { .. }
-            | Self::DocumentEngineTrapImporting { .. }
-            | Self::DocumentEngineTrapRunningRecovered { .. }
-            | Self::DocumentEngineTrapRunningUnrecoverable { .. } => code::DOCUMENT_ENGINE_TRAP,
-            Self::DocumentKindMismatch { .. } => code::DOCUMENT_KIND_MISMATCH,
-            Self::WorkspaceNotFoundForCallerRead { .. }
-            | Self::WorkspaceNotFoundForCallerReadKnown { .. }
-            | Self::WorkspaceNotFoundForCallerCreate { .. }
-            | Self::WorkspaceNotFoundForCallerCreateKnown { .. }
-            | Self::WorkspaceNotFoundInIndex { .. }
-            | Self::WorkspaceNotFoundByHandle { .. } => code::WORKSPACE_NOT_FOUND,
-            Self::DocumentPathTaken { .. } => code::DOCUMENT_PATH_TAKEN,
-            Self::DisplayNameTaken { .. } => code::DISPLAY_NAME_TAKEN,
-            Self::WorkspaceSegmentTaken { .. } | Self::WorkspaceSegmentTakenInNamespace { .. } => {
-                code::WORKSPACE_SEGMENT_TAKEN
-            }
-            Self::WorkspaceSegmentUnusable { .. } => code::WORKSPACE_SEGMENT_UNUSABLE,
-            Self::DocumentNameConflict { .. } => code::DOCUMENT_NAME_CONFLICT,
-            Self::DocumentHasDescendants { .. } => code::DOCUMENT_HAS_DESCENDANTS,
-            Self::DocumentMoveIntoSelf { .. } => code::DOCUMENT_MOVE_INTO_SELF,
-            Self::CannotPlaceCopyContested { .. } | Self::CannotPlaceCopyNoRoom { .. } => {
-                code::CANNOT_PLACE_COPY
-            }
-            Self::DocumentSerializeFailed { .. } => code::DOCUMENT_SERIALIZE_FAILED,
-            Self::StoredDocumentUnsupportedVersion { .. } => {
-                code::STORED_DOCUMENT_UNSUPPORTED_VERSION
-            }
-            Self::CorruptStoredData { .. } => code::CORRUPT_STORED_DATA,
-            Self::OkfParseFailed { .. } => code::OKF_PARSE_FAILED,
-            Self::OkfNotYamlSafe { .. } => code::OKF_NOT_YAML_SAFE,
-            Self::TagNotAdmitted { .. } | Self::TagExclusive { .. } => code::TAG_NOT_IN_LIBRARY,
-            Self::FacetWriteRejected { .. } => code::FACET_WRITE_REJECTED,
-            Self::SearchNeedsQueryOrFilter | Self::SearchNeedsQueryOrFilterRoute => {
-                code::SEARCH_NEEDS_QUERY_OR_FILTER
-            }
-            Self::NamelessLinkifyTarget { .. } => code::NAMELESS_LINK_TARGET,
-            Self::InvalidBodyNotJson => code::INVALID_BODY,
-            Self::InvalidRequest { .. } => code::INVALID_REQUEST,
-            Self::DatabaseBusy => code::DATABASE_BUSY,
-            Self::InternalError => code::INTERNAL_ERROR,
-        }
-    }
-
-    /// The HTTP status the refusal travels with.
-    #[expect(clippy::too_many_lines, reason = "one arm per refusal the contract lists")]
-    #[must_use]
-    pub const fn status(&self) -> u16 {
-        match self {
-            Self::MarkdownRunUpdate { .. }
-            | Self::MarkdownBodyUpdate { .. }
-            | Self::MarkdownRunsUpdate { .. }
-            | Self::MarkdownBodyDocument { .. }
-            | Self::MarkdownRunDocument { .. }
-            | Self::MarkdownRunDocumentWithBody { .. }
-            | Self::MarkdownRunsDocument { .. }
-            | Self::NodeTextTooLargeUpdate { .. }
-            | Self::NodeTextTooLargeDocument { .. }
-            | Self::NodeLocationTooLargeUpdate { .. }
-            | Self::NodeLocationTooLargeDocument { .. }
-            | Self::LabelTooLargeUpdate { .. }
-            | Self::LabelTooLargeDocument { .. }
-            | Self::CommentMessageTooLargeUpdate { .. }
-            | Self::CommentMessageTooLargeDocument { .. }
-            | Self::ContainerNameTooLongUpdate { .. }
-            | Self::ContainerNameTooLongDocument { .. }
-            | Self::CommentAnchorTooLargeUpdate { .. }
-            | Self::CommentAnchorTooLargeDocument { .. }
-            | Self::AnchorQuoteTooLongUpdate { .. }
-            | Self::AnchorQuoteTooLongDocument { .. }
-            | Self::TooManyOpenThreadsUpdate { .. }
-            | Self::TooManyOpenThreadsDocument { .. }
-            | Self::TooManyOpenChangesUpdate { .. }
-            | Self::TooManyOpenChangesDocument { .. }
-            | Self::TooManyThreadMessagesUpdate { .. }
-            | Self::TooManyThreadMessagesDocument { .. }
-            | Self::TagsCountBoardUpdate { .. }
-            | Self::TagsCountBoardDocument { .. }
-            | Self::TagsCountElementUpdate { .. }
-            | Self::TagsCountElementDocument { .. }
-            | Self::TagsLengthBoardUpdate { .. }
-            | Self::TagsLengthBoardDocument { .. }
-            | Self::TagsLengthElementUpdate { .. }
-            | Self::TagsLengthElementDocument { .. }
-            | Self::CanvasTooLargeNodesUpdate { .. }
-            | Self::CanvasTooLargeNodesDocument { .. }
-            | Self::CanvasTooLargeEdgesAndLinesUpdate { .. }
-            | Self::CanvasTooLargeEdgesAndLinesDocument { .. }
-            | Self::TooManyDocuments { .. }
-            | Self::TooManyFolders { .. }
-            | Self::TooManyWorkspaces { .. }
-            | Self::TooManyVersions { .. }
-            | Self::ReferenceRewriteBodyTooLarge { .. }
-            | Self::ReferenceRewriteNodeTextTooLarge { .. } => 413,
-            Self::ContentRootKindUpdate { .. }
-            | Self::ContentRootKindDocument { .. }
-            | Self::ReservedMapKeyUpdate { .. }
-            | Self::ReservedMapKeyDocument { .. }
-            | Self::ReservedKeyWrite { .. }
-            | Self::RetiredShapeWrittenUpdate { .. }
-            | Self::RetiredShapeWrittenDocument { .. }
-            | Self::RetiredCommentPlaneWrittenUpdate { .. }
-            | Self::RetiredCommentPlaneWrittenDocument { .. }
-            | Self::OffGrammarPath { .. }
-            | Self::OffGrammarPathMore { .. }
-            | Self::UnreadableDocumentMeta { .. }
-            | Self::DocumentKindChangedNamedKind { .. }
-            | Self::DocumentKindChangedNamedNoKind { .. }
-            | Self::DocumentKindChangedUnnamedKind { .. }
-            | Self::DocumentKindChangedUnnamedNoKind { .. }
-            | Self::DocumentNameTooLong { .. }
-            | Self::FolderNameRefused { .. }
-            | Self::WorkspaceSegmentUnusable { .. }
-            | Self::DocumentNameConflict { .. }
-            | Self::DocumentMoveIntoSelf { .. }
-            | Self::OkfParseFailed { .. }
-            | Self::OkfNotYamlSafe { .. }
-            | Self::TagNotAdmitted { .. }
-            | Self::TagExclusive { .. }
-            | Self::FacetWriteRejected { .. }
-            | Self::SearchNeedsQueryOrFilter
-            | Self::SearchNeedsQueryOrFilterRoute
-            | Self::NamelessLinkifyTarget { .. }
-            | Self::InvalidBodyNotJson
-            | Self::InvalidRequest { .. } => 400,
-            Self::UnattachedContainerUpdate { .. }
-            | Self::UnattachedContainerDocument { .. }
-            | Self::CausalGap
-            | Self::DocumentKindMismatch { .. }
-            | Self::DocumentPathTaken { .. }
-            | Self::DisplayNameTaken { .. }
-            | Self::WorkspaceSegmentTaken { .. }
-            | Self::WorkspaceSegmentTakenInNamespace { .. }
-            | Self::DocumentHasDescendants { .. }
-            | Self::CannotPlaceCopyContested { .. }
-            | Self::CannotPlaceCopyNoRoom { .. }
-            | Self::DocumentSerializeFailed { .. }
-            | Self::RetiredCommentPlane { .. }
-            | Self::RetiredStoredShape { .. } => 409,
-            Self::DocumentNotFound { .. }
-            | Self::DocumentNotFoundInIndex { .. }
-            | Self::DocumentSnapshotNotFound { .. }
-            | Self::WorkspaceNotFoundForCallerRead { .. }
-            | Self::WorkspaceNotFoundForCallerReadKnown { .. }
-            | Self::WorkspaceNotFoundForCallerCreate { .. }
-            | Self::WorkspaceNotFoundForCallerCreateKnown { .. }
-            | Self::WorkspaceNotFoundInIndex { .. }
-            | Self::WorkspaceNotFoundByHandle { .. } => 404,
-            Self::DocumentEngineTrapLoading { .. }
-            | Self::DocumentEngineTrapSaving { .. }
-            | Self::DocumentEngineTrapImporting { .. }
-            | Self::DocumentEngineTrapRunningRecovered { .. }
-            | Self::DocumentEngineTrapRunningUnrecoverable { .. }
-            | Self::StoredDocumentUnsupportedVersion { .. }
-            | Self::CorruptStoredData { .. }
-            | Self::InternalError => 500,
-            Self::DatabaseBusy => 503,
-        }
-    }
-
-    /// The sentence, as the TypeScript says it.
-    #[expect(clippy::too_many_lines, reason = "one arm per refusal the contract lists")]
-    #[must_use]
-    pub fn message(&self) -> String {
-        match self {
-            Self::MarkdownRunUpdate { chars, limit } => format!("This update inserts {chars} characters in one piece, past {limit}"),
-            Self::MarkdownBodyUpdate { chars, limit } => format!("This update would make a document body {chars} characters long, past {limit}"),
-            Self::MarkdownRunsUpdate { chars, max_chars, runs } => format!("This update makes {runs} separate inserts of {chars} characters in all, which together cost more to apply than one insert at the {max_chars}-character limit for one write"),
-            Self::MarkdownBodyDocument { chars, limit, path } => format!("The document at {0} has a body of {chars} characters, past {limit}", crate::refusal_text::json(path)),
-            Self::MarkdownRunDocument { chars, max_chars, path } => format!("The document at {0} holds in its history one insert of {chars} characters, past the {max_chars}-character limit for one write. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole", crate::refusal_text::json(path)),
-            Self::MarkdownRunDocumentWithBody { body_chars, chars, max_chars, path } => format!("The document at {0} holds in its history one insert of {chars} characters, past the {max_chars}-character limit for one write, though its body is {body_chars} characters now. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole", crate::refusal_text::json(path)),
-            Self::MarkdownRunsDocument { chars, max_chars, path, runs } => format!("The document at {0} holds in its history {runs} separate inserts of {chars} characters in all, which together cost more to apply than one insert at the {max_chars}-character limit for one write. Merging that history into a workspace that already holds documents replays it; a workspace with no documents yet takes the record whole", crate::refusal_text::json(path)),
-            Self::NodeTextTooLargeUpdate { chars, limit, node_id } => format!("This update would give node {0} {chars} characters of text, past {limit}", crate::refusal_text::json(node_id)),
-            Self::NodeTextTooLargeDocument { chars, limit, node_id, path } => format!("The document at {0} has node {1} with {chars} characters of text, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(node_id)),
-            Self::NodeLocationTooLargeUpdate { chars, limit, node_id } => format!("This update would give node {0} a location of {chars} characters, past {limit}", crate::refusal_text::json(node_id)),
-            Self::NodeLocationTooLargeDocument { chars, limit, node_id, path } => format!("The document at {0} gives node {1} a location of {chars} characters, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(node_id)),
-            Self::LabelTooLargeUpdate { chars, element_id, limit } => format!("This update would give {0} a label of {chars} characters, past {limit}", crate::refusal_text::json(element_id)),
-            Self::LabelTooLargeDocument { chars, element_id, limit, path } => format!("The document at {0} gives {1} a label of {chars} characters, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(element_id)),
-            Self::CommentMessageTooLargeUpdate { chars, limit, message_id } => format!("This update would make comment message {0} {chars} characters long, past {limit}", crate::refusal_text::json(message_id)),
-            Self::CommentMessageTooLargeDocument { chars, limit, message_id, path } => format!("The document at {0} has comment message {1} {chars} characters long, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(message_id)),
-            Self::ContainerNameTooLongUpdate { chars, limit } => format!("This update would bring in a container named with {chars} characters, past {limit}"),
-            Self::ContainerNameTooLongDocument { chars, limit, path } => format!("The document at {0} holds a container named with {chars} characters, past {limit}", crate::refusal_text::json(path)),
-            Self::CommentAnchorTooLargeUpdate { count, limit, thread_id } => format!("This update would leave comment thread {0} anchored to {count} nodes, past {limit}", crate::refusal_text::json(thread_id)),
-            Self::CommentAnchorTooLargeDocument { count, limit, path, thread_id } => format!("The document at {0} holds comment thread {1} anchored to {count} nodes, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(thread_id)),
-            Self::AnchorQuoteTooLongUpdate { chars, element_id, limit } => format!("This update would give {0} an anchor quoting {chars} characters, past {limit}", crate::refusal_text::json(element_id)),
-            Self::AnchorQuoteTooLongDocument { chars, element_id, limit, path } => format!("The document at {0} gives {1} an anchor quoting {chars} characters, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(element_id)),
-            Self::TooManyOpenThreadsUpdate { count, limit } => format!("This update would leave {count} open comment threads on a document, past {limit}"),
-            Self::TooManyOpenThreadsDocument { count, limit, path } => format!("The document at {0} holds {count} open comment threads, past {limit}", crate::refusal_text::json(path)),
-            Self::TooManyOpenChangesUpdate { count, limit } => format!("This update would leave {count} open proposed changes on a document, past {limit}"),
-            Self::TooManyOpenChangesDocument { count, limit, path } => format!("The document at {0} holds {count} open proposed changes, past {limit}", crate::refusal_text::json(path)),
-            Self::TooManyThreadMessagesUpdate { count, limit } => format!("This update would leave a comment thread of {count} messages, past {limit}"),
-            Self::TooManyThreadMessagesDocument { count, limit, path } => format!("The document at {0} holds a comment thread of {count} messages, past {limit}", crate::refusal_text::json(path)),
-            Self::TagsCountBoardUpdate { amount, limit } => format!("This update would give the board {amount} tags, past {limit}"),
-            Self::TagsCountBoardDocument { amount, limit, path } => format!("The document at {0} gives the board {amount} tags, past {limit}", crate::refusal_text::json(path)),
-            Self::TagsCountElementUpdate { amount, element_id, limit } => format!("This update would give element {0} {amount} tags, past {limit}", crate::refusal_text::json(element_id)),
-            Self::TagsCountElementDocument { amount, element_id, limit, path } => format!("The document at {0} gives element {1} {amount} tags, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(element_id)),
-            Self::TagsLengthBoardUpdate { amount, limit } => format!("This update would give the board a tag of {amount} characters, past {limit}"),
-            Self::TagsLengthBoardDocument { amount, limit, path } => format!("The document at {0} gives the board a tag of {amount} characters, past {limit}", crate::refusal_text::json(path)),
-            Self::TagsLengthElementUpdate { amount, element_id, limit } => format!("This update would give element {0} a tag of {amount} characters, past {limit}", crate::refusal_text::json(element_id)),
-            Self::TagsLengthElementDocument { amount, element_id, limit, path } => format!("The document at {0} gives element {1} a tag of {amount} characters, past {limit}", crate::refusal_text::json(path), crate::refusal_text::json(element_id)),
-            Self::CanvasTooLargeNodesUpdate { count, limit } => format!("This update would leave a canvas of {count} nodes, past {limit}"),
-            Self::CanvasTooLargeNodesDocument { count, limit, path } => format!("The document at {0} is a canvas of {count} nodes, past {limit}", crate::refusal_text::json(path)),
-            Self::CanvasTooLargeEdgesAndLinesUpdate { count, limit } => format!("This update would leave a canvas of {count} edges and lines, past {limit}"),
-            Self::CanvasTooLargeEdgesAndLinesDocument { count, limit, path } => format!("The document at {0} is a canvas of {count} edges and lines, past {limit}", crate::refusal_text::json(path)),
-            Self::ContentRootKindUpdate { key } => format!("This update would leave a document holding something other than its own content container at {0}, which leaves that document unreadable", crate::refusal_text::json(key)),
-            Self::ContentRootKindDocument { key, path } => format!("The document at {0} is holding something other than its own content container at {1}, which leaves that document unreadable", crate::refusal_text::json(path), crate::refusal_text::json(key)),
-            Self::UnattachedContainerUpdate { container } => format!("This update writes into a container ({container}) created by a change they do not build on, so nothing of it was kept. Send them built on the change that creates the container"),
-            Self::UnattachedContainerDocument { container, path } => format!("The document at {0} holds in its history writes into a container ({container}) created by a change they do not build on, so nothing of it was kept. Send them built on the change that creates the container", crate::refusal_text::json(path)),
-            Self::ReservedMapKeyUpdate { container } => format!("This update writes a key named \"__proto__\" (in {container}), which no document may hold, so nothing of it was kept"),
-            Self::ReservedMapKeyDocument { container, path } => format!("The document at {0} holds in its history a write of a key named \"__proto__\" (in {container}), which no document may hold, so nothing of it was kept", crate::refusal_text::json(path)),
-            Self::ReservedKeyWrite { container } => format!("This write holds a key named \"__proto__\" (in {container}), which no document may hold, so nothing of it was kept"),
-            Self::RetiredShapeWrittenUpdate { found } => format!("This update would write {found}, a form an older version stored and this one no longer reads, so nothing of it was kept"),
-            Self::RetiredShapeWrittenDocument { found, path } => format!("The document at {0} holds in its history {found}, a form an older version stored and this one no longer reads, so nothing of it was kept", crate::refusal_text::json(path)),
-            Self::RetiredCommentPlaneWrittenUpdate { rows } => format!("This update would write a comment in the flat comments plane an older version kept comments in ({rows} there now), which this one no longer reads, so nothing of it was kept"),
-            Self::RetiredCommentPlaneWrittenDocument { path, rows } => format!("The document at {0} holds in its history a comment in the flat comments plane an older version kept comments in ({rows} there now), which this one no longer reads, so nothing of it was kept", crate::refusal_text::json(path)),
-            Self::OffGrammarPath { max_length, paths } => format!("This update would put documents or folders at paths this keeper cannot store: {0}. A path may be at most {max_length} characters, and each segment may hold only ASCII letters, digits and interior hyphens", crate::refusal_text::json_list(paths)),
-            Self::OffGrammarPathMore { max_length, more, paths } => format!("This update would put documents or folders at paths this keeper cannot store: {0} and {more} more. A path may be at most {max_length} characters, and each segment may hold only ASCII letters, digits and interior hyphens", crate::refusal_text::json_list(paths)),
-            Self::UnreadableDocumentMeta { nodes } => format!("This update would leave workspace nodes this keeper cannot read ({0}), which hides the documents they hold and everything below them; a document needs a known kind, a segment, its id and whole-number timestamps, and a folder carries only its segment", crate::refusal_text::list(nodes)),
-            Self::DocumentKindChangedNamedKind { document_id, kind, recorded } => format!("This update would leave the envelope of document {document_id} saying \"{kind}\" while the document is recorded as \"{recorded}\"; a document keeps the kind it was created as"),
-            Self::DocumentKindChangedNamedNoKind { document_id, recorded } => format!("This update would leave the envelope of document {document_id} saying no kind while the document is recorded as \"{recorded}\"; a document keeps the kind it was created as"),
-            Self::DocumentKindChangedUnnamedKind { kind, recorded } => format!("This update would leave the envelope of a document saying \"{kind}\" while the document is recorded as \"{recorded}\"; a document keeps the kind it was created as"),
-            Self::DocumentKindChangedUnnamedNoKind { recorded } => format!("This update would leave the envelope of a document saying no kind while the document is recorded as \"{recorded}\"; a document keeps the kind it was created as"),
-            Self::DocumentNameTooLong { max_length, paths } => format!("This update would give {0} a display name past {max_length} characters, the most a name may have", crate::refusal_text::json_list(paths)),
-            Self::FolderNameRefused { paths, reason } => format!("This update would give the folder {0} a name no folder may have. {reason}", crate::refusal_text::json_list(paths)),
-            Self::CausalGap => "This update builds on changes this keeper has not received yet, so nothing of it was kept. Send the changes it builds on first".to_owned(),
-            Self::TooManyDocuments { documents, limit } => format!("This write would leave the workspace holding {documents} documents; a workspace holds at most {limit}. Move some documents to another workspace first"),
-            Self::TooManyFolders { folders, limit } => format!("This write would leave the workspace holding {folders} folders; a workspace holds at most {limit}. Move or delete some folders' documents first"),
-            Self::TooManyWorkspaces { limit, namespace } => format!("\"{namespace}\" already holds {limit} workspaces, the most one person may hold on this server"),
-            Self::TooManyVersions { limit } => format!("This document already keeps {limit} saved versions, the most one document keeps; no further version can be saved for it"),
-            Self::DocumentNotFound { document_id, workspace_id } => format!("Document not found: {document_id} in workspace {workspace_id}"),
-            Self::DocumentNotFoundInIndex { target, workspace_id } => format!("No document \"{target}\" in workspace \"{workspace_id}\""),
-            Self::DocumentSnapshotNotFound { document_id } => format!("document has no saved snapshot: {document_id}"),
-            Self::DocumentEngineTrapLoading { subject } => format!("The CRDT engine aborted while loading {subject}; nothing from this write was stored. A very large document is the usual trigger. If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted."),
-            Self::DocumentEngineTrapSaving { subject } => format!("The CRDT engine aborted while saving {subject}; nothing from this write was stored. A very large document is the usual trigger. If the same document fails again, its in-memory copy is unusable until the daemon restarts or the document is deleted."),
-            Self::DocumentEngineTrapImporting { subject } => format!("The CRDT engine aborted while importing an update into {subject}; nothing from this write was stored. A very large document is the usual trigger. The in-memory copy was dropped, so the next request reloads what was stored; sending the same update again aborts the same way. After a trap this process may abort on other large writes too, until the daemon restarts."),
-            Self::DocumentEngineTrapRunningRecovered { subject } => format!("The Rust core aborted while running {subject}; nothing from this request was stored. The core was reset, so the next request runs on a fresh instance; sending the same input again may abort the same way."),
-            Self::DocumentEngineTrapRunningUnrecoverable { subject } => format!("The Rust core aborted while running {subject}; nothing from this request was stored. The core could not be reset and answers every request with this until the daemon restarts."),
-            Self::DocumentKindMismatch { detail, document_id, kind } => format!("Document {document_id} is a {kind} document. {detail}"),
-            Self::WorkspaceNotFoundForCallerRead { workspace_id } => format!("Workspace not found: \"{workspace_id}\". Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true)."),
-            Self::WorkspaceNotFoundForCallerReadKnown { known, workspace_id } => format!("Workspace not found: \"{workspace_id}\". Workspaces here: {0}. Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).", crate::refusal_text::quoted_list(known)),
-            Self::WorkspaceNotFoundForCallerCreate { workspace_id } => format!("Workspace not found: \"{workspace_id}\". Pass createWorkspace: true on this wb_workspace_edit call to create it along with the document."),
-            Self::WorkspaceNotFoundForCallerCreateKnown { known, workspace_id } => format!("Workspace not found: \"{workspace_id}\". Workspaces here: {0}. Pass createWorkspace: true on this wb_workspace_edit call to create it along with the document.", crate::refusal_text::quoted_list(known)),
-            Self::WorkspaceNotFoundInIndex { workspace_id } => format!("Workspace not found: \"{workspace_id}\". Create it before adding documents to it."),
-            Self::WorkspaceNotFoundByHandle { handle } => format!("Workspace \"{handle}\" not found"),
-            Self::DocumentPathTaken { path, workspace_id } => format!("Document path \"{path}\" already exists in workspace \"{workspace_id}\""),
-            Self::DisplayNameTaken { display_name, kind } => format!("Another {kind} here is already called \"{0}\". Choose a name no other {kind} here has.", crate::refusal_text::trim(display_name)),
-            Self::WorkspaceSegmentTaken { segment } => format!("Workspace segment \"{segment}\" is already taken"),
-            Self::WorkspaceSegmentTakenInNamespace { namespace, segment } => format!("Workspace segment \"{segment}\" is already taken in namespace \"{namespace}\""),
-            Self::WorkspaceSegmentUnusable { handle } => format!("Cannot create workspace \"{handle}\": a new workspace is addressed by its segment, which must be ASCII letters, digits and interior hyphens, and must not itself be shaped like a canonical id. Choose a name that fits, or address an existing workspace by its id."),
-            Self::DocumentNameConflict { given, title } => format!("name \"{given}\" and the frontmatter title \"{title}\" are two display names for one document. Give one of them, or make them the same."),
-            Self::DocumentHasDescendants { detail, path } => format!("Document \"{path}\" has descendants. {detail}"),
-            Self::DocumentMoveIntoSelf { from, to } => format!("Cannot move \"{from}\" to \"{to}\": the destination is inside the subtree being moved"),
-            Self::CannotPlaceCopyContested { path, workspace_id } => format!("More than one document carries \"{path}\" in workspace \"{workspace_id}\". Resolve by documentId, or rename one of them."),
-            Self::CannotPlaceCopyNoRoom { path } => format!("There is no room beside \"{path}\" for a copy: its folder's path is too long."),
-            Self::DocumentSerializeFailed { cause, document_id, format } => format!("Document {document_id} cannot be read as {format}: {cause}. Rewrite it with `wb_workspace_edit`'s `document.set` op to repair it."),
-            Self::StoredDocumentUnsupportedVersion { message } | Self::CorruptStoredData { message } => message.clone(),
-            Self::RetiredCommentPlane { rows } => format!("this document holds {rows} comment{0} saved by an older version in a form this version no longer reads (the flat comments plane before threads); its data has not been changed", crate::refusal_text::plural_s(*rows)),
-            Self::RetiredStoredShape { found } => format!("this document holds {found}, saved by an older version in a form this version no longer reads; its data has not been changed"),
-            Self::ReferenceRewriteBodyTooLarge { chars, limit } => format!("The links would make the document body {chars} characters long, past {limit}"),
-            Self::ReferenceRewriteNodeTextTooLarge { chars, limit, node_id } => format!("The links would give node {0} {chars} characters of text, past {limit}", crate::refusal_text::json(node_id)),
-            Self::OkfParseFailed { detail, message, stage } | Self::OkfNotYamlSafe { detail, message, stage } => format!("OKF parse failed at {stage}: {message}{detail}"),
-            Self::TagNotAdmitted { admitted, key, library_path, tag, what } => format!("tag \"{tag}\" on {what} is not admitted: the workspace's tag library (the document at \"{library_path}\") declares {key} as one of {0}", crate::refusal_text::list(admitted)),
-            Self::TagExclusive { carried, key, library_path, what } => format!("{key} is one value at a time in the workspace's tag library (the document at \"{library_path}\"), and this write leaves {what} with {0}", crate::refusal_text::and_list(carried)),
-            Self::FacetWriteRejected { facet_key, reason } => format!("facet \"{facet_key}\" rejected: {reason}"),
-            Self::SearchNeedsQueryOrFilter => "Nothing to search for: pass `query` (words to match), or `tags` / `kind` (a filter to answer alone), or both. To list every document, use wb_document_list.".to_owned(),
-            Self::SearchNeedsQueryOrFilterRoute => "Nothing to search for: pass `q` (words to match), or `tag` / `kind` (a filter to answer alone), or both.".to_owned(),
-            Self::NamelessLinkifyTarget { target_document_id } => format!("Document {target_document_id} has no display name — nothing names it in prose, so there is nothing to linkify."),
-            Self::InvalidBodyNotJson => "the request body is not valid JSON".to_owned(),
-            Self::InvalidRequest { reason } => reason.clone(),
-            Self::DatabaseBusy => "The database is busy; retry shortly.".to_owned(),
-            Self::InternalError => "The server failed to handle this request.".to_owned(),
-        }
-    }
-}
-
 impl fmt::Display for Refusal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.message())
     }
-}
-
-/// Each refusal built from the example the contract pins for it, by name.
-#[cfg(test)]
-#[expect(clippy::too_many_lines, reason = "one arm per refusal the contract lists")]
-pub(crate) fn examples() -> Vec<(&'static str, Refusal)> {
-    vec![
-        ("MarkdownRunUpdate", Refusal::MarkdownRunUpdate { chars: 300_000, limit: "the 262144-character limit for one document; split the content across documents".to_owned() }),
-        ("MarkdownBodyUpdate", Refusal::MarkdownBodyUpdate { chars: 300_000, limit: "the 262144-character limit for one document; split the content across documents".to_owned() }),
-        ("MarkdownRunsUpdate", Refusal::MarkdownRunsUpdate { chars: 400_000, max_chars: 262_144, runs: 3 }),
-        ("MarkdownBodyDocument", Refusal::MarkdownBodyDocument { chars: 300_000, limit: "the 262144-character limit for one document; split the content across documents".to_owned(), path: "notes/a".to_owned() }),
-        ("MarkdownRunDocument", Refusal::MarkdownRunDocument { chars: 300_000, max_chars: 262_144, path: "notes/a".to_owned() }),
-        ("MarkdownRunDocumentWithBody", Refusal::MarkdownRunDocumentWithBody { body_chars: 120, chars: 300_000, max_chars: 262_144, path: "notes/a".to_owned() }),
-        ("MarkdownRunsDocument", Refusal::MarkdownRunsDocument { chars: 400_000, max_chars: 262_144, path: "notes/a".to_owned(), runs: 3 }),
-        ("NodeTextTooLargeUpdate", Refusal::NodeTextTooLargeUpdate { chars: 70_000, limit: "the 8192-character limit for one node; split it across nodes, or put it in a markdown document and embed that".to_owned(), node_id: "n1".to_owned() }),
-        ("NodeTextTooLargeDocument", Refusal::NodeTextTooLargeDocument { chars: 70_000, limit: "the 8192-character limit for one node; split it across nodes, or put it in a markdown document and embed that".to_owned(), node_id: "n1".to_owned(), path: "notes/a".to_owned() }),
-        ("NodeLocationTooLargeUpdate", Refusal::NodeLocationTooLargeUpdate { chars: 8193, limit: "the 8192-character limit".to_owned(), node_id: "n1".to_owned() }),
-        ("NodeLocationTooLargeDocument", Refusal::NodeLocationTooLargeDocument { chars: 8193, limit: "the 8192-character limit".to_owned(), node_id: "n1".to_owned(), path: "notes/a".to_owned() }),
-        ("LabelTooLargeUpdate", Refusal::LabelTooLargeUpdate { chars: 9000, element_id: "e1".to_owned(), limit: "the 1024-character limit; a longer text belongs in a text node".to_owned() }),
-        ("LabelTooLargeDocument", Refusal::LabelTooLargeDocument { chars: 9000, element_id: "e1".to_owned(), limit: "the 1024-character limit; a longer text belongs in a text node".to_owned(), path: "notes/a".to_owned() }),
-        ("CommentMessageTooLargeUpdate", Refusal::CommentMessageTooLargeUpdate { chars: 9000, limit: "the 4096-character limit; split it across replies".to_owned(), message_id: "m1".to_owned() }),
-        ("CommentMessageTooLargeDocument", Refusal::CommentMessageTooLargeDocument { chars: 9000, limit: "the 4096-character limit; split it across replies".to_owned(), message_id: "m1".to_owned(), path: "notes/a".to_owned() }),
-        ("ContainerNameTooLongUpdate", Refusal::ContainerNameTooLongUpdate { chars: 5000, limit: "the 1024-character limit for the name of one container; a thread or a proposal is named by its id".to_owned() }),
-        ("ContainerNameTooLongDocument", Refusal::ContainerNameTooLongDocument { chars: 5000, limit: "the 1024-character limit for the name of one container; a thread or a proposal is named by its id".to_owned(), path: "notes/a".to_owned() }),
-        ("CommentAnchorTooLargeUpdate", Refusal::CommentAnchorTooLargeUpdate { count: 3000, limit: "the 2000-node limit for one comment anchor, a whole canvas's worth".to_owned(), thread_id: "t1".to_owned() }),
-        ("CommentAnchorTooLargeDocument", Refusal::CommentAnchorTooLargeDocument { count: 3000, limit: "the 2000-node limit for one comment anchor, a whole canvas's worth".to_owned(), path: "notes/a".to_owned(), thread_id: "t1".to_owned() }),
-        ("AnchorQuoteTooLongUpdate", Refusal::AnchorQuoteTooLongUpdate { chars: 5000, element_id: "t1".to_owned(), limit: "the 1024-character limit for the passage one anchor quotes; quote a shorter passage, or split a replacement across changes".to_owned() }),
-        ("AnchorQuoteTooLongDocument", Refusal::AnchorQuoteTooLongDocument { chars: 5000, element_id: "t1".to_owned(), limit: "the 1024-character limit for the passage one anchor quotes; quote a shorter passage, or split a replacement across changes".to_owned(), path: "notes/a".to_owned() }),
-        ("TooManyOpenThreadsUpdate", Refusal::TooManyOpenThreadsUpdate { count: 600, limit: "the limit of 500 open comment threads for one document; resolve some first".to_owned() }),
-        ("TooManyOpenThreadsDocument", Refusal::TooManyOpenThreadsDocument { count: 600, limit: "the limit of 500 open comment threads for one document; resolve some first".to_owned(), path: "notes/a".to_owned() }),
-        ("TooManyOpenChangesUpdate", Refusal::TooManyOpenChangesUpdate { count: 1001, limit: "the limit of 1000 open proposed changes for one document; adopt or dismiss some first".to_owned() }),
-        ("TooManyOpenChangesDocument", Refusal::TooManyOpenChangesDocument { count: 1001, limit: "the limit of 1000 open proposed changes for one document; adopt or dismiss some first".to_owned(), path: "notes/a".to_owned() }),
-        ("TooManyThreadMessagesUpdate", Refusal::TooManyThreadMessagesUpdate { count: 1001, limit: "the limit of 1000 messages in one comment thread; open a new thread to continue".to_owned() }),
-        ("TooManyThreadMessagesDocument", Refusal::TooManyThreadMessagesDocument { count: 1001, limit: "the limit of 1000 messages in one comment thread; open a new thread to continue".to_owned(), path: "notes/a".to_owned() }),
-        ("TagsCountBoardUpdate", Refusal::TagsCountBoardUpdate { amount: 1025, limit: "the 1024-tag limit for one document, board, node or edge".to_owned() }),
-        ("TagsCountBoardDocument", Refusal::TagsCountBoardDocument { amount: 1025, limit: "the 1024-tag limit for one document, board, node or edge".to_owned(), path: "notes/a".to_owned() }),
-        ("TagsCountElementUpdate", Refusal::TagsCountElementUpdate { amount: 1025, element_id: "n1".to_owned(), limit: "the 1024-tag limit for one document, board, node or edge".to_owned() }),
-        ("TagsCountElementDocument", Refusal::TagsCountElementDocument { amount: 1025, element_id: "n1".to_owned(), limit: "the 1024-tag limit for one document, board, node or edge".to_owned(), path: "notes/a".to_owned() }),
-        ("TagsLengthBoardUpdate", Refusal::TagsLengthBoardUpdate { amount: 1025, limit: "the 1024-character limit for one tag".to_owned() }),
-        ("TagsLengthBoardDocument", Refusal::TagsLengthBoardDocument { amount: 1025, limit: "the 1024-character limit for one tag".to_owned(), path: "notes/a".to_owned() }),
-        ("TagsLengthElementUpdate", Refusal::TagsLengthElementUpdate { amount: 1025, element_id: "n1".to_owned(), limit: "the 1024-character limit for one tag".to_owned() }),
-        ("TagsLengthElementDocument", Refusal::TagsLengthElementDocument { amount: 1025, element_id: "n1".to_owned(), limit: "the 1024-character limit for one tag".to_owned(), path: "notes/a".to_owned() }),
-        ("CanvasTooLargeNodesUpdate", Refusal::CanvasTooLargeNodesUpdate { count: 3000, limit: "the 2000-node limit for one canvas; remove nodes first, or split the board across canvases".to_owned() }),
-        ("CanvasTooLargeNodesDocument", Refusal::CanvasTooLargeNodesDocument { count: 3000, limit: "the 2000-node limit for one canvas; remove nodes first, or split the board across canvases".to_owned(), path: "notes/a".to_owned() }),
-        ("CanvasTooLargeEdgesAndLinesUpdate", Refusal::CanvasTooLargeEdgesAndLinesUpdate { count: 3000, limit: "the limit of 2000 edges and lines together for one canvas; remove edges or lines first, or split the board across canvases".to_owned() }),
-        ("CanvasTooLargeEdgesAndLinesDocument", Refusal::CanvasTooLargeEdgesAndLinesDocument { count: 3000, limit: "the limit of 2000 edges and lines together for one canvas; remove edges or lines first, or split the board across canvases".to_owned(), path: "notes/a".to_owned() }),
-        ("ContentRootKindUpdate", Refusal::ContentRootKindUpdate { key: "content".to_owned() }),
-        ("ContentRootKindDocument", Refusal::ContentRootKindDocument { key: "content".to_owned(), path: "notes/a".to_owned() }),
-        ("UnattachedContainerUpdate", Refusal::UnattachedContainerUpdate { container: "cid:1@2:Map".to_owned() }),
-        ("UnattachedContainerDocument", Refusal::UnattachedContainerDocument { container: "cid:1@2:Map".to_owned(), path: "notes/a".to_owned() }),
-        ("ReservedMapKeyUpdate", Refusal::ReservedMapKeyUpdate { container: "cid:1@2:Map".to_owned() }),
-        ("ReservedMapKeyDocument", Refusal::ReservedMapKeyDocument { container: "cid:1@2:Map".to_owned(), path: "notes/a".to_owned() }),
-        ("ReservedKeyWrite", Refusal::ReservedKeyWrite { container: "doc".to_owned() }),
-        ("RetiredShapeWrittenUpdate", Refusal::RetiredShapeWrittenUpdate { found: "node \"n1\" stored under the retired key".to_owned() }),
-        ("RetiredShapeWrittenDocument", Refusal::RetiredShapeWrittenDocument { found: "node \"n1\" stored under the retired key".to_owned(), path: "notes/a".to_owned() }),
-        ("RetiredCommentPlaneWrittenUpdate", Refusal::RetiredCommentPlaneWrittenUpdate { rows: 2 }),
-        ("RetiredCommentPlaneWrittenDocument", Refusal::RetiredCommentPlaneWrittenDocument { path: "notes/a".to_owned(), rows: 2 }),
-        ("OffGrammarPath", Refusal::OffGrammarPath { max_length: 1024, paths: vec!["a b".to_owned(), "c".to_owned()] }),
-        ("OffGrammarPathMore", Refusal::OffGrammarPathMore { max_length: 1024, more: 2, paths: vec!["a b".to_owned(), "c".to_owned(), "d e".to_owned()] }),
-        ("UnreadableDocumentMeta", Refusal::UnreadableDocumentMeta { nodes: vec!["a".to_owned(), "b/c".to_owned()] }),
-        ("DocumentKindChangedNamedKind", Refusal::DocumentKindChangedNamedKind { document_id: "d1".to_owned(), kind: "markdown".to_owned(), recorded: "spatial".to_owned() }),
-        ("DocumentKindChangedNamedNoKind", Refusal::DocumentKindChangedNamedNoKind { document_id: "d1".to_owned(), recorded: "spatial".to_owned() }),
-        ("DocumentKindChangedUnnamedKind", Refusal::DocumentKindChangedUnnamedKind { kind: "markdown".to_owned(), recorded: "spatial".to_owned() }),
-        ("DocumentKindChangedUnnamedNoKind", Refusal::DocumentKindChangedUnnamedNoKind { recorded: "spatial".to_owned() }),
-        ("DocumentNameTooLong", Refusal::DocumentNameTooLong { max_length: 200, paths: vec!["a".to_owned(), "b".to_owned()] }),
-        ("FolderNameRefused", Refusal::FolderNameRefused { paths: vec!["a".to_owned()], reason: "A folder name cannot be blank.".to_owned() }),
-        ("CausalGap", Refusal::CausalGap),
-        ("TooManyDocuments", Refusal::TooManyDocuments { documents: 2001, limit: 2000 }),
-        ("TooManyFolders", Refusal::TooManyFolders { folders: 4001, limit: 4000 }),
-        ("TooManyWorkspaces", Refusal::TooManyWorkspaces { limit: 1000, namespace: "ns".to_owned() }),
-        ("TooManyVersions", Refusal::TooManyVersions { limit: 50 }),
-        ("DocumentNotFound", Refusal::DocumentNotFound { document_id: "d1".to_owned(), workspace_id: "w1".to_owned() }),
-        ("DocumentNotFoundInIndex", Refusal::DocumentNotFoundInIndex { target: "a/b".to_owned(), workspace_id: "w1".to_owned() }),
-        ("DocumentSnapshotNotFound", Refusal::DocumentSnapshotNotFound { document_id: "d1".to_owned() }),
-        ("DocumentEngineTrapLoading", Refusal::DocumentEngineTrapLoading { subject: "document d1".to_owned() }),
-        ("DocumentEngineTrapSaving", Refusal::DocumentEngineTrapSaving { subject: "document d1".to_owned() }),
-        ("DocumentEngineTrapImporting", Refusal::DocumentEngineTrapImporting { subject: "document d1".to_owned() }),
-        ("DocumentEngineTrapRunningRecovered", Refusal::DocumentEngineTrapRunningRecovered { subject: "layout".to_owned() }),
-        ("DocumentEngineTrapRunningUnrecoverable", Refusal::DocumentEngineTrapRunningUnrecoverable { subject: "layout".to_owned() }),
-        ("DocumentKindMismatch", Refusal::DocumentKindMismatch { detail: "Use wb_body_edit.".to_owned(), document_id: "d1".to_owned(), kind: "markdown".to_owned() }),
-        ("WorkspaceNotFoundForCallerRead", Refusal::WorkspaceNotFoundForCallerRead { workspace_id: "w1".to_owned() }),
-        ("WorkspaceNotFoundForCallerReadKnown", Refusal::WorkspaceNotFoundForCallerReadKnown { known: vec!["a".to_owned(), "b".to_owned()], workspace_id: "w1".to_owned() }),
-        ("WorkspaceNotFoundForCallerCreate", Refusal::WorkspaceNotFoundForCallerCreate { workspace_id: "w1".to_owned() }),
-        ("WorkspaceNotFoundForCallerCreateKnown", Refusal::WorkspaceNotFoundForCallerCreateKnown { known: vec!["a".to_owned(), "b".to_owned()], workspace_id: "w1".to_owned() }),
-        ("WorkspaceNotFoundInIndex", Refusal::WorkspaceNotFoundInIndex { workspace_id: "w1".to_owned() }),
-        ("WorkspaceNotFoundByHandle", Refusal::WorkspaceNotFoundByHandle { handle: "w1".to_owned() }),
-        ("DocumentPathTaken", Refusal::DocumentPathTaken { path: "a/b".to_owned(), workspace_id: "w1".to_owned() }),
-        ("DisplayNameTaken", Refusal::DisplayNameTaken { display_name: " Notes ".to_owned(), kind: "folder".to_owned() }),
-        ("WorkspaceSegmentTaken", Refusal::WorkspaceSegmentTaken { segment: "notes".to_owned() }),
-        ("WorkspaceSegmentTakenInNamespace", Refusal::WorkspaceSegmentTakenInNamespace { namespace: "ns".to_owned(), segment: "notes".to_owned() }),
-        ("WorkspaceSegmentUnusable", Refusal::WorkspaceSegmentUnusable { handle: "no way!".to_owned() }),
-        ("DocumentNameConflict", Refusal::DocumentNameConflict { given: "A".to_owned(), title: "B".to_owned() }),
-        ("DocumentHasDescendants", Refusal::DocumentHasDescendants { detail: "Delete a/b first.".to_owned(), path: "a".to_owned() }),
-        ("DocumentMoveIntoSelf", Refusal::DocumentMoveIntoSelf { from: "a".to_owned(), to: "a/b".to_owned() }),
-        ("CannotPlaceCopyContested", Refusal::CannotPlaceCopyContested { path: "a".to_owned(), workspace_id: "w1".to_owned() }),
-        ("CannotPlaceCopyNoRoom", Refusal::CannotPlaceCopyNoRoom { path: "a/b".to_owned() }),
-        ("DocumentSerializeFailed", Refusal::DocumentSerializeFailed { cause: "a value YAML cannot carry".to_owned(), document_id: "d1".to_owned(), format: "okf".to_owned() }),
-        ("StoredDocumentUnsupportedVersion", Refusal::StoredDocumentUnsupportedVersion { message: "stored under version 9".to_owned() }),
-        ("CorruptStoredData", Refusal::CorruptStoredData { message: "does not parse".to_owned() }),
-        ("RetiredCommentPlane", Refusal::RetiredCommentPlane { rows: 2 }),
-        ("RetiredStoredShape", Refusal::RetiredStoredShape { found: "node \"n1\" stored under the retired key".to_owned() }),
-        ("ReferenceRewriteBodyTooLarge", Refusal::ReferenceRewriteBodyTooLarge { chars: 300_000, limit: "the 262144-character limit for one document; split the content across documents".to_owned() }),
-        ("ReferenceRewriteNodeTextTooLarge", Refusal::ReferenceRewriteNodeTextTooLarge { chars: 70_000, limit: "the 8192-character limit for one node; split it across nodes, or put it in a markdown document and embed that".to_owned(), node_id: "n1".to_owned() }),
-        ("OkfParseFailed", Refusal::OkfParseFailed { detail: " — a.b: nope".to_owned(), message: "bad yaml".to_owned(), stage: "frontmatter".to_owned() }),
-        ("OkfNotYamlSafe", Refusal::OkfNotYamlSafe { detail: String::new(), message: ".nan has no YAML spelling".to_owned(), stage: "yaml-safe".to_owned() }),
-        ("TagNotAdmitted", Refusal::TagNotAdmitted { admitted: vec!["dev".to_owned(), "prod".to_owned()], key: "env".to_owned(), library_path: "tags".to_owned(), tag: "env:qa".to_owned(), what: "the board".to_owned() }),
-        ("TagExclusive", Refusal::TagExclusive { carried: vec!["env:dev".to_owned(), "env:prod".to_owned()], key: "env".to_owned(), library_path: "tags".to_owned(), what: "node redis".to_owned() }),
-        ("FacetWriteRejected", Refusal::FacetWriteRejected { facet_key: "visual.shape/v1".to_owned(), reason: "bad payload".to_owned() }),
-        ("SearchNeedsQueryOrFilter", Refusal::SearchNeedsQueryOrFilter),
-        ("SearchNeedsQueryOrFilterRoute", Refusal::SearchNeedsQueryOrFilterRoute),
-        ("NamelessLinkifyTarget", Refusal::NamelessLinkifyTarget { target_document_id: "d1".to_owned() }),
-        ("InvalidBodyNotJson", Refusal::InvalidBodyNotJson),
-        ("InvalidRequest", Refusal::InvalidRequest { reason: "unknown query parameter \"x\"; it reads q".to_owned() }),
-        ("DatabaseBusy", Refusal::DatabaseBusy),
-        ("InternalError", Refusal::InternalError),
-    ]
 }

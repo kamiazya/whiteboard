@@ -2144,6 +2144,100 @@
       "exampleText": "The server failed to handle this request.",
       "surfaces": ["api-v1"],
       "source": "create-server.ts answerUnhandled"
+    },
+    {
+      "name": "VersionNotFound",
+      "code": "version_not_found",
+      "status": 404,
+      "description": "A restore naming a version the document's own history does not hold: none by that id, or another document's.",
+      "message": "version not found: {versionId} in document {documentId}",
+      "params": {
+        "versionId": "string",
+        "documentId": "string"
+      },
+      "example": {
+        "versionId": "v1",
+        "documentId": "d1"
+      },
+      "exampleText": "version not found: v1 in document d1",
+      "surfaces": ["mcp-tools"],
+      "source": "VersionNotFoundError"
+    },
+    {
+      "name": "RestoreTargetExists",
+      "code": "document_path_taken",
+      "status": 409,
+      "description": "A restore into a targetPath that already holds a document, without overwrite.",
+      "message": "target already exists: {targetPath} — pass overwrite: true to restore onto it",
+      "params": {
+        "targetPath": "string"
+      },
+      "example": {
+        "targetPath": "a/b"
+      },
+      "exampleText": "target already exists: a/b — pass overwrite: true to restore onto it",
+      "surfaces": ["mcp-tools"],
+      "source": "RestoreTargetExistsError"
+    },
+    {
+      "name": "SubtreeNeedsWorkspaceVersion",
+      "code": "invalid_request",
+      "status": 400,
+      "description": "A subtree rollback to a version that does not carry the whole workspace at that point.",
+      "message": "subtree rollback needs a workspace-scoped version: {versionId}",
+      "params": {
+        "versionId": "string"
+      },
+      "example": {
+        "versionId": "v1"
+      },
+      "exampleText": "subtree rollback needs a workspace-scoped version: v1",
+      "surfaces": ["mcp-tools"],
+      "source": "SubtreeNeedsWorkspaceVersionError"
+    },
+    {
+      "name": "SubtreeTakesNoTarget",
+      "code": "invalid_request",
+      "status": 400,
+      "description": "A subtree rollback asked to land at a targetPath other than where it rolls back.",
+      "message": "subtree rollback cannot take a targetPath",
+      "params": {},
+      "example": {},
+      "exampleText": "subtree rollback cannot take a targetPath",
+      "surfaces": ["mcp-tools"],
+      "source": "SubtreeTakesNoTargetError"
+    },
+    {
+      "name": "InvalidRestoreTargetPath",
+      "code": "invalid_request",
+      "status": 400,
+      "description": "A restore targetPath that is not a document path, refused by the operation as the backstop no surface can skip.",
+      "message": "invalid targetPath: {targetPath}",
+      "params": {
+        "targetPath": "string"
+      },
+      "example": {
+        "targetPath": "a//b"
+      },
+      "exampleText": "invalid targetPath: a//b",
+      "surfaces": ["mcp-tools"],
+      "source": "InvalidRestoreTargetPathError"
+    },
+    {
+      "name": "RestoredDocumentIdMissing",
+      "code": "internal_error",
+      "status": 500,
+      "description": "A restore that landed at a path whose row lists no document id, so the caller cannot be told which document holds it.",
+      "message": "restored document has no id: {targetPath}",
+      "params": {
+        "targetPath": "string"
+      },
+      "example": {
+        "targetPath": "a/b"
+      },
+      "exampleText": "restored document has no id: a/b",
+      "surfaces": ["mcp-tools"],
+      "source": "RestoredDocumentIdMissingError"
     }
   ]
 }

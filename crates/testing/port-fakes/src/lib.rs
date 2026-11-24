@@ -20,7 +20,7 @@ pub use block_on::block_on;
 pub use fixed_caller::FixedCaller;
 pub use fixed_clock::FixedClock;
 pub use keyed_lock::{Acquire, KeyedGuard, KeyedLock};
-pub use memory_record_store::MemoryRecordStore;
+pub use memory_record_store::{MemoryRecordStore, Merge};
 pub use memory_registry::MemoryRegistry;
 pub use memory_version_store::MemoryVersionStore;
 pub use seq_id_mint::SeqIdMint;

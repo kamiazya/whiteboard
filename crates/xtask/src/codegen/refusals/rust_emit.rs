@@ -1,6 +1,7 @@
-//! The Rust half of the refusals generator: the `Refusal` enum, its
-//! `code`/`status`/`message` matches and its examples, written from the same
-//! checked entries the TypeScript half reads.
+//! The Rust half of the refusals generator: a table of one row per refusal,
+//! read by a macro that writes the `Refusal` enum, its `code`/`status`/
+//! `message` and its examples, from the same checked entries the TypeScript
+//! half reads.
 
 use std::fmt::Write as _;
 
@@ -43,19 +44,6 @@ fn rust_example(value: &Value, ty: Ty) -> String {
             format!("vec![{}]", items.join(", "))
         }
     }
-}
-
-/// `Self::Name { a, b }`, `Self::Name { .. }` for a match that reads none of
-/// them, or the bare name of a refusal that has none.
-fn rust_pattern(e: &Checked<'_>, bind: bool) -> String {
-    if e.tys.is_empty() {
-        return format!("Self::{}", e.entry.name);
-    }
-    if !bind {
-        return format!("Self::{} {{ .. }}", e.entry.name);
-    }
-    let fields: Vec<String> = e.tys.keys().map(|name| snake_of_camel(name)).collect();
-    format!("Self::{} {{ {} }}", e.entry.name, fields.join(", "))
 }
 
 fn rust_message(e: &Checked<'_>) -> String {
@@ -105,28 +93,6 @@ fn rust_message(e: &Checked<'_>) -> String {
     format!("format!({}{rest})", rust_literal(&format))
 }
 
-const EXPECT_LONG_MATCH: &str = "    #[expect(\n        clippy::too_many_lines,\n        reason = \"one arm per refusal the contract lists\"\n    )]\n";
-
-fn rust_variants(out: &mut String, entries: &[Checked<'_>]) {
-    out.push_str(
-        "\n/// A refusal: the code and status a request is answered with, and its sentence.\n",
-    );
-    out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\npub enum Refusal {\n");
-    for e in entries {
-        rust_doc(out, 4, &e.entry.description);
-        if e.tys.is_empty() {
-            let _ = writeln!(out, "    {},", e.entry.name);
-            continue;
-        }
-        let _ = writeln!(out, "    {} {{", e.entry.name);
-        for (name, ty) in &e.tys {
-            let _ = writeln!(out, "        {}: {},", snake_of_camel(name), ty.rust());
-        }
-        out.push_str("    },\n");
-    }
-    out.push_str("}\n");
-}
-
 fn rust_codes(out: &mut String, entries: &[Checked<'_>]) {
     out.push_str("\n/// Every code a refusal carries, as a constant.\npub mod code {\n");
     for code in distinct_codes(entries) {
@@ -162,97 +128,100 @@ fn rust_codes(out: &mut String, entries: &[Checked<'_>]) {
     }
 }
 
-/// Match arms with the same body AND the same bindings written as one arm over
-/// their patterns, in the order each first appears: clippy's lint against
-/// repeated arms refuses a repeat, and an or-pattern must bind each name at
-/// one type. An arm is `(pattern, body, bindings)`, the last empty when the
-/// pattern binds nothing.
-fn rust_arms(out: &mut String, arms: &[(String, String, String)]) {
-    let mut order: Vec<(&str, &str)> = Vec::new();
-    let mut by_key: BTreeMap<(&str, &str), Vec<&str>> = BTreeMap::new();
-    for (pattern, body, bindings) in arms {
-        let key = (body.as_str(), bindings.as_str());
-        let patterns = by_key.entry(key).or_default();
-        if patterns.is_empty() {
-            order.push(key);
+/// The macro the rows are written through: one row per refusal is the table,
+/// and the enum, the three accessors and the examples are each written once
+/// over it, so a refusal added to the contract adds a row and lengthens no
+/// function.
+const TABLE_MACRO: &str = r"
+/// Writes the `Refusal` enum, its `code`, `status` and `message`, and the
+/// test-only `examples` from one row per refusal: its doc, its variant, its
+/// code, status and sentence, and the example the contract pins for it.
+macro_rules! refusals {
+    ($(
+        $(#[$doc:meta])*
+        $name:ident $({ $($field:ident: $ty:ty),* $(,)? })? => $code:expr, $status:expr, $message:expr;
+        example $({ $($given:ident: $value:expr),* $(,)? })?;
+    )*) => {
+        /// A refusal: the code and status a request is answered with, and its sentence.
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        pub enum Refusal {
+            $($(#[$doc])* $name $({ $($field: $ty),* })?,)*
         }
-        patterns.push(pattern.as_str());
-    }
-    for key in order {
-        let _ = writeln!(out, "            {} => {},", by_key[&key].join(" | "), key.0);
-    }
-}
 
-fn rust_methods(out: &mut String, entries: &[Checked<'_>]) {
-    out.push_str("\nimpl Refusal {\n");
-    out.push_str("    /// The stable code a caller branches on.\n");
-    out.push_str(EXPECT_LONG_MATCH);
-    out.push_str(
-        "    #[must_use]\n    pub const fn code(&self) -> &'static str {\n        match self {\n",
-    );
-    let arms: Vec<(String, String, String)> = entries
-        .iter()
-        .map(|e| {
-            let body = format!("code::{}", e.entry.code.to_ascii_uppercase());
-            (rust_pattern(e, false), body, String::new())
-        })
-        .collect();
-    rust_arms(out, &arms);
-    out.push_str("        }\n    }\n\n");
-    out.push_str("    /// The HTTP status the refusal travels with.\n");
-    out.push_str(EXPECT_LONG_MATCH);
-    out.push_str(
-        "    #[must_use]\n    pub const fn status(&self) -> u16 {\n        match self {\n",
-    );
-    let arms: Vec<(String, String, String)> = entries
-        .iter()
-        .map(|e| (rust_pattern(e, false), e.entry.status.to_string(), String::new()))
-        .collect();
-    rust_arms(out, &arms);
-    out.push_str("        }\n    }\n\n");
-    out.push_str("    /// The sentence, as the TypeScript says it.\n");
-    out.push_str(EXPECT_LONG_MATCH);
-    out.push_str("    #[must_use]\n    pub fn message(&self) -> String {\n        match self {\n");
-    let arms: Vec<(String, String, String)> = entries
-        .iter()
-        .map(|e| (rust_pattern(e, true), rust_message(e), format!("{:?}", e.tys)))
-        .collect();
-    rust_arms(out, &arms);
-    out.push_str("        }\n    }\n}\n");
-}
+        impl Refusal {
+            /// The stable code a caller branches on.
+            #[must_use]
+            pub const fn code(&self) -> &'static str {
+                match self {
+                    $(Self::$name { .. } => $code,)*
+                }
+            }
 
-fn rust_examples(out: &mut String, entries: &[Checked<'_>]) {
-    out.push_str("\n/// Each refusal built from the example the contract pins for it, by name.\n");
-    out.push_str("#[cfg(test)]\n");
-    out.push_str(EXPECT_LONG_MATCH.trim_start_matches("    "));
-    out.push_str("pub(crate) fn examples() -> Vec<(&'static str, Refusal)> {\n    vec![\n");
-    for e in entries {
-        let fields: Vec<String> = e
-            .tys
-            .iter()
-            .map(|(name, ty)| {
-                format!("{}: {}", snake_of_camel(name), rust_example(&e.entry.example[*name], *ty))
-            })
-            .collect();
-        let build = if fields.is_empty() {
-            format!("Refusal::{}", e.entry.name)
-        } else {
-            format!("Refusal::{} {{ {} }}", e.entry.name, fields.join(", "))
-        };
-        let _ = writeln!(out, "        ({}, {build}),", rust_literal(&e.entry.name));
-    }
-    out.push_str("    ]\n}\n");
+            /// The HTTP status the refusal travels with.
+            #[must_use]
+            pub const fn status(&self) -> u16 {
+                match self {
+                    $(Self::$name { .. } => $status,)*
+                }
+            }
+
+            /// The sentence, as the TypeScript says it.
+            #[must_use]
+            pub fn message(&self) -> String {
+                match self {
+                    $(Self::$name $({ $($field),* })? => $message,)*
+                }
+            }
+        }
+
+        /// Each refusal built from the example the contract pins for it, by name.
+        #[cfg(test)]
+        pub(crate) fn examples() -> Vec<(&'static str, Refusal)> {
+            vec![$((stringify!($name), Refusal::$name $({ $($given: $value),* })?),)*]
+        }
+    };
+}
+";
+
+/// One row of the table: the variant with its fields, then its code, status
+/// and sentence, then the example it is built from in the tests.
+fn rust_row(out: &mut String, e: &Checked<'_>) {
+    rust_doc(out, 4, &e.entry.description);
+    let fields = |each: &dyn Fn(&str, Ty) -> String| -> String {
+        if e.tys.is_empty() {
+            return String::new();
+        }
+        let fields: Vec<String> = e.tys.iter().map(|(name, ty)| each(name, *ty)).collect();
+        format!(" {{ {} }}", fields.join(", "))
+    };
+    let declared = fields(&|name, ty| format!("{}: {}", snake_of_camel(name), ty.rust()));
+    let _ = writeln!(
+        out,
+        "    {}{declared}\n        => code::{}, {}, {};",
+        e.entry.name,
+        e.entry.code.to_ascii_uppercase(),
+        e.entry.status,
+        rust_message(e)
+    );
+    let given = fields(&|name, ty| {
+        format!("{}: {}", snake_of_camel(name), rust_example(&e.entry.example[name], ty))
+    });
+    let _ = writeln!(out, "    example{given};");
 }
 
 pub(super) fn rust(entries: &[Checked<'_>]) -> String {
     let mut out = header(SOURCE);
     out.push_str("\nuse std::fmt;\n");
-    rust_variants(&mut out, entries);
+    out.push_str(TABLE_MACRO);
+    out.push_str("\nrefusals! {\n");
+    for e in entries {
+        rust_row(&mut out, e);
+    }
+    out.push_str("}\n");
     rust_codes(&mut out, entries);
-    rust_methods(&mut out, entries);
     out.push_str(
         "\nimpl fmt::Display for Refusal {\n    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {\n        f.write_str(&self.message())\n    }\n}\n",
-    );
-    rust_examples(&mut out, entries);
+    )
+    ;
     out
 }

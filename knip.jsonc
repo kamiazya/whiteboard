@@ -80,7 +80,8 @@
         "src/generated/spatial.zod.ts": ["exports", "types"],
         // The refusals contract exports its whole table, params and code
         // lists, whether or not a consumer reads each.
-        "src/generated/refusals.ts": ["exports", "types"]
+        "src/generated/refusals.ts": ["exports", "types"],
+        "src/generated/refusal-codes.ts": ["exports", "types"]
       }
     },
     "packages/codec": {
