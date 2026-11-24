@@ -17,8 +17,8 @@ use whiteboard_model::checks::{okf_actor, okf_timestamp};
 
 pub(crate) const THREADS_KEY: &str = "threads";
 pub(crate) const MESSAGES_KEY: &str = "messages";
-const RETIRED_COMMENTS_KEY: &str = "comments";
-const RETIRED_PLANE_REFUSAL: &str = "RetiredCommentPlaneError";
+pub(crate) const RETIRED_COMMENTS_KEY: &str = "comments";
+pub(crate) const RETIRED_PLANE_REFUSAL: &str = "RetiredCommentPlaneError";
 /// The prefix of the style key a thread's passage is marked with.
 const MARK_PREFIX: &str = "comment-";
 
@@ -138,10 +138,14 @@ pub(crate) fn read_thread(threads: &LoroMap, id: &str) -> Option<Value> {
 
 /// `commentThreads`: every thread the document holds, ordered by id.
 pub(crate) fn comment_threads(doc: &LoroDoc) -> Value {
-    let threads = map_of(doc, THREADS_KEY);
+    threads_in(&map_of(doc, THREADS_KEY))
+}
+
+/// `readCommentThreads` over the thread plane `threads`.
+pub(crate) fn threads_in(threads: &LoroMap) -> Value {
     let mut ids: Vec<String> = threads.keys().map(|id| id.to_string()).collect();
     ids.sort_by(|a, b| by_code_unit(a, b));
-    let read = ids.iter().filter_map(|id| read_thread(&threads, id));
+    let read = ids.iter().filter_map(|id| read_thread(threads, id));
     Value::Seq(read.collect())
 }
 

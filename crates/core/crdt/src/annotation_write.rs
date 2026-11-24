@@ -8,14 +8,16 @@
 //! receives them in. A value holding a `__proto__` key is not answered, since
 //! what JavaScript makes of one depends on how the object was built.
 
-use crate::annotations::{MESSAGES_KEY, Stored, THREADS_KEY, annotations, child_map, read_thread};
-use crate::content_write::LORO_REFUSAL;
+use crate::annotations::{
+    MESSAGES_KEY, RETIRED_COMMENTS_KEY, RETIRED_PLANE_REFUSAL, Stored, THREADS_KEY, child_map,
+    read_thread, threads_in,
+};
+use crate::host::{Host, LORO_REFUSAL};
 use crate::read::loro_value_to_value;
 use crate::spatial_write::{Fault, Step, field, holds_reserved_key, items, text};
 use crate::write::plain;
 use loro::{
-    Container, ExpandType, LoroDoc, LoroMap, LoroValue, StyleConfig, StyleConfigMap,
-    ValueOrContainer,
+    Container, ExpandType, LoroMap, LoroValue, StyleConfig, StyleConfigMap, ValueOrContainer,
 };
 use whiteboard_model::{Value, enumeration_order};
 
@@ -83,24 +85,21 @@ fn assert_finite_anchor(anchor: &Value) -> Step {
     Ok(())
 }
 
-fn threads(doc: &LoroDoc) -> LoroMap {
-    doc.get_map(THREADS_KEY)
-}
-
-/// The container a thread is stored in, `None` when it is not a map.
-fn thread_container(doc: &LoroDoc, id: &str) -> Option<LoroMap> {
-    child_map(threads(doc).get(id))
+/// The container a thread is stored in, `None` when it is not a map or the
+/// plane is not there; peeked, so a thread not held opens nothing.
+fn thread_container(host: &Host<'_>, id: &str) -> Result<Option<LoroMap>, Fault> {
+    Ok(host.peek_map(THREADS_KEY)?.and_then(|threads| child_map(threads.get(id))))
 }
 
 /// `writeCommentThread`: the thread's own fields and its messages, in one
 /// commit, the anchor asserted before anything is written.
-fn write_comment_thread(doc: &LoroDoc, thread: &Value) -> Step {
+fn write_comment_thread(host: &Host<'_>, thread: &Value) -> Step {
     assert_finite_anchor(field(thread, ANCHOR).ok_or(Fault::Declined)?)?;
     let id = text(field(thread, "id"))?;
     let status = field(thread, STATUS).ok_or(Fault::Declined)?;
     let messages = items(field(thread, "messages"))?;
     let messages = messages.iter().map(message_fields).collect::<Result<Vec<_>, _>>()?;
-    let container = open_mergeable_map(&threads(doc), id)?;
+    let container = open_mergeable_map(&host.map(THREADS_KEY)?, id)?;
     put(&container, ANCHOR, field(thread, ANCHOR).ok_or(Fault::Declined)?)?;
     put(&container, STATUS, status)?;
     if let Some(at) = field(thread, CREATED_AT) {
@@ -110,24 +109,24 @@ fn write_comment_thread(doc: &LoroDoc, thread: &Value) -> Step {
     for (message_id, fields) in &messages {
         put(&held, message_id, fields)?;
     }
-    doc.commit();
+    host.doc().commit();
     Ok(())
 }
 
 /// `writeThreadMessage`: one message, nothing for a thread not held.
-fn write_thread_message(doc: &LoroDoc, thread_id: &str, message: Option<&Value>) -> Step {
-    let Some(container) = thread_container(doc, thread_id) else { return Ok(()) };
+fn write_thread_message(host: &Host<'_>, thread_id: &str, message: Option<&Value>) -> Step {
+    let Some(container) = thread_container(host, thread_id)? else { return Ok(()) };
     let (id, fields) = message_fields(message.ok_or(Fault::Declined)?)?;
     put(&open_mergeable_map(&container, MESSAGES_KEY)?, id, &fields)?;
-    doc.commit();
+    host.doc().commit();
     Ok(())
 }
 
 /// `setCommentThreadStatus`: nothing for a thread not held.
-fn set_thread_status(doc: &LoroDoc, thread_id: &str, status: Option<&Value>) -> Step {
-    let Some(container) = thread_container(doc, thread_id) else { return Ok(()) };
+fn set_thread_status(host: &Host<'_>, thread_id: &str, status: Option<&Value>) -> Step {
+    let Some(container) = thread_container(host, thread_id)? else { return Ok(()) };
     put(&container, STATUS, status.ok_or(Fault::Declined)?)?;
-    doc.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -166,8 +165,8 @@ fn moved_anchor(anchor: &LoroValue, drop: &Value) -> Result<Option<Value>, Fault
 
 /// `moveCommentThread`: nothing for a thread not held or read, nor for one
 /// whose anchor stays.
-fn move_thread(doc: &LoroDoc, thread_id: &str, drop: Option<&Value>) -> Step {
-    let threads = threads(doc);
+fn move_thread(host: &Host<'_>, thread_id: &str, drop: Option<&Value>) -> Step {
+    let Some(threads) = host.peek_map(THREADS_KEY)? else { return Ok(()) };
     let Some(container) = read_thread(&threads, thread_id).and(child_map(threads.get(thread_id)))
     else {
         return Ok(());
@@ -178,7 +177,7 @@ fn move_thread(doc: &LoroDoc, thread_id: &str, drop: Option<&Value>) -> Step {
     let Some(moved) = moved_anchor(&anchor, drop.ok_or(Fault::Declined)?)? else { return Ok(()) };
     assert_finite_anchor(&moved)?;
     put(&container, ANCHOR, &moved)?;
-    doc.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -230,23 +229,33 @@ fn clamped(range: &Value, key: &str, length: usize) -> Result<usize, Fault> {
     }
 }
 
+/// `readAnnotations` over the host's planes, peeked: the threads, refused
+/// for a document still holding comments in the plane before threads.
+fn held_annotations(host: &Host<'_>) -> Result<Value, Fault> {
+    let retired = host.peek_map(RETIRED_COMMENTS_KEY)?;
+    if retired.is_some_and(|plane| !plane.is_empty()) {
+        return Err(Fault::Thrown(RETIRED_PLANE_REFUSAL));
+    }
+    Ok(host.peek_map(THREADS_KEY)?.map_or(Value::Seq(Vec::new()), |plane| threads_in(&plane)))
+}
+
 /// `markThreadPassages`: the styles of every thread held and marked
-/// registered, then each passage marked as far as the body reaches, in one
-/// commit; nothing for no passages.
-fn mark_passages(doc: &LoroDoc, passages: &[Value]) -> Step {
+/// registered on the whole `LoroDoc`, then each passage marked in the host's
+/// body as far as it reaches, in one commit; nothing for no passages.
+fn mark_passages(host: &Host<'_>, passages: &[Value]) -> Step {
     let ranges = passage_map(passages)?;
     if ranges.is_empty() {
         return Ok(());
     }
-    let held = annotations(doc).map_err(|refusal| Fault::Thrown(refusal.0))?;
+    let held = held_annotations(host)?;
     let mut styles = StyleConfigMap::new();
     let held_ids = items(Some(&held))?.iter().filter_map(|thread| field(thread, "id"));
     let held_ids = held_ids.map(|id| text(Some(id))).collect::<Result<Vec<_>, _>>()?;
     for id in ranges.iter().map(|(id, _)| *id).chain(held_ids) {
         styles.insert(thread_style_key(id).into(), StyleConfig { expand: ExpandType::None });
     }
-    doc.config_text_style(styles);
-    let body = doc.get_text(BODY);
+    host.doc().config_text_style(styles);
+    let body = host.text(BODY)?;
     let length = body.len_utf16();
     for (id, range) in ranges {
         let (start, end) = (clamped(range, "start", length)?, clamped(range, "end", length)?);
@@ -255,13 +264,13 @@ fn mark_passages(doc: &LoroDoc, passages: &[Value]) -> Step {
             body.mark_utf16(start..end, &key, true).map_err(|_| Fault::Declined)?;
         }
     }
-    doc.commit();
+    host.doc().commit();
     Ok(())
 }
 
 /// One annotation writer by name; `None` for a writer that is not one.
 pub(crate) fn apply_annotation(
-    doc: &LoroDoc,
+    host: &Host<'_>,
     op: whiteboard_model::crdt::WriterName,
     args: &Value,
 ) -> Option<Step> {
@@ -270,19 +279,19 @@ pub(crate) fn apply_annotation(
     let thread_id = || text(arg("threadId"));
     Some(match op {
         WriterName::WriteCommentThread => {
-            arg("thread").ok_or(Fault::Declined).and_then(|t| write_comment_thread(doc, t))
+            arg("thread").ok_or(Fault::Declined).and_then(|t| write_comment_thread(host, t))
         }
         WriterName::WriteThreadMessage => {
-            thread_id().and_then(|id| write_thread_message(doc, id, arg("message")))
+            thread_id().and_then(|id| write_thread_message(host, id, arg("message")))
         }
         WriterName::SetCommentThreadStatus => {
-            thread_id().and_then(|id| set_thread_status(doc, id, arg("status")))
+            thread_id().and_then(|id| set_thread_status(host, id, arg("status")))
         }
         WriterName::MoveCommentThread => {
-            thread_id().and_then(|id| move_thread(doc, id, arg("drop")))
+            thread_id().and_then(|id| move_thread(host, id, arg("drop")))
         }
         WriterName::MarkThreadPassages => {
-            items(arg("passages")).and_then(|passages| mark_passages(doc, passages))
+            items(arg("passages")).and_then(|passages| mark_passages(host, passages))
         }
         _ => return None,
     })

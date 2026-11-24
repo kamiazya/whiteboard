@@ -4,7 +4,8 @@
 //! a tree container's nodes and the roots beside it, read without writing,
 //! writes a tree and its containers one loro call at a time, and answers the
 //! document engine's spatial-canvas, document-content, annotation and
-//! proposal writers over a document of its own.
+//! proposal writers over a document of its own or one hosted on a workspace
+//! tree node.
 //!
 //! The `loro` crate is pinned `=` to the version of the npm package
 //! (ADR-0054 decision 13). One `LoroDoc` is never split across two engines:
@@ -33,6 +34,7 @@ mod copy;
 mod engine_write;
 mod envelope;
 mod frontiers;
+mod host;
 mod image_refs;
 mod judgement;
 mod node_content;
@@ -59,7 +61,7 @@ pub use content::{
 pub use content_digest::{content_digest_of, stable_stringify};
 pub use copy::{NodeAt, copy_meta, fill_meta};
 pub use engine_write::{
-    ENGINE_WRITERS, MoreWriters, WriteAnswer, Written, write_batch, write_batch_with,
+    ENGINE_WRITERS, MoreWriters, WriteAnswer, Written, write_batch, write_batch_with, write_hosted,
 };
 pub use frontiers::{
     FrontiersError, decode_frontiers, encode_frontiers, frontiers_version, shallow_root_version,

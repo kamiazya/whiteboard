@@ -8,7 +8,9 @@
 //! appends. Every one opens the tree root first, as the TypeScript's `getTree`
 //! does on every path that does not throw, so a write to a record that held no
 //! tree leaves an empty root in its snapshot. The documents a batch touched
-//! are [`documents_touched_since`]. `Date.now` is handed in.
+//! are [`documents_touched_since`]. `Date.now` is handed in. A
+//! `whiteboard-crdt` writer naming `documentId` is the document its node
+//! hosts, written through [`write_hosted`].
 //!
 //! What a writer throws: `Error` for a document id that names none or a folder
 //! name the model refuses; `ZodError` for a created document's meta the node
@@ -25,8 +27,8 @@ use crate::tree_write::{
 };
 use crate::write_input::folder_name_refused;
 use whiteboard_crdt::{
-    Fault, LoroDoc, MoreWriters, NodeId, Step, VersionVector, Written, commit, create_node,
-    delete_node, move_node, open_tree, tree, write_batch_with,
+    ENGINE_WRITERS, Fault, LoroDoc, MoreWriters, NodeAt, NodeId, Step, VersionVector, Written,
+    commit, create_node, delete_node, move_node, open_tree, tree, write_batch_with, write_hosted,
 };
 use whiteboard_model::Value;
 use whiteboard_model::checks::canonical_ulid;
@@ -271,8 +273,23 @@ pub struct WorkspaceWriters {
     pub now_ms: f64,
 }
 
+/// A `whiteboard-crdt` writer naming the document `documentId` names, over
+/// the containers its tree node holds (`documentContainers`): `Error` for an
+/// id that names no document the record holds.
+fn hosted(doc: &LoroDoc, op: WriterName, args: &Value) -> Option<Step> {
+    let document_id = match text(args, "documentId") {
+        Ok(id) => id,
+        Err(fault) => return Some(Err(fault)),
+    };
+    let Some(node) = document_node(doc, document_id) else { return Some(Err(ERROR)) };
+    write_hosted(NodeAt { doc, tree: WORKSPACE_TREE_KEY, node }, op, args)
+}
+
 impl MoreWriters for WorkspaceWriters {
     fn apply(&self, doc: &LoroDoc, op: WriterName, args: &Value) -> Option<Step> {
+        if ENGINE_WRITERS.contains(&op) {
+            return hosted(doc, op, args);
+        }
         let (write, opens_tree) = writer_of(op)?;
         if opens_tree {
             open_tree(doc, WORKSPACE_TREE_KEY);

@@ -4,8 +4,8 @@
 //! batch produced and the documents it touched, or the class a writer threw,
 //! with the document left as it was.
 //!
-//! Each writer is looked up by name in [`apply`], so the writers still to be
-//! ported join there; until then a batch naming one is not answered. A
+//! Each writer is looked up by name in [`apply`], over the containers a
+//! [`Host`] holds: a document's own roots, or a tree node's meta map. A
 //! writer whose rules live in a crate above this one (the workspace record's)
 //! is answered through [`MoreWriters`], which also answers which documents
 //! the batch touched.
@@ -16,8 +16,10 @@
 //!   would (`importWithinTextLimits`), which this crate does not port; a write
 //!   the judge passes answers exactly what an unjudged one does, so a caller
 //!   holding a judge of its own asks with `WriteJudge::None`.
-//! - a writer naming `documentId`, a document hosted on a workspace tree node,
-//!   whose `changed` is the record's `documentsTouchedSince`.
+//! - a writer naming `documentId`, a document hosted on a workspace tree node:
+//!   which node the id names and the documents the write touched
+//!   (`documentsTouchedSince`) are the record's, so the caller resolves the
+//!   node and writes through [`write_hosted`] from its [`MoreWriters`].
 //! - an argument the writer's TypeScript types refuse ([`Fault::Declined`]).
 //!
 //! A document that is the root of its own `LoroDoc` holds no workspace tree
@@ -26,6 +28,8 @@
 use crate::annotation_write::apply_annotation;
 use crate::content_sync::reconcile_doc_content;
 use crate::content_write::apply_content;
+use crate::copy::NodeAt;
+use crate::host::Host;
 use crate::proposal_write::apply_proposal;
 use crate::spatial_batch::{reconcile, with_spatial_batch};
 use crate::spatial_write::{
@@ -100,46 +104,67 @@ fn as_parsed(value: &Value) -> Result<Value, Fault> {
 }
 
 /// A writer with a single argument, the `id` its write names.
-fn id_writer(doc: &LoroDoc, args: &Value, write: impl Fn(&LoroDoc, &str) -> Step) -> Step {
-    write(doc, text(field(args, "id"))?)
+fn id_writer(host: &Host<'_>, args: &Value, write: impl Fn(&Host<'_>, &str) -> Step) -> Step {
+    write(host, text(field(args, "id"))?)
 }
 
-/// One writer by name. Each commits where its TypeScript commits.
-fn apply(doc: &LoroDoc, op: WriterName, args: &Value) -> Step {
+/// One writer by name over the containers `host` holds. Each commits where its
+/// TypeScript commits.
+fn apply(host: &Host<'_>, op: WriterName, args: &Value) -> Step {
     let arg = |key: &str| field(args, key).ok_or(Fault::Declined);
     match op {
-        WriterName::WriteSpatialCanvas => write_canvas(doc, arg("canvas")?),
+        WriterName::WriteSpatialCanvas => write_canvas(host, arg("canvas")?),
         WriterName::WriteSpatialNode => {
-            write_element(doc, NODE_PLANE, arg("node")?)?;
-            doc.commit();
+            write_element(host, NODE_PLANE, arg("node")?)?;
+            host.doc().commit();
             Ok(())
         }
         WriterName::WriteSpatialEdge => {
-            write_element(doc, EDGE_PLANE, arg("edge")?)?;
-            doc.commit();
+            write_element(host, EDGE_PLANE, arg("edge")?)?;
+            host.doc().commit();
             Ok(())
         }
-        WriterName::DeleteSpatialNode => id_writer(doc, args, delete_node),
-        WriterName::DeleteSpatialEdge => id_writer(doc, args, |doc, id| {
-            if delete_element(doc, EDGE_PLANE, id)? {
-                doc.commit();
+        WriterName::DeleteSpatialNode => id_writer(host, args, delete_node),
+        WriterName::DeleteSpatialEdge => id_writer(host, args, |host, id| {
+            if delete_element(host, EDGE_PLANE, id)? {
+                host.doc().commit();
             }
             Ok(())
         }),
-        WriterName::ReconcileSpatialCanvas => reconcile(doc, arg("prev")?, arg("next")?),
+        WriterName::ReconcileSpatialCanvas => reconcile(host, arg("prev")?, arg("next")?),
         WriterName::SetNodeLock => {
-            id_writer(doc, args, |doc, id| set_lock(doc, NODE_LOCKS, id, field(args, "locked")))
+            id_writer(host, args, |host, id| set_lock(host, NODE_LOCKS, id, field(args, "locked")))
         }
         WriterName::SetEdgeLock => {
-            id_writer(doc, args, |doc, id| set_lock(doc, EDGE_LOCKS, id, field(args, "locked")))
+            id_writer(host, args, |host, id| set_lock(host, EDGE_LOCKS, id, field(args, "locked")))
         }
-        WriterName::WithSpatialBatch => with_spatial_batch(doc, items(field(args, "steps"))?),
-        WriterName::ReconcileDocContent => reconcile_doc_content(doc, text(field(args, "past"))?),
-        _ => apply_content(doc, op, args)
-            .or_else(|| apply_annotation(doc, op, args))
-            .or_else(|| apply_proposal(doc, op, args))
+        WriterName::WithSpatialBatch => with_spatial_batch(host, items(field(args, "steps"))?),
+        _ => apply_content(host, op, args)
+            .or_else(|| apply_annotation(host, op, args))
+            .or_else(|| apply_proposal(host, op, args))
             .unwrap_or(Err(Fault::Declined)),
     }
+}
+
+/// One writer by name over a document that is the root of its own `LoroDoc`.
+fn apply_root(doc: &LoroDoc, op: WriterName, args: &Value) -> Step {
+    match op {
+        WriterName::ReconcileDocContent => reconcile_doc_content(doc, text(field(args, "past"))?),
+        _ => apply(&Host::root(doc), op, args),
+    }
+}
+
+/// A writer this crate answers over the document that `at`'s tree node hosts,
+/// its containers on the node's meta map: `None` for a writer that names no
+/// hosted document (`reconcileDocContent` writes the whole record's roots).
+/// The arguments are the writer's, `documentId` among them, which the caller
+/// resolved to `at`.
+pub fn write_hosted(at: NodeAt<'_>, op: WriterName, args: &Value) -> Option<Step> {
+    if op == WriterName::ReconcileDocContent || !ENGINE_WRITERS.contains(&op) {
+        return None;
+    }
+    let meta = at.doc.get_tree(at.tree).get_meta(at.node.0).ok()?;
+    Some(apply(&Host::node(at.doc, meta), op, args))
 }
 
 /// Writers a crate above this one answers in the same batch, beside the ones
@@ -153,8 +178,12 @@ pub trait MoreWriters {
 }
 
 /// A writer this crate answers: one it ports, over a document of its own.
+/// `reconcileDocContent` writes the whole record's roots, as its TypeScript
+/// does whatever `documentId` it is handed.
 fn answerable(write: &Write) -> bool {
-    ENGINE_WRITERS.contains(&write.op) && field(&write.args, "documentId").is_none()
+    ENGINE_WRITERS.contains(&write.op)
+        && (write.op == WriterName::ReconcileDocContent
+            || field(&write.args, "documentId").is_none())
 }
 
 /// The batch applied to the document `before` holds, written as `peer`: the
@@ -202,7 +231,7 @@ fn run(
     for write in batch {
         let args = as_parsed(&write.args).ok()?;
         let step = if answerable(write) {
-            apply(&doc, write.op, &args)
+            apply_root(&doc, write.op, &args)
         } else {
             more?.apply(&doc, write.op, &args)?
         };

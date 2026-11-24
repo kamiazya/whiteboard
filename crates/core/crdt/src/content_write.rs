@@ -8,10 +8,11 @@
 //! An object argument is read in the order JavaScript enumerates its keys,
 //! since that is the order the TypeScript writes them in.
 
+use crate::host::{Host, LORO_REFUSAL};
 use crate::spatial_write::{
     Fault, Step, delete, field, items, refuse_reserved_key, set, text, write_canvas_facets,
 };
-use loro::{LoroDoc, LoroText};
+use loro::LoroText;
 use whiteboard_model::crdt::WriterName;
 use whiteboard_model::{Value, enumeration_order};
 
@@ -20,10 +21,6 @@ const DOCUMENT: &str = "document";
 const FACETS: &str = "facets";
 const CORE: &str = "core";
 const TRUST: &str = "trust";
-/// A root container name npm loro-crdt refuses to open starts with this.
-const MERGEABLE_PREFIX: &str = "🤝:";
-/// What npm loro-crdt throws is a string, so the engine names its class so.
-pub(crate) const LORO_REFUSAL: Fault = Fault::Thrown("string");
 
 type Entries = Vec<(String, Value)>;
 
@@ -75,9 +72,9 @@ pub(crate) fn splice_minimal(target: &LoroText, next: &str) -> Step {
 }
 
 /// `writeMarkdownBody`.
-fn write_markdown_body(doc: &LoroDoc, body: &str) -> Step {
-    splice_minimal(&doc.get_text(BODY), body)?;
-    doc.commit();
+fn write_markdown_body(host: &Host<'_>, body: &str) -> Step {
+    splice_minimal(&host.text(BODY)?, body)?;
+    host.doc().commit();
     Ok(())
 }
 
@@ -91,14 +88,10 @@ fn offset(value: Option<&Value>) -> Result<usize, Fault> {
     }
 }
 
-/// The engine's `spliceText`: each run spliced into the root text `name`, in
+/// The engine's `spliceText`: each run spliced into the text `name`, in
 /// UTF-16 code units, with no commit of its own.
-fn splice_runs(doc: &LoroDoc, name: &str, runs: &[Value]) -> Step {
-    let named = !name.is_empty() && !name.starts_with(MERGEABLE_PREFIX);
-    if !named || name.contains(['/', '\0']) {
-        return Err(LORO_REFUSAL);
-    }
-    let target = doc.get_text(name);
+fn splice_runs(host: &Host<'_>, name: &str, runs: &[Value]) -> Step {
+    let target = host.text(name)?;
     for run in runs {
         let index = offset(field(run, "index"))?;
         let remove = offset(field(run, "remove"))?;
@@ -122,16 +115,16 @@ fn lookup<'a>(entries: &'a [(String, Value)], key: &str) -> Option<&'a Value> {
 
 /// `replaceBucket`: every entry written, then every stored key the entries do
 /// not name deleted, in one commit.
-fn replace_bucket(doc: &LoroDoc, map: &str, entries: &[(String, Value)]) -> Step {
+fn replace_bucket(host: &Host<'_>, map: &str, entries: &[(String, Value)]) -> Step {
     refuse_reserved_key(&Value::Map(entries.to_vec()))?;
-    let stored: Vec<String> = doc.get_map(map).keys().map(|k| k.to_string()).collect();
+    let stored: Vec<String> = host.map(map)?.keys().map(|k| k.to_string()).collect();
     for (key, value) in entries {
-        set(doc, map, key, value)?;
+        set(host, map, key, value)?;
     }
     for key in stored.iter().filter(|key| lookup(entries, key).is_none()) {
-        delete(doc, map, key)?;
+        delete(host, map, key)?;
     }
-    doc.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -141,7 +134,7 @@ fn spread(value: &Value) -> Result<Value, Fault> {
 }
 
 /// `writeTrustFacets`: `generated` and `verified` copied, nothing else.
-fn write_trust(doc: &LoroDoc, trust: &Value) -> Step {
+fn write_trust(host: &Host<'_>, trust: &Value) -> Step {
     if !matches!(trust, Value::Map(_)) {
         return Err(Fault::Declined);
     }
@@ -153,29 +146,31 @@ fn write_trust(doc: &LoroDoc, trust: &Value) -> Step {
         let events = items(Some(verified))?.iter().map(spread).collect::<Result<_, _>>()?;
         entries.push(("verified".to_owned(), Value::Seq(events)));
     }
-    replace_bucket(doc, TRUST, &entries)
+    replace_bucket(host, TRUST, &entries)
 }
 
-/// `reconcileBucket`: what is new or changed set, then each key `prev` held
-/// and `next` lacks deleted, whether or not the map holds it, in one commit.
+/// `reconcileBucket`: the map opened, what is new or changed set, then each
+/// key `prev` held and `next` lacks deleted, whether or not the map holds it,
+/// in one commit.
 /// Two values are the same when JSON writes them alike, which over values in
 /// enumeration order is equality.
 fn reconcile_bucket(
-    doc: &LoroDoc,
+    host: &Host<'_>,
     map: &str,
     prev: &[(String, Value)],
     next: &[(String, Value)],
 ) -> Step {
     refuse_reserved_key(&Value::Map(next.to_vec()))?;
+    host.map(map)?;
     for (key, value) in next {
         if lookup(prev, key) != Some(value) {
-            set(doc, map, key, value)?;
+            set(host, map, key, value)?;
         }
     }
     for (key, _) in prev.iter().filter(|(key, _)| lookup(next, key).is_none()) {
-        delete(doc, map, key)?;
+        delete(host, map, key)?;
     }
-    doc.commit();
+    host.doc().commit();
     Ok(())
 }
 
@@ -188,33 +183,33 @@ fn core_prev(prev: Option<&Value>) -> Result<Entries, Fault> {
 }
 
 /// One content writer by name; `None` for a writer that is not one.
-pub(crate) fn apply_content(doc: &LoroDoc, op: WriterName, args: &Value) -> Option<Step> {
+pub(crate) fn apply_content(host: &Host<'_>, op: WriterName, args: &Value) -> Option<Step> {
     let arg = |key: &str| field(args, key);
     Some(match op {
         WriterName::WriteMarkdownBody => {
-            text(arg("body")).and_then(|b| write_markdown_body(doc, b))
+            text(arg("body")).and_then(|b| write_markdown_body(host, b))
         }
         WriterName::SpliceText => text(arg("text"))
-            .and_then(|name| items(arg("runs")).and_then(|runs| splice_runs(doc, name, runs))),
+            .and_then(|name| items(arg("runs")).and_then(|runs| splice_runs(host, name, runs))),
         WriterName::WriteDocumentKind => text(arg("kind")).and_then(|kind| {
-            set(doc, DOCUMENT, "kind", &Value::String(kind.to_owned()))?;
-            doc.commit();
+            set(host, DOCUMENT, "kind", &Value::String(kind.to_owned()))?;
+            host.doc().commit();
             Ok(())
         }),
         WriterName::WriteFacets => {
-            entries_of(arg("facets")).and_then(|e| replace_bucket(doc, FACETS, &e))
+            entries_of(arg("facets")).and_then(|e| replace_bucket(host, FACETS, &e))
         }
         WriterName::WriteCoreFacets => {
-            entries_of(arg("core")).and_then(|e| replace_bucket(doc, CORE, &e))
+            entries_of(arg("core")).and_then(|e| replace_bucket(host, CORE, &e))
         }
         WriterName::WriteTrustFacets => {
-            arg("trust").ok_or(Fault::Declined).and_then(|t| write_trust(doc, t))
+            arg("trust").ok_or(Fault::Declined).and_then(|t| write_trust(host, t))
         }
         WriterName::ReconcileFacets => entries_of(arg("prev"))
-            .and_then(|prev| reconcile_bucket(doc, FACETS, &prev, &entries_of(arg("next"))?)),
+            .and_then(|prev| reconcile_bucket(host, FACETS, &prev, &entries_of(arg("next"))?)),
         WriterName::ReconcileCoreFacets => core_prev(arg("prev"))
-            .and_then(|prev| reconcile_bucket(doc, CORE, &prev, &entries_of(arg("next"))?)),
-        WriterName::WriteCanvasFacetsField => write_canvas_facets(doc, arg("next")),
+            .and_then(|prev| reconcile_bucket(host, CORE, &prev, &entries_of(arg("next"))?)),
+        WriterName::WriteCanvasFacetsField => write_canvas_facets(host, arg("next")),
         _ => return None,
     })
 }
