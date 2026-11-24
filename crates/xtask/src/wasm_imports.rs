@@ -419,21 +419,35 @@ mod tests {
         let index = "whiteboard-workspace-index".to_owned();
         let history = "whiteboard-history".to_owned();
         let ops = "whiteboard-ops".to_owned();
+        let mcp = "whiteboard-mcp".to_owned();
         assert_eq!(
             orphan_allowances(&[&det]),
             vec![
                 "whiteboard-crdt",
                 "whiteboard-workspace-index",
                 "whiteboard-history",
-                "whiteboard-ops"
+                "whiteboard-ops",
+                "whiteboard-mcp"
             ]
         );
         assert_eq!(
             orphan_allowances(&[&det, &crdt]),
-            vec!["whiteboard-workspace-index", "whiteboard-history", "whiteboard-ops"]
+            vec![
+                "whiteboard-workspace-index",
+                "whiteboard-history",
+                "whiteboard-ops",
+                "whiteboard-mcp"
+            ]
         );
-        assert_eq!(orphan_allowances(&[&det, &crdt, &index, &history]), vec!["whiteboard-ops"]);
-        assert!(orphan_allowances(&[&det, &crdt, &index, &history, &ops]).is_empty());
+        assert_eq!(
+            orphan_allowances(&[&det, &crdt, &index, &history]),
+            vec!["whiteboard-ops", "whiteboard-mcp"]
+        );
+        assert_eq!(
+            orphan_allowances(&[&det, &crdt, &index, &history, &ops]),
+            vec!["whiteboard-mcp"]
+        );
+        assert!(orphan_allowances(&[&det, &crdt, &index, &history, &ops, &mcp]).is_empty());
     }
 
     #[test]
