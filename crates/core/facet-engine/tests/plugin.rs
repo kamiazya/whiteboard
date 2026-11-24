@@ -92,7 +92,9 @@ fn a_loaded_plugin_lists_its_facets_with_its_name_and_its_stencils_by_display_na
     assert_eq!(mark.targets, [FacetTarget::Node, FacetTarget::Edge]);
     assert_eq!(mark.asset_refs, [("theme".to_owned(), AssetKind::Themes)]);
     let schema = json::parse(
-        r#"{"type": "object", "properties": {"theme": {"type": "string"}}, "required": ["theme"]}"#,
+        r#"{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
+            "properties": {"theme": {"type": "string"}}, "required": ["theme"],
+            "additionalProperties": false}"#,
     )
     .expect("JSON");
     assert_eq!(mark.schema, Some(schema));

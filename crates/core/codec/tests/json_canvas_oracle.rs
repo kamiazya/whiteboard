@@ -26,11 +26,7 @@ use whiteboard_codec::json_canvas::{
     serialize,
 };
 use whiteboard_model::Value;
-use whiteboard_model::spatial::{
-    Arrowhead, BackgroundStyle, CanvasColor, CanvasColorPreset, CanvasEdge, CanvasLine,
-    CanvasPoint, EdgeEnd, EdgeSide, LineEnd, LineEndNode, LineEndPoint, NodeEmbed, NodeResource,
-    SpatialNode,
-};
+use whiteboard_model::canvas_value::canvas_value as lifted;
 // On wasm32 the same tests run under Node (QR-21 layer 3).
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -48,140 +44,28 @@ fn recording() -> Vec<Json> {
 
 // ---------------------------------------------------------------- the canvas as a Value
 
-type Fields = Vec<(&'static str, Option<Value>)>;
-
-fn object(fields: Fields) -> Value {
-    Value::Map(fields.into_iter().filter_map(|(k, v)| Some((k.to_string(), v?))).collect())
-}
-
-fn text(s: &str) -> Value {
-    Value::String(s.to_string())
-}
-
-fn some_text(s: Option<&String>) -> Option<Value> {
-    s.map(|s| text(s))
-}
-
-fn tags_value(tags: Option<&Vec<String>>) -> Option<Value> {
-    tags.map(|t| Value::Seq(t.iter().map(|s| text(s)).collect()))
-}
-
-fn facets_value(facets: Option<&Vec<(String, Value)>>) -> Option<Value> {
-    facets.map(|f| Value::Map(f.clone()))
-}
-
-fn color_value(color: Option<&CanvasColor>) -> Option<Value> {
-    color.map(|c| match c {
-        CanvasColor::CanvasColorPreset(p) => text(p.as_str()),
-        CanvasColor::CanvasColorHex(h) => text(h),
-    })
-}
-
-fn point_value(p: &CanvasPoint) -> Value {
-    object(vec![("x", Some(Value::Number(p.x))), ("y", Some(Value::Number(p.y)))])
-}
-
-fn bends_value(bends: Option<&Vec<CanvasPoint>>) -> Option<Value> {
-    bends.map(|b| Value::Seq(b.iter().map(point_value).collect()))
-}
-
-fn side_value(side: Option<EdgeSide>) -> Option<Value> {
-    side.map(|s| text(s.as_str()))
-}
-
-fn arrow_value(end: Option<Arrowhead>) -> Option<Value> {
-    end.map(|e| text(e.as_str()))
-}
-
-fn node_value(n: &SpatialNode) -> Value {
-    let embed = n.embed.as_ref().map(|e| {
-        object(vec![
-            ("documentId", Some(text(&e.document_id))),
-            ("versionRef", some_text(e.version_ref.as_ref())),
-        ])
-    });
-    let resource = n.resource.as_ref().map(|r| {
-        object(vec![
-            ("mimeType", Some(text(&r.mime_type))),
-            ("content", some_text(r.content.as_ref())),
-            ("location", some_text(r.location.as_ref())),
-            ("subpath", some_text(r.subpath.as_ref())),
-        ])
-    });
-    object(vec![
-        ("id", Some(text(&n.id))),
-        ("x", Some(Value::Number(n.x))),
-        ("y", Some(Value::Number(n.y))),
-        ("width", Some(Value::Number(n.width))),
-        ("height", Some(Value::Number(n.height))),
-        ("color", color_value(n.color.as_ref())),
-        ("embed", embed),
-        ("facets", facets_value(n.facets.as_ref())),
-        ("tags", tags_value(n.tags.as_ref())),
-        ("resource", resource),
-        ("label", some_text(n.label.as_ref())),
-        ("background", some_text(n.background.as_ref())),
-        ("backgroundStyle", n.background_style.map(|s| text(s.as_str()))),
-    ])
-}
-
-fn edge_end_value(e: &EdgeEnd) -> Value {
-    object(vec![
-        ("node", Some(text(&e.node))),
-        ("side", side_value(e.side)),
-        ("end", arrow_value(e.end)),
-    ])
-}
-
-fn edge_value(e: &CanvasEdge) -> Value {
-    object(vec![
-        ("id", Some(text(&e.id))),
-        ("from", Some(edge_end_value(&e.from))),
-        ("to", Some(edge_end_value(&e.to))),
-        ("color", color_value(e.color.as_ref())),
-        ("label", some_text(e.label.as_ref())),
-        ("bends", bends_value(e.bends.as_ref())),
-        ("facets", facets_value(e.facets.as_ref())),
-        ("tags", tags_value(e.tags.as_ref())),
-    ])
-}
-
-fn line_end_value(e: &LineEnd) -> Value {
-    match e {
-        LineEnd::LineEndNode(n) => object(vec![
-            ("kind", Some(text("node"))),
-            ("node", Some(text(&n.node))),
-            ("side", side_value(n.side)),
-            ("end", arrow_value(n.end)),
-        ]),
-        LineEnd::LineEndPoint(p) => object(vec![
-            ("kind", Some(text("point"))),
-            ("point", Some(point_value(&p.point))),
-            ("end", arrow_value(p.end)),
-        ]),
-    }
-}
-
-fn line_value(l: &CanvasLine) -> Value {
-    object(vec![
-        ("id", Some(text(&l.id))),
-        ("from", Some(line_end_value(&l.from))),
-        ("to", Some(line_end_value(&l.to))),
-        ("color", color_value(l.color.as_ref())),
-        ("label", some_text(l.label.as_ref())),
-        ("bends", bends_value(l.bends.as_ref())),
-        ("facets", facets_value(l.facets.as_ref())),
-    ])
-}
-
+/// The canvas as the recording orders it: the model's value, which follows the
+/// TypeScript's lift and puts an edge's `bends` last, with each edge's `bends`
+/// back in the contract's place, before its `facets` and `tags`.
 fn canvas_value(c: &SpatialCanvas) -> Value {
-    object(vec![
-        ("nodes", Some(Value::Seq(c.nodes.iter().map(node_value).collect()))),
-        ("edges", Some(Value::Seq(c.edges.iter().map(edge_value).collect()))),
-        ("lines", c.lines.as_ref().map(|l| Value::Seq(l.iter().map(line_value).collect()))),
-        ("facets", facets_value(c.facets.as_ref())),
-        ("tags", tags_value(c.tags.as_ref())),
-    ])
+    let mut value = lifted(c);
+    let edges = match &mut value {
+        Value::Map(fields) => fields.iter_mut().find(|(key, _)| key == "edges"),
+        _ => None,
+    };
+    if let Some((_, Value::Seq(edges))) = edges {
+        for edge in edges {
+            if let Value::Map(fields) = edge {
+                let at = fields.iter().position(|(key, _)| key == "bends");
+                let before = fields.iter().position(|(key, _)| key == "facets" || key == "tags");
+                if let (Some(at), Some(before)) = (at, before) {
+                    let bends = fields.remove(at);
+                    fields.insert(before, bends);
+                }
+            }
+        }
+    }
+    value
 }
 
 // ---------------------------------------------------------------- the recording's encoding
@@ -246,169 +130,9 @@ mod recorded {
         }
     }
 
-    fn field<'a>(entries: &'a [(String, Value)], name: &str) -> Option<&'a Value> {
-        entries.iter().find(|(k, _)| k == name).map(|(_, v)| v)
-    }
-
-    fn entries(value: &Value) -> &Vec<(String, Value)> {
-        match value {
-            Value::Map(e) => e,
-            other => panic!("{other:?} is no object"),
-        }
-    }
-
-    fn string_of(value: &Value) -> String {
-        match value {
-            Value::String(s) => s.clone(),
-            other => panic!("{other:?} is no string"),
-        }
-    }
-
-    fn number_of(value: &Value) -> f64 {
-        match value {
-            Value::Number(n) => *n,
-            other => panic!("{other:?} is no number"),
-        }
-    }
-
-    fn opt_string(e: &[(String, Value)], name: &str) -> Option<String> {
-        field(e, name).map(string_of)
-    }
-
-    fn seq_of(value: &Value) -> &Vec<Value> {
-        match value {
-            Value::Seq(items) => items,
-            other => panic!("{other:?} is no list"),
-        }
-    }
-
-    fn opt_tags(e: &[(String, Value)]) -> Option<Vec<String>> {
-        field(e, "tags").map(|t| seq_of(t).iter().map(string_of).collect())
-    }
-
-    fn opt_facets(e: &[(String, Value)]) -> Option<Vec<(String, Value)>> {
-        field(e, "facets").map(|f| entries(f).clone())
-    }
-
-    fn color_of(e: &[(String, Value)]) -> Option<CanvasColor> {
-        opt_string(e, "color").map(|c| match CanvasColorPreset::from_wire(&c) {
-            Some(preset) => CanvasColor::CanvasColorPreset(preset),
-            None => CanvasColor::CanvasColorHex(c),
-        })
-    }
-
-    fn point_of(value: &Value) -> CanvasPoint {
-        let e = entries(value);
-        CanvasPoint {
-            x: number_of(field(e, "x").expect("x")),
-            y: number_of(field(e, "y").expect("y")),
-        }
-    }
-
-    fn bends_of(e: &[(String, Value)]) -> Option<Vec<CanvasPoint>> {
-        field(e, "bends").map(|b| seq_of(b).iter().map(point_of).collect())
-    }
-
-    fn side_of(e: &[(String, Value)]) -> Option<EdgeSide> {
-        opt_string(e, "side").map(|s| EdgeSide::from_wire(&s).expect("a side"))
-    }
-
-    fn arrow_of(e: &[(String, Value)]) -> Option<Arrowhead> {
-        opt_string(e, "end").map(|s| Arrowhead::from_wire(&s).expect("an arrowhead"))
-    }
-
-    fn node_of(value: &Value) -> SpatialNode {
-        let e = entries(value);
-        let embed = field(e, "embed").map(|v| {
-            let e = entries(v);
-            NodeEmbed {
-                document_id: opt_string(e, "documentId").expect("documentId"),
-                version_ref: opt_string(e, "versionRef"),
-            }
-        });
-        let resource = field(e, "resource").map(|v| {
-            let e = entries(v);
-            NodeResource {
-                mime_type: opt_string(e, "mimeType").expect("mimeType"),
-                content: opt_string(e, "content"),
-                location: opt_string(e, "location"),
-                subpath: opt_string(e, "subpath"),
-            }
-        });
-        SpatialNode {
-            id: opt_string(e, "id").expect("id"),
-            x: number_of(field(e, "x").expect("x")),
-            y: number_of(field(e, "y").expect("y")),
-            width: number_of(field(e, "width").expect("width")),
-            height: number_of(field(e, "height").expect("height")),
-            color: color_of(e),
-            embed,
-            facets: opt_facets(e),
-            tags: opt_tags(e),
-            resource,
-            label: opt_string(e, "label"),
-            background: opt_string(e, "background"),
-            background_style: opt_string(e, "backgroundStyle")
-                .map(|s| BackgroundStyle::from_wire(&s).expect("a style")),
-        }
-    }
-
-    fn edge_end_of(value: &Value) -> EdgeEnd {
-        let e = entries(value);
-        EdgeEnd { node: opt_string(e, "node").expect("node"), side: side_of(e), end: arrow_of(e) }
-    }
-
-    fn edge_of(value: &Value) -> CanvasEdge {
-        let e = entries(value);
-        CanvasEdge {
-            id: opt_string(e, "id").expect("id"),
-            from: edge_end_of(field(e, "from").expect("from")),
-            to: edge_end_of(field(e, "to").expect("to")),
-            color: color_of(e),
-            label: opt_string(e, "label"),
-            bends: bends_of(e),
-            facets: opt_facets(e),
-            tags: opt_tags(e),
-        }
-    }
-
-    fn line_end_of(value: &Value) -> LineEnd {
-        let e = entries(value);
-        if opt_string(e, "kind").as_deref() == Some("node") {
-            return LineEnd::LineEndNode(LineEndNode {
-                node: opt_string(e, "node").expect("node"),
-                side: side_of(e),
-                end: arrow_of(e),
-            });
-        }
-        LineEnd::LineEndPoint(LineEndPoint {
-            point: point_of(field(e, "point").expect("point")),
-            end: arrow_of(e),
-        })
-    }
-
-    fn line_of(value: &Value) -> CanvasLine {
-        let e = entries(value);
-        CanvasLine {
-            id: opt_string(e, "id").expect("id"),
-            from: line_end_of(field(e, "from").expect("from")),
-            to: line_end_of(field(e, "to").expect("to")),
-            color: color_of(e),
-            label: opt_string(e, "label"),
-            bends: bends_of(e),
-            facets: opt_facets(e),
-        }
-    }
-
+    /// A recorded canvas, which the model's reader reads strictly.
     pub(crate) fn canvas_of(value: &Value) -> SpatialCanvas {
-        let e = entries(value);
-        SpatialCanvas {
-            nodes: seq_of(field(e, "nodes").expect("nodes")).iter().map(node_of).collect(),
-            edges: seq_of(field(e, "edges").expect("edges")).iter().map(edge_of).collect(),
-            lines: field(e, "lines").map(|l| seq_of(l).iter().map(line_of).collect()),
-            facets: opt_facets(e),
-            tags: opt_tags(e),
-        }
+        whiteboard_model::canvas_value::canvas_of(value).expect("a recorded canvas")
     }
 }
 use recorded::{canvas_of, expand};
