@@ -111,6 +111,8 @@ struct CompatStep {
 
 struct FacetEntry {
     namespace: String,
+    /// The owning plugin's human-facing name.
+    plugin_name: String,
     name: String,
     version: String,
     targets: Vec<FacetTarget>,
@@ -130,8 +132,6 @@ pub struct Registry {
     contracts: Contracts,
     facets: Vec<FacetEntry>,
     assets: Vec<(AssetKind, Vec<String>)>,
-    /// Each plugin's id and the name it shows a person, in manifest order.
-    plugins: Vec<(String, String)>,
     /// What a picker calls each registered stencil, by id.
     pub(crate) stencil_names: Vec<(String, String)>,
 }
@@ -175,8 +175,7 @@ impl Registry {
     ) -> Result<Self, BuildError> {
         let facets = facet_entries(manifests, &contracts, migrations)?;
         let assets = KINDS.map(|kind| (kind, asset_ids(kind))).to_vec();
-        let plugins = manifests.iter().map(|m| (m.id.clone(), m.display_name.clone())).collect();
-        Ok(Self { contracts, facets, assets, plugins, stencil_names: Vec::new() })
+        Ok(Self { contracts, facets, assets, stencil_names: Vec::new() })
     }
 
     /// Every registered facet, in the order the manifests declare them.
@@ -186,11 +185,7 @@ impl Registry {
             .iter()
             .map(|facet| ListedFacet {
                 namespace: &facet.namespace,
-                display_name: self
-                    .plugins
-                    .iter()
-                    .find(|(id, _)| *id == facet.namespace)
-                    .map_or("", |(_, name)| name.as_str()),
+                display_name: &facet.plugin_name,
                 name: &facet.name,
                 version: &facet.version,
                 targets: &facet.targets,
@@ -448,6 +443,7 @@ fn facet_entries(
             let compat = compat_steps(plugin, decl, contracts, migrations)?;
             facets.push(FacetEntry {
                 namespace: plugin.clone(),
+                plugin_name: manifest.display_name.clone(),
                 name: decl.name.clone(),
                 version: decl.version.clone(),
                 targets: decl.targets.clone(),
