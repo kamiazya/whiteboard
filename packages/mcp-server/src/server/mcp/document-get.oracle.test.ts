@@ -205,6 +205,115 @@ async function annotate(call: Call, ids: Record<string, string>): Promise<void> 
   await draw(call, ids)
 }
 
+/** Every node kind, an edge and a line with each optional field, and facets on a node and an edge. */
+const DRAWN: Message[] = [
+  {
+    op: 'node.add',
+    node: {
+      id: 't1',
+      type: 'text',
+      text: '# Hi\n\nthere',
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 100,
+      color: '2',
+      facets: { 'visual.shape/v0': { kind: 'ellipse' } },
+    },
+  },
+  {
+    op: 'node.add',
+    node: {
+      id: 'f1',
+      type: 'file',
+      file: 'notes/plan.md',
+      subpath: '#Plan',
+      x: 300,
+      y: 0,
+      width: 200,
+      height: 100,
+    },
+  },
+  {
+    op: 'node.add',
+    node: {
+      id: 'k1',
+      type: 'link',
+      url: 'https://example.com/a?b=1',
+      x: 600,
+      y: 0,
+      width: 200,
+      height: 100,
+      color: '#00ff00',
+    },
+  },
+  {
+    op: 'node.add',
+    node: { id: 'g1', type: 'group', label: 'Group', x: -50, y: 200, width: 900, height: 300 },
+  },
+  {
+    op: 'node.add',
+    node: { id: 't2', type: 'text', text: 'inside', x: 0, y: 250, width: 120, height: 60 },
+  },
+  {
+    op: 'edge.add',
+    edge: {
+      id: 'e1',
+      from: { node: 't1', side: 'right', end: 'none' },
+      to: { node: 'f1', side: 'left', end: 'arrow' },
+      label: 'goes',
+      color: '4',
+      bends: [{ x: 250, y: 25.5 }],
+      facets: { 'x.note/v1': { text: 'why' } },
+    },
+  },
+  { op: 'edge.add', edge: { id: 'e2', from: { node: 'f1' }, to: { node: 'k1' } } },
+  {
+    op: 'line.add',
+    line: {
+      id: 'l1',
+      from: { kind: 'point', point: { x: -100, y: -50 } },
+      to: { kind: 'node', node: 'g1', side: 'top' },
+      label: 'ink',
+      color: '#ff0000',
+    },
+  },
+]
+
+/** Two nodes and an edge between them; `b` is later removed from the record. */
+const DANGLING: Message[] = [
+  {
+    op: 'node.add',
+    node: { id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 100, height: 50 },
+  },
+  {
+    op: 'node.add',
+    node: { id: 'b', type: 'text', text: 'b', x: 200, y: 0, width: 100, height: 50 },
+  },
+  { op: 'edge.add', edge: { id: 'e', from: { node: 'a' }, to: { node: 'b' } } },
+]
+
+/** Four edges at a node that is later removed from the record. */
+const TANGLED: Message[] = [
+  {
+    op: 'node.add',
+    node: { id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 100, height: 50 },
+  },
+  {
+    op: 'node.add',
+    node: { id: 'gone', type: 'text', text: 'b', x: 200, y: 0, width: 100, height: 50 },
+  },
+  ...['é1', 'é2', 'é3', 'é4'].map((id) => ({
+    op: 'edge.add',
+    edge: { id, from: { node: 'gone' }, to: { node: 'gone' } },
+  })),
+]
+
+/** Applies `ops` to a board as a person drawing would, not as a proposal. */
+async function apply(call: Call, documentId: string, ops: Message[]): Promise<void> {
+  await ok(call, 'wb_canvas_edit', { workspaceId: W, documentId, mode: 'apply', ops })
+}
+
 /**
  * Every node kind, an edge and a line with each optional field, facets on a
  * node and an edge (one key each, for the reason `NOTE`'s payloads hold one),
@@ -214,85 +323,7 @@ async function annotate(call: Call, ids: Record<string, string>): Promise<void> 
  * cut where the reason is capped.
  */
 async function draw(call: Call, ids: Record<string, string>): Promise<void> {
-  const shape = { 'visual.shape/v0': { kind: 'ellipse' } }
-  await ok(call, 'wb_canvas_edit', {
-    workspaceId: W,
-    documentId: ids.drawn,
-    mode: 'apply',
-    ops: [
-      {
-        op: 'node.add',
-        node: {
-          id: 't1',
-          type: 'text',
-          text: '# Hi\n\nthere',
-          x: 0,
-          y: 0,
-          width: 200,
-          height: 100,
-          color: '2',
-          facets: shape,
-        },
-      },
-      {
-        op: 'node.add',
-        node: {
-          id: 'f1',
-          type: 'file',
-          file: 'notes/plan.md',
-          subpath: '#Plan',
-          x: 300,
-          y: 0,
-          width: 200,
-          height: 100,
-        },
-      },
-      {
-        op: 'node.add',
-        node: {
-          id: 'k1',
-          type: 'link',
-          url: 'https://example.com/a?b=1',
-          x: 600,
-          y: 0,
-          width: 200,
-          height: 100,
-          color: '#00ff00',
-        },
-      },
-      {
-        op: 'node.add',
-        node: { id: 'g1', type: 'group', label: 'Group', x: -50, y: 200, width: 900, height: 300 },
-      },
-      {
-        op: 'node.add',
-        node: { id: 't2', type: 'text', text: 'inside', x: 0, y: 250, width: 120, height: 60 },
-      },
-      {
-        op: 'edge.add',
-        edge: {
-          id: 'e1',
-          from: { node: 't1', side: 'right', end: 'none' },
-          to: { node: 'f1', side: 'left', end: 'arrow' },
-          label: 'goes',
-          color: '4',
-          bends: [{ x: 250, y: 25.5 }],
-          facets: { 'x.note/v1': { text: 'why' } },
-        },
-      },
-      { op: 'edge.add', edge: { id: 'e2', from: { node: 'f1' }, to: { node: 'k1' } } },
-      {
-        op: 'line.add',
-        line: {
-          id: 'l1',
-          from: { kind: 'point', point: { x: -100, y: -50 } },
-          to: { kind: 'node', node: 'g1', side: 'top' },
-          label: 'ink',
-          color: '#ff0000',
-        },
-      },
-    ],
-  })
+  await apply(call, ids.drawn, DRAWN)
   await ok(call, 'wb_thread_edit', {
     workspaceId: W,
     documentId: ids.drawn,
@@ -306,41 +337,8 @@ async function draw(call: Call, ids: Record<string, string>): Promise<void> {
       },
     ],
   })
-  await ok(call, 'wb_canvas_edit', {
-    workspaceId: W,
-    documentId: ids.dangling,
-    mode: 'apply',
-    ops: [
-      {
-        op: 'node.add',
-        node: { id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 100, height: 50 },
-      },
-      {
-        op: 'node.add',
-        node: { id: 'b', type: 'text', text: 'b', x: 200, y: 0, width: 100, height: 50 },
-      },
-      { op: 'edge.add', edge: { id: 'e', from: { node: 'a' }, to: { node: 'b' } } },
-    ],
-  })
-  await ok(call, 'wb_canvas_edit', {
-    workspaceId: W,
-    documentId: ids.tangled,
-    mode: 'apply',
-    ops: [
-      {
-        op: 'node.add',
-        node: { id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 100, height: 50 },
-      },
-      {
-        op: 'node.add',
-        node: { id: 'gone', type: 'text', text: 'b', x: 200, y: 0, width: 100, height: 50 },
-      },
-      ...['é1', 'é2', 'é3', 'é4'].map((id) => ({
-        op: 'edge.add',
-        edge: { id, from: { node: 'gone' }, to: { node: 'gone' } },
-      })),
-    ],
-  })
+  await apply(call, ids.dangling, DANGLING)
+  await apply(call, ids.tangled, TANGLED)
 }
 
 /** Enough comment to put `talkative` alone over the response budget, and a board's node. */
@@ -487,6 +485,13 @@ function readCalls(ids: Record<string, string>): [string, Message | undefined][]
       'comments in the retired plane',
       { workspaceId: W, documentIds: [ids.bare, ids['old-comments']] },
     ],
+    ...spatialReadCalls(ids),
+  ]
+}
+
+/** The reads of a spatial document, and one of a workspace nothing answers to. */
+function spatialReadCalls(ids: Record<string, string>): [string, Message | undefined][] {
+  return [
     ['a spatial document', { workspaceId: W, documentIds: [ids.board] }],
     [
       'a spatial document, strict',
