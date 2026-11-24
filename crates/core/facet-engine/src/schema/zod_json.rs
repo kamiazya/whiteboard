@@ -98,7 +98,7 @@ fn members_of(value: Value) -> Map {
 /// The definition `name` of the scope `scope` as Zod's JSON Schema, or `None`
 /// for a name the scope does not hold.
 pub(super) fn publish(scopes: &[Scope], scope: usize, name: &str) -> Option<Value> {
-    let mut writer = Writer { scopes, registered: Vec::new() };
+    let mut writer = Writer { scopes, registered: Vec::new(), open: Vec::new() };
     let root = writer.definition(scope, name)?;
     let mut out = vec![member("$schema", string(DIALECT))];
     out.extend(members_of(root));
@@ -111,6 +111,9 @@ pub(super) fn publish(scopes: &[Scope], scope: usize, name: &str) -> Option<Valu
 struct Writer<'s> {
     scopes: &'s [Scope],
     registered: Map,
+    /// The definitions being inlined: an external one is not compiled, so a
+    /// reference back into one is not refused at load and is kept as written.
+    open: Vec<(usize, String)>,
 }
 
 impl<'s> Writer<'s> {
@@ -126,6 +129,7 @@ impl<'s> Writer<'s> {
 
     fn definition(&mut self, scope: usize, name: &str) -> Option<Value> {
         let (scope, written) = self.resolve(scope, name)?;
+        let reference = Value::Map(vec![member("$ref", string(&format!("#/$defs/{name}")))]);
         if get(written, "x-wb-registered") == Some(&Value::Bool(true)) {
             if !self.registered.iter().any(|(key, _)| key == name) {
                 // Held before its body is written, so it is first met here.
@@ -135,9 +139,14 @@ impl<'s> Writer<'s> {
                     *slot = body;
                 }
             }
-            return Some(Value::Map(vec![member("$ref", string(&format!("#/$defs/{name}")))]));
+            return Some(reference);
         }
+        if self.open.iter().any(|(at, held)| *at == scope && held == name) {
+            return Some(reference);
+        }
+        self.open.push((scope, name.to_owned()));
         let body = self.node(scope, written);
+        self.open.pop();
         let capped = get(written, "maxProperties").is_some();
         match self.description(scope, written) {
             Some(text) if !capped => Some(Value::Map(described(members_of(body), text))),
@@ -234,18 +243,26 @@ impl<'s> Writer<'s> {
             Some(Value::Seq(names)) => names.iter().collect(),
             _ => Vec::new(),
         };
-        let order = match get(written, "x-wb-order") {
-            Some(Value::Seq(names)) => names.as_slice(),
+        let declared = match get(written, "properties") {
+            Some(Value::Map(declared)) => declared.as_slice(),
             _ => &[],
         };
+        // An external definition is not compiled, so it may leave its order
+        // unwritten: its properties are then taken as written.
+        let order: Vec<&str> = match get(written, "x-wb-order") {
+            Some(Value::Seq(names)) => names
+                .iter()
+                .filter_map(|name| match name {
+                    Value::String(name) => Some(name.as_str()),
+                    _ => None,
+                })
+                .collect(),
+            _ => declared.iter().map(|(name, _)| name.as_str()).collect(),
+        };
         let (mut properties, mut held) = (Map::new(), Vec::new());
-        for name in order.iter().filter_map(|name| match name {
-            Value::String(name) => Some(name.as_str()),
-            _ => None,
-        }) {
-            let Some(property) = get(written, "properties").and_then(|all| get(all, name)) else {
-                continue;
-            };
+        for name in order {
+            let found = declared.iter().find(|(key, _)| key == name);
+            let Some((_, property)) = found else { continue };
             let optional = !required.contains(&&string(name));
             if !optional || get(property, "default").is_some() {
                 held.push(string(name));

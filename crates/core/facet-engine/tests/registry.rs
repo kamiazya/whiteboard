@@ -308,3 +308,61 @@ fn a_published_definition_inlines_its_own_contracts_references() {
     let foreign = Contracts::load(&[], &host).expect("nothing loads");
     assert_eq!(foreign.published(pair), None);
 }
+
+fn accept(
+    value: &whiteboard_model::Value,
+) -> Result<whiteboard_model::Value, Vec<whiteboard_facet_engine::schema::Issue>> {
+    match value {
+        whiteboard_model::Value::Map(_) => Ok(value.clone()),
+        _ => Err(Vec::new()),
+    }
+}
+
+/// A property whose NAME starts like a dialect keyword is the payload's own
+/// field, not a keyword: published, it is kept, and `required` still names a
+/// declared property.
+#[test]
+fn a_published_definition_keeps_a_property_named_like_the_dialect() {
+    let parse = |text: &str| whiteboard_model::json::parse(text).expect("JSON");
+    let contract = parse(
+        r#"{"$schema": "x", "$defs": {"Labelled": {"type": "object",
+            "properties": {"x-wb-label": {"type": "string", "x-wb-minUtf16": 1}},
+            "required": ["x-wb-label"], "x-wb-order": ["x-wb-label"],
+            "x-wb-unknownKeys": "strip"}}}"#,
+    );
+    let host = Host { matchers: &[], checks: &[], externals: &[] };
+    let contracts = Contracts::load(&[(PATH, &contract)], &host).expect("it compiles");
+    let labelled = contracts.resolve(&format!("{PATH}#/$defs/Labelled")).expect("Labelled");
+    let published = parse(
+        r#"{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
+            "properties": {"x-wb-label": {"type": "string", "minLength": 1}},
+            "required": ["x-wb-label"], "additionalProperties": false}"#,
+    );
+    assert_eq!(contracts.published(labelled), Some(published));
+}
+
+/// An external definition is not compiled, so a reference inside it records
+/// no edge for the load-time cycle check: published, a reference back into
+/// a definition already being inlined is kept as written instead of
+/// recursing, and its properties, which no `x-wb-order` lists, as written.
+#[test]
+fn a_published_external_definition_that_names_itself_ends() {
+    let parse = |text: &str| whiteboard_model::json::parse(text).expect("JSON");
+    let contract = parse(
+        r##"{"$schema": "x", "$defs": {"Tree": {"x-wb-external": true, "type": "object",
+            "properties": {"child": {"$ref": "#/$defs/Tree"}, "name": {"type": "string"}}}}}"##,
+    );
+    let host = Host {
+        matchers: &[],
+        checks: &[],
+        externals: &[("Tree", whiteboard_facet_engine::schema::External::Validator(accept))],
+    };
+    let contracts = Contracts::load(&[(PATH, &contract)], &host).expect("it compiles");
+    let tree = contracts.resolve(&format!("{PATH}#/$defs/Tree")).expect("Tree");
+    let published = parse(
+        r##"{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
+            "properties": {"child": {"$ref": "#/$defs/Tree"}, "name": {"type": "string"}},
+            "additionalProperties": false}"##,
+    );
+    assert_eq!(contracts.published(tree), Some(published));
+}
