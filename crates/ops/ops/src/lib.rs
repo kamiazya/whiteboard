@@ -37,9 +37,11 @@
 //!   with the first operation that writes.
 
 mod address;
+mod content;
 mod document_get;
 mod document_list;
 mod document_resolve;
+mod document_search;
 mod facet_list;
 mod operation;
 mod ports;
@@ -58,6 +60,9 @@ pub use document_list::{
     DocumentList, DocumentListInput, DocumentListOutput, FolderName, ListedDocument,
 };
 pub use document_resolve::{DocumentDetail, DocumentResolve, DocumentResolveInput};
+pub use document_search::{
+    DocumentSearch, DocumentSearchAnswer, DocumentSearchInput, SearchResult,
+};
 pub use facet_list::{
     AssetEntry, DeclaredKey, DeclaredValue, FacetEntry, FacetList, FacetListAnswer, FacetListInput,
     FacetListOutput, TagInUse, WorkspaceTags,

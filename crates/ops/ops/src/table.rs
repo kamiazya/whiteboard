@@ -1,6 +1,9 @@
 //! The operation table: every operation this crate answers, as data.
 
-use crate::{DocumentGet, DocumentList, DocumentResolve, FacetList, Operation, Row, VersionList};
+use crate::{
+    DocumentGet, DocumentList, DocumentResolve, DocumentSearch, FacetList, Operation, Row,
+    VersionList,
+};
 
 /// Visits each operation by type, so a caller reaches its `execute` and its
 /// input and output types as well as its row.
@@ -21,7 +24,7 @@ macro_rules! table {
     };
 }
 
-table!(DocumentList, DocumentResolve, DocumentGet, VersionList, FacetList);
+table!(DocumentList, DocumentResolve, DocumentGet, VersionList, FacetList, DocumentSearch);
 
 #[cfg(test)]
 mod tests;

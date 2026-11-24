@@ -34,6 +34,7 @@ const DOCUMENT_LIST: &str = include_str!("../../../../contracts/tools/wb_documen
 const DOCUMENT_GET: &str = include_str!("../../../../contracts/tools/wb_document_get.json");
 const VERSION_LIST: &str = include_str!("../../../../contracts/tools/wb_version_list.json");
 const FACET_LIST: &str = include_str!("../../../../contracts/tools/wb_facet_list.json");
+const DOCUMENT_SEARCH: &str = include_str!("../../../../contracts/tools/wb_document_search.json");
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
 /// The ports the ported tools read: the record store, the registry, the
@@ -182,6 +183,7 @@ fn the_listing_is_the_contract_of_each_ported_tool() {
         contract(DOCUMENT_GET),
         contract(VERSION_LIST),
         contract(FACET_LIST),
+        contract(DOCUMENT_SEARCH),
     ];
     assert_eq!(answer["result"]["tools"], json!(listed));
 }

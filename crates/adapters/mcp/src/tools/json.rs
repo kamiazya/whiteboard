@@ -11,6 +11,8 @@ use whiteboard_model::Value as Plain;
 pub(crate) enum Json {
     Text(String),
     Bool(bool),
+    /// A finite double, written as `JSON.stringify` writes it.
+    Number(f64),
     List(Vec<Json>),
     Object(Vec<(&'static str, Json)>),
     /// An object whose member names are data, not the tool's own.
@@ -26,6 +28,7 @@ impl Json {
         match self {
             Self::Text(text) => Value::from(text.as_str()),
             Self::Bool(flag) => Value::Bool(*flag),
+            Self::Number(number) => number_value(*number),
             Self::List(items) => Value::Array(items.iter().map(Self::value).collect()),
             Self::Object(members) => Value::Object(
                 members
@@ -49,6 +52,7 @@ impl Json {
         match self {
             Self::Text(text) => Value::from(text.as_str()).to_string(),
             Self::Bool(flag) => flag.to_string(),
+            Self::Number(number) => json_text(&Plain::Number(*number)).unwrap_or_default(),
             Self::List(items) => {
                 let items: Vec<String> = items.iter().map(Self::text).collect();
                 format!("[{}]", items.join(","))
@@ -62,6 +66,23 @@ impl Json {
             Self::Plain(plain) => json_text(plain).unwrap_or_default(),
         }
     }
+}
+
+/// The number its text reads back as: a whole double within the safe range
+/// as the integer `JSON.parse` of its digits gives, any other as the double
+/// itself (exact, where a parser of its text may land an ulp off).
+fn number_value(number: f64) -> Value {
+    const SAFE: f64 = 9_007_199_254_740_991.0;
+    if number.fract() == 0.0 && number.abs() <= SAFE {
+        let whole = format!("{}", number.abs());
+        let digits: u64 = whole.parse().unwrap_or_default();
+        return if number < 0.0 {
+            Value::from(0_i64.saturating_sub_unsigned(digits))
+        } else {
+            Value::from(digits)
+        };
+    }
+    serde_json::Number::from_f64(number).map_or(Value::Null, Value::Number)
 }
 
 /// `JSON.stringify` of an object's members, in the order given.
