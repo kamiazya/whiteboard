@@ -322,7 +322,9 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
                 json!("Tool wb_version_restore not found"),
                 "{case} is pending"
             );
-            let _ = (ports.notifier.take_restores(), ports.observer.take());
+            assert_eq!(progress(ports), json!([]), "{case}: a pending call told no page");
+            assert_eq!(written(ports), json!([]), "{case}: a pending call reported no write");
+            assert_eq!(stored(ports), expected, "{case}: a pending call kept nothing");
             pending += 1;
             continue;
         }
