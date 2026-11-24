@@ -176,6 +176,6 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         told += sent.len();
         replayed += 1;
     }
-    assert_eq!(replayed, 73, "the recording's calls, every one answered");
-    assert_eq!((answered, told), (20, 17), "the calls answered, and those a page was told of");
+    assert_eq!(replayed, 75, "the recording's calls, every one answered");
+    assert_eq!((answered, told), (21, 17), "the calls answered, and those a page was told of");
 }

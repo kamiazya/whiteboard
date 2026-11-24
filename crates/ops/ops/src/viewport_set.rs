@@ -6,8 +6,8 @@ use whiteboard_model::crdt::QueryName;
 use whiteboard_ports::{ClientNotifier, ViewportRequest};
 
 use crate::content::field;
-use crate::document_get::Stop;
 use crate::document_get::engine::{Fault, Hosted};
+use crate::document_get::{Pending, Stop};
 use crate::document_resolve::resolve_in;
 use crate::record::open_record;
 use crate::{Contract, Operation, Ports, Row};
@@ -68,8 +68,9 @@ impl Operation for ViewportSet {
             let hosted = Hosted { record: &record, document_id: &request.document_id };
             let held = match node_ids(hosted) {
                 Ok(held) => held,
-                Err(Unread::Refused(refusal)) => return Err(refusal),
-                Err(Unread::Pending) => return Ok(ViewportSetAnswer::Pending),
+                Err(Fault::Retired(found)) => return Err(Refusal::RetiredStoredShape { found }),
+                Err(Fault::Stop(Stop::Refused(refusal))) => return Err(refusal),
+                Err(Fault::Stop(Stop::Pending(_))) => return Ok(ViewportSetAnswer::Pending),
             };
             if let Some(missing) = wanted.iter().find(|id| !held.contains(id)) {
                 return Err(Refusal::NodeNotFound {
@@ -83,29 +84,20 @@ impl Operation for ViewportSet {
     }
 }
 
-/// Why a canvas's node ids are not answered.
-enum Unread {
-    Refused(Refusal),
-    Pending,
-}
-
 /// The ids of the nodes the canvas holds, as the engine's `spatialCanvas`
-/// answers it: a record its schema skipped is not there to frame.
-fn node_ids(hosted: Hosted<'_>) -> Result<Vec<String>, Unread> {
-    let read = hosted.read(QueryName::SpatialCanvas, &[]).map_err(|fault| match fault {
-        Fault::Retired(found) => Unread::Refused(Refusal::RetiredStoredShape { found }),
-        Fault::Stop(Stop::Refused(refusal)) => Unread::Refused(refusal),
-        Fault::Stop(Stop::Pending(_)) => Unread::Pending,
-    })?;
+/// answers it: a record its schema skipped is not there to frame. An answer
+/// out of the engine's contract is a read this crate does not decide.
+fn node_ids(hosted: Hosted<'_>) -> Result<Vec<String>, Fault> {
+    let undecided =
+        || Fault::Stop(Stop::Pending(Pending::UndecidedRead(hosted.document_id.into())));
+    let read = hosted.read(QueryName::SpatialCanvas, &[])?;
     let nodes = field(&read, "canvas").and_then(|canvas| field(canvas, "nodes"));
-    let Some(Value::Seq(nodes)) = nodes else { return Err(Unread::Pending) };
-    nodes
-        .iter()
-        .map(|node| match field(node, "id") {
-            Some(Value::String(id)) => Ok(id.clone()),
-            _ => Err(Unread::Pending),
-        })
-        .collect()
+    let Some(Value::Seq(nodes)) = nodes else { return Err(undecided()) };
+    let id = |node| match field(node, "id") {
+        Some(Value::String(id)) => Some(id.clone()),
+        _ => None,
+    };
+    nodes.iter().map(|node| id(node).ok_or_else(undecided)).collect()
 }
 
 #[cfg(test)]

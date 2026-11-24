@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { base64ToBytes, bytesToBase64 } from '@kamiazya/whiteboard-model'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { InMemoryTransport, type McpServer } from '@modelcontextprotocol/server'
-import { LoroDoc } from 'loro-crdt'
+import { LoroDoc, LoroList, type LoroMap, type LoroTree } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from '../routes/_test-helpers.js'
 
@@ -15,8 +15,9 @@ import { withTempDataDir } from '../routes/_test-helpers.js'
  * `oracle/viewport-set.jsonl` opens with one record row: a workspace record
  * (`snapshot`, kept as `W`), the registry rows that address it, the caller's
  * namespace, the handles a refusal may name, the ids of its documents by
- * path, and `watching`: the paths a page has open, each with whether it has
- * signalled `client_ready`. The calls are answered by the daemon's live
+ * path (one, `elderly`, edited afterwards into a shape no tool writes any
+ * more), and `watching`: the paths a page has open, each with whether it has
+ * signalled `client_ready`. Delete the file to build the record again. The calls are answered by the daemon's live
  * audience (`attachLiveAudience`) over those pages, registered as sync
  * streams, so `delivered` is what a page being there makes it.
  *
@@ -49,7 +50,7 @@ vi.mock('../config.js', () => ({
 // `../config.js`, so they read this file's temporary data directory.
 const { createMcpServer } = await import('./server.js')
 const { resolveTestServerDeps } = await import('../routes/_test-helpers.js')
-const { importWorkspaceRecord, workspaceRecordCopy } = await import(
+const { editWorkspaceRecord, importWorkspaceRecord, workspaceRecordCopy } = await import(
   '../store/_test-workspace-record.js'
 )
 const { attachLiveAudience } = await import('../canvas-client-notifier.js')
@@ -126,6 +127,7 @@ async function populate(call: Call): Promise<Record<string, string>> {
       { op: 'document.create', path: 'quiet', kind: 'spatial' },
       { op: 'document.create', path: 'opened', kind: 'spatial' },
       { op: 'document.create', path: 'note', kind: 'markdown', markdown: 'a note\n' },
+      { op: 'document.create', path: 'elderly', kind: 'spatial' },
     ],
   })
   const ids: Record<string, string> = {}
@@ -141,10 +143,28 @@ async function populate(call: Call): Promise<Record<string, string>> {
   return ids
 }
 
+/** The tree node meta map that hosts `documentId`. */
+function hostOf(copy: LoroDoc, documentId: string): LoroMap {
+  const tree = copy.getTree('tree') as LoroTree
+  const node = tree.getNodes().find((each) => each.data.get('documentId') === documentId)
+  if (node === undefined) throw new Error(`no node hosts ${documentId}`)
+  return node.data
+}
+
+/**
+ * What no tool writes any more: `elderly` holds its elements in the retired
+ * Excalidraw `elements` list, which refuses a read of its canvas.
+ */
+function retire(copy: LoroDoc, ids: Record<string, string>): void {
+  const elements = hostOf(copy, ids.elderly ?? '').setContainer('elements', new LoroList())
+  elements.push({ id: 'e1', type: 'rectangle' })
+}
+
 async function buildRecord(): Promise<Message> {
   const known = [SEGMENT]
   const deps = await freshDeps(known)
   const ids = await populate(await caller(deps))
+  await editWorkspaceRecord(W, (copy) => retire(copy, ids))
   const record = await workspaceRecordCopy(W)
   const registry = (await deps.documentIndex.listWorkspaces()).filter(
     (row) => row.workspaceId === W,
@@ -218,6 +238,7 @@ function answeredCalls(ids: Record<string, string>): Asked[] {
     ['a board open nowhere', at(ids.quiet)],
     ['a board open nowhere, a position', at(ids.quiet, { zoom: 3 })],
     ['a board open in a page not ready', at(ids.opened)],
+    ['a retired canvas, framed whole', at(ids.elderly)],
   ]
 }
 
@@ -231,6 +252,7 @@ function refusedCalls(ids: Record<string, string>): Asked[] {
     ['a node of an empty board', { workspaceId: W, documentId: ids.quiet, elementIds: ['pad'] }],
     ['a markdown document', { workspaceId: W, documentId: ids.note }],
     ['a markdown document, a node', { workspaceId: W, documentId: ids.note, elementIds: ['x'] }],
+    ['a retired canvas, a node', { workspaceId: W, documentId: ids.elderly, elementIds: ['e1'] }],
     ['a document nothing holds', { workspaceId: W, documentId: NOTHING }],
     ['a document nothing holds, by segment', { workspaceId: SEGMENT, documentId: NOTHING }],
     ['a workspace nothing answers to', { workspaceId: 'nope', documentId: ids.board }],
