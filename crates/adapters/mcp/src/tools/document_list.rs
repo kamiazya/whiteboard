@@ -4,25 +4,19 @@ use serde_json::{Map, Value};
 use whiteboard_ops::{DocumentDetail, DocumentList, DocumentListInput, DocumentListOutput};
 
 use super::Binding;
-use super::input::{Field, Input};
+use super::input::{Field, Input, Kind, Refined};
 use super::json::Json;
 
 impl Binding for DocumentList {
     const NAME: &str = "wb_document_list";
     const CONTRACT: &str = include_str!("../../../../../contracts/tools/wb_document_list.json");
-    const INPUT: Input = Input {
-        fields: &[Field {
-            name: "workspaceId",
-            test: is_workspace_address,
-            message: "a workspace address is an id, <handle>/<segment>, or a segment ([a-zA-Z0-9-], at most one \"/\")",
-        }],
-    };
+    const INPUT: Input = Input { fields: &[WORKSPACE_ADDRESS] };
 
     fn input(_: &Map<String, Value>, workspace_id: String) -> DocumentListInput {
         DocumentListInput { workspace_id }
     }
 
-    fn output(output: &DocumentListOutput) -> Json {
+    fn output(output: &DocumentListOutput) -> Option<Json> {
         let documents = output
             .documents
             .iter()
@@ -46,7 +40,7 @@ impl Binding for DocumentList {
                 .collect();
             members.push(("folderNames", Json::List(names)));
         }
-        Json::Object(members)
+        Some(Json::Object(members))
     }
 }
 
@@ -67,6 +61,15 @@ fn detail(detail: &DocumentDetail) -> Vec<(&'static str, Json)> {
     }
     members
 }
+
+/// `workspaceId`, as `workspaceAddressInputSchema` refines it.
+pub(super) const WORKSPACE_ADDRESS: Field = Field {
+    name: "workspaceId",
+    kind: Kind::Text(Refined {
+        test: is_workspace_address,
+        message: "a workspace address is an id, <handle>/<segment>, or a segment ([a-zA-Z0-9-], at most one \"/\")",
+    }),
+};
 
 /// `workspaceAddressInputSchema`'s `/^[a-zA-Z0-9-]+(\/[a-zA-Z0-9-]+)?$/`:
 /// one or two non-empty parts of ASCII letters, digits and hyphens. A

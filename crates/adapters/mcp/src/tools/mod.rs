@@ -10,12 +10,13 @@
 //! `structuredContent` and as its `JSON.stringify` text, or with the
 //! operation's refusal.
 
+mod document_get;
 mod document_list;
 mod input;
 mod json;
 
 use serde_json::{Map, Value, json};
-use whiteboard_ops::{DocumentList, Operation, Ports, with_resolved_workspace};
+use whiteboard_ops::{DocumentGet, DocumentList, Operation, Ports, with_resolved_workspace};
 
 use crate::{ToolCatalogue, ToolError};
 use input::Input;
@@ -29,7 +30,6 @@ pub const PENDING_TOOLS: &[&str] = &[
     "wb_body_edit",
     "wb_canvas_edit",
     "wb_canvas_snapshot",
-    "wb_document_get",
     "wb_document_search",
     "wb_facet_list",
     "wb_facet_set",
@@ -54,7 +54,9 @@ trait Binding: Operation {
     /// the canonical id the `workspaceId` address resolved to.
     fn input(arguments: &Map<String, Value>, workspace_id: String) -> Self::Input;
 
-    fn output(output: &Self::Output) -> Json;
+    /// The tool's answer, or `None` where the operation met what it does not
+    /// answer yet, which the call answers as a pending tool is.
+    fn output(output: &Self::Output) -> Option<Json>;
 }
 
 /// The tools of the ops table, over one ports bundle.
@@ -70,7 +72,7 @@ impl<P: Ports> OpsCatalogue<P> {
 
 impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
     fn tools(&self) -> Vec<Value> {
-        vec![contract::<DocumentList>()]
+        vec![contract::<DocumentList>(), contract::<DocumentGet>()]
     }
 
     async fn call(
@@ -78,10 +80,11 @@ impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
         name: &str,
         arguments: Option<&Map<String, Value>>,
     ) -> Result<Value, ToolError> {
-        if name == DocumentList::NAME {
-            return run::<DocumentList, P>(&self.ports, arguments).await;
+        match name {
+            DocumentList::NAME => run::<DocumentList, P>(&self.ports, arguments).await,
+            DocumentGet::NAME => run::<DocumentGet, P>(&self.ports, arguments).await,
+            _ => Err(ToolError::NotFound),
         }
-        Err(ToolError::NotFound)
     }
 }
 
@@ -111,7 +114,7 @@ async fn run<B: Binding, P: Ports>(
     })
     .await
     .map_err(ToolError::Refused)?;
-    let output = B::output(&output);
+    let output = B::output(&output).ok_or(ToolError::NotFound)?;
     Ok(json!({
         "content": [{ "type": "text", "text": output.text() }],
         "structuredContent": output.value(),
