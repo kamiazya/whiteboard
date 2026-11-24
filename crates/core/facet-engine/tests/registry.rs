@@ -311,7 +311,10 @@ fn a_published_definition_drops_the_dialect_and_inlines_its_own_contracts_refere
 fn accept(
     value: &whiteboard_model::Value,
 ) -> Result<whiteboard_model::Value, Vec<whiteboard_facet_engine::schema::Issue>> {
-    Ok(value.clone())
+    match value {
+        whiteboard_model::Value::Map(_) => Ok(value.clone()),
+        _ => Err(Vec::new()),
+    }
 }
 
 /// A property whose NAME starts like a dialect keyword is the payload's own
