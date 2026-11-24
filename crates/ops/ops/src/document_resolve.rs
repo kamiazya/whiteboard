@@ -2,7 +2,7 @@
 
 use whiteboard_api_contracts::Refusal;
 use whiteboard_ports::PortError;
-use whiteboard_workspace_index::{DocumentEntry, resolve_document_by_id};
+use whiteboard_workspace_index::{DocumentEntry, WorkspaceRecord, resolve_document_by_id};
 
 use crate::record::open_record;
 use crate::{Contract, Method, Operation, Ports, Route, Row};
@@ -66,16 +66,24 @@ impl Operation for DocumentResolve {
         let record = open_record(ports.records(), &input.workspace_id)
             .await
             .map_err(|error| Refusal::from(&error))?;
-        // A stamp no `Date` holds throws from `toISOString` there, an
-        // uncaught throw.
-        let found = resolve_document_by_id(&record, &input.document_id)
-            .map_err(|_| Refusal::from(&PortError::InvalidTime))?;
-        let Some(entry) = found else {
-            return Err(Refusal::DocumentNotFound {
-                document_id: input.document_id,
-                workspace_id: input.workspace_id,
-            });
-        };
+        let entry = resolve_in(&record, &input.workspace_id, &input.document_id)?;
         Ok(DocumentDetail::of(entry))
     }
+}
+
+/// `document_id` in the open record of `workspace_id`, or the refusal an MCP
+/// caller is given for a document the workspace does not hold.
+pub(crate) fn resolve_in(
+    record: &WorkspaceRecord,
+    workspace_id: &str,
+    document_id: &str,
+) -> Result<DocumentEntry, Refusal> {
+    // A stamp no `Date` holds throws from `toISOString` there, an uncaught
+    // throw.
+    let found = resolve_document_by_id(record, document_id)
+        .map_err(|_| Refusal::from(&PortError::InvalidTime))?;
+    found.ok_or_else(|| Refusal::DocumentNotFound {
+        document_id: document_id.to_owned(),
+        workspace_id: workspace_id.to_owned(),
+    })
 }

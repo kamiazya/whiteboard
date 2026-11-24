@@ -39,8 +39,16 @@ pub struct SavedVersion {
     pub restored_from: Option<String>,
 }
 
+/// What a save asks the keeper to record: a point somebody chose, under
+/// their label, or an automatic checkpoint.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewVersion {
+    pub label: Option<String>,
+    pub auto: bool,
+}
+
 /// The version history a keeper holds: natively a table beside the record,
-/// on Workers a Durable Object's storage. Only the listing is here; a save,
+/// on Workers a Durable Object's storage. The listing and the save are here;
 /// a checkout and a restore join with the operations that make them.
 pub trait VersionStore {
     /// Every saved version of `document_id` in `workspace_id`, newest first
@@ -52,4 +60,20 @@ pub trait VersionStore {
         workspace_id: &str,
         document_id: &str,
     ) -> impl Future<Output = Result<Vec<SavedVersion>, PortError>> + MaybeSend;
+
+    /// Records the document's state as it stands in the stored record as a
+    /// new version of `document_id`, and answers it as `list` would list it.
+    ///
+    /// The keeper mints the id and the stamp, and names who saved it: the
+    /// operation names nobody, so a save is the agent's (`kind: "ai"`, as the
+    /// daemon's `agentVersionHistory` stamps an unnamed save). The keeper
+    /// tells the document's watchers the version exists, and refuses a
+    /// manual save once the document keeps as many manual versions as one
+    /// document may (`TooManyVersions`), keeping nothing.
+    fn save(
+        &self,
+        workspace_id: &str,
+        document_id: &str,
+        save: &NewVersion,
+    ) -> impl Future<Output = Result<SavedVersion, PortError>> + MaybeSend;
 }

@@ -98,6 +98,9 @@ pub enum PortError {
     TooManyDocuments { documents: usize, limit: usize },
     /// `TooManyFoldersError`: the write would leave `folders`.
     TooManyFolders { folders: usize, limit: usize },
+    /// `TooManyVersionsError`: the document already keeps `limit` versions of
+    /// the kind the save would add.
+    TooManyVersions { limit: usize },
     /// A clock read no JavaScript `Date` holds.
     InvalidTime,
 }
@@ -116,7 +119,8 @@ impl PortError {
             }
             Self::TooManyWorkspaces { .. }
             | Self::TooManyDocuments { .. }
-            | Self::TooManyFolders { .. } => PortErrorKind::Ceiling,
+            | Self::TooManyFolders { .. }
+            | Self::TooManyVersions { .. } => PortErrorKind::Ceiling,
             Self::InvalidTime => PortErrorKind::InvalidTime,
         }
     }
@@ -141,6 +145,7 @@ impl PortError {
             Self::TooManyWorkspaces { .. } => "too_many_workspaces",
             Self::TooManyDocuments { .. } => "too_many_documents",
             Self::TooManyFolders { .. } => "too_many_folders",
+            Self::TooManyVersions { .. } => "too_many_versions",
             Self::InvalidTime => "internal_error",
         }
     }
@@ -170,6 +175,10 @@ impl fmt::Display for PortError {
             Self::TooManyFolders { folders, limit } => write!(
                 f,
                 "This write would leave the workspace holding {folders} folders; a workspace holds at most {limit}. Move or delete some folders' documents first"
+            ),
+            Self::TooManyVersions { limit } => write!(
+                f,
+                "This document already keeps {limit} saved versions, the most one document keeps; no further version can be saved for it"
             ),
             Self::InvalidTime => f.write_str("The clock read a time no Date holds"),
         }
@@ -267,6 +276,14 @@ mod tests {
                 ),
             ),
             (
+                PortError::TooManyVersions { limit: 200 },
+                PortErrorKind::Ceiling,
+                "too_many_versions",
+                s(
+                    "This document already keeps 200 saved versions, the most one document keeps; no further version can be saved for it",
+                ),
+            ),
+            (
                 PortError::InvalidTime,
                 PortErrorKind::InvalidTime,
                 "internal_error",
@@ -278,7 +295,7 @@ mod tests {
     #[test]
     fn every_variant_has_its_kind_code_and_message() {
         let all: Vec<Row> = lookups().into_iter().chain(refusals()).collect();
-        assert_eq!(all.len(), 9);
+        assert_eq!(all.len(), 10);
         for (error, kind, code, message) in all {
             assert_eq!(error.kind(), kind, "{error:?}");
             assert_eq!(error.code(), code, "{error:?}");

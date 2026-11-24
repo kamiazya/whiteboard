@@ -33,6 +33,7 @@ const READS: &str =
 const DOCUMENT_LIST: &str = include_str!("../../../../contracts/tools/wb_document_list.json");
 const DOCUMENT_GET: &str = include_str!("../../../../contracts/tools/wb_document_get.json");
 const VERSION_LIST: &str = include_str!("../../../../contracts/tools/wb_version_list.json");
+const VERSION_SAVE: &str = include_str!("../../../../contracts/tools/wb_version_save.json");
 const FACET_LIST: &str = include_str!("../../../../contracts/tools/wb_facet_list.json");
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
@@ -45,6 +46,7 @@ impl Ports for Fakes {
     type Registry = MemoryRegistry;
     type Caller = FixedCaller;
     type Versions = MemoryVersionStore;
+    type Lock = whiteboard_port_fakes::KeyedLock;
 
     fn records(&self) -> &MemoryRecordStore {
         &self.0
@@ -60,6 +62,10 @@ impl Ports for Fakes {
 
     fn versions(&self) -> &MemoryVersionStore {
         &self.3
+    }
+
+    fn lock(&self) -> &whiteboard_port_fakes::KeyedLock {
+        unreachable!("a read takes no lock")
     }
 }
 
@@ -181,6 +187,7 @@ fn the_listing_is_the_contract_of_each_ported_tool() {
         contract(DOCUMENT_LIST),
         contract(DOCUMENT_GET),
         contract(VERSION_LIST),
+        contract(VERSION_SAVE),
         contract(FACET_LIST),
     ];
     assert_eq!(answer["result"]["tools"], json!(listed));

@@ -32,9 +32,10 @@
 //!   the operation's refusal is re-said with the handle the caller typed. An
 //!   operation itself sees only the canonical id.
 //! - A read opens the workspace record from the bytes the store answers and
-//!   answers from `whiteboard-workspace-index`'s reads. A write goes through
-//!   one bracket — lock, load, engine write, persist, release — which lands
-//!   with the first operation that writes.
+//!   answers from `whiteboard-workspace-index`'s reads. A write holds the
+//!   workspace's write lock ([`Ports::lock`]) for the whole of it; a write to
+//!   the record goes through one bracket — lock, load, engine write, persist,
+//!   release — which lands with the first operation that writes the record.
 
 mod address;
 mod document_get;
@@ -46,6 +47,7 @@ mod ports;
 mod record;
 mod table;
 mod version_list;
+mod version_save;
 
 pub use address::{
     WorkspaceAddress, parse_workspace_address, resolve_workspace, with_resolved_workspace,
@@ -65,5 +67,6 @@ pub use operation::{Contract, Method, Operation, Route, Row};
 pub use ports::Ports;
 pub use table::{OPERATIONS, Visit, each_operation};
 pub use version_list::{VersionList, VersionListInput, VersionListOutput};
+pub use version_save::{SavedDocumentVersion, VersionSave, VersionSaveInput, VersionSaveOutput};
 /// The facet vocabulary a listing is filtered by, as the engine names it.
 pub use whiteboard_facet_engine::plugin_manifest::{AssetKind, FacetTarget};

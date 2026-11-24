@@ -1,6 +1,8 @@
 //! The ports an operation runs over, as one bundle.
 
-use whiteboard_ports::{Caller, MaybeSync, VersionStore, WorkspaceRecordStore, WorkspaceRegistry};
+use whiteboard_ports::{
+    Caller, MaybeSync, VersionStore, WorkspaceLock, WorkspaceRecordStore, WorkspaceRegistry,
+};
 
 /// Everything an operation may reach the outside through. A composition root
 /// implements it once over its mechanics, and a test over fakes.
@@ -16,6 +18,9 @@ pub trait Ports: MaybeSync {
     type Caller: Caller + MaybeSync;
     /// Where documents' saved versions are kept.
     type Versions: VersionStore + MaybeSync;
+    /// The workspace write lock every writer holds for its whole write, so a
+    /// write of several documents is one point in time.
+    type Lock: WorkspaceLock + MaybeSync;
 
     fn records(&self) -> &Self::Records;
 
@@ -24,4 +29,6 @@ pub trait Ports: MaybeSync {
     fn caller(&self) -> &Self::Caller;
 
     fn versions(&self) -> &Self::Versions;
+
+    fn lock(&self) -> &Self::Lock;
 }

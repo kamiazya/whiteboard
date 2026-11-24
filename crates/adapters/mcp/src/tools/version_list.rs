@@ -43,7 +43,7 @@ impl Binding for VersionList {
 
 /// A version in the order `versionEntryForAgent` builds it, an absent field
 /// left out.
-fn version(saved: &SavedVersion) -> Json {
+pub(super) fn version(saved: &SavedVersion) -> Json {
     let text = |value: &str| Json::Text(value.to_owned());
     let mut members = vec![("id", text(&saved.id)), ("createdAt", text(&saved.created_at))];
     members.extend(saved.label.as_deref().map(|label| ("label", text(label))));

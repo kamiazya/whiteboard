@@ -50,6 +50,7 @@ impl Ports for Fakes {
     type Registry = MemoryRegistry;
     type Caller = FixedCaller;
     type Versions = MemoryVersionStore;
+    type Lock = whiteboard_port_fakes::KeyedLock;
 
     fn records(&self) -> &MemoryRecordStore {
         &self.0
@@ -65,6 +66,10 @@ impl Ports for Fakes {
 
     fn versions(&self) -> &MemoryVersionStore {
         unreachable!("a document read lists no version")
+    }
+
+    fn lock(&self) -> &whiteboard_port_fakes::KeyedLock {
+        unreachable!("a read takes no lock")
     }
 }
 

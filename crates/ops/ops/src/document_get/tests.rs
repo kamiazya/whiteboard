@@ -102,6 +102,7 @@ fn a_workspace_the_store_holds_no_record_of_is_refused() {
         type Registry = MemoryRegistry;
         type Caller = FixedCaller;
         type Versions = MemoryVersionStore;
+        type Lock = whiteboard_port_fakes::KeyedLock;
         fn records(&self) -> &MemoryRecordStore {
             &self.0
         }
@@ -113,6 +114,10 @@ fn a_workspace_the_store_holds_no_record_of_is_refused() {
         }
         fn versions(&self) -> &MemoryVersionStore {
             unreachable!("a document read lists no version")
+        }
+
+        fn lock(&self) -> &whiteboard_port_fakes::KeyedLock {
+            unreachable!("a read takes no lock")
         }
     }
     let ports = Empty(MemoryRecordStore::new(), MemoryRegistry::new(), FixedCaller::new());
