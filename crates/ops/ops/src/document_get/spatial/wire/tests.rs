@@ -47,6 +47,15 @@ fn a_safe_integer_is_its_digits_and_any_other_number_its_bits() {
     assert_eq!(MAX_WIRE, 4_194_304);
 }
 
+#[test]
+fn a_control_character_is_escaped_and_nothing_from_the_space_on_is() {
+    for (text, quoted_as) in
+        [("\u{0}", r#""\u0000""#), ("\u{1f}", r#""\u001f""#), (" ", r#"" ""#), ("~", r#""~""#)]
+    {
+        assert_eq!(quoted(text), quoted_as.len() as u64, "{text:?}");
+    }
+}
+
 /// `levels` lists, each holding the next.
 fn nested(levels: usize) -> Value {
     (1..levels).fold(Value::Seq(Vec::new()), |inner, _| Value::Seq(vec![inner]))
