@@ -40,7 +40,19 @@ pub(crate) enum Kind {
     OptionalText,
     /// An optional string, one of these.
     Choice(&'static [&'static str]),
+    /// An optional non-empty string of at most `max` UTF-16 units, refused
+    /// past it with `too_big`.
+    Bounded { max: usize, too_big: &'static str },
+    /// An optional array of refined strings, `min` to `max` items long,
+    /// refused past `max` with `too_big`.
+    Listed { min: usize, max: usize, too_big: &'static str, item: Refined },
+    /// An optional integer from `min` to `max` (whole numbers, which
+    /// `Display` writes as Zod does).
+    Whole { min: f64, max: f64 },
 }
+
+/// `Number.MAX_SAFE_INTEGER`, which Zod's `int()` holds a number to.
+const SAFE_INTEGER: f64 = 9_007_199_254_740_991.0;
 
 /// A string held to `test`, refused with `message` when it fails.
 pub(crate) struct Refined {
@@ -94,8 +106,14 @@ fn object_issues(path: &str, fields: &[Field], object: &Map<String, Value>) -> V
 fn field_issues(path: &str, kind: &Kind, value: Option<&Value>) -> Vec<String> {
     match kind {
         Kind::Text(refined) => text_issue(path, refined, value).into_iter().collect(),
-        Kind::List { min, max, item } => list_issues(path, (*min, *max), item, value),
+        Kind::List { min, max, item } => list_issues(path, (*min, *max), None, item, value),
         Kind::Sized { min, max } => sized_issues(path, (*min, *max), value),
+        Kind::Listed { min, max, too_big, item } => match value {
+            None => Vec::new(),
+            Some(_) => list_issues(path, (*min, *max), Some(too_big), item, value),
+        },
+        Kind::Bounded { max, too_big } => bounded_issues(path, *max, too_big, value),
+        Kind::Whole { min, max } => whole_issues(path, (*min, *max), value),
         Kind::Object(fields) => match value {
             None => Vec::new(),
             Some(Value::Object(object)) => object_issues(path, fields, object),
@@ -132,17 +150,25 @@ fn text_issue(path: &str, refined: &Refined, value: Option<&Value>) -> Option<St
 
 /// A length out of `min..=max` in `what`'s words, as Zod's length checks
 /// word it; Zod judges the length of any value that has one.
+/// Past `max`, `too_big` replaces Zod's words when the schema gave its own.
 fn length_issue(
     path: &str,
     (min, max): (usize, usize),
     length: usize,
     what: &str,
+    too_big: Option<&str>,
 ) -> Option<String> {
     let unit = if what == "array" { "items" } else { "characters" };
     if length < min {
         Some(at(path, &format!("Too small: expected {what} to have >={min} {unit}")))
     } else if length > max {
-        Some(at(path, &format!("Too big: expected {what} to have <={max} {unit}")))
+        Some(at(
+            path,
+            &too_big.map_or_else(
+                || format!("Too big: expected {what} to have <={max} {unit}"),
+                str::to_owned,
+            ),
+        ))
     } else {
         None
     }
@@ -159,7 +185,7 @@ fn sized_issues(path: &str, (min, max): (usize, usize), value: Option<&Value>) -
     match value {
         Some(Value::String(text)) => {
             let units = text.encode_utf16().count();
-            length_issue(path, (min, max), characters(text), "string")
+            length_issue(path, (min, max), characters(text), "string", None)
                 .or_else(|| {
                     (units > max).then(|| {
                         at(path, &format!("Too big: expected string to have <={max} UTF-16 units"))
@@ -169,10 +195,54 @@ fn sized_issues(path: &str, (min, max): (usize, usize), value: Option<&Value>) -
                 .collect()
         }
         Some(Value::Array(items)) => std::iter::once(expected(path, "string", value))
-            .chain(length_issue(path, (min, max), items.len(), "array"))
+            .chain(length_issue(path, (min, max), items.len(), "array", None))
             .collect(),
         _ => vec![expected(path, "string", value)],
     }
+}
+
+/// An optional string of one character to `max`, then at most `max` UTF-16
+/// units, refused past either with `too_big`: `utf16Max(z.string().min(1),
+/// max, too_big)`, whose words are the schema's for both. An array is no
+/// string, and Zod still judges its length, in items.
+fn bounded_issues(path: &str, max: usize, too_big: &str, value: Option<&Value>) -> Vec<String> {
+    let Some(given) = value else { return Vec::new() };
+    match given {
+        Value::String(text) => {
+            length_issue(path, (1, max), characters(text), "string", Some(too_big))
+                .or_else(|| (text.encode_utf16().count() > max).then(|| at(path, too_big)))
+                .into_iter()
+                .collect()
+        }
+        Value::Array(items) => std::iter::once(expected(path, "string", value))
+            .chain(length_issue(path, (1, max), items.len(), "array", Some(too_big)))
+            .collect(),
+        _ => vec![expected(path, "string", value)],
+    }
+}
+
+/// An integer's issues as Zod's `number().int().min().max()` judges one: a
+/// fraction is the only issue, while an integer past the safe range is one
+/// and the bounds are judged on beside it.
+fn whole_issues(path: &str, (min, max): (f64, f64), value: Option<&Value>) -> Vec<String> {
+    let Some(given) = value else { return Vec::new() };
+    let Some(number) = given.as_f64() else { return vec![expected(path, "number", value)] };
+    if number.fract() != 0.0 {
+        return vec![expected(path, "int", Some(given))];
+    }
+    let mut issues = Vec::new();
+    if number > SAFE_INTEGER {
+        issues.push(at(path, "Too big: expected int to be <=9007199254740991"));
+    } else if number < -SAFE_INTEGER {
+        issues.push(at(path, "Too small: expected int to be >=-9007199254740991"));
+    }
+    if number < min {
+        issues.push(at(path, &format!("Too small: expected number to be >={min}")));
+    }
+    if number > max {
+        issues.push(at(path, &format!("Too big: expected number to be <={max}")));
+    }
+    issues
 }
 
 /// An array's length out of bounds is its only issue; within them, each
@@ -181,10 +251,11 @@ fn sized_issues(path: &str, (min, max): (usize, usize), value: Option<&Value>) -
 fn list_issues(
     path: &str,
     (min, max): (usize, usize),
+    too_big: Option<&str>,
     item: &Refined,
     value: Option<&Value>,
 ) -> Vec<String> {
-    let bounds = |length: usize, what: &str| length_issue(path, (min, max), length, what);
+    let bounds = |length: usize, what: &str| length_issue(path, (min, max), length, what, too_big);
     match value {
         Some(Value::Array(items)) => bounds(items.len(), "array").map_or_else(
             || {

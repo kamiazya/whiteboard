@@ -22,7 +22,7 @@ use crate::metadata;
 /// What cargo reads from a checkout to build the workspace: the Rust half,
 /// and the data files production code embeds with `include_str!` (the
 /// contracts the interpreter compiles, the visual plugin's manifest, asset
-/// tables and emoji shortcode table). A test below holds every such embed to
+/// tables, emoji shortcode table and emoji search tables). A test below holds every such embed to
 /// this list.
 const RUST_SOURCES: &[&str] = &[
     "Cargo.toml",
@@ -34,6 +34,8 @@ const RUST_SOURCES: &[&str] = &[
     "packages/plugin-visual/src/assets/",
     "packages/plugin-visual/src/visual.manifest.json",
     "packages/plugin-visual/src/emoji/emoji-shortcodes.tsv",
+    "packages/plugin-visual/src/emoji/emoji-search-terms.tsv",
+    "packages/plugin-visual/src/emoji/extended-pictographic.txt",
 ];
 
 /// The first byte offset at which two artifacts differ, or `None`.

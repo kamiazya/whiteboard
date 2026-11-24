@@ -35,8 +35,11 @@ const PICTOGRAPHIC = /\p{Extended_Pictographic}/u
 
 let table: Map<string, string> | undefined
 
-/** `character -> everything that character can be found by`. */
-function terms(): Map<string, string> {
+/**
+ * `character -> everything that character can be found by`, in catalog order.
+ * Exported for the table the Rust core reads (`emoji-search-table.test.ts`).
+ */
+export function emojiSearchTerms(): ReadonlyMap<string, string> {
   if (table !== undefined) return table
   const ja = emojiJapaneseTerms()
   const found = new Map<string, string>()
@@ -83,7 +86,7 @@ export function emojiSearchText(text: string): string {
   const pictographic = PICTOGRAPHIC.test(text)
   if (!pictographic && !text.includes(':')) return ''
 
-  const table = terms()
+  const table = emojiSearchTerms()
   const found = new Set<string>()
   if (pictographic) {
     for (const { segment } of graphemes.segment(text)) {

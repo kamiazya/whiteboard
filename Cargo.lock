@@ -1864,6 +1864,7 @@ dependencies = [
  "whiteboard-port-fakes",
  "whiteboard-ports",
  "whiteboard-reference-graph",
+ "whiteboard-search",
  "whiteboard-workspace-index",
 ]
 

@@ -12,6 +12,7 @@
 
 mod document_get;
 mod document_list;
+mod document_search;
 mod facet_list;
 mod input;
 mod json;
@@ -20,8 +21,8 @@ mod version_save;
 
 use serde_json::{Map, Value, json};
 use whiteboard_ops::{
-    DocumentGet, DocumentList, FacetList, Operation, Ports, VersionList, VersionSave,
-    with_resolved_workspace,
+    DocumentGet, DocumentList, DocumentSearch, FacetList, Operation, Ports, VersionList,
+    VersionSave, with_resolved_workspace,
 };
 
 use crate::{ToolCatalogue, ToolError};
@@ -36,7 +37,6 @@ pub const PENDING_TOOLS: &[&str] = &[
     "wb_body_edit",
     "wb_canvas_edit",
     "wb_canvas_snapshot",
-    "wb_document_search",
     "wb_facet_set",
     "wb_scene_render",
     "wb_thread_edit",
@@ -83,6 +83,7 @@ impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
             contract::<VersionList>(),
             contract::<VersionSave>(),
             contract::<FacetList>(),
+            contract::<DocumentSearch>(),
         ]
     }
 
@@ -97,6 +98,7 @@ impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
             VersionList::NAME => run::<VersionList, P>(&self.ports, arguments).await,
             VersionSave::NAME => run::<VersionSave, P>(&self.ports, arguments).await,
             FacetList::NAME => run::<FacetList, P>(&self.ports, arguments).await,
+            DocumentSearch::NAME => run::<DocumentSearch, P>(&self.ports, arguments).await,
             _ => Err(ToolError::NotFound),
         }
     }

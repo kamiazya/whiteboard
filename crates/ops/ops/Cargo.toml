@@ -16,6 +16,7 @@ whiteboard-model = { path = "../../core/model" }
 whiteboard-plugin-visual = { path = "../../core/plugin-visual" }
 whiteboard-ports = { path = "../../ports/ports" }
 whiteboard-reference-graph = { path = "../../core/reference-graph" }
+whiteboard-search = { path = "../../core/search" }
 whiteboard-workspace-index = { path = "../../core/workspace-index" }
 
 [dev-dependencies]
