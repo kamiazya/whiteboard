@@ -176,17 +176,13 @@ impl<'s> Writer<'s> {
     /// recursion: `#` for the root, and otherwise the next `__schema<n>`
     /// under `$defs`, where the definition is moved once written.
     fn recursion(&mut self, key: (usize, String)) -> Value {
-        let pointer = match self.cyclic.iter().find(|(held, _)| *held == key) {
-            Some((_, pointer)) => pointer.clone(),
-            None => {
-                let root = self.open.first() == Some(&key);
-                let extracted = self.cyclic.iter().filter(|(_, p)| p != "#").count();
-                let pointer =
-                    if root { "#".to_owned() } else { format!("#/$defs/__schema{extracted}") };
-                self.cyclic.push((key, pointer.clone()));
-                pointer
-            }
-        };
+        if let Some((_, pointer)) = self.cyclic.iter().find(|(held, _)| *held == key) {
+            return Value::Map(vec![member("$ref", Value::String(pointer.clone()))]);
+        }
+        let root = self.open.first() == Some(&key);
+        let extracted = self.cyclic.iter().filter(|(_, p)| p != "#").count();
+        let pointer = if root { "#".to_owned() } else { format!("#/$defs/__schema{extracted}") };
+        self.cyclic.push((key, pointer.clone()));
         Value::Map(vec![member("$ref", Value::String(pointer))])
     }
 
