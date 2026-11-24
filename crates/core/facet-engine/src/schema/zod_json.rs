@@ -92,7 +92,8 @@ fn described(mut members: Map, text: &str) -> Map {
 /// The definition `name` of the scope `scope` as Zod's JSON Schema.
 pub(super) fn publish(scopes: &[Scope], scope: usize, name: &str) -> Value {
     let mut writer =
-        Writer { scopes, registered: Vec::new(), open: Vec::new(), cyclic: Vec::new() };
+        Writer { scopes, registered: Vec::new(), open: Vec::new(), cyclic: Vec::new(), root: None };
+    writer.root = writer.resolve(scope, name).map(|(owner, _)| (owner, name.to_owned()));
     let root = writer.definition(scope, name).unwrap_or_default();
     let mut out = vec![member("$schema", string(DIALECT))];
     out.extend(root);
@@ -111,6 +112,10 @@ struct Writer<'s> {
     /// Each definition met again inside itself, and the pointer its uses
     /// are written as.
     cyclic: Vec<((usize, String), String)>,
+    /// The definition published, which a recursion names as `#`; a
+    /// registered one is a `$ref` beside its body and is never met again
+    /// inside itself.
+    root: Option<(usize, String)>,
 }
 
 impl<'s> Writer<'s> {
@@ -169,7 +174,7 @@ impl<'s> Writer<'s> {
         if let Some((_, pointer)) = self.cyclic.iter().find(|(held, _)| *held == key) {
             return vec![member("$ref", Value::String(pointer.clone()))];
         }
-        let root = self.open.first() == Some(&key);
+        let root = self.root.as_ref() == Some(&key);
         let extracted = self.cyclic.iter().filter(|(_, p)| p != "#").count();
         let pointer = if root { "#".to_owned() } else { format!("#/$defs/__schema{extracted}") };
         self.cyclic.push((key, pointer.clone()));

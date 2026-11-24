@@ -248,3 +248,26 @@ fn a_record_keyed_by_a_union_that_names_itself_requires_no_key() {
     );
     assert_eq!(published_left("Keyed"), Some(parse(&zod)));
 }
+
+/// A registered root is a `$ref` beside its definition, so a recursion met
+/// inside it, into another definition, is never `#`: Zod 4.6.7 writes it as
+/// `__schema0`, which `#` (the reference to the root) would not be.
+#[test]
+fn a_recursion_inside_a_registered_root_is_not_the_root() {
+    const TREE: External = External::Defined { contract: UNCOMPILED, validator: None };
+    let host = Host { matchers: &[], checks: &[], externals: &[("Tree", TREE)] };
+    let contract = parse(
+        r##"{"$defs": {
+            "Tree": {"type": "string", "x-wb-external": "m"},
+            "Envelope": {"type": "object", "properties": {"t": {"$ref": "#/$defs/Tree"}},
+                "required": ["t"], "x-wb-order": ["t"], "additionalProperties": true,
+                "x-wb-unknownKeys": "strip", "x-wb-registered": true}
+        }}"##,
+    );
+    let contracts = Contracts::load(&[("c.json", &contract)], &host).expect("it compiles");
+    let envelope = contracts.resolve("c.json#/$defs/Envelope").expect("held");
+    let zod = format!(
+        r##"{{{DIALECT},"$ref":"#/$defs/Envelope","$defs":{{"Envelope":{{"type":"object","properties":{{"t":{{"$ref":"#/$defs/__schema0"}}}},"required":["t"],"additionalProperties":false}},"__schema0":{{"type":"object","properties":{{"child":{{"$ref":"#/$defs/__schema0"}}}},"additionalProperties":false}}}}}}"##
+    );
+    assert_eq!(contracts.published(envelope), Some(parse(&zod)));
+}
