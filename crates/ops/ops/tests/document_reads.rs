@@ -1,7 +1,8 @@
 //! `wb_document_list` and the `/api/v1` resolve held to the TypeScript's answers
 //! for the same records.
 //!
-//! `fixtures/document_reads.jsonl` is recorded by
+//! `packages/mcp-server/src/server/mcp/oracle/document-reads.jsonl` is
+//! recorded by
 //! `packages/mcp-server/src/server/mcp/tool-contracts.oracle.test.ts`, which
 //! runs server-core's `wbDocumentList` as `createServer`'s tool record calls
 //! it (the address resolved first) and its `wbDocumentResolve`, over
@@ -25,7 +26,8 @@ use whiteboard_ops::{
 use whiteboard_port_fakes::{FixedCaller, MemoryRecordStore, MemoryRegistry, block_on};
 use whiteboard_ports::WorkspaceEntry;
 
-const CASES: &str = include_str!("fixtures/document_reads.jsonl");
+const CASES: &str =
+    include_str!("../../../../packages/mcp-server/src/server/mcp/oracle/document-reads.jsonl");
 const CONTRACT: &str = include_str!("../../../../contracts/api/refusals.json");
 
 /// The ports these reads need: the record store, the registry and the caller.

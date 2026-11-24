@@ -26,7 +26,8 @@ use whiteboard_ports::WorkspaceEntry;
 
 const CASES: &str =
     include_str!("../../../../packages/mcp-server/src/server/mcp/oracle/tool-calls.jsonl");
-const READS: &str = include_str!("../../../ops/ops/tests/fixtures/document_reads.jsonl");
+const READS: &str =
+    include_str!("../../../../packages/mcp-server/src/server/mcp/oracle/document-reads.jsonl");
 const DOCUMENT_LIST: &str = include_str!("../../../../contracts/tools/wb_document_list.json");
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 

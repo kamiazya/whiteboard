@@ -26,7 +26,7 @@ import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
  * both draw their inputs from the first, so this test reads nothing but the
  * recordings to answer them again:
  *
- * - `crates/ops/ops/tests/fixtures/document_reads.jsonl`, server-core's
+ * - `oracle/document-reads.jsonl`, server-core's
  *   operations as `createServer`'s tool record calls them (the address
  *   resolved first) and as the `/api/v1` resolve calls its operation. A
  *   record row is a workspace record (`snapshot`, `null` when the keeper
@@ -48,7 +48,7 @@ import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
  */
 const CONTRACTS = join(repoRoot(), 'contracts', 'tools')
 const CALLS = new URL('./oracle/tool-calls.jsonl', import.meta.url)
-const READS = join(repoRoot(), 'crates', 'ops', 'ops', 'tests', 'fixtures', 'document_reads.jsonl')
+const READS = new URL('./oracle/document-reads.jsonl', import.meta.url)
 const RECORD = process.env.WHITEBOARD_RECORD_ORACLE === '1'
 
 const tmp = withTempDataDir('whiteboard-mcp-tool-contracts-')

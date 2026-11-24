@@ -120,8 +120,8 @@ where
 /// never typed its id, so a refusal quoting it names nothing they can check.
 ///
 /// ponytail: the refusals whose text an operation here can fill with the id,
-/// listed by hand; a variant joins as an operation answers it, or a generated
-/// `map_text` over every refusal replaces the list when one is worth it.
+/// listed by hand; a variant joins as an operation answers it, or a mapping
+/// generated over every refusal's text replaces the list when one is worth it.
 fn in_callers_words(refusal: Refusal, workspace_id: &str, handle: &str) -> Refusal {
     let said = |text: String| text.replace(workspace_id, handle);
     match refusal {
