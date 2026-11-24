@@ -223,17 +223,18 @@ async function adopt(deps: ServerDeps, versions: Record<string, Kept[]>): Promis
 
 const EMOJI = '\u{1F600}'
 
-/** The calls the recording answers, in order, by what each one is about. */
-function calls(ids: Record<string, string>): [string, string, Message | undefined][] {
-  const save = (
-    about: string,
-    args: Message | undefined,
-  ): [string, string, Message | undefined] => [about, 'wb_version_save', args]
-  const list = (about: string, documentId: string | undefined): [string, string, Message] => [
-    about,
-    'wb_version_list',
-    { workspaceId: W, documentId },
-  ]
+type Asked = [string, string, Message | undefined]
+
+const save = (about: string, args: Message | undefined): Asked => [about, 'wb_version_save', args]
+
+const list = (about: string, documentId: string | undefined): Asked => [
+  about,
+  'wb_version_list',
+  { workspaceId: W, documentId },
+]
+
+/** Saves that answer, and listings of what they and a refused batch left. */
+function savingCalls(ids: Record<string, string>): Asked[] {
   return [
     save('one document', { workspaceId: W, documentIds: [ids.plan], label: 'checkpoint' }),
     save('by segment', { workspaceId: SEGMENT, documentIds: [ids.board], label: 'by segment' }),
@@ -259,6 +260,12 @@ function calls(ids: Record<string, string>): [string, string, Message | undefine
       label: 'never',
     }),
     list('nothing of the refused batch was kept', ids.board),
+  ]
+}
+
+/** Saves the operation refuses, and one at the label's ceiling. */
+function refusedCalls(ids: Record<string, string>): Asked[] {
+  return [
     save('a document nothing holds, by segment', {
       workspaceId: SEGMENT,
       documentIds: [NOTHING],
@@ -295,7 +302,12 @@ function calls(ids: Record<string, string>): [string, string, Message | undefine
       documentIds: [ids.board],
       label: EMOJI.repeat(100),
     }),
-    // Arguments the SDK refuses before the tool runs.
+  ]
+}
+
+/** Arguments the SDK refuses before the tool runs: what is absent or of the wrong shape. */
+function missingCalls(ids: Record<string, string>): Asked[] {
+  return [
     save('no arguments', undefined),
     save('empty arguments', {}),
     save('no documents', { workspaceId: W, label: 'x' }),
@@ -309,6 +321,12 @@ function calls(ids: Record<string, string>): [string, string, Message | undefine
     }),
     save('a string for the list', { workspaceId: W, documentIds: ids.plan, label: 'x' }),
     save('an empty string for the list', { workspaceId: W, documentIds: '', label: 'x' }),
+  ]
+}
+
+/** Arguments the SDK refuses before the tool runs: values out of bounds or of the wrong type. */
+function wrongValueCalls(ids: Record<string, string>): Asked[] {
+  return [
     // Zod judges a string's length in code points, not in UTF-16 units.
     save('a string of 51 characters for the list', {
       workspaceId: W,
@@ -348,6 +366,11 @@ function calls(ids: Record<string, string>): [string, string, Message | undefine
     }),
     save('every field wrong', { workspaceId: 1, documentIds: null, label: [], extra: true }),
   ]
+}
+
+/** The calls the recording answers, in order, by what each one is about. */
+function calls(ids: Record<string, string>): Asked[] {
+  return [...savingCalls(ids), ...refusedCalls(ids), ...missingCalls(ids), ...wrongValueCalls(ids)]
 }
 
 const exists = (file: URL) =>
