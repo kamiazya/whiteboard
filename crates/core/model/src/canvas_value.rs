@@ -179,12 +179,25 @@ impl<'a> Fields<'a> {
 
     /// The field `name` read by `read`: `None` for one that is malformed,
     /// `Some(None)` for one that is absent.
+    ///
+    /// Instantiated once per reader, so only the call to `read` is generic:
+    /// the key search is [`Self::take`], linked once. Holding the search in
+    /// every instance, or leaving each instance to the inliner, measured 12
+    /// to 20 KB more of the wasm artifact.
+    #[expect(clippy::inline_always, reason = "each instance is one call site's glue; see above")]
+    #[inline(always)]
     pub fn field<T>(&mut self, name: &str, read: impl FnOnce(&'a Value) -> Option<T>) -> Read<T> {
-        let Some((_, value)) = self.entries.iter().find(|(key, _)| key == name) else {
-            return Some(None);
-        };
+        match self.take(name) {
+            Some(value) => read(value).map(Some),
+            None => Some(None),
+        }
+    }
+
+    /// The value of the field `name`, counted as taken, or `None` when absent.
+    fn take(&mut self, name: &str) -> Option<&'a Value> {
+        let (_, value) = self.entries.iter().find(|(key, _)| key == name)?;
         self.taken = self.taken.saturating_add(1);
-        read(value).map(Some)
+        Some(value)
     }
 
     /// Whether every key was one the contract names.
