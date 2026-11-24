@@ -32,10 +32,11 @@ pub fn read_tag_library(facets: &Value, registry: &Registry) -> Map {
         .into_iter()
         .map(|(key, declaration)| {
             let Value::Map(fields) = declaration else { return (key, declaration) };
+            // `values` is the one record a parsed declaration holds.
             let fields = fields
                 .into_iter()
                 .map(|(name, value)| match value {
-                    Value::Map(values) if name == "values" => (name, Value::Map(sorted(&values))),
+                    Value::Map(values) => (name, Value::Map(sorted(&values))),
                     other => (name, other),
                 })
                 .collect();

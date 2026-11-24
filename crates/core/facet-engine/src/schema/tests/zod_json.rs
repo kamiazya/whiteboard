@@ -123,3 +123,40 @@ fn an_external_left_to_text_that_is_not_json_is_refused() {
     let malformed = Refusal::Malformed("an external's contract is not JSON");
     assert_eq!(refused, Some(CompileError { at: "c.json".to_owned(), refusal: malformed }));
 }
+
+/// A record whose keys are a closed set names every key `required`, as Zod's
+/// record writes the `_zod.values` of its key: a constant, an enum, a union
+/// of those; a union with an open arm names none.
+#[test]
+fn a_record_over_a_closed_key_set_requires_every_key() {
+    let keys = r##"{"$defs": {
+        "OnlyK": {"type": "string", "const": "k"},
+        "Xy": {"type": "string", "enum": ["x", "y"]},
+        "Kxy": {"anyOf": [{"$ref": "#/$defs/OnlyK"}, {"$ref": "#/$defs/Xy"}]},
+        "Open": {"anyOf": [{"$ref": "#/$defs/OnlyK"}, {"type": "string"}]},
+        "Keys": {"type": "object", "properties": {
+            "kk": {"type": "object", "propertyNames": {"$ref": "#/$defs/OnlyK"},
+                "additionalProperties": {"type": "boolean"}},
+            "ku": {"type": "object", "propertyNames": {"$ref": "#/$defs/Kxy"},
+                "additionalProperties": {"type": "boolean"}},
+            "ko": {"type": "object", "propertyNames": {"$ref": "#/$defs/Open"},
+                "additionalProperties": {"type": "boolean"}}
+        }, "required": ["kk", "ku", "ko"], "x-wb-order": ["kk", "ku", "ko"],
+        "additionalProperties": false, "x-wb-unknownKeys": "refuse"}
+    }}"##;
+    let zod = r#"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"kk":{"type":"object","propertyNames":{"type":"string","const":"k"},"additionalProperties":{"type":"boolean"},"required":["k"]},"ku":{"type":"object","propertyNames":{"anyOf":[{"type":"string","const":"k"},{"type":"string","enum":["x","y"]}]},"additionalProperties":{"type":"boolean"},"required":["k","x","y"]},"ko":{"type":"object","propertyNames":{"anyOf":[{"type":"string","const":"k"},{"type":"string"}]},"additionalProperties":{"type":"boolean"}}},"required":["kk","ku","ko"],"additionalProperties":false}"#;
+    assert_eq!(published(keys, "Keys"), Some(parse(zod)));
+}
+
+/// The generator writes an object's properties in `x-wb-order`, which is the
+/// order Zod's JSON Schema lists them in, whatever order the contract
+/// declares them in.
+#[test]
+fn properties_are_written_in_the_order_the_contract_names() {
+    let reordered = r#"{"$defs": {"Pair": {"type": "object",
+        "properties": {"b": {"type": "string"}, "a": {"type": "boolean"}},
+        "required": ["b", "a"], "x-wb-order": ["a", "b"],
+        "additionalProperties": false, "x-wb-unknownKeys": "refuse"}}}"#;
+    let zod = r#"{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":{"a":{"type":"boolean"},"b":{"type":"string"}},"required":["a","b"],"additionalProperties":false}"#;
+    assert_eq!(published(reordered, "Pair"), Some(parse(zod)));
+}
