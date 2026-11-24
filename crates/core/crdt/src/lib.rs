@@ -24,6 +24,7 @@ mod anchor;
 mod annotation_write;
 mod annotations;
 mod canvas;
+mod container_place;
 mod content;
 mod content_digest;
 mod content_sync;
@@ -50,6 +51,7 @@ mod text_limits;
 mod tree;
 mod write;
 
+pub use container_place::container_node;
 pub use content::{
     CONTENT_QUERIES, DocumentKind, Refusal, answer_content_query, document_kind, markdown_body,
     retired_stored_shape,
@@ -69,7 +71,11 @@ pub use loro::{
     StyleConfig, StyleConfigMap, TreeID, VersionVector, loro_value,
 };
 pub use node_content::sync_node_content;
-pub use ops_since::{node_writes_since, nodes_written_since};
+pub use ops_since::{
+    NodeKeys, node_writes_since, nodes_written_since, organisation_changed_since,
+    peers_written_since, tree_written_since,
+};
+pub use plain::plain_value;
 pub use projection::{project_node, project_node_without};
 pub use read::{
     ImportError, deep_value, frontier_pairs, import_bytes, loro_value_to_value, version_pairs,

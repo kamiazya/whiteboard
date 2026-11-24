@@ -1,6 +1,9 @@
 //! The document engine's reads over a workspace record: what the record lists,
 //! and the content queries of a document hosted on one of its tree nodes.
 //!
+//! The reads that take arguments or read the record's history are
+//! `record_reads`'.
+//!
 //! Each answers as `read` of `contracts/crdt/document-engine.schema.json`
 //! does, `{ ok: value }` or `{ err: class }`, and answers `None` for a query
 //! it leaves to the caller: one that names an argument it does not read, or
@@ -9,16 +12,17 @@
 use crate::hosted_reads::{answer_hosted, hosted, is_safe_integer};
 use crate::node_meta::{DocumentMeta, NodeRead, WORKSPACE_TREE_KEY};
 use crate::record::{PlacedDocument, WorkspaceRecord};
-use crate::touched::{Touched, touched_documents};
+use crate::record_reads::{RECORD_READS, answer_record_read};
+use crate::touched::Touched;
 use crate::trash::TrashRow;
 use crate::walk::{Walked, walk, walk_naming_unreadable};
-use whiteboard_crdt::{Entry, LoroDoc, VersionVector, peek, tree};
+use whiteboard_crdt::{Entry, LoroDoc, peek, tree};
 use whiteboard_model::Value;
 use whiteboard_model::crdt::{Query, QueryName, ReadResponse};
 
 const WORKSPACE_META_KEY: &str = "workspaceMeta";
 
-fn text(value: &str) -> Value {
+pub(crate) fn text(value: &str) -> Value {
     Value::String(value.to_owned())
 }
 
@@ -37,7 +41,7 @@ fn with(
     entries
 }
 
-fn ok(value: Value) -> ReadResponse {
+pub(crate) fn ok(value: Value) -> ReadResponse {
     ReadResponse { value: map([("ok", value)]) }
 }
 
@@ -59,7 +63,7 @@ fn meta_value(meta: &DocumentMeta) -> Vec<(String, Value)> {
     with(entries, "updatedAt", meta.updated_at.map(Value::Number))
 }
 
-fn document_entry((placed, shadowed): &(PlacedDocument, bool)) -> Value {
+pub(crate) fn document_entry((placed, shadowed): &(PlacedDocument, bool)) -> Value {
     let entries = with(meta_value(&placed.meta), "path", Some(text(&placed.path)));
     let entries = with(entries, "contentDigest", Some(text(&placed.content_digest)));
     Value::Map(with(entries, "shadowed", shadowed.then_some(Value::Bool(true))))
@@ -104,9 +108,9 @@ fn trash_entry(row: &TrashRow) -> Value {
 
 #[expect(
     clippy::cast_precision_loss,
-    reason = "a stored time is a safe integer, which a double holds exactly"
+    reason = "a stored time or a text's length is a safe integer, which a double holds exactly"
 )]
-fn number(value: u64) -> Value {
+pub(crate) fn number(value: u64) -> Value {
     Value::Number(value as f64)
 }
 
@@ -128,7 +132,7 @@ fn unreadable_nodes(doc: &LoroDoc) -> Value {
     Value::Seq(skipped.iter().map(|node| text(&node.to_string())).collect())
 }
 
-fn touched_entry(touched: &Touched) -> Value {
+pub(crate) fn touched_entry(touched: &Touched) -> Value {
     map([
         ("documentId", text(&touched.document_id)),
         ("node", text(&touched.node.to_string())),
@@ -137,7 +141,7 @@ fn touched_entry(touched: &Touched) -> Value {
     ])
 }
 
-fn seq<T>(rows: impl IntoIterator<Item = T>, show: impl Fn(T) -> Value) -> Value {
+pub(crate) fn seq<T>(rows: impl IntoIterator<Item = T>, show: impl Fn(T) -> Value) -> Value {
     Value::Seq(rows.into_iter().map(show).collect())
 }
 
@@ -154,10 +158,6 @@ fn answer_record_query(doc: &LoroDoc, name: QueryName) -> Option<ReadResponse> {
             map([("path", text(&path)), ("name", text(&name))])
         }),
         QueryName::UnreadableNodes => unreadable_nodes(doc),
-        // With no version named, every operation the record kept.
-        QueryName::TouchedSince => {
-            seq(touched_documents(doc, &VersionVector::new()).iter(), touched_entry)
-        }
         _ => return None,
     }))
 }
@@ -165,6 +165,9 @@ fn answer_record_query(doc: &LoroDoc, name: QueryName) -> Option<ReadResponse> {
 /// Answers `query` over a workspace record, `None` for a query it does not read.
 #[must_use]
 pub fn answer_workspace_query(doc: &LoroDoc, query: &Query) -> Option<ReadResponse> {
+    if RECORD_READS.contains(&query.query) {
+        return answer_record_read(doc, query);
+    }
     if let Some((document_id, rest)) = hosted(query) {
         return answer_hosted(doc, query, &document_id, &rest);
     }

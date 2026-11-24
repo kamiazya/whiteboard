@@ -294,7 +294,7 @@ const TRASH_FOLDER_NAMES_MAX: usize = 256;
 
 /// The named folders above `path` among `named`, shallowest first, as a trash
 /// row keeps them so a restore can show them again.
-fn named_folders_above(named: &[(String, String)], path: &str) -> Vec<(String, String)> {
+pub(crate) fn named_folders_above(named: &[(String, String)], path: &str) -> Vec<(String, String)> {
     let segments: Vec<&str> = path.split('/').collect();
     let mut above: Vec<(String, String)> = (1..segments.len())
         .filter_map(|depth| {

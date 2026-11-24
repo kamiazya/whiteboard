@@ -341,7 +341,12 @@ fn a_query_that_names_what_the_record_does_not_read_is_left_to_the_caller() {
     assert!(answered(QueryName::Documents, since).is_none());
     assert!(answered(QueryName::Documents, Some(Value::Map(Vec::new()))).is_some());
     assert!(answered(QueryName::Documents, Some(Value::Null)).is_none());
-    assert!(answered(QueryName::RemovedSince, None).is_none());
+    assert!(answered(QueryName::RemovedSince, None).is_some());
+    assert!(answered(QueryName::RemovedSince, Some(Value::Null)).is_none(), "refused arguments");
+    for since in [Value::Null, Value::Seq(vec![Value::Null])] {
+        let asked = Some(Value::Map(vec![("since".into(), since)]));
+        assert!(answered(QueryName::RemovedSince, asked).is_none(), "a version not of pairs");
+    }
     assert!(
         answered(QueryName::DocumentKind, None).is_none(),
         "a document of its own is the engine's"
