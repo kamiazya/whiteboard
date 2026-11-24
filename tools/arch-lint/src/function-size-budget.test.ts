@@ -673,17 +673,9 @@ describe('functions stay under the line budget, or are recorded shrinking', () =
  * in the file it tests.
  */
 const RUST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
-  // Generated: a match arm per refusal of contracts/api/refusals.json, which
-  // the emitter writes one for each (a table is the next shrink).
-  'crates/ops/api-contracts/src/generated/refusals.rs#Refusal.code': 122,
-  'crates/ops/api-contracts/src/generated/refusals.rs#Refusal.status': 112,
-  'crates/ops/api-contracts/src/generated/refusals.rs#Refusal.message': 110,
-  'crates/ops/api-contracts/src/generated/refusals.rs#examples': 112,
-  // The refusals generator's two longest steps: one check per rule an entry can
-  // break, and the TypeScript module's sections written in order. Each is a
-  // sequence a reader follows top to bottom.
+  // The refusals generator's longest step: one check per rule an entry can
+  // break, a sequence a reader follows top to bottom.
   'crates/xtask/src/codegen/refusals.rs#check_entry': 77,
-  'crates/xtask/src/codegen/refusals.rs#ts': 69,
   // The map checked against itself and the workspace against the map: one
   // pass per rule, each a few lines, run in sequence. The next shrink is one
   // function per rule, the way the TypeScript checks are one module each.

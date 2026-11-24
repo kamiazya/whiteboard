@@ -581,9 +581,6 @@ describe('file-size budget: scripts, same 800-line budget, same shrink-only cont
  * the construct constants) leaving as it is read less.
  */
 const RUST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
-  // Generated from contracts/api/refusals.json: a variant, its doc comment and
-  // one arm in each of four matches per refusal, so it grows with the contract.
-  'crates/ops/api-contracts/src/generated/refusals.rs': 906,
   // The GFM literal autolink tokenizer and its resolver: the protocol, www and
   // email forms are three state machines in one module, as upstream.
   'crates/core/markdown/src/vendored/construct/gfm_autolink_literal.rs': 830,

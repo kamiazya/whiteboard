@@ -28,6 +28,9 @@ use rust_emit::rust;
 
 pub(super) const SOURCE: &str = "contracts/api/refusals.json";
 const TS_TARGET: &str = "packages/model/src/generated/refusals.ts";
+/// The codes and their lists, apart from the sentences: the main catalog
+/// re-exports them, so every name stays where its readers import it from.
+const TS_CODES_TARGET: &str = "packages/model/src/generated/refusal-codes.ts";
 /// A refusal with a `module` goes to that package's own `src/generated/refusals.ts`.
 const RUST_TARGET: &str = "crates/ops/api-contracts/src/generated/refusals.rs";
 
@@ -555,6 +558,12 @@ fn ts(entries: &[Checked<'_>]) -> String {
         ts_doc(&mut out, 0, &e.entry.description);
         ts_refusal(&mut out, e);
     }
+    out.push_str("\nexport * from './refusal-codes.js'\n");
+    out
+}
+
+fn ts_codes(entries: &[Checked<'_>]) -> String {
+    let mut out = header(SOURCE);
     out.push_str("\n// One export per code, so a bundle carries only the codes it answers with.\n");
     for code in distinct_codes(entries) {
         let line = format!(
@@ -591,6 +600,13 @@ fn ts(entries: &[Checked<'_>]) -> String {
             family_codes(entries, family).iter().map(|code| ts_literal(code)).collect();
         ts_array(&mut out, &format!("export const {name} = "), &items);
     }
+    ts_breach_tables(&mut out, entries);
+    out
+}
+
+/// Each breach table: the code a breach shape is answered with, named by its
+/// place in the sync-write list.
+fn ts_breach_tables(out: &mut String, entries: &[Checked<'_>]) {
     let sync_codes = family_codes(entries, "sync-write");
     for (table, name) in BREACH_TABLES {
         let _ = write!(
@@ -612,7 +628,6 @@ fn ts(entries: &[Checked<'_>]) -> String {
         }
         out.push_str("} as const\n");
     }
-    out
 }
 
 /// The refusals' outputs, as `(repo-relative path, content, is the Rust half)`,
@@ -625,7 +640,10 @@ pub(super) fn generate(text: &str) -> Result<Vec<(String, String, bool)>, Vec<St
     let mut modules: Vec<&str> = entries.iter().filter_map(|e| e.entry.module.as_deref()).collect();
     modules.sort_unstable();
     modules.dedup();
-    let mut texts = vec![(TS_TARGET.to_owned(), ts(&entries))];
+    let mut texts = vec![
+        (TS_TARGET.to_owned(), ts(&entries)),
+        (TS_CODES_TARGET.to_owned(), ts_codes(&entries)),
+    ];
     for module in modules {
         texts.push((module_target(module), ts_module(&entries, module)));
     }

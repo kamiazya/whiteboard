@@ -48,10 +48,12 @@ const CONTRACT: &str = r#"{
   ]
 }"#;
 
+/// The TypeScript the contract generates, every file in order as one text,
+/// and the Rust.
 fn files(text: &str) -> Result<(String, String), Vec<String>> {
     let mut out = generate(text)?;
     let rust = out.pop().map(|file| file.1).unwrap_or_default();
-    Ok((out.remove(0).1, rust))
+    Ok((out.into_iter().map(|file| file.1).collect(), rust))
 }
 
 fn mutated(from: &str, to: &str) -> String {
@@ -71,6 +73,27 @@ fn the_checked_in_contract_generates_both_halves() {
     let (ts, rust) = files(text).unwrap();
     assert!(ts.contains("export const REFUSAL_CODES = {"));
     assert!(rust.contains("pub enum Refusal {"));
+    assert!(rust.contains("\nrefusals! {\n"));
+}
+
+#[test]
+fn the_codes_are_a_file_of_their_own_that_the_sentences_re_export() {
+    let all = generate(CONTRACT).unwrap();
+    let paths: Vec<&str> = all.iter().map(|(path, _, _)| path.as_str()).collect();
+    assert_eq!(
+        paths,
+        [
+            "packages/model/src/generated/refusals.ts",
+            "packages/model/src/generated/refusal-codes.ts",
+            "crates/ops/api-contracts/src/generated/refusals.rs",
+        ]
+    );
+    let (sentences, codes) = (&all[0].1, &all[1].1);
+    assert!(sentences.ends_with("\nexport * from './refusal-codes.js'\n"), "{sentences}");
+    assert!(!sentences.contains("REFUSAL_CODE"), "{sentences}");
+    assert!(codes.starts_with("// @generated"), "{codes}");
+    assert!(codes.contains("export const REFUSAL_CODE_PLAIN_THING = 'plain_thing'\n"), "{codes}");
+    assert!(!codes.contains("export const Plain = "), "{codes}");
 }
 
 #[test]
@@ -91,27 +114,39 @@ fn the_typescript_half_carries_the_table_the_params_and_the_codes() {
 }
 
 #[test]
-fn the_rust_half_compiles_each_template_into_its_own_formatting() {
+fn the_rust_half_writes_one_row_per_refusal_into_the_table() {
     let (_, rust) = files(CONTRACT).unwrap();
     for wanted in [
-        "    /// Says hi.\n    Greeted {\n        count: u64,\n        items: Vec<String>,\n        name: String,\n    },\n",
-        "    Plain,\n",
+        "    /// Says hi.\n    Greeted { count: u64, items: Vec<String>, name: String }\n        => code::GREETED_THING, 404, format!(\"Hi {0}, {count} item{1}: {2} {{ok}}\", crate::refusal_text::json(name), crate::refusal_text::plural_s(*count), crate::refusal_text::list(items));\n    example { count: 2, items: vec![\"a\".to_owned(), \"b\".to_owned()], name: \"x\".to_owned() };\n",
+        "    /// Plain.\n    Plain\n        => code::PLAIN_THING, 500, \"It's plain {.\".to_owned();\n    example;\n",
+        "    Echo { reason: String }\n        => code::GREETED_THING, 409, reason.clone();\n    example { reason: \"because\".to_owned() };\n",
         "pub const GREETED_THING: &str = \"greeted_thing\";",
         "pub const CODES: &[&str] = &[code::GREETED_THING, code::PLAIN_THING];",
         "pub const SYNC_WRITE_CODES: &[&str] = &[code::GREETED_THING];",
         "pub const VERSION_CODES: &[&str] = &[];",
-        "Self::Greeted { .. } | Self::Echo { .. } => code::GREETED_THING,",
-        "Self::Plain => code::PLAIN_THING,",
-        "Self::Greeted { .. } => 404,",
-        "Self::Plain => \"It's plain {.\".to_owned(),",
-        "Self::Echo { reason } => reason.clone(),",
-        "{{ok}}\", crate::refusal_text::json(name), crate::refusal_text::plural_s(*count), crate::refusal_text::list(items))",
-        "(\"Greeted\", Refusal::Greeted { count: 2, items: vec![\"a\".to_owned(), \"b\".to_owned()], name: \"x\".to_owned() }),",
-        "(\"Plain\", Refusal::Plain),",
         "f.write_str(&self.message())",
     ] {
         assert!(rust.contains(wanted), "{wanted}\n{rust}");
     }
+}
+
+#[test]
+fn every_accessor_is_written_once_over_the_rows_and_no_function_grows_with_them() {
+    let (_, small) = files(CONTRACT).unwrap();
+    let text = include_str!("../../../../../contracts/api/refusals.json");
+    let (_, whole) = files(text).unwrap();
+    let macro_of = |rust: &str| rust[..rust.find("\nrefusals! {").unwrap()].to_owned();
+    assert_eq!(macro_of(&small), macro_of(&whole), "the macro does not depend on the rows");
+    for accessor in [
+        "pub const fn code(&self)",
+        "pub const fn status(&self)",
+        "pub fn message(&self)",
+        "pub(crate) fn examples()",
+        "pub enum Refusal {",
+    ] {
+        assert_eq!(whole.matches(accessor).count(), 1, "{accessor}");
+    }
+    assert!(!whole.contains("too_many_lines"), "no function needs the long-function lint");
 }
 
 #[test]
@@ -510,15 +545,16 @@ fn a_refusal_with_a_module_is_generated_into_that_packages_own_file() {
         paths,
         [
             "packages/model/src/generated/refusals.ts",
+            "packages/model/src/generated/refusal-codes.ts",
             "packages/loro-adapter/src/generated/refusals.ts",
             "crates/ops/api-contracts/src/generated/refusals.rs",
         ]
     );
-    let (main, module) = (&all[0].1, &all[1].1);
+    let (main, module) = (&all[0].1, &all[2].1);
     assert!(module.contains("export const Greeted = "), "{module}");
     assert!(!main.contains("export const Greeted = "), "{main}");
     assert!(main.contains("export const Echo = "), "{main}");
-    assert!(all[2].1.contains("Greeted {"), "the Rust enum holds every refusal");
+    assert!(all[3].1.contains("    Greeted {"), "the Rust table holds every refusal");
     for bad in ["Loro", "a_b", "a-", "-a", "a--b", ""] {
         let text = CONTRACT.replacen(
             r#""family": "sync-write","#,
@@ -632,7 +668,10 @@ fn main() {{
 #[test]
 fn a_lone_integer_placeholder_is_formatted_not_cloned() {
     let (_, rust) = files(AWKWARD).unwrap();
-    assert!(rust.contains("Self::Lone { count } => format!(\"{count}\"),"), "{rust}");
+    assert!(
+        rust.contains("Lone { count: u64 }\n        => code::LONE, 400, format!(\"{count}\");"),
+        "{rust}"
+    );
 }
 
 #[test]
@@ -642,7 +681,7 @@ fn a_filtered_placeholder_is_positional_and_qualified() {
         "format!(\"{0}: {path_json}\", crate::refusal_text::json(path))",
         "format!(\"{0}|{1}\", crate::refusal_text::json_list(paths), crate::refusal_text::list(paths_json))",
         "format!(\"{n} item{0}{0}\", crate::refusal_text::plural_s(*n))",
-        "Self::Shadow { json } => format!(\"{0}\", crate::refusal_text::json(json)),",
+        "Shadow { json: String }\n        => code::SHADOW, 400, format!(\"{0}\", crate::refusal_text::json(json));",
     ] {
         assert!(rust.contains(wanted), "{wanted}\n{rust}");
     }

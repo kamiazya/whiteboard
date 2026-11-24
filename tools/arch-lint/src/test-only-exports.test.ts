@@ -399,7 +399,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the published type of nodeEmbedSchema on the package export-star surface, generated beside its schema so a hand-written drift cannot arise',
   'packages/model/src/generated/spatial.zod.ts#canvasCommentSchema':
     'the render-time view of a comment on the package export-star surface, generated from the contract; spatial.contract.test.ts pins its refusals',
-  'packages/model/src/generated/refusals.ts#REFUSAL_CODES':
+  'packages/model/src/generated/refusal-codes.ts#REFUSAL_CODES':
     'the generated aggregate of every code, kept off the runtime path so a bundle imports only the codes it uses; refusals.test.ts holds it equal to the contract',
   'packages/model/src/trust.ts#trustTier':
     'the OKF §5.3 tier rule, kept ahead of its first surface; ADR-0039 and package-model.md name it as a model contract its tests spec',
