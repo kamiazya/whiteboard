@@ -290,6 +290,10 @@ impl Compiler<'_> {
             let Some(Value::Map(defs)) = child(Some(&parsed), "$defs") else {
                 return malformed(path, "an external's contract is not JSON with $defs");
             };
+            if get(defs, name).is_none() {
+                let at = format!("{path}#/$defs/{name}");
+                return malformed(&at, "an external's contract does not define it");
+            }
             externals.push((name.clone(), self.scopes.len()));
             self.scopes.push(Written::of(defs, &parsed));
         }

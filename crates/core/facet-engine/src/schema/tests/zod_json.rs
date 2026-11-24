@@ -271,3 +271,19 @@ fn a_recursion_inside_a_registered_root_is_not_the_root() {
     );
     assert_eq!(contracts.published(envelope), Some(parse(&zod)));
 }
+
+/// A definition left to a contract that does not define it would publish as
+/// nothing, so the contract is refused where it names that definition.
+#[test]
+fn a_definition_left_to_a_contract_without_it_is_refused() {
+    let host = Host {
+        matchers: &[],
+        checks: &[],
+        externals: &[("Gone", External::Defined { contract: MODEL, validator: None })],
+    };
+    let contract = parse(r#"{"$defs": {"Gone": {"type": "string", "x-wb-external": "m"}}}"#);
+    let refused = Contracts::load(&[("c.json", &contract)], &host).err();
+    let malformed = Refusal::Malformed("an external's contract does not define it");
+    let at = "c.json#/$defs/Gone".to_owned();
+    assert_eq!(refused, Some(CompileError { at, refusal: malformed }));
+}
