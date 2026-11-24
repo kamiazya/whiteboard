@@ -32,6 +32,7 @@ impl Binding for VersionSave {
             },
             Field { name: "label", kind: Kind::Sized { min: 1, max: LABEL_MAX } },
         ],
+        refine: None,
     };
 
     fn input(arguments: &Map<String, Value>, workspace_id: Option<String>) -> VersionSaveInput {

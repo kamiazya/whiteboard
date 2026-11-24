@@ -10,7 +10,7 @@ use super::json::Json;
 impl Binding for DocumentList {
     const NAME: &str = "wb_document_list";
     const CONTRACT: &str = include_str!("../../../../../contracts/tools/wb_document_list.json");
-    const INPUT: Input = Input { fields: &[WORKSPACE_ADDRESS] };
+    const INPUT: Input = Input { fields: &[WORKSPACE_ADDRESS], refine: None };
 
     fn input(_: &Map<String, Value>, workspace_id: Option<String>) -> DocumentListInput {
         DocumentListInput { workspace_id: workspace_id.unwrap_or_default() }

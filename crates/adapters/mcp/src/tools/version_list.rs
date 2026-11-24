@@ -24,6 +24,7 @@ impl Binding for VersionList {
                 }),
             },
         ],
+        refine: None,
     };
 
     fn input(arguments: &Map<String, Value>, workspace_id: Option<String>) -> VersionListInput {
