@@ -1,7 +1,0 @@
-# Seeds for failure cases proptest has generated in the past. It is
-# automatically read and these particular cases re-run before any
-# novel cases are generated.
-#
-# It is recommended to check this file in to source control so that
-# everyone who runs the test benefits from these saved cases.
-cc ab42e2299154e02afd4946a7cd31495308cdba3fa5620b43a012d928e21cd623 # shrinks to {"😀": [Object {"body": String("a"), "id": String("a")}]}
