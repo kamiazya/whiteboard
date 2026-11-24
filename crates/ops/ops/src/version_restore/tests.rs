@@ -4,6 +4,8 @@
 //! its history, and that a restore left pending did nothing.
 
 use super::*;
+use std::pin::pin;
+use std::task::{Context, Poll, Waker};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_model::encoding::base64_to_bytes;
@@ -11,7 +13,17 @@ use whiteboard_port_fakes::{
     FixedCaller, FixedClock, KeyedLock, MemoryRecordStore, MemoryRegistry, MemoryVersionStore,
     RecordingNotifier, RecordingObserver, SeqIdMint, block_on,
 };
-use whiteboard_ports::{OperatorKind, SavedVersion, VersionOperator};
+use whiteboard_ports::{MaybeSend, OperatorKind, SavedVersion, VersionOperator};
+
+/// An observer whose answer never comes, standing for a keeper slow enough
+/// that the client cancels while the restore waits on it.
+struct Stalled;
+
+impl WriteObserver for Stalled {
+    fn document_written(&self, _: &DocumentWritten) -> impl Future<Output = ()> + MaybeSend {
+        std::future::pending()
+    }
+}
 
 // Marked as test code where it is, so repro-check's scan for what production
 // embeds does not read the recording as an input of the shipped build.
@@ -20,17 +32,17 @@ const CASES: &str =
     include_str!("../../../../../packages/mcp-server/src/server/mcp/oracle/version-restore.jsonl");
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
-struct Fakes {
+struct Fakes<O = RecordingObserver> {
     records: MemoryRecordStore,
     versions: MemoryVersionStore,
     lock: KeyedLock,
     clock: FixedClock,
     mint: SeqIdMint,
     notifier: RecordingNotifier,
-    observer: RecordingObserver,
+    observer: O,
 }
 
-impl Ports for Fakes {
+impl<O: WriteObserver + MaybeSend + Sync> Ports for Fakes<O> {
     type Records = MemoryRecordStore;
     type Registry = MemoryRegistry;
     type Caller = FixedCaller;
@@ -39,7 +51,7 @@ impl Ports for Fakes {
     type Clock = FixedClock;
     type Mint = SeqIdMint;
     type Notifier = RecordingNotifier;
-    type Observer = RecordingObserver;
+    type Observer = O;
 
     fn records(&self) -> &MemoryRecordStore {
         &self.records
@@ -73,7 +85,7 @@ impl Ports for Fakes {
         &self.notifier
     }
 
-    fn observer(&self) -> &RecordingObserver {
+    fn observer(&self) -> &O {
         &self.observer
     }
 }
@@ -254,4 +266,27 @@ fn a_past_no_document_reads_is_left_pending() {
     let answer = block_on(VersionRestore::execute(&fakes, input)).expect("an answer");
     assert_eq!(answer, VersionRestoreAnswer::Pending(RestorePending::Unreadable));
     assert!(fakes.notifier.take_restores().is_empty());
+}
+
+#[test]
+fn a_restore_dropped_while_waiting_on_the_observer_still_ends_its_progress() {
+    let (kept, input) = fakes(MemoryRecordStore::new(), "plan");
+    let fakes = Fakes {
+        records: kept.records,
+        versions: kept.versions,
+        lock: kept.lock,
+        clock: kept.clock,
+        mint: kept.mint,
+        notifier: kept.notifier,
+        observer: Stalled,
+    };
+    {
+        let mut restore = pin!(VersionRestore::execute(&fakes, input));
+        let mut cx = Context::from_waker(Waker::noop());
+        assert!(matches!(restore.as_mut().poll(&mut cx), Poll::Pending), "stalled at the observer");
+        assert_eq!(fakes.records.appended(W).len(), 1, "the write was kept before the wait");
+    }
+    let phases: Vec<RestorePhase> =
+        fakes.notifier.take_restores().into_iter().map(|e| e.phase).collect();
+    assert_eq!(phases, [RestorePhase::Started, RestorePhase::Complete]);
 }

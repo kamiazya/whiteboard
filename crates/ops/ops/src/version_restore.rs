@@ -251,6 +251,24 @@ fn notify<N: ClientNotifier>(notifier: &N, past: &Past<'_>, path: &str, phase: R
     });
 }
 
+/// Tells a page the restore of `path` ended, exactly once, when dropped.
+struct Ended<'a, N: ClientNotifier> {
+    notifier: &'a N,
+    workspace_id: &'a str,
+    path: &'a str,
+}
+
+impl<N: ClientNotifier> Drop for Ended<'_, N> {
+    fn drop(&mut self) {
+        self.notifier.restore_progress(&RestoreProgress {
+            workspace_id: self.workspace_id.to_owned(),
+            path: self.path.to_owned(),
+            phase: RestorePhase::Complete,
+            label: None,
+        });
+    }
+}
+
 /// `restoreToTarget`, refusals only: a target past the grammar, a subtree
 /// asked to land elsewhere, an existing target without `overwrite`, one of
 /// the other kind, and a past the target could not take.
@@ -328,21 +346,22 @@ async fn in_place<P: Ports>(
     let written =
         write::past_at_node(bytes, peer, &document_id, &past.bytes, ports.clock().now_ms())?;
     notify(notifier, &past, path, RestorePhase::Started);
-    if let Some(update) = &written.update
-        && let Err(error) = ports.records().append(past.workspace_id, update).await
     {
-        notify(notifier, &past, path, RestorePhase::Complete);
-        return Err(Stop::from(&error));
+        // Ended on every exit after the start — a kept write, a keeper's
+        // refusal, or the call dropped at an await when the client cancels.
+        let _ended = Ended { notifier, workspace_id: past.workspace_id, path };
+        if let Some(update) = &written.update {
+            ports.records().append(past.workspace_id, update).await.map_err(|e| Stop::from(&e))?;
+        }
+        if written.changed {
+            let told = DocumentWritten {
+                workspace_id: past.workspace_id.to_owned(),
+                document_id: document_id.clone(),
+                path: path.to_owned(),
+            };
+            ports.observer().document_written(&told).await;
+        }
     }
-    if written.changed {
-        let told = DocumentWritten {
-            workspace_id: past.workspace_id.to_owned(),
-            document_id: document_id.clone(),
-            path: path.to_owned(),
-        };
-        ports.observer().document_written(&told).await;
-    }
-    notify(notifier, &past, path, RestorePhase::Complete);
     if written.changed {
         let point =
             NewVersion { label: None, auto: true, restored_from: Some(past.version_id.to_owned()) };
