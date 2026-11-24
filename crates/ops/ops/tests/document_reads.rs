@@ -1,13 +1,17 @@
 //! `wb_document_list` and the `/api/v1` resolve held to the TypeScript's answers
 //! for the same records.
 //!
-//! `fixtures/document_reads.jsonl` was recorded by running server-core's own
-//! `wbDocumentList` and `wbDocumentResolve` over `LoroWorkspaceDocumentIndex`:
-//! a row with a `snapshot` is a workspace record (`null`: the keeper holds no
-//! such workspace), and each row after it one call over that record with the
-//! answer, `ok` with the output or `err` with the class thrown and its message.
-//! A refusal is held to the message exactly and to the code `refusals.json`
-//! gives the class it was thrown as.
+//! `fixtures/document_reads.jsonl` is recorded by
+//! `packages/mcp-server/src/server/mcp/tool-contracts.oracle.test.ts`, which
+//! runs server-core's `wbDocumentList` as `createServer`'s tool record calls
+//! it (the address resolved first) and its `wbDocumentResolve`, over
+//! `LoroWorkspaceDocumentIndex`. A row with a `snapshot` is a workspace record
+//! kept as `W` (`null`: the keeper holds none) with the registry rows that
+//! address it, the caller's namespace and the handles a refusal may name; each
+//! row after it is one call over that record with the answer, `ok` with the
+//! output or `err` with the class thrown and its message. A refusal is held
+//! to the message exactly and to the code `refusals.json` gives the class it
+//! was thrown as.
 
 use serde_json::{Map, Value, json};
 #[cfg(target_arch = "wasm32")]
@@ -16,22 +20,73 @@ use whiteboard_api_contracts::Refusal;
 use whiteboard_model::encoding::base64_to_bytes;
 use whiteboard_ops::{
     DocumentDetail, DocumentList, DocumentListInput, DocumentListOutput, DocumentResolve,
-    DocumentResolveInput, Operation, Ports,
+    DocumentResolveInput, Operation, Ports, with_resolved_workspace,
 };
-use whiteboard_port_fakes::{MemoryRecordStore, block_on};
+use whiteboard_port_fakes::{FixedCaller, MemoryRecordStore, MemoryRegistry, block_on};
+use whiteboard_ports::WorkspaceEntry;
 
 const CASES: &str = include_str!("fixtures/document_reads.jsonl");
 const CONTRACT: &str = include_str!("../../../../contracts/api/refusals.json");
 
-/// The ports these reads need: the record store alone.
-struct Fakes(MemoryRecordStore);
+/// The ports these reads need: the record store, the registry and the caller.
+struct Fakes(MemoryRecordStore, MemoryRegistry, FixedCaller);
 
 impl Ports for Fakes {
     type Records = MemoryRecordStore;
+    type Registry = MemoryRegistry;
+    type Caller = FixedCaller;
 
     fn records(&self) -> &MemoryRecordStore {
         &self.0
     }
+
+    fn registry(&self) -> &MemoryRegistry {
+        &self.1
+    }
+
+    fn caller(&self) -> &FixedCaller {
+        &self.2
+    }
+}
+
+/// The record store alone, its workspace in the registry; the caller `me`,
+/// told of nothing.
+#[cfg(test)]
+fn over(records: MemoryRecordStore) -> Fakes {
+    let registry = MemoryRegistry::new().holding(entry(&json!({ "workspaceId": W })));
+    Fakes(records, registry, FixedCaller::new())
+}
+
+/// A registry row as the recording writes it.
+#[cfg(test)]
+fn entry(row: &Value) -> WorkspaceEntry {
+    let text = |key: &str| row.get(key).map(|v| v.as_str().expect("a string").to_owned());
+    WorkspaceEntry {
+        workspace_id: text("workspaceId").expect("an id"),
+        namespace: text("namespace"),
+        segment: text("segment"),
+    }
+}
+
+/// The ports a record row describes.
+#[cfg(test)]
+fn fakes_of(record: &Value) -> Fakes {
+    let records = match record["snapshot"].as_str() {
+        Some(text) => MemoryRecordStore::new().holding(W, base64_to_bytes(text).expect("base64")),
+        None => MemoryRecordStore::new(),
+    };
+    let registry = record["registry"]
+        .as_array()
+        .expect("registry rows")
+        .iter()
+        .fold(MemoryRegistry::new(), |registry, row| registry.holding(entry(row)));
+    let mut caller =
+        FixedCaller::new().in_namespace(record["callerNamespace"].as_str().expect("a namespace"));
+    if let Some(known) = record["known"].as_array() {
+        let known = known.iter().map(|h| h.as_str().expect("a handle").to_owned()).collect();
+        caller = caller.knowing(known);
+    }
+    Fakes(records, registry, caller)
 }
 
 #[cfg(test)]
@@ -117,39 +172,42 @@ fn expected(row: &Value) -> Value {
     }
 }
 
+/// One call row answered over `ports`: the listing through the address, as
+/// the tool record calls it, and the resolve over `W`, as the route calls it.
+#[cfg(test)]
+fn answered(ports: &Fakes, row: &Value) -> Value {
+    match row["op"].as_str() {
+        Some("list") => {
+            let handle = row["workspaceId"].as_str().expect("an address");
+            let listed = with_resolved_workspace(ports, handle, |workspace_id| {
+                DocumentList::execute(ports, DocumentListInput { workspace_id })
+            });
+            answer(block_on(listed), list_json)
+        }
+        Some("resolve") => {
+            let document_id = row["documentId"].as_str().expect("an id").to_owned();
+            let input = DocumentResolveInput { workspace_id: W.to_owned(), document_id };
+            answer(block_on(DocumentResolve::execute(ports, input)), |found| {
+                Value::Object(detail(found))
+            })
+        }
+        other => panic!("{}: an operation the recorder did not record: {other:?}", row["case"]),
+    }
+}
+
 #[test]
 fn every_call_answers_as_the_typescript_answered_it() {
-    let mut store = Fakes(MemoryRecordStore::new());
+    let mut ports = over(MemoryRecordStore::new());
     let mut checked = 0;
     for row in rows() {
-        let workspace_id = "01ARZ3NDEKTSV4RRFFQ69G5FAV".to_owned();
-        if let Some(snapshot) = row.get("snapshot") {
-            store = Fakes(match snapshot.as_str() {
-                Some(text) => MemoryRecordStore::new()
-                    .holding(&workspace_id, base64_to_bytes(text).expect("base64")),
-                None => MemoryRecordStore::new(),
-            });
+        if row.get("snapshot").is_some() {
+            ports = fakes_of(&row);
             continue;
         }
-        let case = row["case"].as_str().expect("a case");
-        let answered = match row["op"].as_str() {
-            Some("list") => answer(
-                block_on(DocumentList::execute(&store, DocumentListInput { workspace_id })),
-                list_json,
-            ),
-            Some("resolve") => {
-                let document_id = row["documentId"].as_str().expect("an id").to_owned();
-                let input = DocumentResolveInput { workspace_id, document_id };
-                answer(block_on(DocumentResolve::execute(&store, input)), |found| {
-                    Value::Object(detail(found))
-                })
-            }
-            other => panic!("{case}: an operation the probe did not record: {other:?}"),
-        };
-        assert_eq!(answered, expected(&row), "{case}: {}", row["op"]);
+        assert_eq!(answered(&ports, &row), expected(&row), "{}: {}", row["case"], row["op"]);
         checked += 1;
     }
-    assert_eq!(checked, 18, "the recording's calls, every one replayed");
+    assert_eq!(checked, 34, "the recording's calls, every one replayed");
 }
 
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
@@ -175,7 +233,7 @@ fn both(ports: &Fakes) -> [Refusal; 2] {
 
 #[test]
 fn a_record_whose_bytes_do_not_import_is_refused_as_damaged_by_both_reads() {
-    let ports = Fakes(MemoryRecordStore::new().holding(W, b"not a loro snapshot".to_vec()));
+    let ports = over(MemoryRecordStore::new().holding(W, b"not a loro snapshot".to_vec()));
     for refusal in both(&ports) {
         assert_eq!(refusal.code(), "corrupt_stored_data");
         assert_eq!(refusal.status(), 500);
@@ -187,12 +245,12 @@ fn a_record_whose_bytes_do_not_import_is_refused_as_damaged_by_both_reads() {
 
 #[test]
 fn a_store_that_fails_is_answered_with_its_own_refusal_by_both_reads() {
-    let ports = Fakes(MemoryRecordStore::failing(whiteboard_ports::PortError::DatabaseBusy));
+    let ports = over(MemoryRecordStore::failing(whiteboard_ports::PortError::DatabaseBusy));
     for refusal in both(&ports) {
         assert_eq!(refusal, Refusal::DatabaseBusy);
     }
     let gone = whiteboard_ports::PortError::WorkspaceNotFound { workspace_id: W.to_owned() };
-    let [listed, resolved] = both(&Fakes(MemoryRecordStore::failing(gone)));
+    let [listed, resolved] = both(&over(MemoryRecordStore::failing(gone)));
     assert_eq!(listed, Refusal::WorkspaceNotFoundForCallerRead { workspace_id: W.to_owned() });
     assert_eq!(resolved, Refusal::WorkspaceNotFoundInIndex { workspace_id: W.to_owned() });
 }

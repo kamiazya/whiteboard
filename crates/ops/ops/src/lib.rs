@@ -24,11 +24,19 @@
 //!   every tool a row names to be listed. The contracts are named by the
 //!   server-core schema they mirror; a tool's published surface is
 //!   `contracts/tools/<name>.json`, and input validation is the adapter's.
+//! - A workspace arrives as the caller's ADDRESS (an id, `<handle>/<segment>`
+//!   or a segment of the caller's own) and is resolved once, before the
+//!   operation runs, by [`with_resolved_workspace`]: the registry and the
+//!   caller are ports, an address nothing answers to is refused with a read's
+//!   advice (naming the workspaces here when the caller may see them), and
+//!   the operation's refusal is re-said with the handle the caller typed. An
+//!   operation itself sees only the canonical id.
 //! - A read opens the workspace record from the bytes the store answers and
 //!   answers from `whiteboard-workspace-index`'s reads. A write goes through
 //!   one bracket — lock, load, engine write, persist, release — which lands
 //!   with the first operation that writes.
 
+mod address;
 mod document_list;
 mod document_resolve;
 mod operation;
@@ -36,6 +44,9 @@ mod ports;
 mod record;
 mod table;
 
+pub use address::{
+    WorkspaceAddress, parse_workspace_address, resolve_workspace, with_resolved_workspace,
+};
 pub use document_list::{
     DocumentList, DocumentListInput, DocumentListOutput, FolderName, ListedDocument,
 };

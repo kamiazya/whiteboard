@@ -19,11 +19,8 @@ impl Binding for DocumentList {
         }],
     };
 
-    /// The address is passed on as the workspace's id: resolving a segment
-    /// or a qualified handle through the keeper's registry is pending.
-    fn input(arguments: &Map<String, Value>) -> DocumentListInput {
-        let workspace_id = arguments.get("workspaceId").and_then(Value::as_str).unwrap_or_default();
-        DocumentListInput { workspace_id: workspace_id.to_owned() }
+    fn input(_: &Map<String, Value>, workspace_id: String) -> DocumentListInput {
+        DocumentListInput { workspace_id }
     }
 
     fn output(output: &DocumentListOutput) -> Json {

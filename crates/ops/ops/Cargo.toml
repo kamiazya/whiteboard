@@ -10,12 +10,12 @@ publish.workspace = true
 
 [dependencies]
 whiteboard-api-contracts = { path = "../api-contracts" }
+whiteboard-model = { path = "../../core/model" }
 whiteboard-ports = { path = "../../ports/ports" }
 whiteboard-workspace-index = { path = "../../core/workspace-index" }
 
 [dev-dependencies]
 serde_json.workspace = true
-whiteboard-model = { path = "../../core/model" }
 whiteboard-port-fakes = { path = "../../testing/port-fakes" }
 
 # QR-21 layer 3: the same tests run natively and on wasm32 under Node.
