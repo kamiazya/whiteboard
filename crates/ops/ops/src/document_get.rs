@@ -10,8 +10,9 @@
 //! verbatim), so no root supplies it.
 //!
 //! What this crate cannot answer yet is [`Pending`]: a spatial document's
-//! JSON Canvas (the stored canvas is answered as a value, and lifting it into
-//! the model's canvas for the codec is the next slice), a frontmatter the OKF
+//! JSON Canvas (the stored canvas is answered as a value, and the lift of
+//! that value into the model's canvas the codec writes lives in
+//! `whiteboard-wasm`, a layer above), a frontmatter the OKF
 //! writer refuses (whose words are the TypeScript shim's) and a read the
 //! record leaves to its caller.
 
