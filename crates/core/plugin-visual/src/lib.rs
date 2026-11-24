@@ -12,6 +12,7 @@
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
 pub mod checks;
+pub mod emoji_search;
 pub mod host;
 pub mod read;
 pub mod render;
