@@ -609,186 +609,35 @@ export const DatabaseBusy = () => 'The database is busy; retry shortly.'
  */
 export const InternalError = () => 'The server failed to handle this request.'
 
-// One export per code, so a bundle carries only the codes it answers with.
-export const REFUSAL_CODE_MARKDOWN_TOO_LARGE = 'markdown_too_large'
-export const REFUSAL_CODE_NODE_TEXT_TOO_LARGE = 'node_text_too_large'
-export const REFUSAL_CODE_NODE_LOCATION_TOO_LARGE = 'node_location_too_large'
-export const REFUSAL_CODE_LABEL_TOO_LARGE = 'label_too_large'
-export const REFUSAL_CODE_COMMENT_TOO_LARGE = 'comment_too_large'
-export const REFUSAL_CODE_CONTAINER_NAME_TOO_LONG = 'container_name_too_long'
-export const REFUSAL_CODE_COMMENT_ANCHOR_TOO_LARGE = 'comment_anchor_too_large'
-export const REFUSAL_CODE_ANCHOR_QUOTE_TOO_LONG = 'anchor_quote_too_long'
-export const REFUSAL_CODE_TOO_MANY_OPEN_THREADS = 'too_many_open_threads'
-export const REFUSAL_CODE_TOO_MANY_OPEN_CHANGES = 'too_many_open_changes'
-export const REFUSAL_CODE_TOO_MANY_THREAD_MESSAGES = 'too_many_thread_messages'
-export const REFUSAL_CODE_TAGS_TOO_LARGE = 'tags_too_large'
-export const REFUSAL_CODE_TOO_MANY_NODES_OR_EDGES = 'too_many_nodes_or_edges'
-export const REFUSAL_CODE_INVALID_DOCUMENT_ROOT = 'invalid_document_root'
-export const REFUSAL_CODE_CAUSAL_GAP = 'causal_gap'
-export const REFUSAL_CODE_RESERVED_MAP_KEY = 'reserved_map_key'
-export const REFUSAL_CODE_RETIRED_STORED_SHAPE = 'retired_stored_shape'
-export const REFUSAL_CODE_RETIRED_COMMENT_PLANE = 'retired_comment_plane'
-export const REFUSAL_CODE_INVALID_PATH = 'invalid_path'
-export const REFUSAL_CODE_UNREADABLE_DOCUMENT_META = 'unreadable_document_meta'
-export const REFUSAL_CODE_DOCUMENT_KIND_CHANGED = 'document_kind_changed'
-export const REFUSAL_CODE_DOCUMENT_NAME_TOO_LONG = 'document_name_too_long'
-export const REFUSAL_CODE_FOLDER_NAME_REFUSED = 'folder_name_refused'
-export const REFUSAL_CODE_TOO_MANY_DOCUMENTS = 'too_many_documents'
-export const REFUSAL_CODE_TOO_MANY_FOLDERS = 'too_many_folders'
-export const REFUSAL_CODE_TOO_MANY_WORKSPACES = 'too_many_workspaces'
-export const REFUSAL_CODE_TOO_MANY_VERSIONS = 'too_many_versions'
-export const REFUSAL_CODE_DOCUMENT_NOT_FOUND = 'document_not_found'
-export const REFUSAL_CODE_DOCUMENT_ENGINE_TRAP = 'document_engine_trap'
-export const REFUSAL_CODE_DOCUMENT_KIND_MISMATCH = 'document_kind_mismatch'
-export const REFUSAL_CODE_NODE_NOT_FOUND = 'node_not_found'
-export const REFUSAL_CODE_WORKSPACE_NOT_FOUND = 'workspace_not_found'
-export const REFUSAL_CODE_DOCUMENT_PATH_TAKEN = 'document_path_taken'
-export const REFUSAL_CODE_DISPLAY_NAME_TAKEN = 'display_name_taken'
-export const REFUSAL_CODE_WORKSPACE_SEGMENT_TAKEN = 'workspace_segment_taken'
-export const REFUSAL_CODE_WORKSPACE_SEGMENT_UNUSABLE = 'workspace_segment_unusable'
-export const REFUSAL_CODE_DOCUMENT_NAME_CONFLICT = 'document_name_conflict'
-export const REFUSAL_CODE_DOCUMENT_HAS_DESCENDANTS = 'document_has_descendants'
-export const REFUSAL_CODE_DOCUMENT_MOVE_INTO_SELF = 'document_move_into_self'
-export const REFUSAL_CODE_CANNOT_PLACE_COPY = 'cannot_place_copy'
-export const REFUSAL_CODE_DOCUMENT_SERIALIZE_FAILED = 'document_serialize_failed'
-export const REFUSAL_CODE_STORED_DOCUMENT_UNSUPPORTED_VERSION =
-  'stored_document_unsupported_version'
-export const REFUSAL_CODE_CORRUPT_STORED_DATA = 'corrupt_stored_data'
-export const REFUSAL_CODE_OKF_PARSE_FAILED = 'okf_parse_failed'
-export const REFUSAL_CODE_OKF_NOT_YAML_SAFE = 'okf_not_yaml_safe'
-export const REFUSAL_CODE_TAG_NOT_IN_LIBRARY = 'tag_not_in_library'
-export const REFUSAL_CODE_FACET_WRITE_REJECTED = 'facet_write_rejected'
-export const REFUSAL_CODE_SEARCH_NEEDS_QUERY_OR_FILTER = 'search_needs_query_or_filter'
-export const REFUSAL_CODE_NAMELESS_LINK_TARGET = 'nameless_link_target'
-export const REFUSAL_CODE_INVALID_BODY = 'invalid_body'
-export const REFUSAL_CODE_INVALID_REQUEST = 'invalid_request'
-export const REFUSAL_CODE_DATABASE_BUSY = 'database_busy'
-export const REFUSAL_CODE_INTERNAL_ERROR = 'internal_error'
+/**
+ * A restore naming a version the document's own history does not hold: none by that id, or
+ * another document's.
+ */
+export const VersionNotFound = (versionId: string, documentId: string) =>
+  `version not found: ${versionId} in document ${documentId}`
 
-/** Every code a refusal carries, keyed by the camelCase of the code. */
-export const REFUSAL_CODES = {
-  markdownTooLarge: REFUSAL_CODE_MARKDOWN_TOO_LARGE,
-  nodeTextTooLarge: REFUSAL_CODE_NODE_TEXT_TOO_LARGE,
-  nodeLocationTooLarge: REFUSAL_CODE_NODE_LOCATION_TOO_LARGE,
-  labelTooLarge: REFUSAL_CODE_LABEL_TOO_LARGE,
-  commentTooLarge: REFUSAL_CODE_COMMENT_TOO_LARGE,
-  containerNameTooLong: REFUSAL_CODE_CONTAINER_NAME_TOO_LONG,
-  commentAnchorTooLarge: REFUSAL_CODE_COMMENT_ANCHOR_TOO_LARGE,
-  anchorQuoteTooLong: REFUSAL_CODE_ANCHOR_QUOTE_TOO_LONG,
-  tooManyOpenThreads: REFUSAL_CODE_TOO_MANY_OPEN_THREADS,
-  tooManyOpenChanges: REFUSAL_CODE_TOO_MANY_OPEN_CHANGES,
-  tooManyThreadMessages: REFUSAL_CODE_TOO_MANY_THREAD_MESSAGES,
-  tagsTooLarge: REFUSAL_CODE_TAGS_TOO_LARGE,
-  tooManyNodesOrEdges: REFUSAL_CODE_TOO_MANY_NODES_OR_EDGES,
-  invalidDocumentRoot: REFUSAL_CODE_INVALID_DOCUMENT_ROOT,
-  causalGap: REFUSAL_CODE_CAUSAL_GAP,
-  reservedMapKey: REFUSAL_CODE_RESERVED_MAP_KEY,
-  retiredStoredShape: REFUSAL_CODE_RETIRED_STORED_SHAPE,
-  retiredCommentPlane: REFUSAL_CODE_RETIRED_COMMENT_PLANE,
-  invalidPath: REFUSAL_CODE_INVALID_PATH,
-  unreadableDocumentMeta: REFUSAL_CODE_UNREADABLE_DOCUMENT_META,
-  documentKindChanged: REFUSAL_CODE_DOCUMENT_KIND_CHANGED,
-  documentNameTooLong: REFUSAL_CODE_DOCUMENT_NAME_TOO_LONG,
-  folderNameRefused: REFUSAL_CODE_FOLDER_NAME_REFUSED,
-  tooManyDocuments: REFUSAL_CODE_TOO_MANY_DOCUMENTS,
-  tooManyFolders: REFUSAL_CODE_TOO_MANY_FOLDERS,
-  tooManyWorkspaces: REFUSAL_CODE_TOO_MANY_WORKSPACES,
-  tooManyVersions: REFUSAL_CODE_TOO_MANY_VERSIONS,
-  documentNotFound: REFUSAL_CODE_DOCUMENT_NOT_FOUND,
-  documentEngineTrap: REFUSAL_CODE_DOCUMENT_ENGINE_TRAP,
-  documentKindMismatch: REFUSAL_CODE_DOCUMENT_KIND_MISMATCH,
-  nodeNotFound: REFUSAL_CODE_NODE_NOT_FOUND,
-  workspaceNotFound: REFUSAL_CODE_WORKSPACE_NOT_FOUND,
-  documentPathTaken: REFUSAL_CODE_DOCUMENT_PATH_TAKEN,
-  displayNameTaken: REFUSAL_CODE_DISPLAY_NAME_TAKEN,
-  workspaceSegmentTaken: REFUSAL_CODE_WORKSPACE_SEGMENT_TAKEN,
-  workspaceSegmentUnusable: REFUSAL_CODE_WORKSPACE_SEGMENT_UNUSABLE,
-  documentNameConflict: REFUSAL_CODE_DOCUMENT_NAME_CONFLICT,
-  documentHasDescendants: REFUSAL_CODE_DOCUMENT_HAS_DESCENDANTS,
-  documentMoveIntoSelf: REFUSAL_CODE_DOCUMENT_MOVE_INTO_SELF,
-  cannotPlaceCopy: REFUSAL_CODE_CANNOT_PLACE_COPY,
-  documentSerializeFailed: REFUSAL_CODE_DOCUMENT_SERIALIZE_FAILED,
-  storedDocumentUnsupportedVersion: REFUSAL_CODE_STORED_DOCUMENT_UNSUPPORTED_VERSION,
-  corruptStoredData: REFUSAL_CODE_CORRUPT_STORED_DATA,
-  okfParseFailed: REFUSAL_CODE_OKF_PARSE_FAILED,
-  okfNotYamlSafe: REFUSAL_CODE_OKF_NOT_YAML_SAFE,
-  tagNotInLibrary: REFUSAL_CODE_TAG_NOT_IN_LIBRARY,
-  facetWriteRejected: REFUSAL_CODE_FACET_WRITE_REJECTED,
-  searchNeedsQueryOrFilter: REFUSAL_CODE_SEARCH_NEEDS_QUERY_OR_FILTER,
-  namelessLinkTarget: REFUSAL_CODE_NAMELESS_LINK_TARGET,
-  invalidBody: REFUSAL_CODE_INVALID_BODY,
-  invalidRequest: REFUSAL_CODE_INVALID_REQUEST,
-  databaseBusy: REFUSAL_CODE_DATABASE_BUSY,
-  internalError: REFUSAL_CODE_INTERNAL_ERROR,
-} as const
+/** A restore into a targetPath that already holds a document, without overwrite. */
+export const RestoreTargetExists = (targetPath: string) =>
+  `target already exists: ${targetPath} — pass overwrite: true to restore onto it`
 
-/** A code a refusal carries. */
-export type RefusalCode = (typeof REFUSAL_CODES)[keyof typeof REFUSAL_CODES]
+/** A subtree rollback to a version that does not carry the whole workspace at that point. */
+export const SubtreeNeedsWorkspaceVersion = (versionId: string) =>
+  `subtree rollback needs a workspace-scoped version: ${versionId}`
 
-/** The codes a keeper refuses a sync write with. */
-export const SYNC_WRITE_REFUSAL_CODES = [
-  'markdown_too_large',
-  'node_text_too_large',
-  'node_location_too_large',
-  'label_too_large',
-  'comment_too_large',
-  'container_name_too_long',
-  'comment_anchor_too_large',
-  'anchor_quote_too_long',
-  'too_many_open_threads',
-  'too_many_open_changes',
-  'too_many_thread_messages',
-  'tags_too_large',
-  'too_many_nodes_or_edges',
-  'invalid_document_root',
-  'causal_gap',
-  'reserved_map_key',
-  'retired_stored_shape',
-  'retired_comment_plane',
-  'invalid_path',
-  'unreadable_document_meta',
-  'document_kind_changed',
-  'document_name_too_long',
-  'folder_name_refused',
-  'too_many_documents',
-  'too_many_folders',
-] as const
+/** A subtree rollback asked to land at a targetPath other than where it rolls back. */
+export const SubtreeTakesNoTarget = () => 'subtree rollback cannot take a targetPath'
 
-/** The codes a keeper refuses a version save with. */
-export const VERSION_REFUSAL_CODES = ['too_many_versions'] as const
+/**
+ * A restore targetPath that is not a document path, refused by the operation as the backstop
+ * no surface can skip.
+ */
+export const InvalidRestoreTargetPath = (targetPath: string) => `invalid targetPath: ${targetPath}`
 
-/** The code each text breach shape of a sync write is answered with. */
-export const SYNC_TEXT_BREACH_CODES = {
-  run: SYNC_WRITE_REFUSAL_CODES[0],
-  body: SYNC_WRITE_REFUSAL_CODES[0],
-  runs: SYNC_WRITE_REFUSAL_CODES[0],
-  'node-text': SYNC_WRITE_REFUSAL_CODES[1],
-  'node-location': SYNC_WRITE_REFUSAL_CODES[2],
-  label: SYNC_WRITE_REFUSAL_CODES[3],
-  'comment-message': SYNC_WRITE_REFUSAL_CODES[4],
-  'container-name': SYNC_WRITE_REFUSAL_CODES[5],
-  'thread-anchor': SYNC_WRITE_REFUSAL_CODES[6],
-  'anchor-quote': SYNC_WRITE_REFUSAL_CODES[7],
-  'open-threads': SYNC_WRITE_REFUSAL_CODES[8],
-  'open-changes': SYNC_WRITE_REFUSAL_CODES[9],
-  'thread-messages': SYNC_WRITE_REFUSAL_CODES[10],
-  tags: SYNC_WRITE_REFUSAL_CODES[11],
-  'canvas-size': SYNC_WRITE_REFUSAL_CODES[12],
-  'content-root': SYNC_WRITE_REFUSAL_CODES[13],
-  'unattached-container': SYNC_WRITE_REFUSAL_CODES[14],
-  'reserved-map-key': SYNC_WRITE_REFUSAL_CODES[15],
-  'retired-shape': SYNC_WRITE_REFUSAL_CODES[16],
-  'retired-comment-plane': SYNC_WRITE_REFUSAL_CODES[17],
-} as const
+/**
+ * A restore that landed at a path whose row lists no document id, so the caller cannot be told
+ * which document holds it.
+ */
+export const RestoredDocumentIdMissing = (targetPath: string) =>
+  `restored document has no id: ${targetPath}`
 
-/** The code each workspace breach shape of a sync write is answered with. */
-export const SYNC_WORKSPACE_BREACH_CODES = {
-  'invalid-path': SYNC_WRITE_REFUSAL_CODES[18],
-  'unreadable-document-meta': SYNC_WRITE_REFUSAL_CODES[19],
-  'document-kind-changed': SYNC_WRITE_REFUSAL_CODES[20],
-  'document-name-too-long': SYNC_WRITE_REFUSAL_CODES[21],
-  'folder-name-refused': SYNC_WRITE_REFUSAL_CODES[22],
-  'causal-gap': SYNC_WRITE_REFUSAL_CODES[14],
-  'too-many-documents': SYNC_WRITE_REFUSAL_CODES[23],
-  'too-many-folders': SYNC_WRITE_REFUSAL_CODES[24],
-} as const
+export * from './refusal-codes.js'

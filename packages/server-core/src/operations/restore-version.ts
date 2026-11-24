@@ -15,6 +15,7 @@ import {
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import { getLogger } from '../log.js'
 import type { LiveDocuments, RestoreProgressEvent, ServerDeps } from '../server-deps.js'
+import { RestoredDocumentIdMissingError } from './restore-refusals.js'
 import { DocumentKindChangedError, textBreachRefusal } from './sync-write-refusals.js'
 
 /** What a restore reaches: the history, the live documents, the record it writes into, and the write observer. */
@@ -287,18 +288,6 @@ async function createTarget(
     targetPath,
     documentId,
     elementCount: await past.read({ query: 'spatialNodeCount' }, assertedAs<number>()),
-  }
-}
-
-/**
- * The restore landed but the target's row lists no document id, so the
- * caller cannot be told which document now holds it. Named, so a server-mode
- * caller reads this rather than a bare internal error.
- */
-class RestoredDocumentIdMissingError extends Error {
-  constructor(public readonly targetPath: string) {
-    super(`restored document has no id: ${targetPath}`)
-    this.name = 'RestoredDocumentIdMissingError'
   }
 }
 
