@@ -34,8 +34,6 @@ pub(crate) const SPATIAL_ANCHOR: &[&str] =
 pub(crate) const TEXT_ANCHOR: &[&str] = &["kind", "nodeId", "quote", "start", "end"];
 /// `textQuoteSelectorSchema`.
 pub(crate) const QUOTE: &[&str] = &["prefix", "exact", "suffix"];
-/// `annotationAnchorSchema`'s `document` arm.
-pub(crate) const DOCUMENT_ANCHOR: &[&str] = &["kind"];
 
 /// `proposalSchema`.
 pub(crate) const PROPOSAL: &[&str] = &["id", "author", "createdAt", "changes"];
@@ -65,8 +63,6 @@ pub(crate) const NODE: &[&str] = &[
 ];
 /// `nodeResourceSchema`.
 pub(crate) const RESOURCE: &[&str] = &["mimeType", "content", "location", "subpath"];
-/// `nodeEmbedSchema`.
-pub(crate) const EMBED: &[&str] = &["documentId", "versionRef"];
 /// `canvasEdgeSchema`.
 pub(crate) const EDGE: &[&str] = &["id", "from", "to", "color", "label", "bends", "facets", "tags"];
 /// `edgeEndSchema`.
@@ -160,12 +156,11 @@ fn text_anchor(value: Value) -> Value {
     })
 }
 
-/// An annotation anchor, by its arm.
+/// An annotation anchor, by its arm; the `document` arm holds one key.
 fn anchor(value: Value) -> Value {
     match kind_of(&value) {
         Some("text") => text_anchor(value),
         Some("spatial") => shaped(value, SPATIAL_ANCHOR, flat),
-        Some("document") => shaped(value, DOCUMENT_ANCHOR, flat),
         _ => value,
     }
 }
@@ -183,13 +178,13 @@ pub(crate) fn thread(value: Value) -> Value {
 pub(crate) fn node(value: Value) -> Value {
     shaped(value, NODE, |key, held| match key {
         "resource" => shaped(held, RESOURCE, flat),
-        "embed" => shaped(held, EMBED, flat),
         _ => held,
     })
 }
 
-// A point's keys, a bend's or a free end's, are ascending as `plain` writes
-// them, which is `canvasPointSchema`'s order: no point is reordered.
+// A point's keys (a bend's, a free end's) and an embed's are ascending as
+// `plain` writes them, which is `canvasPointSchema`'s and `nodeEmbedSchema`'s
+// order: neither is reordered.
 
 fn edge_field(key: &str, held: Value) -> Value {
     match key {

@@ -49,7 +49,6 @@ fn the_spatial_orders_are_the_contracts() {
     for (list, name) in [
         (NODE, "SpatialNode"),
         (RESOURCE, "NodeResource"),
-        (EMBED, "NodeEmbed"),
         (EDGE, "CanvasEdge"),
         (EDGE_END, "EdgeEnd"),
         (LINE, "CanvasLine"),
@@ -102,11 +101,13 @@ fn array_indices_lead_then_the_shape_then_the_rest_as_held() {
 }
 
 #[test]
-fn a_point_is_written_in_its_schemas_order_without_reordering() {
-    let ascending: Vec<String> = declared(SPATIAL, "CanvasPoint");
-    let mut sorted = ascending.clone();
-    sorted.sort();
-    assert_eq!(ascending, sorted, "a point's keys would need an order of their own");
+fn a_point_and_an_embed_are_written_in_their_schemas_order_without_reordering() {
+    for name in ["CanvasPoint", "NodeEmbed"] {
+        let ascending: Vec<String> = declared(SPATIAL, name);
+        let mut sorted = ascending.clone();
+        sorted.sort();
+        assert_eq!(ascending, sorted, "{name}'s keys would need an order of their own");
+    }
 }
 
 fn change_of(op: &str, entries: Vec<(&str, Value)>) -> Value {
