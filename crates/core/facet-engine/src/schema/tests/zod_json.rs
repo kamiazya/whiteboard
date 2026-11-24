@@ -164,15 +164,21 @@ fn properties_are_written_in_the_order_the_contract_names() {
 }
 
 /// A contract a definition is left to is not compiled, so it is published
-/// however it is written: a member of a shape the dialect does not have
-/// constrains nothing, an order names what it can, and a root referenced
-/// twice inside itself is `#` both times.
+/// however it is written: a member of a shape the dialect does not have and
+/// a reference nothing answers to constrain nothing, an order names what it
+/// can, kept unknown keys are any value, and a root referenced twice inside
+/// itself is `#` both times.
 #[test]
 fn a_definition_left_to_an_uncompiled_contract_is_published_as_written() {
     const OTHER: &str = r##"{"$defs": {
         "Odd": {"type": "object", "properties": 5},
         "Listed": {"type": "array", "items": 7},
-        "Ordered": {"type": "object", "properties": {"a": {"type": "string"}}, "x-wb-order": [1, "a"]},
+        "Ordered": {"type": "object", "properties": {"a": {"type": "string"}},
+            "x-wb-order": [1, "a", "ghost"], "x-wb-unknownKeys": "keep"},
+        "Lost": {"type": "object", "propertyNames": {"$ref": "#/$defs/Nowhere"},
+            "additionalProperties": {"$ref": "elsewhere"}},
+        "Afar": {"type": "object", "propertyNames": {"$ref": "elsewhere"},
+            "additionalProperties": {"$ref": "#/$defs/Nowhere"}},
         "Twice": {"type": "object", "properties": {
             "l": {"$ref": "#/$defs/Twice"}, "r": {"$ref": "#/$defs/Twice"}}}
     }}"##;
@@ -180,10 +186,17 @@ fn a_definition_left_to_an_uncompiled_contract_is_published_as_written() {
     let host = Host {
         matchers: &[],
         checks: &[],
-        externals: &[("Odd", LEFT), ("Listed", LEFT), ("Ordered", LEFT), ("Twice", LEFT)],
+        externals: &[
+            ("Odd", LEFT),
+            ("Listed", LEFT),
+            ("Ordered", LEFT),
+            ("Twice", LEFT),
+            ("Lost", LEFT),
+            ("Afar", LEFT),
+        ],
     };
     let left = |name: &str| format!(r#""{name}": {{"type": "string", "x-wb-external": "m"}}"#);
-    let names = ["Odd", "Listed", "Ordered", "Twice"];
+    let names = ["Odd", "Listed", "Ordered", "Twice", "Lost", "Afar"];
     let defs: Vec<String> = names.iter().map(|name| left(name)).collect();
     let contract = parse(&format!(r#"{{"$defs": {{{}}}}}"#, defs.join(",")));
     let contracts = Contracts::load(&[("c.json", &contract)], &host).expect("it compiles");
@@ -201,6 +214,14 @@ fn a_definition_left_to_an_uncompiled_contract_is_published_as_written() {
         published("Listed"),
         Some(parse(&format!(r#"{{{dialect},"type":"array","items":{{}}}}"#)))
     );
-    assert_eq!(published("Ordered"), Some(object(r#"{"a":{"type":"string"}}"#)));
+    let kept = format!(
+        r#"{{{dialect},"type":"object","properties":{{"a":{{"type":"string"}}}},"additionalProperties":{{}}}}"#
+    );
+    assert_eq!(published("Ordered"), Some(parse(&kept)));
+    let open = format!(
+        r#"{{{dialect},"type":"object","propertyNames":{{}},"additionalProperties":{{}}}}"#
+    );
+    assert_eq!(published("Lost"), Some(parse(&open)));
+    assert_eq!(published("Afar"), Some(parse(&open)));
     assert_eq!(published("Twice"), Some(object(r##"{"l":{"$ref":"#"},"r":{"$ref":"#"}}"##)));
 }

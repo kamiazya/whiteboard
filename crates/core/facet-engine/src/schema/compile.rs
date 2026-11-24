@@ -257,9 +257,9 @@ impl Compiler<'_> {
         }
         // A definition's id is its place in this list, which is how the
         // references compiled above name it.
+        let externals = self.left_to_others(written, path)?;
         let scope = self.scopes.len();
-        self.scopes.push(Written::of(written, contract));
-        self.left_to_others(scope, written, path)?;
+        self.scopes.push(Written { externals, ..Written::of(written, contract) });
         let contract = path.to_owned();
         self.defs.extend(written.iter().zip(roots).map(|((name, _), root)| Def {
             contract: contract.clone(),
@@ -270,12 +270,13 @@ impl Compiler<'_> {
         Ok(())
     }
 
-    /// Each external definition of the contract at `scope` that the host
-    /// leaves to another contract, that contract read for it.
+    /// Each external definition of a contract that the host leaves to
+    /// another contract, by the scope that contract is read into for it.
     ///
     /// ponytail: a contract read once per definition left to it; key them by
     /// text if a host ever leaves many.
-    fn left_to_others(&mut self, scope: usize, written: &Map, path: &str) -> Compiled<()> {
+    fn left_to_others(&mut self, written: &Map, path: &str) -> Compiled<Vec<(String, usize)>> {
+        let mut externals = Vec::new();
         for (name, node) in written {
             let source = match supplied(self.host.externals, name) {
                 Some(External::Defined { contract, .. })
@@ -289,13 +290,10 @@ impl Compiler<'_> {
             let Some(Value::Map(defs)) = child(Some(&parsed), "$defs") else {
                 return malformed(path, "an external's contract is not JSON with $defs");
             };
-            let other = self.scopes.len();
+            externals.push((name.clone(), self.scopes.len()));
             self.scopes.push(Written::of(defs, &parsed));
-            if let Some(held) = self.scopes.get_mut(scope) {
-                held.externals.push((name.clone(), other));
-            }
         }
-        Ok(())
+        Ok(externals)
     }
 
     /// A definition: its node, or the host's validator where the contract

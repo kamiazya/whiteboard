@@ -129,7 +129,7 @@ impl Contracts {
     #[must_use]
     pub fn published(&self, def: DefId) -> Option<Value> {
         let held = self.defs.get(def.0)?;
-        zod_json::publish(&self.scopes, held.scope, &held.name)
+        Some(zod_json::publish(&self.scopes, held.scope, &held.name))
     }
 
     /// Whether the definition is an object that declares `field`: what an

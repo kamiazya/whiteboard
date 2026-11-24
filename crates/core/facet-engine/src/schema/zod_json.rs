@@ -89,18 +89,17 @@ fn described(mut members: Map, text: &str) -> Map {
     members
 }
 
-/// The definition `name` of the scope `scope` as Zod's JSON Schema, or `None`
-/// for a name the scope does not hold.
-pub(super) fn publish(scopes: &[Scope], scope: usize, name: &str) -> Option<Value> {
+/// The definition `name` of the scope `scope` as Zod's JSON Schema.
+pub(super) fn publish(scopes: &[Scope], scope: usize, name: &str) -> Value {
     let mut writer =
         Writer { scopes, registered: Vec::new(), open: Vec::new(), cyclic: Vec::new() };
-    let root = writer.definition(scope, name)?;
+    let root = writer.definition(scope, name).unwrap_or_default();
     let mut out = vec![member("$schema", string(DIALECT))];
     out.extend(root);
     if !writer.registered.is_empty() {
         out.push(member("$defs", Value::Map(writer.registered)));
     }
-    Some(Value::Map(out))
+    Value::Map(out)
 }
 
 struct Writer<'s> {
@@ -118,11 +117,12 @@ impl<'s> Writer<'s> {
     /// Where `name` is written: its own scope, or the contract it is left to.
     fn resolve(&self, scope: usize, name: &str) -> Option<(usize, &'s Value)> {
         let scopes = self.scopes;
-        let held = scopes.get(scope)?;
-        let owner = held.externals.iter().find(|(external, _)| external == name);
-        let scope = owner.map_or(scope, |(_, other)| *other);
-        let defs = &scopes.get(scope)?.defs;
-        defs.iter().find(|(key, _)| key == name).map(|(_, written)| (scope, written))
+        let owner = scopes
+            .get(scope)
+            .and_then(|held| held.externals.iter().find(|(external, _)| external == name))
+            .map_or(scope, |(_, other)| *other);
+        let defs = scopes.get(owner).map_or(&[][..], |held| &held.defs);
+        defs.iter().find(|(key, _)| key == name).map(|(_, written)| (owner, written))
     }
 
     fn definition(&mut self, scope: usize, name: &str) -> Option<Map> {
@@ -132,9 +132,9 @@ impl<'s> Writer<'s> {
             if !self.registered.iter().any(|(key, _)| key == name) {
                 // Held before its body is written, so it is first met here.
                 self.registered.push(member(name, Value::Null));
-                let body = self.node(scope, written);
-                if let Some((_, slot)) = self.registered.iter_mut().find(|(key, _)| key == name) {
-                    *slot = Value::Map(body);
+                let mut body = Some(Value::Map(self.node(scope, written)));
+                for (_, slot) in self.registered.iter_mut().filter(|(key, _)| key == name) {
+                    *slot = body.take().unwrap_or_default();
                 }
             }
             return Some(reference);
@@ -143,9 +143,9 @@ impl<'s> Writer<'s> {
         if self.open.contains(&key) {
             return Some(self.recursion(key));
         }
-        self.open.push(key);
+        self.open.push(key.clone());
         let body = self.node(scope, written);
-        let key = self.open.pop()?;
+        self.open.pop();
         let capped = get(written, "maxProperties").is_some();
         let body = match self.description(scope, written) {
             Some(text) if !capped => described(body, text),
