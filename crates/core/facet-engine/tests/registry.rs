@@ -343,14 +343,18 @@ fn a_published_definition_keeps_a_property_named_like_the_dialect() {
 
 /// An external definition is not compiled, so a reference inside it records
 /// no edge for the load-time cycle check: published, a reference back into
-/// a definition already being inlined is kept as written instead of
-/// recursing, and its properties, which no `x-wb-order` lists, as written.
+/// a definition being written ends, as Zod writes a recursion (`#` for the
+/// root, a `$defs` entry otherwise, each printed by Zod 4.6.7 for the same
+/// shape), and its properties, which no `x-wb-order` lists, are taken as
+/// written.
 #[test]
 fn a_published_external_definition_that_names_itself_ends() {
     let parse = |text: &str| whiteboard_model::json::parse(text).expect("JSON");
     let contract = parse(
         r##"{"$schema": "x", "$defs": {"Tree": {"x-wb-external": true, "type": "object",
-            "properties": {"child": {"$ref": "#/$defs/Tree"}, "name": {"type": "string"}}}}}"##,
+            "properties": {"child": {"$ref": "#/$defs/Tree"}, "name": {"type": "string"}}},
+            "Holder": {"type": "object", "properties": {"t": {"$ref": "#/$defs/Tree"}},
+                "required": ["t"], "x-wb-order": ["t"], "x-wb-unknownKeys": "strip"}}}"##,
     );
     let host = Host {
         matchers: &[],
@@ -361,8 +365,17 @@ fn a_published_external_definition_that_names_itself_ends() {
     let tree = contracts.resolve(&format!("{PATH}#/$defs/Tree")).expect("Tree");
     let published = parse(
         r##"{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
-            "properties": {"child": {"$ref": "#/$defs/Tree"}, "name": {"type": "string"}},
+            "properties": {"child": {"$ref": "#"}, "name": {"type": "string"}},
             "additionalProperties": false}"##,
     );
     assert_eq!(contracts.published(tree), Some(published));
+    let holder = contracts.resolve(&format!("{PATH}#/$defs/Holder")).expect("Holder");
+    let published = parse(
+        r##"{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
+            "properties": {"t": {"$ref": "#/$defs/__schema0"}}, "required": ["t"],
+            "additionalProperties": false, "$defs": {"__schema0": {"type": "object",
+                "properties": {"child": {"$ref": "#/$defs/__schema0"},
+                    "name": {"type": "string"}}, "additionalProperties": false}}}"##,
+    );
+    assert_eq!(contracts.published(holder), Some(published));
 }

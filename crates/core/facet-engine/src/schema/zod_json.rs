@@ -8,7 +8,11 @@
 //!   registers (`x-wb-registered`) is written once under `$defs` at its end,
 //!   in the order first met, and named by `$ref` wherever it is used;
 //!   registering replaces a description, so a registered one has none;
-//! - any other reference is the definition it names, inlined;
+//! - any other reference is the definition it names, inlined, but for one
+//!   back into a definition being written (an external one is not compiled,
+//!   so nothing refuses its cycle at load): that is a recursion, written as
+//!   Zod writes one, `#` when it names the root and otherwise
+//!   `#/$defs/__schema<n>`, the definition moved under `$defs` by that name;
 //! - a string is `type`, `minLength`, `pattern`; a constant or an enum is
 //!   `type` then `const` or `enum`; a number `type` then its bound; a named
 //!   check writes nothing;
@@ -98,7 +102,8 @@ fn members_of(value: Value) -> Map {
 /// The definition `name` of the scope `scope` as Zod's JSON Schema, or `None`
 /// for a name the scope does not hold.
 pub(super) fn publish(scopes: &[Scope], scope: usize, name: &str) -> Option<Value> {
-    let mut writer = Writer { scopes, registered: Vec::new(), open: Vec::new() };
+    let mut writer =
+        Writer { scopes, registered: Vec::new(), open: Vec::new(), cyclic: Vec::new() };
     let root = writer.definition(scope, name)?;
     let mut out = vec![member("$schema", string(DIALECT))];
     out.extend(members_of(root));
@@ -112,8 +117,11 @@ struct Writer<'s> {
     scopes: &'s [Scope],
     registered: Map,
     /// The definitions being inlined: an external one is not compiled, so a
-    /// reference back into one is not refused at load and is kept as written.
+    /// reference back into one is not refused at load.
     open: Vec<(usize, String)>,
+    /// Each definition met again inside itself, and the pointer its uses
+    /// are written as.
+    cyclic: Vec<((usize, String), String)>,
 }
 
 impl<'s> Writer<'s> {
@@ -141,17 +149,45 @@ impl<'s> Writer<'s> {
             }
             return Some(reference);
         }
-        if self.open.iter().any(|(at, held)| *at == scope && held == name) {
-            return Some(reference);
+        let key = (scope, name.to_owned());
+        if self.open.contains(&key) {
+            return Some(self.recursion(key));
         }
-        self.open.push((scope, name.to_owned()));
+        self.open.push(key);
         let body = self.node(scope, written);
-        self.open.pop();
+        let key = self.open.pop()?;
         let capped = get(written, "maxProperties").is_some();
-        match self.description(scope, written) {
-            Some(text) if !capped => Some(Value::Map(described(members_of(body), text))),
+        let body = match self.description(scope, written) {
+            Some(text) if !capped => Value::Map(described(members_of(body), text)),
+            _ => body,
+        };
+        match self.cyclic.iter().find(|(held, _)| *held == key) {
+            Some((_, pointer)) if pointer != "#" => {
+                let pointer = pointer.clone();
+                let id = pointer.trim_start_matches("#/$defs/").to_owned();
+                self.registered.push(member(&id, body));
+                Some(Value::Map(vec![member("$ref", Value::String(pointer))]))
+            }
             _ => Some(body),
         }
+    }
+
+    /// A reference back into a definition being written, as Zod writes a
+    /// recursion: `#` for the root, and otherwise the next `__schema<n>`
+    /// under `$defs`, where the definition is moved once written.
+    fn recursion(&mut self, key: (usize, String)) -> Value {
+        let pointer = match self.cyclic.iter().find(|(held, _)| *held == key) {
+            Some((_, pointer)) => pointer.clone(),
+            None => {
+                let root = self.open.first() == Some(&key);
+                let extracted = self.cyclic.iter().filter(|(_, p)| p != "#").count();
+                let pointer =
+                    if root { "#".to_owned() } else { format!("#/$defs/__schema{extracted}") };
+                self.cyclic.push((key, pointer.clone()));
+                pointer
+            }
+        };
+        Value::Map(vec![member("$ref", Value::String(pointer))])
     }
 
     /// What the generator describes `written` with, if anything.
