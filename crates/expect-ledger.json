@@ -8,6 +8,18 @@
       "reason": "a JSON-RPC id read as the integer JavaScript reads, checked whole and within 2^53 beside the cast"
     },
     {
+      "crate": "crates/ops/ops",
+      "lint": "clippy::cast_possible_truncation",
+      "count": 1,
+      "reason": "a count a text-limit breach carries, which the judge writes as the double of a u32: a whole number in range"
+    },
+    {
+      "crate": "crates/ops/ops",
+      "lint": "clippy::cast_sign_loss",
+      "count": 1,
+      "reason": "the same count as cast_possible_truncation: written from a u32, never negative"
+    },
+    {
       "crate": "crates/bindings/wasm",
       "lint": "clippy::cast_possible_truncation",
       "count": 2,

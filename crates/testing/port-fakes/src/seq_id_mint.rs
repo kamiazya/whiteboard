@@ -6,6 +6,8 @@ use whiteboard_ports::IdMint;
 #[derive(Debug)]
 pub struct SeqIdMint {
     next_peer: AtomicU64,
+    /// How far each peer id moves the next: 1, or 0 for one replica throughout.
+    step: u64,
     next_byte: AtomicU64,
 }
 
@@ -13,13 +15,20 @@ impl SeqIdMint {
     /// A mint whose first peer id is `first_peer`, and whose bytes start at 0.
     #[must_use]
     pub fn new(first_peer: u64) -> Self {
-        Self { next_peer: AtomicU64::new(first_peer), next_byte: AtomicU64::new(0) }
+        Self { next_peer: AtomicU64::new(first_peer), step: 1, next_byte: AtomicU64::new(0) }
+    }
+
+    /// A mint answering `peer` for every peer id, as a keeper whose every
+    /// record writes as one replica does.
+    #[must_use]
+    pub fn one_peer(peer: u64) -> Self {
+        Self { next_peer: AtomicU64::new(peer), step: 0, next_byte: AtomicU64::new(0) }
     }
 }
 
 impl IdMint for SeqIdMint {
     fn peer_id(&self) -> u64 {
-        self.next_peer.fetch_add(1, Ordering::SeqCst)
+        self.next_peer.fetch_add(self.step, Ordering::SeqCst)
     }
 
     /// The bytes 0, 1, 2, … wrapping at 256, continuing across calls.
@@ -36,6 +45,12 @@ mod tests {
     fn peer_ids_count_up_from_the_first() {
         let mint = SeqIdMint::new(7);
         assert_eq!([mint.peer_id(), mint.peer_id(), mint.peer_id()], [7, 8, 9]);
+    }
+
+    #[test]
+    fn one_peer_answers_the_same_id_every_time() {
+        let mint = SeqIdMint::one_peer(42);
+        assert_eq!([mint.peer_id(), mint.peer_id(), mint.peer_id()], [42, 42, 42]);
     }
 
     #[test]

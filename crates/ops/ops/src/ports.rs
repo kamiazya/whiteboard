@@ -1,7 +1,8 @@
 //! The ports an operation runs over, as one bundle.
 
 use whiteboard_ports::{
-    Caller, MaybeSync, VersionStore, WorkspaceLock, WorkspaceRecordStore, WorkspaceRegistry,
+    Caller, ClientNotifier, Clock, IdMint, MaybeSync, VersionStore, WorkspaceLock,
+    WorkspaceRecordStore, WorkspaceRegistry, WriteObserver,
 };
 
 /// Everything an operation may reach the outside through. A composition root
@@ -21,6 +22,14 @@ pub trait Ports: MaybeSync {
     /// The workspace write lock every writer holds for its whole write, so a
     /// write of several documents is one point in time.
     type Lock: WorkspaceLock + MaybeSync;
+    /// The time a write stamps.
+    type Clock: Clock + MaybeSync;
+    /// The replica a write to a record writes as.
+    type Mint: IdMint + MaybeSync;
+    /// The pages a document is open in.
+    type Notifier: ClientNotifier + MaybeSync;
+    /// What a keeper does once a document's content was written.
+    type Observer: WriteObserver + MaybeSync;
 
     fn records(&self) -> &Self::Records;
 
@@ -31,4 +40,12 @@ pub trait Ports: MaybeSync {
     fn versions(&self) -> &Self::Versions;
 
     fn lock(&self) -> &Self::Lock;
+
+    fn clock(&self) -> &Self::Clock;
+
+    fn mint(&self) -> &Self::Mint;
+
+    fn notifier(&self) -> &Self::Notifier;
+
+    fn observer(&self) -> &Self::Observer;
 }

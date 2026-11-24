@@ -8,6 +8,7 @@
 //! cross-target` and `cargo xtask wasm-imports` hold.
 
 pub mod caller;
+pub mod client_notifier;
 pub mod clock;
 pub mod error;
 pub mod id_mint;
@@ -16,8 +17,10 @@ pub mod maybe_send;
 pub mod record_store;
 pub mod version_store;
 pub mod workspace_registry;
+pub mod write_observer;
 
 pub use caller::{Caller, SINGLE_PERSON_NAMESPACE};
+pub use client_notifier::{ClientNotifier, RestorePhase, RestoreProgress};
 pub use clock::Clock;
 pub use error::{PortError, PortErrorKind, SnapshotReassemblyCode, StoredUnreadableCode};
 pub use id_mint::IdMint;
@@ -26,3 +29,4 @@ pub use maybe_send::{MaybeSend, MaybeSync};
 pub use record_store::WorkspaceRecordStore;
 pub use version_store::{NewVersion, OperatorKind, SavedVersion, VersionOperator, VersionStore};
 pub use workspace_registry::{WorkspaceEntry, WorkspaceLookup, WorkspaceRegistry};
+pub use write_observer::{DocumentWritten, WriteObserver};

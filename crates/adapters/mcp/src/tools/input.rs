@@ -43,6 +43,11 @@ pub(crate) enum Kind {
     /// An optional non-empty string of at most `max` UTF-16 units, refused
     /// past it with `too_big`.
     Bounded { max: usize, too_big: &'static str },
+    /// The same string, required.
+    RequiredBounded { max: usize, too_big: &'static str },
+    /// An optional document path: `utf16Max(z.string().min(1), max)` refined
+    /// by `segments`, which Zod judges whatever the length checks said.
+    Path { max: usize, segments: Refined },
     /// An optional array of refined strings, `min` to `max` items long,
     /// refused past `max` with `too_big`.
     Listed { min: usize, max: usize, too_big: &'static str, item: Refined },
@@ -113,6 +118,11 @@ fn field_issues(path: &str, kind: &Kind, value: Option<&Value>) -> Vec<String> {
             Some(_) => list_issues(path, (*min, *max), Some(too_big), item, value),
         },
         Kind::Bounded { max, too_big } => bounded_issues(path, *max, too_big, value),
+        Kind::RequiredBounded { max, too_big } => match value {
+            None => vec![expected(path, "string", None)],
+            Some(_) => bounded_issues(path, *max, too_big, value),
+        },
+        Kind::Path { max, segments } => path_issues(path, *max, segments, value),
         Kind::Whole { min, max } => whole_issues(path, (*min, *max), value),
         Kind::Object(fields) => match value {
             None => Vec::new(),
@@ -199,6 +209,20 @@ fn sized_issues(path: &str, (min, max): (usize, usize), value: Option<&Value>) -
             .collect(),
         _ => vec![expected(path, "string", value)],
     }
+}
+
+/// An optional document path: its length as `sized_issues` judges it, then
+/// its segments, which Zod judges after a length issue too, since neither
+/// aborts; a value that is no string is judged for its length alone.
+fn path_issues(path: &str, max: usize, segments: &Refined, value: Option<&Value>) -> Vec<String> {
+    let Some(given) = value else { return Vec::new() };
+    let mut issues = sized_issues(path, (1, max), Some(given));
+    if let Value::String(text) = given
+        && !(segments.test)(text)
+    {
+        issues.push(at(path, segments.message));
+    }
+    issues
 }
 
 /// An optional string of one character to `max`, then at most `max` UTF-16

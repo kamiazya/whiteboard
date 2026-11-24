@@ -90,36 +90,58 @@ fn a_document_neither_its_content_nor_its_index_row_gives_a_kind_is_failed() {
     assert_eq!(read, Ok(Err(kind_unknown(id))));
 }
 
+use whiteboard_port_fakes::{
+    FixedCaller, MemoryRecordStore, MemoryRegistry, MemoryVersionStore, block_on,
+};
+
+/// A workspace no store holds a record of, read without a lock or a version.
+struct Empty(MemoryRecordStore, MemoryRegistry, FixedCaller);
+impl Ports for Empty {
+    type Records = MemoryRecordStore;
+    type Registry = MemoryRegistry;
+    type Caller = FixedCaller;
+    type Versions = MemoryVersionStore;
+    type Lock = whiteboard_port_fakes::KeyedLock;
+    type Clock = whiteboard_port_fakes::FixedClock;
+    type Mint = whiteboard_port_fakes::SeqIdMint;
+    type Notifier = whiteboard_port_fakes::RecordingNotifier;
+    type Observer = whiteboard_port_fakes::RecordingObserver;
+    fn records(&self) -> &MemoryRecordStore {
+        &self.0
+    }
+    fn registry(&self) -> &MemoryRegistry {
+        &self.1
+    }
+    fn caller(&self) -> &FixedCaller {
+        &self.2
+    }
+    fn versions(&self) -> &MemoryVersionStore {
+        unreachable!("a document read lists no version")
+    }
+
+    fn clock(&self) -> &whiteboard_port_fakes::FixedClock {
+        unreachable!("nothing here writes a record")
+    }
+
+    fn mint(&self) -> &whiteboard_port_fakes::SeqIdMint {
+        unreachable!("nothing here writes a record")
+    }
+
+    fn notifier(&self) -> &whiteboard_port_fakes::RecordingNotifier {
+        unreachable!("nothing here writes a record")
+    }
+
+    fn observer(&self) -> &whiteboard_port_fakes::RecordingObserver {
+        unreachable!("nothing here writes a record")
+    }
+
+    fn lock(&self) -> &whiteboard_port_fakes::KeyedLock {
+        unreachable!("a read takes no lock")
+    }
+}
+
 #[test]
 fn a_workspace_the_store_holds_no_record_of_is_refused() {
-    use whiteboard_port_fakes::{
-        FixedCaller, MemoryRecordStore, MemoryRegistry, MemoryVersionStore, block_on,
-    };
-
-    struct Empty(MemoryRecordStore, MemoryRegistry, FixedCaller);
-    impl Ports for Empty {
-        type Records = MemoryRecordStore;
-        type Registry = MemoryRegistry;
-        type Caller = FixedCaller;
-        type Versions = MemoryVersionStore;
-        type Lock = whiteboard_port_fakes::KeyedLock;
-        fn records(&self) -> &MemoryRecordStore {
-            &self.0
-        }
-        fn registry(&self) -> &MemoryRegistry {
-            &self.1
-        }
-        fn caller(&self) -> &FixedCaller {
-            &self.2
-        }
-        fn versions(&self) -> &MemoryVersionStore {
-            unreachable!("a document read lists no version")
-        }
-
-        fn lock(&self) -> &whiteboard_port_fakes::KeyedLock {
-            unreachable!("a read takes no lock")
-        }
-    }
     let ports = Empty(MemoryRecordStore::new(), MemoryRegistry::new(), FixedCaller::new());
     let input = DocumentGetInput {
         workspace_id: "w".to_owned(),

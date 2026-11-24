@@ -12,6 +12,8 @@ mod keyed_lock;
 mod memory_record_store;
 mod memory_registry;
 mod memory_version_store;
+mod recording_notifier;
+mod recording_observer;
 mod seq_id_mint;
 #[cfg(test)]
 mod within;
@@ -23,4 +25,6 @@ pub use keyed_lock::{Acquire, KeyedGuard, KeyedLock};
 pub use memory_record_store::{MemoryRecordStore, Merge};
 pub use memory_registry::MemoryRegistry;
 pub use memory_version_store::MemoryVersionStore;
+pub use recording_notifier::RecordingNotifier;
+pub use recording_observer::RecordingObserver;
 pub use seq_id_mint::SeqIdMint;
