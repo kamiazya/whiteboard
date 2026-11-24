@@ -163,75 +163,73 @@ fn properties_are_written_in_the_order_the_contract_names() {
     assert_eq!(published(reordered, "Pair"), Some(parse(zod)));
 }
 
+/// A contract definitions are left to that the dialect could not compile.
+const UNCOMPILED: &str = r##"{"$defs": {
+    "Odd": {"type": "object", "properties": 5},
+    "Listed": {"type": "array", "items": 7},
+    "Ordered": {"type": "object", "properties": {"a": {"type": "string"}},
+        "x-wb-order": [1, "a", "ghost"], "x-wb-unknownKeys": "keep"},
+    "Lost": {"type": "object", "propertyNames": {"$ref": "#/$defs/Nowhere"},
+        "additionalProperties": {"$ref": "elsewhere"}},
+    "Afar": {"type": "object", "propertyNames": {"$ref": "elsewhere"},
+        "additionalProperties": {"$ref": "#/$defs/Nowhere"}},
+    "Twice": {"type": "object", "properties": {
+        "l": {"$ref": "#/$defs/Twice"}, "r": {"$ref": "#/$defs/Twice"}}},
+    "Tree": {"type": "object", "properties": {"child": {"$ref": "#/$defs/Tree"}}},
+    "Root": {"type": "object", "required": ["t"],
+        "properties": {"again": {"$ref": "#/$defs/Root"}, "t": {"$ref": "#/$defs/Tree"}}}
+}}"##;
+const LEFT_NAMES: [&str; 7] = ["Odd", "Listed", "Ordered", "Twice", "Lost", "Afar", "Root"];
+
+/// `name` of a contract that leaves every one of [`LEFT_NAMES`] to
+/// [`UNCOMPILED`], as published.
+fn published_left(name: &str) -> Option<Value> {
+    const LEFT: External = External::Defined { contract: UNCOMPILED, validator: None };
+    let externals: Vec<(&str, External)> = LEFT_NAMES.iter().map(|name| (*name, LEFT)).collect();
+    let host = Host { matchers: &[], checks: &[], externals: &externals };
+    let left = |name: &str| format!(r#""{name}": {{"type": "string", "x-wb-external": "m"}}"#);
+    let defs: Vec<String> = LEFT_NAMES.iter().map(|name| left(name)).collect();
+    let contract = parse(&format!(r#"{{"$defs": {{{}}}}}"#, defs.join(",")));
+    let contracts = Contracts::load(&[("c.json", &contract)], &host).expect("it compiles");
+    contracts.published(contracts.resolve(&format!("c.json#/$defs/{name}")).expect("held"))
+}
+
+const DIALECT: &str = r#""$schema":"https://json-schema.org/draft/2020-12/schema""#;
+
+fn object(properties: &str) -> Value {
+    parse(&format!(
+        r#"{{{DIALECT},"type":"object","properties":{properties},"additionalProperties":false}}"#
+    ))
+}
+
 /// A contract a definition is left to is not compiled, so it is published
 /// however it is written: a member of a shape the dialect does not have and
 /// a reference nothing answers to constrain nothing, an order names what it
-/// can, kept unknown keys are any value, and a root referenced twice inside
-/// itself is `#` both times.
+/// can, and kept unknown keys are any value.
 #[test]
 fn a_definition_left_to_an_uncompiled_contract_is_published_as_written() {
-    const OTHER: &str = r##"{"$defs": {
-        "Odd": {"type": "object", "properties": 5},
-        "Listed": {"type": "array", "items": 7},
-        "Ordered": {"type": "object", "properties": {"a": {"type": "string"}},
-            "x-wb-order": [1, "a", "ghost"], "x-wb-unknownKeys": "keep"},
-        "Lost": {"type": "object", "propertyNames": {"$ref": "#/$defs/Nowhere"},
-            "additionalProperties": {"$ref": "elsewhere"}},
-        "Afar": {"type": "object", "propertyNames": {"$ref": "elsewhere"},
-            "additionalProperties": {"$ref": "#/$defs/Nowhere"}},
-        "Twice": {"type": "object", "properties": {
-            "l": {"$ref": "#/$defs/Twice"}, "r": {"$ref": "#/$defs/Twice"}}},
-        "Tree": {"type": "object", "properties": {"child": {"$ref": "#/$defs/Tree"}}},
-        "Root": {"type": "object", "required": ["t"],
-            "properties": {"again": {"$ref": "#/$defs/Root"}, "t": {"$ref": "#/$defs/Tree"}}}
-    }}"##;
-    const LEFT: External = External::Defined { contract: OTHER, validator: None };
-    let host = Host {
-        matchers: &[],
-        checks: &[],
-        externals: &[
-            ("Odd", LEFT),
-            ("Listed", LEFT),
-            ("Ordered", LEFT),
-            ("Twice", LEFT),
-            ("Lost", LEFT),
-            ("Afar", LEFT),
-            ("Root", LEFT),
-        ],
-    };
-    let left = |name: &str| format!(r#""{name}": {{"type": "string", "x-wb-external": "m"}}"#);
-    let names = ["Odd", "Listed", "Ordered", "Twice", "Lost", "Afar", "Root"];
-    let defs: Vec<String> = names.iter().map(|name| left(name)).collect();
-    let contract = parse(&format!(r#"{{"$defs": {{{}}}}}"#, defs.join(",")));
-    let contracts = Contracts::load(&[("c.json", &contract)], &host).expect("it compiles");
-    let published = |name: &str| {
-        contracts.published(contracts.resolve(&format!("c.json#/$defs/{name}")).expect("held"))
-    };
-    let dialect = r#""$schema":"https://json-schema.org/draft/2020-12/schema""#;
-    let object = |properties: &str| {
-        parse(&format!(
-            r#"{{{dialect},"type":"object","properties":{properties},"additionalProperties":false}}"#
-        ))
-    };
-    assert_eq!(published("Odd"), Some(object("{}")));
-    assert_eq!(
-        published("Listed"),
-        Some(parse(&format!(r#"{{{dialect},"type":"array","items":{{}}}}"#)))
-    );
+    assert_eq!(published_left("Odd"), Some(object("{}")));
+    let listed = format!(r#"{{{DIALECT},"type":"array","items":{{}}}}"#);
+    assert_eq!(published_left("Listed"), Some(parse(&listed)));
     let kept = format!(
-        r#"{{{dialect},"type":"object","properties":{{"a":{{"type":"string"}}}},"additionalProperties":{{}}}}"#
+        r#"{{{DIALECT},"type":"object","properties":{{"a":{{"type":"string"}}}},"additionalProperties":{{}}}}"#
     );
-    assert_eq!(published("Ordered"), Some(parse(&kept)));
+    assert_eq!(published_left("Ordered"), Some(parse(&kept)));
     let open = format!(
-        r#"{{{dialect},"type":"object","propertyNames":{{}},"additionalProperties":{{}}}}"#
+        r#"{{{DIALECT},"type":"object","propertyNames":{{}},"additionalProperties":{{}}}}"#
     );
-    assert_eq!(published("Lost"), Some(parse(&open)));
-    assert_eq!(published("Afar"), Some(parse(&open)));
-    assert_eq!(published("Twice"), Some(object(r##"{"l":{"$ref":"#"},"r":{"$ref":"#"}}"##)));
-    // A recursion into the root is `#` and takes no `__schema<n>` number
-    // (`registry.rs` holds the same shapes to Zod's output).
+    assert_eq!(published_left("Lost"), Some(parse(&open)));
+    assert_eq!(published_left("Afar"), Some(parse(&open)));
+}
+
+/// A root referenced twice inside itself is `#` both times, and a recursion
+/// into the root takes no `__schema<n>` number (`registry.rs` holds the same
+/// shapes to Zod's output).
+#[test]
+fn a_recursion_left_to_an_uncompiled_contract_is_written_as_zod_writes_one() {
+    assert_eq!(published_left("Twice"), Some(object(r##"{"l":{"$ref":"#"},"r":{"$ref":"#"}}"##)));
     let root = format!(
-        r##"{{{dialect},"type":"object","properties":{{"again":{{"$ref":"#"}},"t":{{"$ref":"#/$defs/__schema0"}}}},"required":["t"],"additionalProperties":false,"$defs":{{"__schema0":{{"type":"object","properties":{{"child":{{"$ref":"#/$defs/__schema0"}}}},"additionalProperties":false}}}}}}"##
+        r##"{{{DIALECT},"type":"object","properties":{{"again":{{"$ref":"#"}},"t":{{"$ref":"#/$defs/__schema0"}}}},"required":["t"],"additionalProperties":false,"$defs":{{"__schema0":{{"type":"object","properties":{{"child":{{"$ref":"#/$defs/__schema0"}}}},"additionalProperties":false}}}}}}"##
     );
-    assert_eq!(published("Root"), Some(parse(&root)));
+    assert_eq!(published_left("Root"), Some(parse(&root)));
 }
