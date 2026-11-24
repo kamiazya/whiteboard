@@ -18,7 +18,9 @@
 use serde_json::{Value, json};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
-use whiteboard_mcp::{Identity, OpsCatalogue, PENDING_TOOLS, Server, ToolCatalogue};
+use whiteboard_mcp::{
+    Identity, OpsCatalogue, PARTLY_BOUND_TOOLS, PENDING_TOOLS, Server, ToolCatalogue,
+};
 use whiteboard_model::encoding::base64_to_bytes;
 use whiteboard_ops::Ports;
 use whiteboard_port_fakes::{
@@ -49,7 +51,10 @@ impl Ports for Fakes {
     type Caller = FixedCaller;
     type Versions = MemoryVersionStore;
     type Lock = whiteboard_port_fakes::KeyedLock;
+    type Clock = whiteboard_port_fakes::FixedClock;
+    type Mint = whiteboard_port_fakes::SeqIdMint;
     type Notifier = whiteboard_port_fakes::RecordingNotifier;
+    type Observer = whiteboard_port_fakes::RecordingObserver;
 
     fn records(&self) -> &MemoryRecordStore {
         &self.0
@@ -65,6 +70,18 @@ impl Ports for Fakes {
 
     fn versions(&self) -> &MemoryVersionStore {
         &self.3
+    }
+
+    fn clock(&self) -> &whiteboard_port_fakes::FixedClock {
+        unreachable!("nothing here writes a record")
+    }
+
+    fn mint(&self) -> &whiteboard_port_fakes::SeqIdMint {
+        unreachable!("nothing here writes a record")
+    }
+
+    fn observer(&self) -> &whiteboard_port_fakes::RecordingObserver {
+        unreachable!("nothing here writes a record")
     }
 
     fn lock(&self) -> &whiteboard_port_fakes::KeyedLock {
@@ -219,6 +236,39 @@ fn every_listed_tool_is_called_through_its_binding() {
     }
 }
 
+/// Zod 4 judges the bounds of any value with a numeric `length`, so an object
+/// given for a string is refused for its type and then its length.
+#[test]
+fn an_object_given_for_a_string_is_judged_for_its_length_too() {
+    let refusal = |name: &str, arguments: Value| {
+        let answer = block_on(server(nothing()).handle(&json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": name, "arguments": arguments } })))
+        .expect("an answer");
+        answer["result"]["content"][0]["text"].as_str().unwrap_or_default().to_owned()
+    };
+    let wrong = "Invalid input: expected string, received object";
+    let label = refusal("wb_version_save", json!({ "label": { "length": 0 } }));
+    assert!(
+        label.contains(&format!("label: {wrong}, label: Too small: expected unknown to be >=1")),
+        "{label}"
+    );
+    let query = refusal("wb_document_search", json!({ "query": { "length": 2000 } }));
+    assert!(
+        query.contains(&format!(
+            "query: {wrong}, query: a search query is longer than the 1024-character limit"
+        )),
+        "{query}"
+    );
+    let version = refusal("wb_version_restore", json!({ "versionId": { "length": 2000 } }));
+    assert!(
+        version.contains(&format!(
+            "versionId: {wrong}, versionId: a version id is longer than the 256-character limit for one id"
+        )),
+        "{version}"
+    );
+}
+
 #[test]
 fn a_pending_tool_is_not_listed_and_not_found() {
     let catalogue = OpsCatalogue::new(nothing());
@@ -226,6 +276,9 @@ fn a_pending_tool_is_not_listed_and_not_found() {
         catalogue.tools().into_iter().map(|tool| tool["name"].clone()).collect();
     for name in PENDING_TOOLS {
         assert!(!listed.contains(&json!(name)), "{name} is pending and listed");
+        if PARTLY_BOUND_TOOLS.contains(name) {
+            continue;
+        }
         let answer = block_on(server(nothing()).handle(&json!({
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": { "name": name, "arguments": {} } })))
@@ -272,15 +325,27 @@ fn the_listed_and_pending_tools_are_named_once() {
     assert_eq!(named.len(), total);
 }
 
-/// Every tool the ops table names is listed, so an operation that gains a
-/// tool cannot go unserved.
+/// Every tool the ops table names is listed or partly bound, so an operation
+/// that gains a tool cannot go unserved; a partly bound tool is a pending one.
 #[test]
-fn every_tool_the_ops_table_names_is_listed() {
+fn every_tool_the_ops_table_names_is_listed_or_partly_bound() {
     let catalogue = OpsCatalogue::new(nothing());
     let listed: Vec<Value> =
         catalogue.tools().into_iter().map(|tool| tool["name"].clone()).collect();
-    let tools: Vec<Value> =
-        whiteboard_ops::OPERATIONS.iter().filter_map(|row| row.tool).map(Value::from).collect();
+    for name in PARTLY_BOUND_TOOLS {
+        assert!(PENDING_TOOLS.contains(name), "{name} is partly bound and not pending");
+    }
+    let tools: Vec<Value> = whiteboard_ops::OPERATIONS
+        .iter()
+        .filter_map(|row| row.tool)
+        .filter(|tool| !PARTLY_BOUND_TOOLS.contains(tool))
+        .map(Value::from)
+        .collect();
+    let bound = whiteboard_ops::OPERATIONS.iter().filter_map(|row| row.tool);
+    assert_eq!(
+        bound.filter(|tool| PARTLY_BOUND_TOOLS.contains(tool)).count(),
+        PARTLY_BOUND_TOOLS.len()
+    );
     assert!(!tools.is_empty(), "the table names a tool");
     assert_eq!(listed, tools);
 }

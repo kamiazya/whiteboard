@@ -48,7 +48,9 @@ mod operation;
 mod ports;
 mod record;
 mod table;
+mod text_refusal;
 mod version_list;
+mod version_restore;
 mod version_save;
 mod viewport_set;
 
@@ -74,6 +76,9 @@ pub use operation::{Contract, Method, Operation, Route, Row};
 pub use ports::Ports;
 pub use table::{OPERATIONS, Visit, each_operation};
 pub use version_list::{VersionList, VersionListInput, VersionListOutput};
+pub use version_restore::{
+    RestorePending, VersionRestore, VersionRestoreAnswer, VersionRestoreInput, VersionRestored,
+};
 pub use version_save::{SavedDocumentVersion, VersionSave, VersionSaveInput, VersionSaveOutput};
 pub use viewport_set::{ViewportSet, ViewportSetAnswer};
 /// The facet vocabulary a listing is filtered by, as the engine names it.

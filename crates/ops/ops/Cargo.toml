@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 whiteboard-api-contracts = { path = "../api-contracts" }
 whiteboard-codec = { path = "../../core/codec" }
+whiteboard-crdt = { path = "../../core/crdt" }
 whiteboard-facet-engine = { path = "../../core/facet-engine" }
 whiteboard-model = { path = "../../core/model" }
 whiteboard-plugin-visual = { path = "../../core/plugin-visual" }

@@ -20,7 +20,10 @@ impl Ports for Fakes {
     type Caller = FixedCaller;
     type Versions = MemoryVersionStore;
     type Lock = whiteboard_port_fakes::KeyedLock;
+    type Clock = whiteboard_port_fakes::FixedClock;
+    type Mint = whiteboard_port_fakes::SeqIdMint;
     type Notifier = whiteboard_port_fakes::RecordingNotifier;
+    type Observer = whiteboard_port_fakes::RecordingObserver;
 
     fn records(&self) -> &MemoryRecordStore {
         &self.records
@@ -36,6 +39,18 @@ impl Ports for Fakes {
 
     fn versions(&self) -> &MemoryVersionStore {
         unreachable!("an address reads no version")
+    }
+
+    fn clock(&self) -> &whiteboard_port_fakes::FixedClock {
+        unreachable!("nothing here writes a record")
+    }
+
+    fn mint(&self) -> &whiteboard_port_fakes::SeqIdMint {
+        unreachable!("nothing here writes a record")
+    }
+
+    fn observer(&self) -> &whiteboard_port_fakes::RecordingObserver {
+        unreachable!("nothing here writes a record")
     }
 
     fn lock(&self) -> &whiteboard_port_fakes::KeyedLock {
@@ -229,7 +244,10 @@ impl Ports for (MemoryRegistry, Unreadable) {
     type Caller = Unreadable;
     type Versions = MemoryVersionStore;
     type Lock = whiteboard_port_fakes::KeyedLock;
+    type Clock = whiteboard_port_fakes::FixedClock;
+    type Mint = whiteboard_port_fakes::SeqIdMint;
     type Notifier = whiteboard_port_fakes::RecordingNotifier;
+    type Observer = whiteboard_port_fakes::RecordingObserver;
 
     fn records(&self) -> &MemoryRecordStore {
         unreachable!("an unknown address reads no record")
@@ -245,6 +263,18 @@ impl Ports for (MemoryRegistry, Unreadable) {
 
     fn versions(&self) -> &MemoryVersionStore {
         unreachable!("an address reads no version")
+    }
+
+    fn clock(&self) -> &whiteboard_port_fakes::FixedClock {
+        unreachable!("nothing here writes a record")
+    }
+
+    fn mint(&self) -> &whiteboard_port_fakes::SeqIdMint {
+        unreachable!("nothing here writes a record")
+    }
+
+    fn observer(&self) -> &whiteboard_port_fakes::RecordingObserver {
+        unreachable!("nothing here writes a record")
     }
 
     fn lock(&self) -> &whiteboard_port_fakes::KeyedLock {

@@ -17,13 +17,14 @@ mod facet_list;
 mod input;
 mod json;
 mod version_list;
+mod version_restore;
 mod version_save;
 mod viewport_set;
 
 use serde_json::{Map, Value, json};
 use whiteboard_ops::{
     DocumentGet, DocumentList, DocumentSearch, FacetList, Operation, Ports, VersionList,
-    VersionSave, ViewportSet, with_resolved_workspace,
+    VersionRestore, VersionSave, ViewportSet, with_resolved_workspace,
 };
 
 use crate::{ToolCatalogue, ToolError};
@@ -44,6 +45,11 @@ pub const PENDING_TOOLS: &[&str] = &[
     "wb_version_restore",
     "wb_workspace_edit",
 ];
+
+/// The pending tools a call already reaches: not listed, since most of what
+/// they do is not ported, but a call is judged and answered as far as the
+/// operation answers it, and the rest is `Tool <name> not found`.
+pub const PARTLY_BOUND_TOOLS: &[&str] = &["wb_version_restore"];
 
 /// An operation as a tool: its name and contract, its input as the SDK
 /// judges it, and its output as the tool answers it.
@@ -98,6 +104,7 @@ impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
             DocumentGet::NAME => run::<DocumentGet, P>(&self.ports, arguments).await,
             VersionList::NAME => run::<VersionList, P>(&self.ports, arguments).await,
             VersionSave::NAME => run::<VersionSave, P>(&self.ports, arguments).await,
+            VersionRestore::NAME => run::<VersionRestore, P>(&self.ports, arguments).await,
             FacetList::NAME => run::<FacetList, P>(&self.ports, arguments).await,
             DocumentSearch::NAME => run::<DocumentSearch, P>(&self.ports, arguments).await,
             ViewportSet::NAME => run::<ViewportSet, P>(&self.ports, arguments).await,

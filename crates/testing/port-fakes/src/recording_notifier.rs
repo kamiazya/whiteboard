@@ -2,15 +2,17 @@ use std::collections::BTreeSet;
 use std::future::{Future, ready};
 use std::sync::{Mutex, PoisonError};
 
-use whiteboard_ports::{ClientNotifier, MaybeSend, ViewportRequest};
+use whiteboard_ports::{ClientNotifier, MaybeSend, RestoreProgress, ViewportRequest};
 
 /// Pages held open in memory: the documents a ready page watches, and every
-/// viewport request handed over, in order. With none watched it is a keeper
-/// with no audience, which answers every request `false`.
+/// viewport request and restore event handed over, in order. With none
+/// watched it is a keeper with no audience, which answers every request
+/// `false`.
 #[derive(Debug, Default)]
 pub struct RecordingNotifier {
     watched: BTreeSet<(String, String)>,
     requests: Mutex<Vec<ViewportRequest>>,
+    restores: Mutex<Vec<RestoreProgress>>,
 }
 
 impl RecordingNotifier {
@@ -32,6 +34,13 @@ impl RecordingNotifier {
     pub fn requests(&self) -> Vec<ViewportRequest> {
         self.requests.lock().unwrap_or_else(PoisonError::into_inner).clone()
     }
+
+    /// Every restore event told so far, leaving none behind, so a test reads
+    /// what one call told.
+    #[must_use]
+    pub fn take_restores(&self) -> Vec<RestoreProgress> {
+        std::mem::take(&mut *self.restores.lock().unwrap_or_else(PoisonError::into_inner))
+    }
 }
 
 impl ClientNotifier for RecordingNotifier {
@@ -43,11 +52,17 @@ impl ClientNotifier for RecordingNotifier {
         let key = (request.workspace_id.clone(), request.document_id.clone());
         ready(self.watched.contains(&key))
     }
+
+    fn restore_progress(&self, event: &RestoreProgress) {
+        self.restores.lock().unwrap_or_else(PoisonError::into_inner).push(event.clone());
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use whiteboard_ports::{ClientNotifier, ViewportMode, ViewportRequest};
+    use whiteboard_ports::{
+        ClientNotifier, RestorePhase, RestoreProgress, ViewportMode, ViewportRequest,
+    };
 
     use super::RecordingNotifier;
     use crate::block_on;
@@ -79,5 +94,22 @@ mod tests {
         let pages = RecordingNotifier::new();
         assert!(!block_on(pages.request_viewport(&request("w", "d"))));
         assert_eq!(pages.requests().len(), 1);
+    }
+
+    fn restore(path: &str, phase: RestorePhase) -> RestoreProgress {
+        RestoreProgress { workspace_id: "w".into(), path: path.into(), phase, label: None }
+    }
+
+    #[test]
+    fn a_restore_told_is_kept_until_taken() {
+        let pages = RecordingNotifier::new();
+        pages.restore_progress(&restore("a", RestorePhase::Started));
+        pages.restore_progress(&restore("a", RestorePhase::Complete));
+        assert_eq!(
+            pages.take_restores(),
+            vec![restore("a", RestorePhase::Started), restore("a", RestorePhase::Complete)]
+        );
+        assert!(pages.take_restores().is_empty());
+        assert!(pages.requests().is_empty(), "a restore is no viewport request");
     }
 }

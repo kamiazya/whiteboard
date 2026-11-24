@@ -17,6 +17,7 @@ whiteboard-ops = { path = "../../ops/ops" }
 whiteboard-ports = { path = "../../ports/ports" }
 
 [dev-dependencies]
+whiteboard-crdt = { path = "../../core/crdt" }
 whiteboard-port-fakes = { path = "../../testing/port-fakes" }
 whiteboard-proptest = { path = "../../testing/proptest" }
 

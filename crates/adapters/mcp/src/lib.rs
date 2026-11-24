@@ -34,7 +34,8 @@
 //!   is the catalogue over the ops table: the ported tools as
 //!   `contracts/tools` publishes them, each call judged, its workspace
 //!   address resolved, run and answered as the TypeScript's wrapper answers
-//!   it; [`PENDING_TOOLS`] names the rest.
+//!   it; [`PENDING_TOOLS`] names the rest, of which [`PARTLY_BOUND_TOOLS`]
+//!   are reached by a call and answer what their operation ports.
 //! - **What is served**: `initialize`, `ping`, `logging/setLevel` (its level
 //!   kept for the notifier, [`Server::log_level`]), `tools/list` and
 //!   `tools/call`, and `Method not found` for anything else. The prompt and
@@ -57,4 +58,4 @@ mod tools;
 pub use catalogue::{ToolCatalogue, ToolError};
 pub use dispatch::{Identity, LogLevel, Server};
 pub use jsonrpc::{SUPPORTED_PROTOCOL_VERSIONS, code};
-pub use tools::{OpsCatalogue, PENDING_TOOLS};
+pub use tools::{OpsCatalogue, PARTLY_BOUND_TOOLS, PENDING_TOOLS};
