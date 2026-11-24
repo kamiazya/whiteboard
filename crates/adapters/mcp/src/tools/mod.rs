@@ -45,9 +45,9 @@ pub const PENDING_TOOLS: &[&str] = &[
 /// An operation as a tool: its name and contract, its input as the SDK
 /// judges it, and its output as the tool answers it.
 trait Binding: Operation {
-    const NAME: &'static str;
+    const NAME: &str;
     /// The contract file's text: the tool as `tools/list` publishes it.
-    const CONTRACT: &'static str;
+    const CONTRACT: &str;
     const INPUT: Input;
 
     /// The operation's input from arguments `INPUT` has passed, its workspace
