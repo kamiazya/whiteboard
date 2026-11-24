@@ -57,11 +57,19 @@ fn a_read_the_record_leaves_to_its_caller_is_pending() {
 }
 
 #[test]
-fn a_spatial_document_is_pending() {
+fn a_spatial_document_is_read_as_json_canvas_in_the_mode_asked() {
     let (record, ids) = recorded();
-    let id = ids["board"].as_str().expect("an id");
-    let read = read_one(Hosted { record: &record, document_id: id });
-    assert_eq!(read, Err(Stop::Pending(Pending::JsonCanvas(id.to_owned()))));
+    let id = ids["drawn"].as_str().expect("an id");
+    let read = |strict| {
+        let read = read_one(Hosted { record: &record, document_id: id }, strict);
+        read.expect("an answer").expect("a document")
+    };
+    let (extended, strict) = (read(false), read(true));
+    assert_eq!((extended.kind.as_str(), extended.frontmatter), ("spatial", None));
+    assert!(extended.content.starts_with(r#"{"nodes":[{"id":"f1""#), "{}", extended.content);
+    assert!(extended.content.contains("x-whiteboard"));
+    assert!(!strict.content.contains("x-whiteboard"), "{}", strict.content);
+    assert_eq!(strict.threads.len(), 1);
 }
 
 #[test]
@@ -69,7 +77,7 @@ fn a_repeated_id_is_read_once_where_it_first_appears() {
     let (record, ids) = recorded();
     let (bare, plan) = (ids["bare"].as_str().expect("id"), ids["plan"].as_str().expect("id"));
     let asked = [bare, plan, bare].map(str::to_owned).to_vec();
-    let output = read_all(&record, asked).expect("an answer");
+    let output = read_all(&record, asked, false).expect("an answer");
     let read: Vec<&str> = output.documents.iter().map(|d| d.document_id.as_str()).collect();
     assert_eq!(read, [bare, plan]);
 }
@@ -78,7 +86,7 @@ fn a_repeated_id_is_read_once_where_it_first_appears() {
 fn a_document_neither_its_content_nor_its_index_row_gives_a_kind_is_failed() {
     let (record, ids) = recorded();
     let id = ids["kindless"].as_str().expect("an id");
-    let read = read_known(Hosted { record: &record, document_id: id }, None, None);
+    let read = read_known(Hosted { record: &record, document_id: id }, None, None, false);
     assert_eq!(read, Ok(Err(kind_unknown(id))));
 }
 
@@ -102,8 +110,11 @@ fn a_workspace_the_store_holds_no_record_of_is_refused() {
         }
     }
     let ports = Empty(MemoryRecordStore::new(), MemoryRegistry::new(), FixedCaller::new());
-    let input =
-        DocumentGetInput { workspace_id: "w".to_owned(), document_ids: vec!["d".to_owned()] };
+    let input = DocumentGetInput {
+        workspace_id: "w".to_owned(),
+        document_ids: vec!["d".to_owned()],
+        strict: false,
+    };
     let refused = block_on(DocumentGet::execute(&ports, input));
     assert_eq!(refused, Err(Refusal::WorkspaceNotFoundInIndex { workspace_id: "w".to_owned() }));
 }
