@@ -10,11 +10,24 @@ pub(crate) async fn open_record(
     store: &impl WorkspaceRecordStore,
     workspace_id: &str,
 ) -> Result<WorkspaceRecord, PortError> {
+    Ok(load_record(store, workspace_id).await?.1)
+}
+
+/// [`open_record`], with the bytes it was opened from, which a writer writes
+/// over as a replica of its own.
+pub(crate) async fn load_record(
+    store: &impl WorkspaceRecordStore,
+    workspace_id: &str,
+) -> Result<(Vec<u8>, WorkspaceRecord), PortError> {
     let Some(bytes) = store.load(workspace_id).await? else {
         return Err(PortError::WorkspaceNotFound { workspace_id: workspace_id.to_owned() });
     };
-    WorkspaceRecord::open(&bytes).map_err(|cause| PortError::StoredDocumentUnreadable {
-        code: StoredUnreadableCode::Malformed,
-        message: format!("stored workspace document {workspace_id} could not be imported: {cause}"),
-    })
+    let record =
+        WorkspaceRecord::open(&bytes).map_err(|cause| PortError::StoredDocumentUnreadable {
+            code: StoredUnreadableCode::Malformed,
+            message: format!(
+                "stored workspace document {workspace_id} could not be imported: {cause}"
+            ),
+        })?;
+    Ok((bytes, record))
 }

@@ -16,13 +16,13 @@ use whiteboard_api_contracts::Refusal;
 use whiteboard_crdt::{DocumentKind, LoroDoc, document_kind, import_bytes, judge_state};
 use whiteboard_ports::{
     ClientNotifier, Clock, DocumentWritten, IdMint, NewVersion, PortError, RestorePhase,
-    RestoreProgress, StoredUnreadableCode, VersionStore, WorkspaceLock, WorkspaceRecordStore,
-    WriteObserver,
+    RestoreProgress, VersionStore, WorkspaceLock, WorkspaceRecordStore, WriteObserver,
 };
 use whiteboard_workspace_index::WorkspaceRecord;
 use whiteboard_workspace_index::document_path::is_document_path;
 
 use crate::document_resolve::resolve_in;
+use crate::record::load_record;
 use crate::text_refusal::text_breach_refusal;
 use crate::{Contract, Operation, Ports, Row};
 
@@ -138,35 +138,20 @@ struct Past<'a> {
     doc: LoroDoc,
 }
 
-/// The record of the workspace as its store holds it, and its bytes.
-async fn record_of(
-    store: &impl WorkspaceRecordStore,
-    workspace_id: &str,
-) -> Result<(Vec<u8>, WorkspaceRecord), PortError> {
-    let Some(bytes) = store.load(workspace_id).await? else {
-        return Err(PortError::WorkspaceNotFound { workspace_id: workspace_id.to_owned() });
-    };
-    let record =
-        WorkspaceRecord::open(&bytes).map_err(|cause| PortError::StoredDocumentUnreadable {
-            code: StoredUnreadableCode::Malformed,
-            message: format!(
-                "stored workspace document {workspace_id} could not be imported: {cause}"
-            ),
-        })?;
-    Ok((bytes, record))
+/// `VersionNotFoundError`: no version by that id in the document's history.
+fn not_found(document_id: &str, version_id: &str) -> Refusal {
+    Refusal::VersionNotFound {
+        document_id: document_id.to_owned(),
+        version_id: version_id.to_owned(),
+    }
 }
 
 /// The restore, answering the version's label once it landed.
 async fn restore<P: Ports>(ports: &P, input: &VersionRestoreInput) -> Result<Option<String>, Stop> {
     let ws = input.workspace_id.as_str();
-    let (bytes, record) = record_of(ports.records(), ws).await.map_err(|e| Stop::from(&e))?;
+    let (bytes, record) = load_record(ports.records(), ws).await.map_err(|e| Stop::from(&e))?;
     let entry = resolve_in(&record, ws, &input.document_id)?;
-    let not_found = || {
-        Stop::Refused(Refusal::VersionNotFound {
-            document_id: input.document_id.clone(),
-            version_id: input.version_id.clone(),
-        })
-    };
+    let not_found = || Stop::Refused(not_found(&input.document_id, &input.version_id));
     if !keeper_names(&input.version_id) {
         return Err(Stop::Pending(RestorePending::UnnamedVersionId));
     }
@@ -194,12 +179,13 @@ async fn restore<P: Ports>(ports: &P, input: &VersionRestoreInput) -> Result<Opt
     match input.target_path.as_deref() {
         Some(target) if target != path => into_target(ports, &record, &past, path, target, input),
         _ if input.subtree == Some(true) => {
-            match ports.versions().load_workspace_at(ws, &input.version_id).await {
-                Ok(None) => Err(Stop::Refused(Refusal::SubtreeNeedsWorkspaceVersion {
+            let versions = ports.versions();
+            let at = versions.load_workspace_at(ws, &input.version_id).await;
+            match at.map_err(|error| Stop::from(&error))? {
+                None => Err(Stop::Refused(Refusal::SubtreeNeedsWorkspaceVersion {
                     version_id: input.version_id.clone(),
                 })),
-                Ok(Some(_)) => Err(Stop::Pending(RestorePending::Subtree)),
-                Err(error) => Err(Stop::from(&error)),
+                Some(_) => Err(Stop::Pending(RestorePending::Subtree)),
             }
         }
         _ => in_place(ports, &bytes, &record, past, path).await,
@@ -332,13 +318,11 @@ async fn in_place<P: Ports>(
     if let Some(refusal) = judged(&past.doc, path, kind_at(record, path).as_deref())? {
         return Err(refused_between(notifier, &past, path, refusal));
     }
-    let Some(placed) = record.placed_document_at(path) else {
-        let gone = Refusal::VersionNotFound {
-            document_id: past.document_id.to_owned(),
-            version_id: past.version_id.to_owned(),
-        };
-        return Err(refused_between(notifier, &past, path, gone));
-    };
+    // The path is the one the document resolved to in this record, so a
+    // document is there; the TypeScript answers a vanished one as not found.
+    let (document, version) = (past.document_id, past.version_id);
+    let gone = || refused_between(notifier, &past, path, not_found(document, version));
+    let placed = record.placed_document_at(path).ok_or_else(gone)?;
     let document_id = placed.meta.document_id;
     let peer = ports.mint().peer_id();
     let written =

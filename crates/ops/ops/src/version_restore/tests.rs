@@ -219,3 +219,39 @@ fn a_restore_in_place_keeps_one_update_written_as_the_minted_replica() {
         .collect();
     assert_eq!(grown, [7], "only the minted replica wrote");
 }
+
+#[test]
+fn a_board_onto_a_note_is_refused_in_the_note_s_words() {
+    let (fakes, input) = fakes(MemoryRecordStore::new(), "board");
+    let asked = VersionRestoreInput {
+        target_path: Some("same".to_owned()),
+        overwrite: Some(true),
+        ..input
+    };
+    assert_eq!(
+        refused(&fakes, asked).message(),
+        "Document same is a markdown document. Restoring a spatial version onto it would replace its markdown body with a canvas. Restore into a new targetPath instead."
+    );
+    assert!(fakes.notifier.take_restores().is_empty(), "refused before anything is told");
+}
+
+#[test]
+fn a_record_the_store_cannot_read_is_refused() {
+    let (mut fakes, input) = fakes(MemoryRecordStore::new(), "plan");
+    fakes.records = MemoryRecordStore::new().holding(W, vec![1, 2, 3]);
+    assert_eq!(refused(&fakes, input.clone()).code(), "corrupt_stored_data");
+    fakes.records = MemoryRecordStore::new();
+    assert_eq!(refused(&fakes, input).code(), "workspace_not_found");
+}
+
+#[test]
+fn a_past_no_document_reads_is_left_pending() {
+    let (mut fakes, input) = fakes(MemoryRecordStore::new(), "plan");
+    let document_id = input.document_id.clone();
+    fakes.versions = MemoryVersionStore::new()
+        .holding(W, &document_id, owning(&input.version_id))
+        .checking_out(W, &input.version_id, vec![1, 2, 3]);
+    let answer = block_on(VersionRestore::execute(&fakes, input)).expect("an answer");
+    assert_eq!(answer, VersionRestoreAnswer::Pending(RestorePending::Unreadable));
+    assert!(fakes.notifier.take_restores().is_empty());
+}
