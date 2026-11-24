@@ -1,6 +1,6 @@
 //! The ports an operation runs over, as one bundle.
 
-use whiteboard_ports::{MaybeSync, WorkspaceRecordStore};
+use whiteboard_ports::{Caller, MaybeSync, WorkspaceRecordStore, WorkspaceRegistry};
 
 /// Everything an operation may reach the outside through. A composition root
 /// implements it once over its mechanics, and a test over fakes.
@@ -10,6 +10,14 @@ use whiteboard_ports::{MaybeSync, WorkspaceRecordStore};
 pub trait Ports: MaybeSync {
     /// Where workspace records are kept.
     type Records: WorkspaceRecordStore + MaybeSync;
+    /// Which workspace an address names.
+    type Registry: WorkspaceRegistry + MaybeSync;
+    /// Who the call is served for.
+    type Caller: Caller + MaybeSync;
 
     fn records(&self) -> &Self::Records;
+
+    fn registry(&self) -> &Self::Registry;
+
+    fn caller(&self) -> &Self::Caller;
 }

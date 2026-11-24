@@ -15,7 +15,7 @@ mod input;
 mod json;
 
 use serde_json::{Map, Value, json};
-use whiteboard_ops::{DocumentList, Operation, Ports};
+use whiteboard_ops::{DocumentList, Operation, Ports, with_resolved_workspace};
 
 use crate::{ToolCatalogue, ToolError};
 use input::Input;
@@ -45,13 +45,14 @@ pub const PENDING_TOOLS: &[&str] = &[
 /// An operation as a tool: its name and contract, its input as the SDK
 /// judges it, and its output as the tool answers it.
 trait Binding: Operation {
-    const NAME: &'static str;
+    const NAME: &str;
     /// The contract file's text: the tool as `tools/list` publishes it.
-    const CONTRACT: &'static str;
+    const CONTRACT: &str;
     const INPUT: Input;
 
-    /// The operation's input from arguments `INPUT` has passed.
-    fn input(arguments: &Map<String, Value>) -> Self::Input;
+    /// The operation's input from arguments `INPUT` has passed, its workspace
+    /// the canonical id the `workspaceId` address resolved to.
+    fn input(arguments: &Map<String, Value>, workspace_id: String) -> Self::Input;
 
     fn output(output: &Self::Output) -> Json;
 }
@@ -91,7 +92,10 @@ fn contract<B: Binding>() -> Value {
 }
 
 /// One call: the SDK's judgement of the arguments (absent: an empty object),
-/// the operation, and the result the tool wrapper answers.
+/// the `workspaceId` address resolved as server-core's tool record resolves
+/// it, the operation, and the result the tool wrapper answers. Every tool
+/// bound so far takes a workspace address, which `INPUT` has held to be a
+/// string.
 async fn run<B: Binding, P: Ports>(
     ports: &P,
     arguments: Option<&Map<String, Value>>,
@@ -101,7 +105,12 @@ async fn run<B: Binding, P: Ports>(
     if let Some(text) = input::refusal(B::NAME, &B::INPUT, arguments) {
         return Err(ToolError::Failed(text));
     }
-    let output = B::execute(ports, B::input(arguments)).await.map_err(ToolError::Refused)?;
+    let handle = arguments.get("workspaceId").and_then(Value::as_str).unwrap_or_default();
+    let output = with_resolved_workspace(ports, handle, |workspace_id| {
+        B::execute(ports, B::input(arguments, workspace_id))
+    })
+    .await
+    .map_err(ToolError::Refused)?;
     let output = B::output(&output);
     Ok(json!({
         "content": [{ "type": "text", "text": output.text() }],

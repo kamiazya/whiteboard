@@ -32,8 +32,9 @@
 //!   is a result with `isError`, its text the refusal's sentence, which is
 //!   how the TypeScript's tool wrapper answers a throw. [`OpsCatalogue`]
 //!   is the catalogue over the ops table: the ported tools as
-//!   `contracts/tools` publishes them, each call judged, run and answered as
-//!   the TypeScript's wrapper answers it; [`PENDING_TOOLS`] names the rest.
+//!   `contracts/tools` publishes them, each call judged, its workspace
+//!   address resolved, run and answered as the TypeScript's wrapper answers
+//!   it; [`PENDING_TOOLS`] names the rest.
 //! - **What is served**: `initialize`, `ping`, `logging/setLevel` (its level
 //!   kept for the notifier, [`Server::log_level`]), `tools/list` and
 //!   `tools/call`, and `Method not found` for anything else. The prompt and

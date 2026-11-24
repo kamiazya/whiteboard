@@ -9,6 +9,7 @@ use whiteboard_workspace_index::{
     WorkspaceRecord, list_documents, list_folder_names, list_pinned_documents,
 };
 
+use crate::address::unknown_workspace;
 use crate::record::open_record;
 use crate::{Contract, DocumentDetail, Method, Operation, Ports, Route, Row};
 
@@ -65,21 +66,22 @@ impl Operation for DocumentList {
         ports: &P,
         input: DocumentListInput,
     ) -> Result<DocumentListOutput, Refusal> {
-        let record = open_record(ports.records(), &input.workspace_id)
-            .await
-            .map_err(|error| refusal_for_read(&error))?;
-        listing(&record)
+        match open_record(ports.records(), &input.workspace_id).await {
+            Ok(record) => listing(&record),
+            Err(error) => Err(refusal_for_read(ports, error).await),
+        }
     }
 }
 
 /// An unknown workspace in the advice for a read, as the tool surface words
-/// it; any other failure as the port's own refusal.
-fn refusal_for_read(error: &PortError) -> Refusal {
+/// it, naming the workspaces the caller may see; any other failure as the
+/// port's own refusal.
+async fn refusal_for_read<P: Ports>(ports: &P, error: PortError) -> Refusal {
     match error {
         PortError::WorkspaceNotFound { workspace_id } => {
-            Refusal::WorkspaceNotFoundForCallerRead { workspace_id: workspace_id.clone() }
+            unknown_workspace(ports, workspace_id).await
         }
-        other => Refusal::from(other),
+        other => Refusal::from(&other),
     }
 }
 

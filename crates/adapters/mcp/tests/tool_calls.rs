@@ -4,9 +4,11 @@
 //! `packages/mcp-server/src/server/mcp/oracle/tool-calls.jsonl` is recorded by
 //! `tool-contracts.oracle.test.ts` beside it, which drives `createMcpServer`
 //! and keeps the recording equal to what it answers today. A row with a
-//! `snapshot` is a workspace record (`null`: the keeper holds no such
-//! workspace), the same records the ops crate's fixture holds; each row after
-//! it is one `tools/call` over that record and the result it drew.
+//! `snapshot` is a workspace record kept as `W` (`null`: the keeper holds
+//! none) with the registry rows that address it, the caller's namespace and
+//! the handles a refusal may name, the same records the ops crate's fixture
+//! holds; each row after it is one `tools/call` over that record and the
+//! result it drew.
 //!
 //! The comparison is of parsed JSON values, except a text content, which is
 //! a string and held byte for byte — the structured output's `JSON.stringify`
@@ -19,23 +21,41 @@ use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_mcp::{Identity, OpsCatalogue, PENDING_TOOLS, Server, ToolCatalogue};
 use whiteboard_model::encoding::base64_to_bytes;
 use whiteboard_ops::Ports;
-use whiteboard_port_fakes::{MemoryRecordStore, block_on};
+use whiteboard_port_fakes::{FixedCaller, MemoryRecordStore, MemoryRegistry, block_on};
+use whiteboard_ports::WorkspaceEntry;
 
 const CASES: &str =
     include_str!("../../../../packages/mcp-server/src/server/mcp/oracle/tool-calls.jsonl");
-const READS: &str = include_str!("../../../ops/ops/tests/fixtures/document_reads.jsonl");
+const READS: &str =
+    include_str!("../../../../packages/mcp-server/src/server/mcp/oracle/document-reads.jsonl");
 const DOCUMENT_LIST: &str = include_str!("../../../../contracts/tools/wb_document_list.json");
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
-/// The record store alone, which the ported tools read.
-struct Fakes(MemoryRecordStore);
+/// The ports the ported tools read: the record store, the registry and the
+/// caller.
+struct Fakes(MemoryRecordStore, MemoryRegistry, FixedCaller);
 
 impl Ports for Fakes {
     type Records = MemoryRecordStore;
+    type Registry = MemoryRegistry;
+    type Caller = FixedCaller;
 
     fn records(&self) -> &MemoryRecordStore {
         &self.0
     }
+
+    fn registry(&self) -> &MemoryRegistry {
+        &self.1
+    }
+
+    fn caller(&self) -> &FixedCaller {
+        &self.2
+    }
+}
+
+/// No workspace, and a caller in `me` told of none.
+fn nothing() -> Fakes {
+    Fakes(MemoryRecordStore::new(), MemoryRegistry::new(), FixedCaller::new())
 }
 
 /// A call whose unknown keys the client wrote out of sorted order. The
@@ -44,18 +64,42 @@ impl Ports for Fakes {
 /// them sorted: the one recorded answer this catalogue does not reproduce.
 const SORTED_KEYS: (&str, &str) = ("\"b\", \"a\"", "\"a\", \"b\"");
 
-fn server(store: MemoryRecordStore) -> Server<OpsCatalogue<Fakes>> {
+fn server(fakes: Fakes) -> Server<OpsCatalogue<Fakes>> {
     let identity =
         Identity { name: "whiteboard".into(), version: "0".into(), instructions: String::new() };
-    Server::new(identity, OpsCatalogue::new(Fakes(store)))
+    Server::new(identity, OpsCatalogue::new(fakes))
 }
 
+/// A registry row as the recording writes it.
 #[cfg(test)]
-fn store_of(snapshot: &Value) -> MemoryRecordStore {
-    match snapshot.as_str() {
+fn entry(row: &Value) -> WorkspaceEntry {
+    let text = |key: &str| row.get(key).map(|v| v.as_str().expect("a string").to_owned());
+    WorkspaceEntry {
+        workspace_id: text("workspaceId").expect("an id"),
+        namespace: text("namespace"),
+        segment: text("segment"),
+    }
+}
+
+/// The ports a record row describes.
+#[cfg(test)]
+fn fakes_of(record: &Value) -> Fakes {
+    let records = match record["snapshot"].as_str() {
         Some(text) => MemoryRecordStore::new().holding(W, base64_to_bytes(text).expect("base64")),
         None => MemoryRecordStore::new(),
+    };
+    let registry = record["registry"]
+        .as_array()
+        .expect("registry rows")
+        .iter()
+        .fold(MemoryRegistry::new(), |registry, row| registry.holding(entry(row)));
+    let mut caller =
+        FixedCaller::new().in_namespace(record["callerNamespace"].as_str().expect("a namespace"));
+    if let Some(known) = record["known"].as_array() {
+        let known = known.iter().map(|h| h.as_str().expect("a handle").to_owned()).collect();
+        caller = caller.knowing(known);
     }
+    Fakes(records, registry, caller)
 }
 
 #[cfg(test)]
@@ -72,12 +116,12 @@ fn expected(row: &Value) -> Value {
 
 #[test]
 fn every_recorded_call_is_answered_as_the_typescript_answered_it() {
-    let mut current = server(MemoryRecordStore::new());
+    let mut current = server(nothing());
     let mut replayed = 0;
     for (id, line) in CASES.lines().enumerate() {
         let row: Value = serde_json::from_str(line).expect("a JSON row");
-        if let Some(snapshot) = row.get("snapshot") {
-            current = server(store_of(snapshot));
+        if row.get("snapshot").is_some() {
+            current = server(fakes_of(&row));
             continue;
         }
         let message =
@@ -92,30 +136,29 @@ fn every_recorded_call_is_answered_as_the_typescript_answered_it() {
         }
         replayed += 1;
     }
-    assert_eq!(replayed, 28, "the recording's calls, every one replayed");
+    assert_eq!(replayed, 44, "the recording's calls, every one replayed");
 }
 
-/// The records `case`'s rows name, `(case, snapshot)` in order.
+/// The record rows, in order.
 #[cfg(test)]
-fn records(rows: &str) -> Vec<(Value, Value)> {
+fn records(rows: &str) -> Vec<Value> {
     rows.lines()
         .map(|line| serde_json::from_str::<Value>(line).expect("a JSON row"))
-        .filter_map(|row| Some((row["case"].clone(), row.get("snapshot")?.clone())))
+        .filter(|row| row.get("snapshot").is_some())
         .collect()
 }
 
 #[test]
 fn the_recorded_calls_run_over_the_records_the_ops_fixture_holds() {
     let records = records(CASES);
-    assert_eq!(records.len(), 4, "the recording's records");
+    assert_eq!(records.len(), 7, "the recording's records");
     assert_eq!(records, self::records(READS));
 }
 
 #[test]
 fn the_listing_is_the_contract_of_each_ported_tool() {
     let answer = block_on(
-        server(MemoryRecordStore::new())
-            .handle(&json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" })),
+        server(nothing()).handle(&json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" })),
     )
     .expect("an answer");
     let contract: Value = serde_json::from_str(DOCUMENT_LIST).expect("the contract parses");
@@ -124,12 +167,12 @@ fn the_listing_is_the_contract_of_each_ported_tool() {
 
 #[test]
 fn a_pending_tool_is_not_listed_and_not_found() {
-    let catalogue = OpsCatalogue::new(Fakes(MemoryRecordStore::new()));
+    let catalogue = OpsCatalogue::new(nothing());
     let listed: Vec<Value> =
         catalogue.tools().into_iter().map(|tool| tool["name"].clone()).collect();
     for name in PENDING_TOOLS {
         assert!(!listed.contains(&json!(name)), "{name} is pending and listed");
-        let answer = block_on(server(MemoryRecordStore::new()).handle(&json!({
+        let answer = block_on(server(nothing()).handle(&json!({
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": { "name": name, "arguments": {} } })))
         .expect("an answer");
@@ -148,7 +191,7 @@ fn the_contracts_are_the_listed_tools_and_the_pending_ones() {
         .map(|entry| entry.expect("an entry").file_name().into_string().expect("a name"))
         .collect();
     files.sort();
-    let catalogue = OpsCatalogue::new(Fakes(MemoryRecordStore::new()));
+    let catalogue = OpsCatalogue::new(nothing());
     let mut named: Vec<String> = catalogue
         .tools()
         .iter()
@@ -165,7 +208,7 @@ fn the_contracts_are_the_listed_tools_and_the_pending_ones() {
 #[cfg(target_arch = "wasm32")]
 #[test]
 fn the_listed_and_pending_tools_are_named_once() {
-    let catalogue = OpsCatalogue::new(Fakes(MemoryRecordStore::new()));
+    let catalogue = OpsCatalogue::new(nothing());
     let mut named: Vec<Value> =
         catalogue.tools().into_iter().map(|tool| tool["name"].clone()).collect();
     named.extend(PENDING_TOOLS.iter().map(|name| Value::from(*name)));
@@ -179,7 +222,7 @@ fn the_listed_and_pending_tools_are_named_once() {
 /// tool cannot go unserved.
 #[test]
 fn every_tool_the_ops_table_names_is_listed() {
-    let catalogue = OpsCatalogue::new(Fakes(MemoryRecordStore::new()));
+    let catalogue = OpsCatalogue::new(nothing());
     let listed: Vec<Value> =
         catalogue.tools().into_iter().map(|tool| tool["name"].clone()).collect();
     let tools: Vec<Value> =
