@@ -274,12 +274,11 @@ fn every_facet_is_listed_in_manifest_order_under_its_plugins_name() {
     assert_eq!(registry.stencil_display_name("demo.sketch"), None);
 }
 
-/// A definition published: the dialect's members gone at every depth, and a
-/// reference replaced by the definition it names in its own contract (itself
-/// published), never by the same name in another loaded contract; a string
-/// that only reads like a pointer is kept.
+/// A definition published as Zod writes it: a reference replaced by the
+/// definition it names in its own contract, never by the same name in another
+/// loaded contract, and a description the generator does not write dropped.
 #[test]
-fn a_published_definition_drops_the_dialect_and_inlines_its_own_contracts_references() {
+fn a_published_definition_inlines_its_own_contracts_references() {
     let parse = |text: &str| whiteboard_model::json::parse(text).expect("JSON");
     let other = parse(r#"{"$schema": "x", "$defs": {"Id": {"type": "number"}}}"#);
     let contract = parse(
@@ -295,15 +294,17 @@ fn a_published_definition_drops_the_dialect_and_inlines_its_own_contracts_refere
     let loaded = [("facets/other.schema.json", &other), (PATH, &contract)];
     let contracts = Contracts::load(&loaded, &host).expect("it compiles");
     let pair = contracts.resolve(&format!("{PATH}#/$defs/Pair")).expect("Pair");
-    let published = parse(
-        r##"{"type": "object", "description": "#/$defs/Id",
-            "properties": {"id": {"type": "string", "description": "an id"},
-                "ids": {"type": "array", "items": {"type": "string", "description": "an id"}}},
-            "required": ["id"]}"##,
-    );
+    let dialect = r#""$schema": "https://json-schema.org/draft/2020-12/schema""#;
+    let published = parse(&format!(
+        r#"{{{dialect}, "type": "object",
+            "properties": {{"id": {{"type": "string", "minLength": 1}},
+                "ids": {{"type": "array", "items": {{"type": "string", "minLength": 1}}}}}},
+            "required": ["id"], "additionalProperties": false}}"#
+    ));
     assert_eq!(contracts.published(pair), Some(published));
     let other_id = contracts.resolve("facets/other.schema.json#/$defs/Id").expect("Id");
-    assert_eq!(contracts.published(other_id), Some(parse(r#"{"type": "number"}"#)));
+    let number = parse(&format!(r#"{{{dialect}, "type": "number"}}"#));
+    assert_eq!(contracts.published(other_id), Some(number));
     let foreign = Contracts::load(&[], &host).expect("nothing loads");
     assert_eq!(foreign.published(pair), None);
 }
@@ -333,30 +334,63 @@ fn a_published_definition_keeps_a_property_named_like_the_dialect() {
     let contracts = Contracts::load(&[(PATH, &contract)], &host).expect("it compiles");
     let labelled = contracts.resolve(&format!("{PATH}#/$defs/Labelled")).expect("Labelled");
     let published = parse(
-        r#"{"type": "object", "properties": {"x-wb-label": {"type": "string"}},
-            "required": ["x-wb-label"]}"#,
+        r#"{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
+            "properties": {"x-wb-label": {"type": "string", "minLength": 1}},
+            "required": ["x-wb-label"], "additionalProperties": false}"#,
     );
     assert_eq!(contracts.published(labelled), Some(published));
 }
 
 /// An external definition is not compiled, so a reference inside it records
 /// no edge for the load-time cycle check: published, a reference back into
-/// a definition already being inlined is kept as written instead of recursing.
+/// a definition being written ends, as Zod writes a recursion (`#` for the
+/// root, a `$defs` entry otherwise, each printed by Zod 4.6.7 for the same
+/// shape), and its properties, which no `x-wb-order` lists, are taken as
+/// written.
 #[test]
 fn a_published_external_definition_that_names_itself_ends() {
     let parse = |text: &str| whiteboard_model::json::parse(text).expect("JSON");
     let contract = parse(
         r##"{"$schema": "x", "$defs": {"Tree": {"x-wb-external": true, "type": "object",
-            "properties": {"child": {"$ref": "#/$defs/Tree"}}}}}"##,
+            "properties": {"child": {"$ref": "#/$defs/Tree"}, "name": {"type": "string"}}},
+            "Holder": {"type": "object", "properties": {"t": {"$ref": "#/$defs/Tree"}},
+                "required": ["t"], "x-wb-order": ["t"], "x-wb-unknownKeys": "strip"},
+            "Root": {"x-wb-external": true, "type": "object", "required": ["t"],
+                "properties": {"again": {"$ref": "#/$defs/Root"}, "t": {"$ref": "#/$defs/Tree"}}}}}"##,
     );
     let host = Host {
         matchers: &[],
         checks: &[],
-        externals: &[("Tree", whiteboard_facet_engine::schema::External::Validator(accept))],
+        externals: &[
+            ("Tree", whiteboard_facet_engine::schema::External::Validator(accept)),
+            ("Root", whiteboard_facet_engine::schema::External::Validator(accept)),
+        ],
     };
     let contracts = Contracts::load(&[(PATH, &contract)], &host).expect("it compiles");
     let tree = contracts.resolve(&format!("{PATH}#/$defs/Tree")).expect("Tree");
-    let published =
-        parse(r##"{"type": "object", "properties": {"child": {"$ref": "#/$defs/Tree"}}}"##);
+    let published = parse(
+        r##"{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
+            "properties": {"child": {"$ref": "#"}, "name": {"type": "string"}},
+            "additionalProperties": false}"##,
+    );
     assert_eq!(contracts.published(tree), Some(published));
+    let holder = contracts.resolve(&format!("{PATH}#/$defs/Holder")).expect("Holder");
+    let published = parse(
+        r##"{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
+            "properties": {"t": {"$ref": "#/$defs/__schema0"}}, "required": ["t"],
+            "additionalProperties": false, "$defs": {"__schema0": {"type": "object",
+                "properties": {"child": {"$ref": "#/$defs/__schema0"},
+                    "name": {"type": "string"}}, "additionalProperties": false}}}"##,
+    );
+    assert_eq!(contracts.published(holder), Some(published));
+    // A recursion into the root is `#` and takes no `__schema<n>` number.
+    let root = contracts.resolve(&format!("{PATH}#/$defs/Root")).expect("Root");
+    let published = parse(
+        r##"{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
+            "properties": {"again": {"$ref": "#"}, "t": {"$ref": "#/$defs/__schema0"}},
+            "required": ["t"], "additionalProperties": false, "$defs": {"__schema0": {
+                "type": "object", "properties": {"child": {"$ref": "#/$defs/__schema0"},
+                    "name": {"type": "string"}}, "additionalProperties": false}}}"##,
+    );
+    assert_eq!(contracts.published(root), Some(published));
 }

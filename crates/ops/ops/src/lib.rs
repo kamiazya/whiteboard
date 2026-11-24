@@ -59,7 +59,8 @@ pub use document_list::{
 };
 pub use document_resolve::{DocumentDetail, DocumentResolve, DocumentResolveInput};
 pub use facet_list::{
-    AssetEntry, FacetEntry, FacetList, FacetListAnswer, FacetListInput, FacetListOutput,
+    AssetEntry, DeclaredKey, DeclaredValue, FacetEntry, FacetList, FacetListAnswer, FacetListInput,
+    FacetListOutput, TagInUse, WorkspaceTags,
 };
 pub use operation::{Contract, Method, Operation, Route, Row};
 pub use ports::Ports;
