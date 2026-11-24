@@ -1,0 +1,26 @@
+[package]
+name = "whiteboard-ops"
+description = "Every /api/v1 operation and MCP tool as a transport-neutral execute over ports, refusing in the TypeScript's words; the operation table as data."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+whiteboard-api-contracts = { path = "../api-contracts" }
+whiteboard-ports = { path = "../../ports/ports" }
+whiteboard-workspace-index = { path = "../../core/workspace-index" }
+
+[dev-dependencies]
+serde_json.workspace = true
+whiteboard-model = { path = "../../core/model" }
+whiteboard-port-fakes = { path = "../../testing/port-fakes" }
+
+# QR-21 layer 3: the same tests run natively and on wasm32 under Node.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[lints]
+workspace = true

@@ -41,11 +41,13 @@ const WASM_BINDGEN_MODULES: &[&str] = &["__wbindgen_placeholder__", "__wbindgen_
 /// the core repeats, and the crossing measured under 1.3% of a layout).
 const HOST_IMPORTS: &[&str] = &["measure"];
 
-/// Core crates whose wasm32 build may import wasm-bindgen's placeholder
+/// Scanned crates whose wasm32 build may import wasm-bindgen's placeholder
 /// modules, each with why. This is the one scoped break of the zero-import
 /// rule: `loro-internal` depends on `wasm-bindgen`, `js-sys` and
 /// `getrandom`'s `js` backend unconditionally on wasm32 (a peer id is random
-/// per document), so the crate that owns the CRDT cannot build without them.
+/// per document), so the crate that owns the CRDT cannot build without them,
+/// nor can any crate that links it (`workspace-index`, `history`, and `ops`,
+/// whose reads open a workspace record).
 /// An allowance is not a host contract: the artifact that links such a crate
 /// must supply the randomness and the clock from its host (a later, separate
 /// CRDT artifact; the shipped `whiteboard-wasm` does not link it). It is held
@@ -55,6 +57,7 @@ pub(crate) const CORE_IMPORT_ALLOWANCES: &[(&str, &[&str])] = &[
     ("whiteboard-crdt", WASM_BINDGEN_MODULES),
     ("whiteboard-workspace-index", WASM_BINDGEN_MODULES),
     ("whiteboard-history", WASM_BINDGEN_MODULES),
+    ("whiteboard-ops", WASM_BINDGEN_MODULES),
 ];
 
 /// The modules `name`, a core crate, may import from.
@@ -389,6 +392,7 @@ mod tests {
     fn only_the_crate_with_an_allowance_may_import_and_only_from_its_modules() {
         assert_eq!(core_allowance("whiteboard-crdt"), WASM_BINDGEN_MODULES);
         assert_eq!(core_allowance("whiteboard-history"), WASM_BINDGEN_MODULES);
+        assert_eq!(core_allowance("whiteboard-ops"), WASM_BINDGEN_MODULES);
         assert!(core_allowance("whiteboard-det").is_empty());
         let s = importing(&["__wbindgen_placeholder__::__wbindgen_throw", "env::now"]);
         assert_eq!(
@@ -413,16 +417,22 @@ mod tests {
         let crdt = "whiteboard-crdt".to_owned();
         let index = "whiteboard-workspace-index".to_owned();
         let history = "whiteboard-history".to_owned();
+        let ops = "whiteboard-ops".to_owned();
         assert_eq!(
             orphan_allowances(&[&det]),
-            vec!["whiteboard-crdt", "whiteboard-workspace-index", "whiteboard-history"]
+            vec![
+                "whiteboard-crdt",
+                "whiteboard-workspace-index",
+                "whiteboard-history",
+                "whiteboard-ops"
+            ]
         );
         assert_eq!(
             orphan_allowances(&[&det, &crdt]),
-            vec!["whiteboard-workspace-index", "whiteboard-history"]
+            vec!["whiteboard-workspace-index", "whiteboard-history", "whiteboard-ops"]
         );
-        assert_eq!(orphan_allowances(&[&det, &crdt, &index]), vec!["whiteboard-history"]);
-        assert!(orphan_allowances(&[&det, &crdt, &index, &history]).is_empty());
+        assert_eq!(orphan_allowances(&[&det, &crdt, &index, &history]), vec!["whiteboard-ops"]);
+        assert!(orphan_allowances(&[&det, &crdt, &index, &history, &ops]).is_empty());
     }
 
     #[test]
