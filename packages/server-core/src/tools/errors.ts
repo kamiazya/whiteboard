@@ -4,6 +4,7 @@ import {
   DocumentSerializeFailed,
   describeThrown,
   FacetWriteRejected,
+  NodeNotFound,
 } from '@kamiazya/whiteboard-model'
 import type { ServerDeps } from '../server-deps.js'
 
@@ -66,7 +67,7 @@ export class NodeNotFoundError extends Error {
     public readonly documentId: string,
     public readonly nodeId: string,
   ) {
-    super(`node not found: ${nodeId} in document ${documentId}`)
+    super(NodeNotFound(nodeId, documentId))
     this.name = 'NodeNotFoundError'
   }
 }

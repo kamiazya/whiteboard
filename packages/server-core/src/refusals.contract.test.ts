@@ -44,6 +44,7 @@ import {
   DocumentKindMismatchError,
   DocumentSerializeError,
   FacetWriteRejectedError,
+  NodeNotFoundError,
 } from './tools/errors.js'
 import { NamelessLinkifyTargetError } from './tools/linkify-mentions.js'
 import { refuseAgainstLibrary } from './tools/tag-library.js'
@@ -345,6 +346,7 @@ const FACTORIES: Factories = {
     new DocumentEngineTrapError(p.subject, 'running', 'x', false),
   DocumentKindMismatch: (p) =>
     new DocumentKindMismatchError(p.documentId, p.kind as never, p.detail),
+  NodeNotFound: (p) => new NodeNotFoundError(p.documentId, p.nodeId),
   WorkspaceNotFoundForCallerRead: (p) => new WorkspaceNotFoundForCallerError(p.workspaceId, 'read'),
   WorkspaceNotFoundForCallerReadKnown: (p) =>
     new WorkspaceNotFoundForCallerError(p.workspaceId, 'read', p.known),

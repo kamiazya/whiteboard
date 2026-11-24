@@ -434,6 +434,10 @@ export const DocumentEngineTrapRunningUnrecoverable = (subject: string) =>
 export const DocumentKindMismatch = (documentId: string, kind: string, detail: string) =>
   `Document ${documentId} is a ${kind} document. ${detail}`
 
+/** A tool naming a node the canvas does not hold. */
+export const NodeNotFound = (nodeId: string, documentId: string) =>
+  `node not found: ${nodeId} in document ${documentId}`
+
 /** A workspace nothing answers to, in the advice for a read, no other workspace known. */
 export const WorkspaceNotFoundForCallerRead = (workspaceId: string) =>
   `Workspace not found: "${workspaceId}". Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).`
@@ -636,6 +640,7 @@ export const REFUSAL_CODE_TOO_MANY_VERSIONS = 'too_many_versions'
 export const REFUSAL_CODE_DOCUMENT_NOT_FOUND = 'document_not_found'
 export const REFUSAL_CODE_DOCUMENT_ENGINE_TRAP = 'document_engine_trap'
 export const REFUSAL_CODE_DOCUMENT_KIND_MISMATCH = 'document_kind_mismatch'
+export const REFUSAL_CODE_NODE_NOT_FOUND = 'node_not_found'
 export const REFUSAL_CODE_WORKSPACE_NOT_FOUND = 'workspace_not_found'
 export const REFUSAL_CODE_DOCUMENT_PATH_TAKEN = 'document_path_taken'
 export const REFUSAL_CODE_DISPLAY_NAME_TAKEN = 'display_name_taken'
@@ -692,6 +697,7 @@ export const REFUSAL_CODES = {
   documentNotFound: REFUSAL_CODE_DOCUMENT_NOT_FOUND,
   documentEngineTrap: REFUSAL_CODE_DOCUMENT_ENGINE_TRAP,
   documentKindMismatch: REFUSAL_CODE_DOCUMENT_KIND_MISMATCH,
+  nodeNotFound: REFUSAL_CODE_NODE_NOT_FOUND,
   workspaceNotFound: REFUSAL_CODE_WORKSPACE_NOT_FOUND,
   documentPathTaken: REFUSAL_CODE_DOCUMENT_PATH_TAKEN,
   displayNameTaken: REFUSAL_CODE_DISPLAY_NAME_TAKEN,
