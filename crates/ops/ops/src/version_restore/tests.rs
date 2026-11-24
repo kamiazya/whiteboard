@@ -156,7 +156,7 @@ fn a_subtree_whose_version_carries_no_workspace_is_refused() {
     let version_id = input.version_id.clone();
     let refusal = refused(&fakes, VersionRestoreInput { subtree: Some(true), ..input });
     assert_eq!(refusal, Refusal::SubtreeNeedsWorkspaceVersion { version_id });
-    assert!(fakes.notifier.take().is_empty());
+    assert!(fakes.notifier.take_restores().is_empty());
 }
 
 #[test]
@@ -176,7 +176,8 @@ fn a_write_the_keeper_cannot_keep_is_refused_and_its_progress_ended() {
     let (fakes, input) = fakes(records, "plan");
     let refusal = refused(&fakes, input);
     assert_eq!(refusal.code(), "corrupt_stored_data");
-    let phases: Vec<RestorePhase> = fakes.notifier.take().into_iter().map(|e| e.phase).collect();
+    let phases: Vec<RestorePhase> =
+        fakes.notifier.take_restores().into_iter().map(|e| e.phase).collect();
     assert_eq!(phases, [RestorePhase::Started, RestorePhase::Complete]);
     assert!(fakes.observer.take().is_empty(), "nothing kept, nothing announced");
     let history = block_on(fakes.versions.list(W, &id(&record(), "ids", "plan"))).expect("a list");
@@ -195,7 +196,7 @@ fn a_restore_left_pending_told_nothing_and_kept_nothing() {
     let (fakes, input) = fakes(MemoryRecordStore::new(), "wide");
     let answer = block_on(VersionRestore::execute(&fakes, input)).expect("an answer");
     assert_eq!(answer, VersionRestoreAnswer::Pending(RestorePending::Declined));
-    assert!(fakes.notifier.take().is_empty());
+    assert!(fakes.notifier.take_restores().is_empty());
     assert!(fakes.observer.take().is_empty());
     assert!(fakes.records.appended(W).is_empty());
 }

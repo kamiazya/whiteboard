@@ -20,7 +20,9 @@ pub mod workspace_registry;
 pub mod write_observer;
 
 pub use caller::{Caller, SINGLE_PERSON_NAMESPACE};
-pub use client_notifier::{ClientNotifier, RestorePhase, RestoreProgress};
+pub use client_notifier::{
+    ClientNotifier, RestorePhase, RestoreProgress, ViewportMode, ViewportRequest,
+};
 pub use clock::Clock;
 pub use error::{PortError, PortErrorKind, SnapshotReassemblyCode, StoredUnreadableCode};
 pub use id_mint::IdMint;

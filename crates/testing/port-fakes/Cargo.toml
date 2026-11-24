@@ -1,6 +1,6 @@
 [package]
 name = "whiteboard-port-fakes"
-description = "In-memory implementations of the ports for tests: a fixed clock, a sequential id mint, a FIFO keyed lock, an in-memory workspace record store, registry and version store, a fixed caller and a std-only block_on. A dev-dependency only."
+description = "In-memory implementations of the ports for tests: a fixed clock, a sequential id mint, a FIFO keyed lock, an in-memory workspace record store, registry and version store, a client notifier that records what it is handed, a fixed caller and a std-only block_on. A dev-dependency only."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

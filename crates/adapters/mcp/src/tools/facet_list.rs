@@ -24,6 +24,7 @@ impl Binding for FacetList {
             Field { name: "assetKind", kind: Kind::Choice(&["themes", "icons", "stencils"]) },
             Field { name: "workspaceId", kind: Kind::OptionalText },
         ],
+        refine: None,
     };
 
     fn input(arguments: &Map<String, Value>, workspace_id: Option<String>) -> FacetListInput {

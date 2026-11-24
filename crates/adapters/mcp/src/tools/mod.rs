@@ -19,11 +19,12 @@ mod json;
 mod version_list;
 mod version_restore;
 mod version_save;
+mod viewport_set;
 
 use serde_json::{Map, Value, json};
 use whiteboard_ops::{
     DocumentGet, DocumentList, DocumentSearch, FacetList, Operation, Ports, VersionList,
-    VersionRestore, VersionSave, with_resolved_workspace,
+    VersionRestore, VersionSave, ViewportSet, with_resolved_workspace,
 };
 
 use crate::{ToolCatalogue, ToolError};
@@ -42,7 +43,6 @@ pub const PENDING_TOOLS: &[&str] = &[
     "wb_scene_render",
     "wb_thread_edit",
     "wb_version_restore",
-    "wb_viewport_set",
     "wb_workspace_edit",
 ];
 
@@ -90,6 +90,7 @@ impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
             contract::<VersionSave>(),
             contract::<FacetList>(),
             contract::<DocumentSearch>(),
+            contract::<ViewportSet>(),
         ]
     }
 
@@ -106,6 +107,7 @@ impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
             VersionRestore::NAME => run::<VersionRestore, P>(&self.ports, arguments).await,
             FacetList::NAME => run::<FacetList, P>(&self.ports, arguments).await,
             DocumentSearch::NAME => run::<DocumentSearch, P>(&self.ports, arguments).await,
+            ViewportSet::NAME => run::<ViewportSet, P>(&self.ports, arguments).await,
             _ => Err(ToolError::NotFound),
         }
     }

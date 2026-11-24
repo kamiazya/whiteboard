@@ -26,7 +26,7 @@ pub trait Ports: MaybeSync {
     type Clock: Clock + MaybeSync;
     /// The replica a write to a record writes as.
     type Mint: IdMint + MaybeSync;
-    /// The pages a document is open in.
+    /// The pages a document is open in, as a tool reaches them.
     type Notifier: ClientNotifier + MaybeSync;
     /// What a keeper does once a document's content was written.
     type Observer: WriteObserver + MaybeSync;

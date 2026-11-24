@@ -268,7 +268,7 @@ fn stored(ports: &Fakes) -> Value {
 #[cfg(test)]
 /// What a call told the pages, as the recorder writes it.
 fn progress(ports: &Fakes) -> Value {
-    let told = ports.notifier.take().into_iter().map(|event| {
+    let told = ports.notifier.take_restores().into_iter().map(|event| {
         let mut row = json!({
             "workspaceId": event.workspace_id,
             "path": event.path,
@@ -322,7 +322,7 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
                 json!("Tool wb_version_restore not found"),
                 "{case} is pending"
             );
-            let _ = (ports.notifier.take(), ports.observer.take());
+            let _ = (ports.notifier.take_restores(), ports.observer.take());
             pending += 1;
             continue;
         }

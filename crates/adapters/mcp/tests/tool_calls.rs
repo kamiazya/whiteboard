@@ -38,6 +38,7 @@ const VERSION_LIST: &str = include_str!("../../../../contracts/tools/wb_version_
 const VERSION_SAVE: &str = include_str!("../../../../contracts/tools/wb_version_save.json");
 const FACET_LIST: &str = include_str!("../../../../contracts/tools/wb_facet_list.json");
 const DOCUMENT_SEARCH: &str = include_str!("../../../../contracts/tools/wb_document_search.json");
+const VIEWPORT_SET: &str = include_str!("../../../../contracts/tools/wb_viewport_set.json");
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
 /// The ports the ported tools read: the record store, the registry, the
@@ -79,16 +80,16 @@ impl Ports for Fakes {
         unreachable!("nothing here writes a record")
     }
 
-    fn notifier(&self) -> &whiteboard_port_fakes::RecordingNotifier {
-        unreachable!("nothing here writes a record")
-    }
-
     fn observer(&self) -> &whiteboard_port_fakes::RecordingObserver {
         unreachable!("nothing here writes a record")
     }
 
     fn lock(&self) -> &whiteboard_port_fakes::KeyedLock {
         unreachable!("a read takes no lock")
+    }
+
+    fn notifier(&self) -> &whiteboard_port_fakes::RecordingNotifier {
+        unreachable!("this call tells no page")
     }
 }
 
@@ -213,6 +214,7 @@ fn the_listing_is_the_contract_of_each_ported_tool() {
         contract(VERSION_SAVE),
         contract(FACET_LIST),
         contract(DOCUMENT_SEARCH),
+        contract(VIEWPORT_SET),
     ];
     assert_eq!(answer["result"]["tools"], json!(listed));
 }

@@ -61,6 +61,7 @@ impl Binding for VersionRestore {
             Field { name: "overwrite", kind: Kind::Flag },
             Field { name: "subtree", kind: Kind::Flag },
         ],
+        refine: None,
     };
 
     fn input(arguments: &Map<String, Value>, workspace_id: Option<String>) -> VersionRestoreInput {

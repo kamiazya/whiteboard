@@ -14,7 +14,14 @@ use crate::schema::received;
 /// A strict object: each field as its kind requires, and any other key refused.
 pub(crate) struct Input {
     pub(crate) fields: &'static [Field],
+    /// The schema's `superRefine` over the whole object: the message of the
+    /// one issue it raises, if any. Zod judges it only when no issue so far
+    /// aborted the parse ([`aborts`]), and names it after every field's.
+    pub(crate) refine: Option<Refinement>,
 }
+
+/// A refinement over the whole object: the message of its issue, if any.
+pub(crate) type Refinement = fn(&Map<String, Value>) -> Option<&'static str>;
 
 /// A member and what it must be.
 pub(crate) struct Field {
@@ -49,11 +56,15 @@ pub(crate) enum Kind {
     /// by `segments`, which Zod judges whatever the length checks said.
     Path { max: usize, segments: Refined },
     /// An optional array of refined strings, `min` to `max` items long,
-    /// refused past `max` with `too_big`.
-    Listed { min: usize, max: usize, too_big: &'static str, item: Refined },
+    /// refused past `max` with `too_big` where the schema gave its own words.
+    Listed { min: usize, max: usize, too_big: Option<&'static str>, item: Refined },
     /// An optional integer from `min` to `max` (whole numbers, which
     /// `Display` writes as Zod does).
     Whole { min: f64, max: f64 },
+    /// An optional number from `min` to `max` (an infinite bound: none),
+    /// bounds `Display` writes as Zod does. JSON spells no number that is
+    /// not finite, so `finite()` refuses nothing a call can carry.
+    Real { min: f64, max: f64 },
 }
 
 /// `Number.MAX_SAFE_INTEGER`, which Zod's `int()` holds a number to.
@@ -67,7 +78,14 @@ pub(crate) struct Refined {
 
 /// The SDK's refusal of `arguments` for the tool `tool`, if it refuses them.
 pub(crate) fn refusal(tool: &str, input: &Input, arguments: &Map<String, Value>) -> Option<String> {
-    let issues = object_issues("", input.fields, arguments);
+    let mut issues = object_issues("", input.fields, arguments);
+    let aborted = input.fields.iter().any(|field| aborts(&field.kind, arguments.get(field.name)));
+    if let Some(refine) = input.refine
+        && !aborted
+        && let Some(message) = refine(arguments)
+    {
+        issues.push(message.to_owned());
+    }
     (!issues.is_empty()).then(|| {
         format!("Input validation error: Invalid arguments for tool {tool}: {}", issues.join(", "))
     })
@@ -115,7 +133,7 @@ fn field_issues(path: &str, kind: &Kind, value: Option<&Value>) -> Vec<String> {
         Kind::Sized { min, max } => sized_issues(path, (*min, *max), value),
         Kind::Listed { min, max, too_big, item } => match value {
             None => Vec::new(),
-            Some(_) => list_issues(path, (*min, *max), Some(too_big), item, value),
+            Some(_) => list_issues(path, (*min, *max), *too_big, item, value),
         },
         Kind::Bounded { max, too_big } => bounded_issues(path, *max, too_big, value),
         Kind::RequiredBounded { max, too_big } => match value {
@@ -124,6 +142,7 @@ fn field_issues(path: &str, kind: &Kind, value: Option<&Value>) -> Vec<String> {
         },
         Kind::Path { max, segments } => path_issues(path, *max, segments, value),
         Kind::Whole { min, max } => whole_issues(path, (*min, *max), value),
+        Kind::Real { min, max } => real_issues(path, (*min, *max), value),
         Kind::Object(fields) => match value {
             None => Vec::new(),
             Some(Value::Object(object)) => object_issues(path, fields, object),
@@ -269,6 +288,55 @@ fn whole_issues(path: &str, (min, max): (f64, f64), value: Option<&Value>) -> Ve
     issues
 }
 
+/// A number's issues as Zod's `number().min().max()` judges one: below or
+/// above a bound, never both.
+fn real_issues(path: &str, (min, max): (f64, f64), value: Option<&Value>) -> Vec<String> {
+    let Some(given) = value else { return Vec::new() };
+    let Some(number) = given.as_f64() else { return vec![expected(path, "number", value)] };
+    if number < min {
+        vec![at(path, &format!("Too small: expected number to be >={min}"))]
+    } else if number > max {
+        vec![at(path, &format!("Too big: expected number to be <={max}"))]
+    } else {
+        Vec::new()
+    }
+}
+
+/// Whether the field's issue stops Zod judging the object's refinement: a
+/// value of the wrong type (a missing required one included, and an option
+/// it does not list), or an array past its maximum, which Zod judges before
+/// any item. A bound on a number or a string's length, a refined string and
+/// an unknown key let it run.
+fn aborts(kind: &Kind, value: Option<&Value>) -> bool {
+    let not_text = |value: &Value| !value.is_string();
+    match (kind, value) {
+        (
+            Kind::Text(_) | Kind::Sized { .. } | Kind::RequiredBounded { .. } | Kind::List { .. },
+            None,
+        ) => true,
+        (_, None) => false,
+        (
+            Kind::Text(_)
+            | Kind::Sized { .. }
+            | Kind::OptionalText
+            | Kind::Bounded { .. }
+            | Kind::RequiredBounded { .. }
+            | Kind::Path { .. },
+            Some(v),
+        ) => not_text(v),
+        (Kind::List { max, .. } | Kind::Listed { max, .. }, Some(v)) => {
+            v.as_array().is_none_or(|items| items.len() > *max || items.iter().any(not_text))
+        }
+        (Kind::Choice(options), Some(v)) => !v.as_str().is_some_and(|o| options.contains(&o)),
+        (Kind::Flag, Some(v)) => !v.is_boolean(),
+        (Kind::Whole { .. } | Kind::Real { .. }, Some(v)) => !v.is_number(),
+        (Kind::Object(fields), Some(Value::Object(object))) => {
+            fields.iter().any(|field| aborts(&field.kind, object.get(field.name)))
+        }
+        (Kind::Object(_), Some(_)) => true,
+    }
+}
+
 /// An array's length out of bounds is its only issue; within them, each
 /// item's. A string is no array, and Zod still judges its length, in
 /// characters (code points).
@@ -297,5 +365,49 @@ fn list_issues(
             .chain(bounds(characters(text), "string"))
             .collect(),
         _ => vec![expected(path, "array", value)],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{Map, Value, json};
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    use super::{Field, Input, Kind, refusal};
+
+    const FIELDS: &[Field] = &[
+        Field { name: "f", kind: Kind::Flag },
+        Field { name: "o", kind: Kind::Object(&[Field { name: "g", kind: Kind::Flag }]) },
+    ];
+    const REFINED: Input = Input { fields: FIELDS, refine: Some(|_| Some("REFINED")) };
+
+    fn issues(arguments: &Value) -> String {
+        let arguments: &Map<String, Value> = arguments.as_object().expect("an object");
+        let text = refusal("t", &REFINED, arguments).expect("a refusal");
+        text.trim_start_matches("Input validation error: Invalid arguments for tool t: ").to_owned()
+    }
+
+    /// Zod 4's answers to `z.object({ f: z.boolean().optional(), o:
+    /// z.object({ g: z.boolean().optional() }).strict().optional() }).strict()`
+    /// refined by an issue `REFINED` on every value: a value of the wrong type
+    /// stops the refinement, at any depth, and a valid one lets it run.
+    #[test]
+    fn a_value_of_the_wrong_type_stops_the_refinement() {
+        assert_eq!(issues(&json!({})), "REFINED");
+        assert_eq!(issues(&json!({ "f": true })), "REFINED");
+        assert_eq!(
+            issues(&json!({ "f": "x" })),
+            "f: Invalid input: expected boolean, received string"
+        );
+        assert_eq!(
+            issues(&json!({ "o": { "g": 1 } })),
+            "o.g: Invalid input: expected boolean, received number"
+        );
+        assert_eq!(issues(&json!({ "o": { "g": true } })), "REFINED");
+        assert_eq!(
+            issues(&json!({ "o": 3 })),
+            "o: Invalid input: expected object, received number"
+        );
     }
 }

@@ -381,6 +381,10 @@ refusals! {
     DocumentKindMismatch { detail: String, document_id: String, kind: String }
         => code::DOCUMENT_KIND_MISMATCH, 409, format!("Document {document_id} is a {kind} document. {detail}");
     example { detail: "Use wb_body_edit.".to_owned(), document_id: "d1".to_owned(), kind: "markdown".to_owned() };
+    /// A tool naming a node the canvas does not hold.
+    NodeNotFound { document_id: String, node_id: String }
+        => code::NODE_NOT_FOUND, 404, format!("node not found: {node_id} in document {document_id}");
+    example { document_id: "d1".to_owned(), node_id: "n1".to_owned() };
     /// A workspace nothing answers to, in the advice for a read, no other workspace known.
     WorkspaceNotFoundForCallerRead { workspace_id: String }
         => code::WORKSPACE_NOT_FOUND, 404, format!("Workspace not found: \"{workspace_id}\". Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).");
@@ -597,6 +601,7 @@ pub mod code {
     pub const DOCUMENT_NOT_FOUND: &str = "document_not_found";
     pub const DOCUMENT_ENGINE_TRAP: &str = "document_engine_trap";
     pub const DOCUMENT_KIND_MISMATCH: &str = "document_kind_mismatch";
+    pub const NODE_NOT_FOUND: &str = "node_not_found";
     pub const WORKSPACE_NOT_FOUND: &str = "workspace_not_found";
     pub const DOCUMENT_PATH_TAKEN: &str = "document_path_taken";
     pub const DISPLAY_NAME_TAKEN: &str = "display_name_taken";
@@ -654,6 +659,7 @@ pub const CODES: &[&str] = &[
     code::DOCUMENT_NOT_FOUND,
     code::DOCUMENT_ENGINE_TRAP,
     code::DOCUMENT_KIND_MISMATCH,
+    code::NODE_NOT_FOUND,
     code::WORKSPACE_NOT_FOUND,
     code::DOCUMENT_PATH_TAKEN,
     code::DISPLAY_NAME_TAKEN,

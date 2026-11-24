@@ -30,7 +30,9 @@ impl Binding for DocumentSearch {
                 kind: Kind::Listed {
                     min: 1,
                     max: 1024,
-                    too_big: "more tag filters than the 1024-tag limit for one document, board, node or edge",
+                    too_big: Some(
+                        "more tag filters than the 1024-tag limit for one document, board, node or edge",
+                    ),
                     item: Refined {
                         test: |tag| !tag.is_empty(),
                         message: "Too small: expected string to have >=1 characters",
@@ -39,6 +41,7 @@ impl Binding for DocumentSearch {
             },
             Field { name: "limit", kind: Kind::Whole { min: 1.0, max: 50.0 } },
         ],
+        refine: None,
     };
 
     fn input(arguments: &Map<String, Value>, workspace_id: Option<String>) -> DocumentSearchInput {

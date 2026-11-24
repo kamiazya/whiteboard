@@ -64,16 +64,16 @@ impl Ports for Fakes {
         unreachable!("nothing here writes a record")
     }
 
-    fn notifier(&self) -> &whiteboard_port_fakes::RecordingNotifier {
-        unreachable!("nothing here writes a record")
-    }
-
     fn observer(&self) -> &whiteboard_port_fakes::RecordingObserver {
         unreachable!("nothing here writes a record")
     }
 
     fn lock(&self) -> &whiteboard_port_fakes::KeyedLock {
         unreachable!("a read takes no lock")
+    }
+
+    fn notifier(&self) -> &whiteboard_port_fakes::RecordingNotifier {
+        unreachable!("this call tells no page")
     }
 }
 
