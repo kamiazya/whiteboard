@@ -165,7 +165,6 @@ pub(crate) fn reconcile_into(host: &Host<'_>, prev: &Value, next: &Value) -> Res
     if !facets_moved && !tags_moved {
         return Ok(writer.wrote);
     }
-    host.map(CANVAS)?;
     if facets_moved {
         write_canvas_facets(host, field(next, "facets"))?;
     }

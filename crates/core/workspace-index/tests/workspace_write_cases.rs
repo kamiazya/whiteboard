@@ -128,7 +128,9 @@ fn a_writer_given_an_argument_its_types_refuse_is_left_to_the_caller() {
 #[test]
 fn a_write_the_record_does_not_answer_is_left_to_the_caller() {
     let record = LoroDoc::new().export(ExportMode::Snapshot).expect("bytes");
-    let hosted = whiteboard_model::json::parse(r#"{"documentId":"x","body":"b"}"#).expect("args");
+    // A hosted document named by anything but its id's text, which the
+    // writer's types refuse.
+    let hosted = whiteboard_model::json::parse(r#"{"documentId":7,"body":"b"}"#).expect("args");
     let write = Write { op: WriterName::WriteMarkdownBody, args: hosted };
     assert!(write_workspace_batch(&record, 1, &[write], WriteJudge::None, 0.0).is_none());
 }

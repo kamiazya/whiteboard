@@ -4,7 +4,8 @@
 //! a tree container's nodes and the roots beside it, read without writing,
 //! writes a tree and its containers one loro call at a time, and answers the
 //! document engine's spatial-canvas, document-content, annotation and
-//! proposal writers over a document of its own.
+//! proposal writers over a document of its own or one hosted on a workspace
+//! tree node.
 //!
 //! The `loro` crate is pinned `=` to the version of the npm package
 //! (ADR-0054 decision 13). One `LoroDoc` is never split across two engines:

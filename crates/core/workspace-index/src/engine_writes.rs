@@ -8,7 +8,9 @@
 //! appends. Every one opens the tree root first, as the TypeScript's `getTree`
 //! does on every path that does not throw, so a write to a record that held no
 //! tree leaves an empty root in its snapshot. The documents a batch touched
-//! are [`documents_touched_since`]. `Date.now` is handed in.
+//! are [`documents_touched_since`]. `Date.now` is handed in. A
+//! `whiteboard-crdt` writer naming `documentId` is the document its node
+//! hosts, written through [`write_hosted`].
 //!
 //! What a writer throws: `Error` for a document id that names none or a folder
 //! name the model refuses; `ZodError` for a created document's meta the node
