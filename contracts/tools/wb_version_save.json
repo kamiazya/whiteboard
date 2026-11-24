@@ -1,0 +1,99 @@
+{
+  "name": "wb_version_save",
+  "description": "Save a labelled version of one or more documents into their history — the same history the History panel shows. One label covers the whole batch, so several documents become one checkpoint. Restore any of them later with wb_version_restore. A document the workspace does not own refuses the whole call before anything is recorded.",
+  "inputSchema": {
+    "type": "object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "workspaceId": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9-]+(\\/[a-zA-Z0-9-]+)?$",
+        "description": "Workspace id, <handle>/<segment>, or a segment of your own."
+      },
+      "documentIds": {
+        "minItems": 1,
+        "maxItems": 50,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+        },
+        "description": "Document IDs (ULIDs) to save a version of."
+      },
+      "label": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200,
+        "description": "Human-readable label for this checkpoint."
+      }
+    },
+    "required": ["workspaceId", "documentIds", "label"],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "title": "Save a labelled version of a document"
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "saved": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "documentId": {
+              "type": "string",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+            },
+            "version": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "The version to restore or name later."
+                },
+                "createdAt": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "auto": {
+                  "type": "boolean",
+                  "description": "True for an automatic checkpoint, false for one somebody saved."
+                },
+                "operator": {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "enum": ["ai", "human", "system"]
+                    },
+                    "displayName": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["kind"],
+                  "additionalProperties": false
+                },
+                "restoredFrom": {
+                  "type": "string"
+                }
+              },
+              "required": ["id", "createdAt", "auto"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["documentId", "version"],
+          "additionalProperties": false
+        },
+        "description": "One entry per document, in the order asked for."
+      }
+    },
+    "required": ["saved"],
+    "additionalProperties": false
+  }
+}

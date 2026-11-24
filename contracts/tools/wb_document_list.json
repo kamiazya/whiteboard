@@ -1,0 +1,84 @@
+{
+  "name": "wb_document_list",
+  "description": "List the documents in a workspace with their placement. An unknown workspace is an error rather than an empty list, so a mistyped workspaceId cannot be mistaken for a genuinely empty workspace.",
+  "inputSchema": {
+    "type": "object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "workspaceId": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9-]+(\\/[a-zA-Z0-9-]+)?$",
+        "description": "Workspace id, <handle>/<segment>, or a segment of your own."
+      }
+    },
+    "required": ["workspaceId"],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false,
+    "title": "List the documents in a workspace"
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "documents": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "documentId": {
+              "type": "string",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "name": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": ["spatial", "markdown"]
+            },
+            "updatedAt": {
+              "type": "string"
+            },
+            "shadowed": {
+              "type": "boolean",
+              "const": true
+            },
+            "pinned": {
+              "description": "Whether the workspace pins this document to the top of its file list. Absent when this keeper keeps no pins.",
+              "type": "boolean"
+            }
+          },
+          "required": ["documentId", "path"],
+          "additionalProperties": false
+        }
+      },
+      "folderNames": {
+        "description": "Folders that have a display name, as {path, name}. A folder not listed shows its last path segment.",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": ["path", "name"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["documents"],
+    "additionalProperties": false
+  }
+}

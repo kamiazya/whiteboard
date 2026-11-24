@@ -1,0 +1,80 @@
+{
+  "name": "wb_version_list",
+  "description": "List the saved versions of a document, newest first — the same list the History panel shows, including automatic checkpoints.",
+  "inputSchema": {
+    "type": "object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "workspaceId": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9-]+(\\/[a-zA-Z0-9-]+)?$",
+        "description": "Workspace id, <handle>/<segment>, or a segment of your own."
+      },
+      "documentId": {
+        "type": "string",
+        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+        "description": "Document ID (ULID) to list saved versions for."
+      }
+    },
+    "required": ["workspaceId", "documentId"],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false,
+    "title": "List the versions of a document"
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "documentId": {
+        "type": "string",
+        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+      },
+      "versions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "The version to restore or name later."
+            },
+            "createdAt": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "auto": {
+              "type": "boolean",
+              "description": "True for an automatic checkpoint, false for one somebody saved."
+            },
+            "operator": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": ["ai", "human", "system"]
+                },
+                "displayName": {
+                  "type": "string"
+                }
+              },
+              "required": ["kind"],
+              "additionalProperties": false
+            },
+            "restoredFrom": {
+              "type": "string"
+            }
+          },
+          "required": ["id", "createdAt", "auto"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["documentId", "versions"],
+    "additionalProperties": false
+  }
+}

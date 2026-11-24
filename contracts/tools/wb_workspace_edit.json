@@ -1,0 +1,258 @@
+{
+  "name": "wb_workspace_edit",
+  "description": "Create, replace, move (or rename) and delete several documents, and name folders, in one call. Ops apply in order; a failing op stops the run and the ops before it stand, because documents are separate CRDTs and a batch across them is not one transaction. Returns the ids it minted.",
+  "inputSchema": {
+    "type": "object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "workspaceId": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9-]+(\\/[a-zA-Z0-9-]+)?$",
+        "description": "Workspace id, <handle>/<segment>, or a segment of your own."
+      },
+      "createWorkspace": {
+        "description": "Set true to create the workspace if it does not exist yet.",
+        "type": "boolean"
+      },
+      "actor": {
+        "description": "Who is producing this batch's content, in OKF's actor convention: `<producer>/<version>` for an agent or tool (e.g. `claude-code/2.1`), `human:<id>` for a person, `process:<id>` for an automated process. Recorded as OKF `generated.by` on the documents this batch writes. Identify yourself here; omitted, the writes are attributed to the server rather than to you.",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      },
+      "ops": {
+        "minItems": 1,
+        "maxItems": 200,
+        "type": "array",
+        "items": {
+          "oneOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "const": "document.create"
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "markdown"
+                    },
+                    "name": {
+                      "description": "Display name, free text (`path` places the document). A frontmatter `title` is the same name: omit it or match it.",
+                      "type": "string",
+                      "maxLength": 200
+                    },
+                    "markdown": {
+                      "description": "The document as OKF Markdown; without a `---` block the string is the body, typed `note`. Facets go under `facets:`, never at the root of the `---` block. Omit to create it empty.",
+                      "type": "string",
+                      "maxLength": 262144
+                    }
+                  },
+                  "required": ["op", "path", "kind"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "op": {
+                      "type": "string",
+                      "const": "document.create"
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 1024
+                    },
+                    "kind": {
+                      "type": "string",
+                      "const": "spatial"
+                    },
+                    "name": {
+                      "description": "Display name, free text (`path` places the document).",
+                      "type": "string",
+                      "maxLength": 200
+                    }
+                  },
+                  "required": ["op", "path", "kind"],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "document.set"
+                },
+                "documentId": {
+                  "type": "string",
+                  "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+                },
+                "markdown": {
+                  "type": "string",
+                  "maxLength": 262144
+                }
+              },
+              "required": ["op", "documentId", "markdown"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "document.move"
+                },
+                "documentId": {
+                  "type": "string",
+                  "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+                },
+                "path": {
+                  "description": "The new path. Documents below the old path move with it, and `[[old/path]]` references in other documents are rewritten to follow. Omit it to rename in place.",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024
+                },
+                "name": {
+                  "description": "The new display name, which is how a spatial document is renamed. Blank clears it. Give `path`, `name`, or both.",
+                  "type": "string",
+                  "maxLength": 200
+                }
+              },
+              "required": ["op", "documentId"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "document.delete"
+                },
+                "documentId": {
+                  "type": "string",
+                  "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+                }
+              },
+              "required": ["op", "documentId"],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "const": "folder.rename"
+                },
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1024,
+                  "description": "The folder; nothing moves."
+                },
+                "name": {
+                  "description": "Omit to clear; no `/`.",
+                  "type": "string"
+                }
+              },
+              "required": ["op", "path"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "description": "Applied in order. A failing op stops the run; the ops before it stand."
+      }
+    },
+    "required": ["workspaceId", "ops"],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "destructiveHint": true,
+    "openWorldHint": false,
+    "title": "Create, replace and delete documents in a workspace"
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "workspaceId": {
+        "type": "string",
+        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+      },
+      "applied": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991,
+        "description": "How many ops ran. Equal to `ops.length` on success."
+      },
+      "results": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string"
+            },
+            "documentId": {
+              "type": "string",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "follow": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "updatedDocumentIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+                      }
+                    },
+                    "failedDocumentIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+                      }
+                    }
+                  },
+                  "required": ["updatedDocumentIds", "failedDocumentIds"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["error"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": ["op"],
+          "additionalProperties": false
+        },
+        "description": "One entry per applied op, in order. A `document.create` carries the id it minted — without that a caller spends a round trip fetching ids, which is the cost this tool exists to remove. A `document.move` carries `follow` when references were rewritten, or when some could not be: the move stands either way."
+      }
+    },
+    "required": ["workspaceId", "applied", "results"],
+    "additionalProperties": false
+  }
+}

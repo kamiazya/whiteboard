@@ -1,0 +1,1350 @@
+{
+  "name": "canvas_view",
+  "description": "Show a canvas inline in the chat as an interactive read-only view. Returns the scene plus its resolved file references, so a node referencing a markdown document shows that document. Read-only: it renders what is stored and changes nothing.",
+  "inputSchema": {
+    "type": "object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "workspaceId": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9-]+(\\/[a-zA-Z0-9-]+)?$",
+        "description": "Workspace id, <handle>/<segment>, or a segment of your own."
+      },
+      "documentId": {
+        "type": "string",
+        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+      },
+      "style": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["clean", "document"]
+          },
+          {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
+          }
+        ]
+      }
+    },
+    "required": ["workspaceId", "documentId"],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false,
+    "title": "Show a canvas inline in the chat"
+  },
+  "_meta": {
+    "ui": {
+      "resourceUri": "ui://whiteboard/canvas-view"
+    },
+    "ui/resourceUri": "ui://whiteboard/canvas-view"
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "workspaceId": {
+        "type": "string",
+        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+      },
+      "documentId": {
+        "type": "string",
+        "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+      },
+      "scene": {
+        "type": "object",
+        "properties": {
+          "nodes": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "x": {
+                      "type": "integer"
+                    },
+                    "y": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Box width; text wraps at it. Omit it for the default."
+                    },
+                    "height": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Box height. Omit it and a text box is made tall enough for its text; a named one too short for the text is refused with the height it needs."
+                    },
+                    "color": {
+                      "$ref": "#/$defs/CanvasColor"
+                    },
+                    "x-whiteboard": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "embed"
+                            },
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+                            },
+                            "versionRef": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "facets": {
+                              "$ref": "#/$defs/ExtensionFacets"
+                            },
+                            "tags": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": ["kind", "documentId"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "facets": {
+                              "$ref": "#/$defs/ExtensionFacets"
+                            },
+                            "tags": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "text"
+                    },
+                    "text": {
+                      "type": "string"
+                    }
+                  },
+                  "required": ["id", "x", "y", "width", "height", "type", "text"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "x": {
+                      "type": "integer"
+                    },
+                    "y": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Box width; text wraps at it. Omit it for the default."
+                    },
+                    "height": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Box height. Omit it and a text box is made tall enough for its text; a named one too short for the text is refused with the height it needs."
+                    },
+                    "color": {
+                      "$ref": "#/$defs/CanvasColor"
+                    },
+                    "x-whiteboard": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "embed"
+                            },
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+                            },
+                            "versionRef": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "facets": {
+                              "$ref": "#/$defs/ExtensionFacets"
+                            },
+                            "tags": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": ["kind", "documentId"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "facets": {
+                              "$ref": "#/$defs/ExtensionFacets"
+                            },
+                            "tags": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "file"
+                    },
+                    "file": {
+                      "type": "string"
+                    },
+                    "subpath": {
+                      "type": "string",
+                      "pattern": "^#"
+                    }
+                  },
+                  "required": ["id", "x", "y", "width", "height", "type", "file"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "x": {
+                      "type": "integer"
+                    },
+                    "y": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Box width; text wraps at it. Omit it for the default."
+                    },
+                    "height": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Box height. Omit it and a text box is made tall enough for its text; a named one too short for the text is refused with the height it needs."
+                    },
+                    "color": {
+                      "$ref": "#/$defs/CanvasColor"
+                    },
+                    "x-whiteboard": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "embed"
+                            },
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+                            },
+                            "versionRef": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "facets": {
+                              "$ref": "#/$defs/ExtensionFacets"
+                            },
+                            "tags": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": ["kind", "documentId"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "facets": {
+                              "$ref": "#/$defs/ExtensionFacets"
+                            },
+                            "tags": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "link"
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "required": ["id", "x", "y", "width", "height", "type", "url"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "x": {
+                      "type": "integer"
+                    },
+                    "y": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Box width; text wraps at it. Omit it for the default."
+                    },
+                    "height": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Box height. Omit it and a text box is made tall enough for its text; a named one too short for the text is refused with the height it needs."
+                    },
+                    "color": {
+                      "$ref": "#/$defs/CanvasColor"
+                    },
+                    "x-whiteboard": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "embed"
+                            },
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+                            },
+                            "versionRef": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "facets": {
+                              "$ref": "#/$defs/ExtensionFacets"
+                            },
+                            "tags": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": ["kind", "documentId"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "facets": {
+                              "$ref": "#/$defs/ExtensionFacets"
+                            },
+                            "tags": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "group"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "background": {
+                      "type": "string"
+                    },
+                    "backgroundStyle": {
+                      "type": "string",
+                      "enum": ["cover", "ratio", "repeat"]
+                    }
+                  },
+                  "required": ["id", "x", "y", "width", "height", "type"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "edges": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "fromNode": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "toNode": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "fromSide": {
+                  "description": "The side the edge leaves from. Omit it: the router picks the side that keeps the line clear of other boxes, and a named side is kept even through one.",
+                  "type": "string",
+                  "enum": ["top", "right", "bottom", "left"]
+                },
+                "toSide": {
+                  "description": "The side the edge arrives at. Omit it for the same reason as fromSide.",
+                  "type": "string",
+                  "enum": ["top", "right", "bottom", "left"]
+                },
+                "fromEnd": {
+                  "type": "string",
+                  "enum": ["none", "arrow"]
+                },
+                "toEnd": {
+                  "type": "string",
+                  "enum": ["none", "arrow"]
+                },
+                "color": {
+                  "$ref": "#/$defs/CanvasColor"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "x-whiteboard": {
+                  "type": "object",
+                  "properties": {
+                    "facets": {
+                      "$ref": "#/$defs/ExtensionFacets"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "bends": {
+                      "minItems": 1,
+                      "maxItems": 64,
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "x": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          },
+                          "y": {
+                            "type": "integer",
+                            "minimum": -9007199254740991,
+                            "maximum": 9007199254740991
+                          }
+                        },
+                        "required": ["x", "y"],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": ["id", "fromNode", "toNode"],
+              "additionalProperties": false
+            }
+          },
+          "x-whiteboard": {
+            "type": "object",
+            "properties": {
+              "lines": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "from": {
+                      "description": "Where the line starts: on a node (`{kind:\"node\",node}`) or at a free point on the canvas (`{kind:\"point\",point}`).",
+                      "$ref": "#/$defs/LineEnd"
+                    },
+                    "to": {
+                      "description": "Where the line ends: on a node (`{kind:\"node\",node}`) or at a free point on the canvas (`{kind:\"point\",point}`).",
+                      "$ref": "#/$defs/LineEnd"
+                    },
+                    "color": {
+                      "$ref": "#/$defs/CanvasColor"
+                    },
+                    "label": {
+                      "type": "string"
+                    },
+                    "bends": {
+                      "$ref": "#/$defs/Bends"
+                    },
+                    "facets": {
+                      "$ref": "#/$defs/ExtensionFacets"
+                    }
+                  },
+                  "required": ["id", "from", "to"],
+                  "additionalProperties": false
+                }
+              },
+              "facets": {
+                "$ref": "#/$defs/ExtensionFacets"
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["nodes", "edges"],
+        "additionalProperties": false
+      },
+      "threads": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "anchor": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "spatial"
+                    },
+                    "nodeId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "edgeId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "nodeIds": {
+                      "minItems": 2,
+                      "maxItems": 2000,
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "x": {
+                      "type": "integer"
+                    },
+                    "y": {
+                      "type": "integer"
+                    },
+                    "width": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "height": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": ["kind", "x", "y"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "text"
+                    },
+                    "nodeId": {
+                      "description": "The text node the passage is in; omit for a markdown document's own body.",
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "quote": {
+                      "type": "object",
+                      "properties": {
+                        "prefix": {
+                          "description": "Text just before the passage, to tell it from a repeat.",
+                          "type": "string"
+                        },
+                        "exact": {
+                          "type": "string",
+                          "minLength": 1,
+                          "description": "The passage, quoted exactly as the body has it."
+                        },
+                        "suffix": {
+                          "description": "Text just after the passage, to tell it from a repeat.",
+                          "type": "string"
+                        }
+                      },
+                      "required": ["exact"],
+                      "additionalProperties": false,
+                      "description": "What the passage says; this is what finds it if the text has moved."
+                    },
+                    "start": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Character offset where the passage starts in the body (or node text) as you read it."
+                    },
+                    "end": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Character offset just past the end of the passage."
+                    }
+                  },
+                  "required": ["kind", "quote", "start", "end"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "type": "string",
+                      "const": "document"
+                    }
+                  },
+                  "required": ["kind"],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "status": {
+              "type": "string",
+              "enum": ["open", "resolved"]
+            },
+            "createdAt": {
+              "type": "string",
+              "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+            },
+            "messages": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "body": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "author": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "createdAt": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                  },
+                  "editedAt": {
+                    "type": "string",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
+                  }
+                },
+                "required": ["id", "body"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["id", "anchor", "status", "messages"],
+          "additionalProperties": false
+        }
+      },
+      "references": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "documentId": {
+              "type": "string",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+            },
+            "name": {
+              "type": "string"
+            },
+            "body": {
+              "type": "string"
+            },
+            "canvas": {
+              "type": "object",
+              "properties": {
+                "nodes": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "x": {
+                            "type": "integer"
+                          },
+                          "y": {
+                            "type": "integer"
+                          },
+                          "width": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "Box width; text wraps at it. Omit it for the default."
+                          },
+                          "height": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "Box height. Omit it and a text box is made tall enough for its text; a named one too short for the text is refused with the height it needs."
+                          },
+                          "color": {
+                            "$ref": "#/$defs/CanvasColor"
+                          },
+                          "x-whiteboard": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "embed"
+                                  },
+                                  "documentId": {
+                                    "type": "string",
+                                    "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+                                  },
+                                  "versionRef": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "facets": {
+                                    "$ref": "#/$defs/ExtensionFacets"
+                                  },
+                                  "tags": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": ["kind", "documentId"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "facets": {
+                                    "$ref": "#/$defs/ExtensionFacets"
+                                  },
+                                  "tags": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "type": {
+                            "type": "string",
+                            "const": "text"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["id", "x", "y", "width", "height", "type", "text"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "x": {
+                            "type": "integer"
+                          },
+                          "y": {
+                            "type": "integer"
+                          },
+                          "width": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "Box width; text wraps at it. Omit it for the default."
+                          },
+                          "height": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "Box height. Omit it and a text box is made tall enough for its text; a named one too short for the text is refused with the height it needs."
+                          },
+                          "color": {
+                            "$ref": "#/$defs/CanvasColor"
+                          },
+                          "x-whiteboard": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "embed"
+                                  },
+                                  "documentId": {
+                                    "type": "string",
+                                    "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+                                  },
+                                  "versionRef": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "facets": {
+                                    "$ref": "#/$defs/ExtensionFacets"
+                                  },
+                                  "tags": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": ["kind", "documentId"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "facets": {
+                                    "$ref": "#/$defs/ExtensionFacets"
+                                  },
+                                  "tags": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "type": {
+                            "type": "string",
+                            "const": "file"
+                          },
+                          "file": {
+                            "type": "string"
+                          },
+                          "subpath": {
+                            "type": "string",
+                            "pattern": "^#"
+                          }
+                        },
+                        "required": ["id", "x", "y", "width", "height", "type", "file"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "x": {
+                            "type": "integer"
+                          },
+                          "y": {
+                            "type": "integer"
+                          },
+                          "width": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "Box width; text wraps at it. Omit it for the default."
+                          },
+                          "height": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "Box height. Omit it and a text box is made tall enough for its text; a named one too short for the text is refused with the height it needs."
+                          },
+                          "color": {
+                            "$ref": "#/$defs/CanvasColor"
+                          },
+                          "x-whiteboard": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "embed"
+                                  },
+                                  "documentId": {
+                                    "type": "string",
+                                    "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+                                  },
+                                  "versionRef": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "facets": {
+                                    "$ref": "#/$defs/ExtensionFacets"
+                                  },
+                                  "tags": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": ["kind", "documentId"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "facets": {
+                                    "$ref": "#/$defs/ExtensionFacets"
+                                  },
+                                  "tags": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "type": {
+                            "type": "string",
+                            "const": "link"
+                          },
+                          "url": {
+                            "type": "string",
+                            "format": "uri"
+                          }
+                        },
+                        "required": ["id", "x", "y", "width", "height", "type", "url"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "x": {
+                            "type": "integer"
+                          },
+                          "y": {
+                            "type": "integer"
+                          },
+                          "width": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "Box width; text wraps at it. Omit it for the default."
+                          },
+                          "height": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "Box height. Omit it and a text box is made tall enough for its text; a named one too short for the text is refused with the height it needs."
+                          },
+                          "color": {
+                            "$ref": "#/$defs/CanvasColor"
+                          },
+                          "x-whiteboard": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "const": "embed"
+                                  },
+                                  "documentId": {
+                                    "type": "string",
+                                    "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+                                  },
+                                  "versionRef": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "facets": {
+                                    "$ref": "#/$defs/ExtensionFacets"
+                                  },
+                                  "tags": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "required": ["kind", "documentId"],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "facets": {
+                                    "$ref": "#/$defs/ExtensionFacets"
+                                  },
+                                  "tags": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string"
+                                    }
+                                  }
+                                },
+                                "additionalProperties": false
+                              }
+                            ]
+                          },
+                          "type": {
+                            "type": "string",
+                            "const": "group"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "background": {
+                            "type": "string"
+                          },
+                          "backgroundStyle": {
+                            "type": "string",
+                            "enum": ["cover", "ratio", "repeat"]
+                          }
+                        },
+                        "required": ["id", "x", "y", "width", "height", "type"],
+                        "additionalProperties": false
+                      }
+                    ]
+                  }
+                },
+                "edges": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "fromNode": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "toNode": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "fromSide": {
+                        "description": "The side the edge leaves from. Omit it: the router picks the side that keeps the line clear of other boxes, and a named side is kept even through one.",
+                        "type": "string",
+                        "enum": ["top", "right", "bottom", "left"]
+                      },
+                      "toSide": {
+                        "description": "The side the edge arrives at. Omit it for the same reason as fromSide.",
+                        "type": "string",
+                        "enum": ["top", "right", "bottom", "left"]
+                      },
+                      "fromEnd": {
+                        "type": "string",
+                        "enum": ["none", "arrow"]
+                      },
+                      "toEnd": {
+                        "type": "string",
+                        "enum": ["none", "arrow"]
+                      },
+                      "color": {
+                        "$ref": "#/$defs/CanvasColor"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "x-whiteboard": {
+                        "type": "object",
+                        "properties": {
+                          "facets": {
+                            "$ref": "#/$defs/ExtensionFacets"
+                          },
+                          "tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "bends": {
+                            "minItems": 1,
+                            "maxItems": 64,
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "x": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                },
+                                "y": {
+                                  "type": "integer",
+                                  "minimum": -9007199254740991,
+                                  "maximum": 9007199254740991
+                                }
+                              },
+                              "required": ["x", "y"],
+                              "additionalProperties": false
+                            }
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["id", "fromNode", "toNode"],
+                    "additionalProperties": false
+                  }
+                },
+                "x-whiteboard": {
+                  "type": "object",
+                  "properties": {
+                    "lines": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "from": {
+                            "description": "Where the line starts: on a node (`{kind:\"node\",node}`) or at a free point on the canvas (`{kind:\"point\",point}`).",
+                            "$ref": "#/$defs/LineEnd"
+                          },
+                          "to": {
+                            "description": "Where the line ends: on a node (`{kind:\"node\",node}`) or at a free point on the canvas (`{kind:\"point\",point}`).",
+                            "$ref": "#/$defs/LineEnd"
+                          },
+                          "color": {
+                            "$ref": "#/$defs/CanvasColor"
+                          },
+                          "label": {
+                            "type": "string"
+                          },
+                          "bends": {
+                            "$ref": "#/$defs/Bends"
+                          },
+                          "facets": {
+                            "$ref": "#/$defs/ExtensionFacets"
+                          }
+                        },
+                        "required": ["id", "from", "to"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "facets": {
+                      "$ref": "#/$defs/ExtensionFacets"
+                    },
+                    "tags": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": ["nodes", "edges"],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "style": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["clean", "document"]
+          },
+          {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$"
+          }
+        ]
+      },
+      "themeFont": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string",
+            "minLength": 1
+          },
+          "url": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["family", "url"],
+        "additionalProperties": false
+      }
+    },
+    "required": ["workspaceId", "documentId", "scene", "threads", "references"],
+    "additionalProperties": false,
+    "$defs": {
+      "CanvasColor": {
+        "anyOf": [
+          {
+            "type": "string",
+            "enum": ["1", "2", "3", "4", "5", "6"]
+          },
+          {
+            "type": "string",
+            "pattern": "^#[0-9a-fA-F]{6}$"
+          }
+        ]
+      },
+      "ExtensionFacets": {
+        "type": "object",
+        "propertyNames": {
+          "type": "string"
+        },
+        "additionalProperties": {}
+      },
+      "CanvasPoint": {
+        "type": "object",
+        "properties": {
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          }
+        },
+        "required": ["x", "y"],
+        "additionalProperties": false
+      },
+      "LineEnd": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "node"
+              },
+              "node": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The node this end attaches to."
+              },
+              "side": {
+                "description": "The side of the node to attach to. Omit it: the router picks the side that keeps the line clear of other boxes, and a named side is kept even through one.",
+                "type": "string",
+                "enum": ["top", "right", "bottom", "left"]
+              },
+              "end": {
+                "description": "The arrowhead drawn at this end.",
+                "type": "string",
+                "enum": ["none", "arrow"]
+              }
+            },
+            "required": ["kind", "node"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "const": "point"
+              },
+              "point": {
+                "description": "Where this end sits, in canvas coordinates.",
+                "$ref": "#/$defs/CanvasPoint"
+              },
+              "end": {
+                "description": "The arrowhead drawn at this end.",
+                "type": "string",
+                "enum": ["none", "arrow"]
+              }
+            },
+            "required": ["kind", "point"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "Bends": {
+        "minItems": 1,
+        "maxItems": 64,
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/CanvasPoint"
+        }
+      }
+    }
+  }
+}

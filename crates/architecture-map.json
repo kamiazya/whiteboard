@@ -297,7 +297,7 @@
       "path": "crates/adapters/mcp",
       "layer": "adapters",
       "status": "present",
-      "description": "a transport-agnostic JSON-RPC dispatcher over the ops tool table: today the 2025-era lifecycle (initialize, ping, logging/setLevel) and tools/list and tools/call routed to a tool catalogue seam, answering as the TypeScript SDK's server does",
+      "description": "a transport-agnostic JSON-RPC dispatcher over the ops tool table: today the 2025-era lifecycle (initialize, ping, logging/setLevel) and tools/list and tools/call routed to a tool catalogue seam, answering as the TypeScript SDK's server does; the catalogue over the ops table lists each ported tool as contracts/tools publishes it and calls it as the TypeScript's tool wrapper does",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": [
         "whiteboard-det",

@@ -1,0 +1,104 @@
+{
+  "name": "wb_document_search",
+  "description": "Find documents by content, or by tag. `query` is full-text over markdown bodies and canvas text (nodes, group labels, edge labels), plus names and paths; Japanese works without a dictionary. `tags` and `kind` filter, and stand alone without a query — \"every document tagged X\" is a filter, since a tag is frontmatter rather than content. Returns ranked matches with context excerpts; scores compare within one response only.",
+  "inputSchema": {
+    "type": "object",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "properties": {
+      "workspaceId": {
+        "type": "string",
+        "pattern": "^[a-zA-Z0-9-]+(\\/[a-zA-Z0-9-]+)?$",
+        "description": "Workspace id, <handle>/<segment>, or a segment of your own."
+      },
+      "query": {
+        "description": "What to find, matched against content. Japanese matches without a dictionary. Omit it to answer every document the filters admit — a tag is frontmatter, not content, so \"which documents carry this tag\" is a filter alone.",
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "kind": {
+        "description": "Restrict to markdown or spatial documents.",
+        "type": "string",
+        "enum": ["spatial", "markdown"]
+      },
+      "tags": {
+        "description": "Restrict to documents carrying EVERY listed tag exactly.",
+        "minItems": 1,
+        "maxItems": 1024,
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "limit": {
+        "default": 10,
+        "description": "How many results to answer, at most.",
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50
+      }
+    },
+    "required": ["workspaceId"],
+    "additionalProperties": false
+  },
+  "annotations": {
+    "readOnlyHint": true,
+    "openWorldHint": false,
+    "title": "Find documents by content"
+  },
+  "outputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "results": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "documentId": {
+              "type": "string",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "type": "string",
+              "enum": ["spatial", "markdown"]
+            },
+            "score": {
+              "type": "number"
+            },
+            "contexts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "lexicalRank": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "semanticRank": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": ["documentId", "path", "score", "contexts"],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": ["results"],
+    "additionalProperties": false
+  }
+}

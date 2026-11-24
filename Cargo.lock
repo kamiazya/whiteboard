@@ -1830,6 +1830,8 @@ dependencies = [
  "serde_json",
  "wasm-bindgen-test",
  "whiteboard-api-contracts",
+ "whiteboard-model",
+ "whiteboard-ops",
  "whiteboard-port-fakes",
  "whiteboard-ports",
  "whiteboard-proptest",

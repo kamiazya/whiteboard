@@ -30,7 +30,10 @@
 //!   list whole (the SDK never paginates), and `tools/call` routes to it. An
 //!   unknown tool is a JSON-RPC error; a [`Refusal`](whiteboard_api_contracts::Refusal)
 //!   is a result with `isError`, its text the refusal's sentence, which is
-//!   how the TypeScript's tool wrapper answers a throw.
+//!   how the TypeScript's tool wrapper answers a throw. [`OpsCatalogue`]
+//!   is the catalogue over the ops table: the ported tools as
+//!   `contracts/tools` publishes them, each call judged, run and answered as
+//!   the TypeScript's wrapper answers it; [`PENDING_TOOLS`] names the rest.
 //! - **What is served**: `initialize`, `ping`, `logging/setLevel` (its level
 //!   kept for the notifier, [`Server::log_level`]), `tools/list` and
 //!   `tools/call`, and `Method not found` for anything else. The prompt and
@@ -48,7 +51,9 @@ mod dispatch;
 mod jsonrpc;
 mod params;
 mod schema;
+mod tools;
 
 pub use catalogue::{ToolCatalogue, ToolError};
 pub use dispatch::{Identity, LogLevel, Server};
 pub use jsonrpc::{SUPPORTED_PROTOCOL_VERSIONS, code};
+pub use tools::{OpsCatalogue, PENDING_TOOLS};
