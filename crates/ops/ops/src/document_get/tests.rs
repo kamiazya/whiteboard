@@ -103,6 +103,7 @@ fn a_workspace_the_store_holds_no_record_of_is_refused() {
         type Caller = FixedCaller;
         type Versions = MemoryVersionStore;
         type Lock = whiteboard_port_fakes::KeyedLock;
+        type Notifier = whiteboard_port_fakes::RecordingNotifier;
         fn records(&self) -> &MemoryRecordStore {
             &self.0
         }
@@ -118,6 +119,10 @@ fn a_workspace_the_store_holds_no_record_of_is_refused() {
 
         fn lock(&self) -> &whiteboard_port_fakes::KeyedLock {
             unreachable!("a read takes no lock")
+        }
+
+        fn notifier(&self) -> &whiteboard_port_fakes::RecordingNotifier {
+            unreachable!("this call tells no page")
         }
     }
     let ports = Empty(MemoryRecordStore::new(), MemoryRegistry::new(), FixedCaller::new());

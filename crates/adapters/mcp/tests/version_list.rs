@@ -32,6 +32,7 @@ impl Ports for Fakes {
     type Caller = FixedCaller;
     type Versions = MemoryVersionStore;
     type Lock = whiteboard_port_fakes::KeyedLock;
+    type Notifier = whiteboard_port_fakes::RecordingNotifier;
 
     fn records(&self) -> &MemoryRecordStore {
         &self.0
@@ -51,6 +52,10 @@ impl Ports for Fakes {
 
     fn lock(&self) -> &whiteboard_port_fakes::KeyedLock {
         unreachable!("a read takes no lock")
+    }
+
+    fn notifier(&self) -> &whiteboard_port_fakes::RecordingNotifier {
+        unreachable!("this call tells no page")
     }
 }
 

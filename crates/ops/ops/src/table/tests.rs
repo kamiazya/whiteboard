@@ -16,7 +16,7 @@ fn the_visited_operations_are_the_rows_in_table_order() {
     let mut visited = Rows(Vec::new());
     each_operation(&mut visited);
     assert_eq!(visited.0, OPERATIONS);
-    assert_eq!(OPERATIONS.len(), 7);
+    assert_eq!(OPERATIONS.len(), 8);
 }
 
 #[test]

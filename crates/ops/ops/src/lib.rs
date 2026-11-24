@@ -50,6 +50,7 @@ mod record;
 mod table;
 mod version_list;
 mod version_save;
+mod viewport_set;
 
 pub use address::{
     WorkspaceAddress, parse_workspace_address, resolve_workspace, with_resolved_workspace,
@@ -74,5 +75,6 @@ pub use ports::Ports;
 pub use table::{OPERATIONS, Visit, each_operation};
 pub use version_list::{VersionList, VersionListInput, VersionListOutput};
 pub use version_save::{SavedDocumentVersion, VersionSave, VersionSaveInput, VersionSaveOutput};
+pub use viewport_set::{ViewportSet, ViewportSetAnswer};
 /// The facet vocabulary a listing is filtered by, as the engine names it.
 pub use whiteboard_facet_engine::plugin_manifest::{AssetKind, FacetTarget};

@@ -1546,6 +1546,24 @@
       "source": "DocumentKindMismatchError"
     },
     {
+      "name": "NodeNotFound",
+      "code": "node_not_found",
+      "status": 404,
+      "description": "A tool naming a node the canvas does not hold.",
+      "message": "node not found: {nodeId} in document {documentId}",
+      "params": {
+        "nodeId": "string",
+        "documentId": "string"
+      },
+      "example": {
+        "nodeId": "n1",
+        "documentId": "d1"
+      },
+      "exampleText": "node not found: n1 in document d1",
+      "surfaces": ["mcp-tools"],
+      "source": "NodeNotFoundError"
+    },
+    {
       "name": "WorkspaceNotFoundForCallerRead",
       "code": "workspace_not_found",
       "status": 404,

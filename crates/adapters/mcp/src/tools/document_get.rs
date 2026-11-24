@@ -32,6 +32,7 @@ impl Binding for DocumentGet {
                 kind: Kind::Object(&[Field { name: "strict", kind: Kind::Flag }]),
             },
         ],
+        refine: None,
     };
 
     fn input(arguments: &Map<String, Value>, workspace_id: Option<String>) -> DocumentGetInput {

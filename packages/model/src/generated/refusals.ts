@@ -434,6 +434,10 @@ export const DocumentEngineTrapRunningUnrecoverable = (subject: string) =>
 export const DocumentKindMismatch = (documentId: string, kind: string, detail: string) =>
   `Document ${documentId} is a ${kind} document. ${detail}`
 
+/** A tool naming a node the canvas does not hold. */
+export const NodeNotFound = (nodeId: string, documentId: string) =>
+  `node not found: ${nodeId} in document ${documentId}`
+
 /** A workspace nothing answers to, in the advice for a read, no other workspace known. */
 export const WorkspaceNotFoundForCallerRead = (workspaceId: string) =>
   `Workspace not found: "${workspaceId}". Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).`
