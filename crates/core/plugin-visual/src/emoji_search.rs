@@ -99,7 +99,8 @@ mod tests {
 
     #[test]
     fn a_code_point_is_pictographic_inside_a_range_and_at_both_ends() {
-        let ranges = ranges_with("00A9..00A9\n2194..2199\nnot a range\n1F000..1F0FF\n");
+        let ranges =
+            ranges_with("00A9..00A9\n2194..2199\nnot a range\nzz..00AA\n00AA..zz\n1F000..1F0FF\n");
         assert_eq!(ranges.len(), 3);
         let at = |code: u32| is_pictographic(&ranges, char::from_u32(code).expect("a char"));
         assert!(at(0xA9) && at(0x2194) && at(0x2196) && at(0x2199) && at(0x1F0FF));
