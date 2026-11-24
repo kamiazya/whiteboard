@@ -27,7 +27,7 @@ use std::collections::BTreeMap;
 use support::{assert_same, base64_decode, model_of, rows_of};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
-use whiteboard_crdt::import_bytes;
+use whiteboard_crdt::{ENGINE_WRITERS, import_bytes};
 use whiteboard_model::crdt::{Query, QueryName, WriteJudge, WriterName};
 use whiteboard_workspace_index::{
     WORKSPACE_WRITERS, answer_workspace_query, write_workspace_batch,
@@ -76,7 +76,9 @@ const REPLAYED: &[(&str, usize)] = &[
 ];
 
 /// The workspace writers replayed here, with the rows the recording holds of
-/// each. A writer row was recorded under the pinned clock.
+/// each, and `whiteboard-crdt`'s writers naming a document hosted on one of
+/// the record's tree nodes (`<writer>@node`). A writer row was recorded under
+/// the pinned clock.
 const WRITES_REPLAYED: &[(&str, usize)] = &[
     ("createWorkspaceDocumentAtPath", 6),
     ("createWorkspaceDocument", 6),
@@ -101,6 +103,32 @@ const WRITES_REPLAYED: &[(&str, usize)] = &[
     ("duplicateWorkspaceDocument", 4),
     ("forgetTrashEntry", 6),
     ("reapplyFolderNames", 6),
+    ("writeSpatialCanvas@node", 2),
+    ("writeSpatialNode@node", 2),
+    ("writeSpatialEdge@node", 2),
+    ("deleteSpatialNode@node", 2),
+    ("deleteSpatialEdge@node", 2),
+    ("reconcileSpatialCanvas@node", 2),
+    ("setNodeLock@node", 2),
+    ("setEdgeLock@node", 2),
+    ("withSpatialBatch@node", 2),
+    ("writeMarkdownBody@node", 2),
+    ("writeDocumentKind@node", 3),
+    ("writeFacets@node", 2),
+    ("writeCoreFacets@node", 2),
+    ("writeTrustFacets@node", 2),
+    ("reconcileFacets@node", 2),
+    ("reconcileCoreFacets@node", 2),
+    ("writeCanvasFacetsField@node", 2),
+    ("spliceText@node", 2),
+    ("writeCommentThread@node", 3),
+    ("writeThreadMessage@node", 2),
+    ("setCommentThreadStatus@node", 2),
+    ("moveCommentThread@node", 2),
+    ("markThreadPassages@node", 3),
+    ("writeProposal@node", 3),
+    ("setProposedChangeStatus@node", 2),
+    ("withDocumentBatch@node", 2),
 ];
 
 /// The workspace writer rows not answered, with the rows of each: a content
@@ -158,6 +186,20 @@ fn every_row_a_record_answers_is_answered_as_the_typescript_answered_it() {
     assert_eq!(replayed, ledger, "the rows replayed, by op");
 }
 
+/// The ledger entry of a writer row this crate answers: a workspace writer by
+/// name, a crdt writer naming a hosted document as `<writer>@node`.
+#[cfg(test)]
+fn ledgered_writer(row: &serde_json::Value) -> Option<String> {
+    row.get("batch")?;
+    let op = row["op"].as_str().expect("an op");
+    let name = WriterName::from_wire(op)?;
+    if WORKSPACE_WRITERS.contains(&name) {
+        return Some(op.to_owned());
+    }
+    let hosted = row["batch"][0]["args"].get("documentId").is_some();
+    (hosted && ENGINE_WRITERS.contains(&name)).then(|| format!("{op}@node"))
+}
+
 #[test]
 fn every_workspace_writer_row_is_answered_as_the_typescript_answered_it() {
     let mut replayed: BTreeMap<String, usize> = BTreeMap::new();
@@ -167,14 +209,9 @@ fn every_workspace_writer_row_is_answered_as_the_typescript_answered_it() {
     };
     let rows = rows_of(RECORDING);
     for (row, line) in rows.iter().zip(RECORDING.lines().filter(|line| !line.is_empty())) {
-        let op = row["op"].as_str().expect("an op");
-        let ours = WriterName::from_wire(op).is_some_and(|op| WORKSPACE_WRITERS.contains(&op));
-        if ours && row.get("batch").is_some() {
-            let held = check_write_with(row["id"].as_str().expect("an id"), row, line, &write);
-            *(if held { &mut replayed } else { &mut deferred })
-                .entry(op.to_owned())
-                .or_default() += 1;
-        }
+        let Some(op) = ledgered_writer(row) else { continue };
+        let held = check_write_with(row["id"].as_str().expect("an id"), row, line, &write);
+        *(if held { &mut replayed } else { &mut deferred }).entry(op).or_default() += 1;
     }
     let ledger = |rows: &[(&str, usize)]| -> BTreeMap<String, usize> {
         rows.iter().map(|&(op, n)| (op.to_owned(), n)).collect()

@@ -7,30 +7,30 @@
 //! deferring no further than the next write keeps every write seeing the canvas
 //! it would have seen had each removal swept at once.
 
+use crate::host::Host;
 use crate::spatial_write::{
     CANVAS, EDGE_PLANE, Fault, LINE_PLANE, NODE_PLANE, NODES, Plane, Step, delete, delete_element,
     field, holds, items, lines_of, refuse_reserved_key, refuse_retired_edges, set, sweep_anchored,
     text, write_canvas_facets, write_element,
 };
-use loro::LoroDoc;
 use std::collections::BTreeSet;
 use whiteboard_model::Value;
 
 /// `spatialBatchWriter`: uncommitted writes, and whether any changed the doc.
 pub(crate) struct BatchWriter<'a> {
-    doc: &'a LoroDoc,
+    host: &'a Host<'a>,
     removed: BTreeSet<String>,
     pub(crate) wrote: bool,
 }
 
 impl<'a> BatchWriter<'a> {
-    pub(crate) fn new(doc: &'a LoroDoc) -> Self {
-        Self { doc, removed: BTreeSet::new(), wrote: false }
+    pub(crate) fn new(host: &'a Host<'a>) -> Self {
+        Self { host, removed: BTreeSet::new(), wrote: false }
     }
 
     /// Sweeps what the removals so far left anchored on nothing.
     pub(crate) fn settle(&mut self) -> Step {
-        sweep_anchored(self.doc, &self.removed)?;
+        sweep_anchored(self.host, &self.removed)?;
         self.removed.clear();
         Ok(())
     }
@@ -38,7 +38,7 @@ impl<'a> BatchWriter<'a> {
     /// `writeNode`, `writeEdge` and `writeLine`.
     pub(crate) fn write(&mut self, plane: Plane, element: &Value) -> Step {
         self.settle()?;
-        write_element(self.doc, plane, element)?;
+        write_element(self.host, plane, element)?;
         self.wrote = true;
         Ok(())
     }
@@ -46,13 +46,13 @@ impl<'a> BatchWriter<'a> {
     /// `deleteNode`: its sweep waits; the retired-edge refusal is asked once
     /// per run of removals, before the first.
     pub(crate) fn delete_node(&mut self, id: &str) -> Step {
-        if !holds(self.doc, NODES, id) {
+        if !holds(self.host, NODES, id)? {
             return Ok(());
         }
         if self.removed.is_empty() {
-            refuse_retired_edges(self.doc)?;
+            refuse_retired_edges(self.host)?;
         }
-        if !delete_element(self.doc, NODE_PLANE, id)? {
+        if !delete_element(self.host, NODE_PLANE, id)? {
             return Ok(());
         }
         self.removed.insert(id.to_owned());
@@ -63,7 +63,7 @@ impl<'a> BatchWriter<'a> {
     /// `deleteEdge` and `deleteLine`: absent ids write nothing.
     pub(crate) fn delete(&mut self, plane: Plane, id: &str) -> Step {
         self.settle()?;
-        if delete_element(self.doc, plane, id)? {
+        if delete_element(self.host, plane, id)? {
             self.wrote = true;
         }
         Ok(())
@@ -77,8 +77,8 @@ impl<'a> BatchWriter<'a> {
 /// `withSpatialBatch` over the engine's steps: `writeNode`, `writeEdge`,
 /// `deleteNode`, and any other op read as `deleteEdge`, as the TypeScript's
 /// dispatch reads it. One commit, and none when nothing was written.
-pub(crate) fn with_spatial_batch(doc: &LoroDoc, steps: &[Value]) -> Step {
-    let mut writer = BatchWriter::new(doc);
+pub(crate) fn with_spatial_batch(host: &Host<'_>, steps: &[Value]) -> Step {
+    let mut writer = BatchWriter::new(host);
     for step in steps {
         if !matches!(step, Value::Map(_)) {
             return Err(Fault::Declined);
@@ -98,7 +98,7 @@ pub(crate) fn with_spatial_batch(doc: &LoroDoc, steps: &[Value]) -> Step {
     }
     writer.settle()?;
     if writer.wrote {
-        doc.commit();
+        host.commit();
     }
     Ok(())
 }
@@ -143,9 +143,9 @@ fn reconcile_by_id(
 
 /// `reconcileSpatialCanvasInto`: whether it wrote anything; the caller owns
 /// the commit.
-pub(crate) fn reconcile_into(doc: &LoroDoc, prev: &Value, next: &Value) -> Result<bool, Fault> {
+pub(crate) fn reconcile_into(host: &Host<'_>, prev: &Value, next: &Value) -> Result<bool, Fault> {
     refuse_reserved_key(next)?;
-    let mut writer = BatchWriter::new(doc);
+    let mut writer = BatchWriter::new(host);
     reconcile_by_id(
         &mut writer,
         NODE_PLANE,
@@ -165,22 +165,23 @@ pub(crate) fn reconcile_into(doc: &LoroDoc, prev: &Value, next: &Value) -> Resul
     if !facets_moved && !tags_moved {
         return Ok(writer.wrote);
     }
+    host.map(CANVAS)?;
     if facets_moved {
-        write_canvas_facets(doc, field(next, "facets"))?;
+        write_canvas_facets(host, field(next, "facets"))?;
     }
     if tags_moved {
         match field(next, "tags") {
-            Some(tags) => set(doc, CANVAS, "tags", tags)?,
-            None => delete(doc, CANVAS, "tags")?,
+            Some(tags) => set(host, CANVAS, "tags", tags)?,
+            None => delete(host, CANVAS, "tags")?,
         }
     }
     Ok(true)
 }
 
 /// `reconcileSpatialCanvas`: one commit, none for an unchanged canvas.
-pub(crate) fn reconcile(doc: &LoroDoc, prev: &Value, next: &Value) -> Step {
-    if reconcile_into(doc, prev, next)? {
-        doc.commit();
+pub(crate) fn reconcile(host: &Host<'_>, prev: &Value, next: &Value) -> Step {
+    if reconcile_into(host, prev, next)? {
+        host.commit();
     }
     Ok(())
 }

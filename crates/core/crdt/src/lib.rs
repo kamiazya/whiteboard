@@ -33,6 +33,7 @@ mod copy;
 mod engine_write;
 mod envelope;
 mod frontiers;
+mod host;
 mod image_refs;
 mod judgement;
 mod node_content;
@@ -59,7 +60,7 @@ pub use content::{
 pub use content_digest::{content_digest_of, stable_stringify};
 pub use copy::{NodeAt, copy_meta, fill_meta};
 pub use engine_write::{
-    ENGINE_WRITERS, MoreWriters, WriteAnswer, Written, write_batch, write_batch_with,
+    ENGINE_WRITERS, MoreWriters, WriteAnswer, Written, write_batch, write_batch_with, write_hosted,
 };
 pub use frontiers::{
     FrontiersError, decode_frontiers, encode_frontiers, frontiers_version, shallow_root_version,

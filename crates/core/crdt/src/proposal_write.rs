@@ -9,9 +9,10 @@
 use crate::annotation_write::{open_mergeable_map, put};
 use crate::annotations::child_map;
 use crate::content_write::splice_minimal;
+use crate::host::Host;
 use crate::spatial_batch::reconcile_into;
 use crate::spatial_write::{Fault, Step, field, items, text};
-use loro::{LoroDoc, LoroValue, ValueOrContainer};
+use loro::{LoroValue, ValueOrContainer};
 use whiteboard_model::crdt::WriterName;
 use whiteboard_model::{Value, enumeration_order};
 
@@ -41,7 +42,7 @@ pub(crate) fn as_js(value: &LoroValue) -> Option<Value> {
 
 /// `writeProposal`: the proposal's own fields and every change, a change
 /// spread into a plain value, in one commit.
-fn write_proposal(doc: &LoroDoc, proposal: &Value) -> Step {
+fn write_proposal(host: &Host<'_>, proposal: &Value) -> Step {
     let id = text(field(proposal, "id"))?;
     let changes = items(field(proposal, "changes"))?;
     let changes = changes
@@ -51,7 +52,7 @@ fn write_proposal(doc: &LoroDoc, proposal: &Value) -> Step {
             _ => Err(Fault::Declined),
         })
         .collect::<Result<Vec<_>, _>>()?;
-    let container = open_mergeable_map(&doc.get_map(PROPOSALS), id)?;
+    let container = open_mergeable_map(&host.map(PROPOSALS)?, id)?;
     for key in ["author", "createdAt"] {
         if let Some(held) = field(proposal, key) {
             put(&container, key, held)?;
@@ -61,20 +62,19 @@ fn write_proposal(doc: &LoroDoc, proposal: &Value) -> Step {
     for (change_id, change) in changes {
         put(&held, change_id, change)?;
     }
-    doc.commit();
+    host.commit();
     Ok(())
 }
 
 /// `setProposedChangeStatusInto`: the change rewritten with the status, and
 /// nothing for a proposal, a change map or a change that is not held, or a
-/// change that is a scalar.
-fn set_status_into(doc: &LoroDoc, args: &Value) -> Step {
+/// change that is a scalar. The plane is peeked, so a verdict opens nothing.
+fn set_status_into(host: &Host<'_>, args: &Value) -> Step {
     let proposal_id = text(field(args, "proposalId"))?;
     let change_id = text(field(args, "changeId"))?;
     let status = field(args, STATUS).ok_or(Fault::Declined)?;
-    let Some(container) = child_map(doc.get_map(PROPOSALS).get(proposal_id)) else {
-        return Ok(());
-    };
+    let Some(plane) = host.peek_map(PROPOSALS)? else { return Ok(()) };
+    let Some(container) = child_map(plane.get(proposal_id)) else { return Ok(()) };
     let Some(changes) = child_map(container.get(CHANGES)) else { return Ok(()) };
     let stored = match changes.get(change_id) {
         Some(ValueOrContainer::Value(LoroValue::Map(stored))) => stored,
@@ -101,35 +101,35 @@ fn set_status_into(doc: &LoroDoc, args: &Value) -> Step {
 /// reads it, in one commit. The TypeScript commits only when a step wrote;
 /// a commit with nothing pending is no operation in loro, so this one need
 /// not ask.
-fn with_document_batch(doc: &LoroDoc, steps: &[Value]) -> Step {
+fn with_document_batch(host: &Host<'_>, steps: &[Value]) -> Step {
     for step in steps {
         if !matches!(step, Value::Map(_)) {
             return Err(Fault::Declined);
         }
         match field(step, "op") {
             Some(Value::String(op)) if op == "writeMarkdownBody" => {
-                splice_minimal(&doc.get_text(BODY), text(field(step, "body"))?)?;
+                splice_minimal(&host.text(BODY)?, text(field(step, "body"))?)?;
             }
             Some(Value::String(op)) if op == "reconcileSpatialCanvas" => {
                 let side = |key: &str| field(step, key).ok_or(Fault::Declined);
-                reconcile_into(doc, side("prev")?, side("next")?)?;
+                reconcile_into(host, side("prev")?, side("next")?)?;
             }
-            _ => set_status_into(doc, step)?,
+            _ => set_status_into(host, step)?,
         }
     }
-    doc.commit();
+    host.commit();
     Ok(())
 }
 
 /// One proposal writer by name; `None` for a writer that is not one.
-pub(crate) fn apply_proposal(doc: &LoroDoc, op: WriterName, args: &Value) -> Option<Step> {
+pub(crate) fn apply_proposal(host: &Host<'_>, op: WriterName, args: &Value) -> Option<Step> {
     Some(match op {
         WriterName::WriteProposal => {
-            field(args, "proposal").ok_or(Fault::Declined).and_then(|p| write_proposal(doc, p))
+            field(args, "proposal").ok_or(Fault::Declined).and_then(|p| write_proposal(host, p))
         }
-        WriterName::SetProposedChangeStatus => set_status_into(doc, args).map(|()| doc.commit()),
+        WriterName::SetProposedChangeStatus => set_status_into(host, args).map(|()| host.commit()),
         WriterName::WithDocumentBatch => {
-            items(field(args, "steps")).and_then(|steps| with_document_batch(doc, steps))
+            items(field(args, "steps")).and_then(|steps| with_document_batch(host, steps))
         }
         _ => return None,
     })
