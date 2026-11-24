@@ -24,14 +24,27 @@ fn a_value_measures_as_its_wire_text() {
                 Value::BigInt("12".into()),
             ]),
         ),
-        ("é\u{1}", Value::String("\"\\\u{8}\u{c}\n\r\t🎨".into())),
+        ("é\u{1}", Value::String("\"\\\u{8}\u{c}\n\r\t 🎨".into())),
     ]);
     let wire = concat!(
         r#"["m","a",["s",null,true,false,["f","3ff8000000000000"],["f","8000000000000000"],-7,"#,
         r#"9007199254740991,["f","4340000000000000"],["f","7ff8000000000000"],["b","12"]],"#,
-        r#""é\u0001","\"\\\b\f\n\r\t🎨"]"#
+        r#""é\u0001","\"\\\b\f\n\r\t 🎨"]"#
     );
     assert_eq!(size(&value, 0), Some(wire.len() as u64));
+}
+
+#[test]
+fn a_safe_integer_is_its_digits_and_any_other_number_its_bits() {
+    for (n, wire) in [
+        (-7.0, "-7"),
+        (0.0, "0"),
+        (-0.0, r#"["f","8000000000000000"]"#),
+        (0.5, r#"["f","3fe0000000000000"]"#),
+    ] {
+        assert_eq!(size(&Value::Number(n), 0), Some(wire.len() as u64), "{n}");
+    }
+    assert_eq!(MAX_WIRE, 4_194_304);
 }
 
 /// `levels` lists, each holding the next.

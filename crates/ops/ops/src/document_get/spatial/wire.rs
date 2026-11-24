@@ -6,13 +6,15 @@
 //! depends on the order of an object's keys, so the engine's order answers
 //! for the TypeScript's.
 
+use whiteboard_codec::json_canvas::MAX_BYTES;
 use whiteboard_model::Value;
 
 /// `WIRE_DEPTH`: an object deeper than this is no wire.
 const WIRE_DEPTH: usize = 100;
 
-/// `JSON_CANVAS_SERIALIZE`'s `maxBytes`, the cap on the wire text.
-const MAX_WIRE: u64 = 4 * 1024 * 1024;
+/// `JSON_CANVAS_SERIALIZE`'s `maxBytes`, the cap on the wire text: the
+/// codec's own, which `whiteboard-wasm` holds it to.
+const MAX_WIRE: u64 = MAX_BYTES as u64;
 
 /// The largest integer a double holds exactly: one the wire writes as itself.
 const MAX_SAFE: f64 = 9_007_199_254_740_991.0;
