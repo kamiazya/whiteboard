@@ -381,6 +381,7 @@ function invalidCalls(ids: Ids): Asked[] {
     ...anchorShapeCalls(base),
     ...faultCalls(base),
     ...limitCalls(base),
+    ...strangeCalls(base),
   ]
 }
 
@@ -518,6 +519,26 @@ function limitCalls(base: Message): Asked[] {
     ['a context of 16 emoji, 32 units', anchored(quote('why', 1, 4, { suffix: emoji(16) }))],
     ['a context of 17 emoji, 34 units', anchored(quote('why', 1, 4, { suffix: emoji(17) }))],
     ['a context of 33 characters', anchored(quote('why', 1, 4, { prefix: 'p'.repeat(33) }))],
+  ]
+}
+
+/** Values of a kind no schema member of theirs expects, which the SDK words with a length. */
+function strangeCalls(base: Message): Asked[] {
+  const one = (op: unknown): Message => ({ ...base, ops: [op] })
+  const anchored = (anchor: unknown): Message => one({ op: 'thread.add', anchor, body: 'x' })
+  const point = (more: Message): Message => anchored({ kind: 'spatial', x: 0, y: 0, ...more })
+  return [
+    ['an object for the ops', { ...base, ops: {} }],
+    ['an object with a length for the ops', { ...base, ops: { length: 0 } }],
+    ['an array for the body', one({ ...add(doc, 'x'), body: [] })],
+    ['an object for the author', one({ ...add(doc, 'x'), author: {} })],
+    ['an object with a length for the author', one({ ...add(doc, 'x'), author: { length: 0 } })],
+    ['a point below the smallest safe integer', point({ x: -9007199254740992 })],
+    ['an array for a coordinate', point({ x: [] })],
+    ['a node set of one empty name', point({ nodeIds: [''] })],
+    ['an array for a quote', anchored({ kind: 'text', quote: [], start: 0, end: 1 })],
+    ['an array for an anchor', anchored([])],
+    ['a stray key beside a broken region', point({ z: 1, width: 4 })],
   ]
 }
 

@@ -33,7 +33,8 @@ pub(super) fn single(issues: Vec<String>) -> Vec<String> {
 /// or an object is also judged for a length it may carry.
 fn not_a_string(path: &str, value: Option<&Value>) -> Vec<String> {
     match value {
-        Some(Value::Array(_) | Value::Object(_)) => vec![UNJUDGED.to_owned()],
+        Some(Value::Array(_)) => vec![UNJUDGED.to_owned()],
+        Some(Value::Object(held)) if held.contains_key("length") => vec![UNJUDGED.to_owned()],
         other => vec![expected(path, "string", other)],
     }
 }
@@ -143,7 +144,7 @@ fn whole(path: &str, value: Option<&Value>, floor: bool) -> Vec<String> {
             if n > SAFE_INTEGER {
                 vec![at(path, "Too big: expected int to be <=9007199254740991")]
             } else if n < -SAFE_INTEGER {
-                vec![UNJUDGED.to_owned()]
+                vec![at(path, "Too small: expected int to be >=-9007199254740991")]
             } else if n.fract() != 0.0 {
                 vec![expected(path, "int", value)]
             } else if floor && n < 0.0 {
@@ -152,7 +153,6 @@ fn whole(path: &str, value: Option<&Value>, floor: bool) -> Vec<String> {
                 Vec::new()
             }
         }
-        Some(Value::Array(_) | Value::Object(_)) => vec![UNJUDGED.to_owned()],
         other => vec![expected(path, "number", other)],
     }
 }
@@ -263,7 +263,6 @@ const QUOTE_FIELDS: &[Field] = &[
 const QUOTE: Checked = Checked {
     issues: |path, value| match value {
         Some(Value::Object(quote)) => object_issues(path, QUOTE_FIELDS, quote),
-        Some(Value::Array(_)) => vec![UNJUDGED.to_owned()],
         other => vec![expected(path, "object", other)],
     },
     aborts: None,
@@ -278,7 +277,6 @@ pub(super) const ANCHOR: Checked = Checked { issues: anchor_issues, aborts: None
 fn anchor_issues(path: &str, value: Option<&Value>) -> Vec<String> {
     let Some(Value::Object(anchor)) = value else {
         return match value {
-            Some(Value::Array(_)) => vec![UNJUDGED.to_owned()],
             other => vec![expected(path, "object", other)],
         };
     };

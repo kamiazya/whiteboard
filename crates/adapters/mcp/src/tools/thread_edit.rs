@@ -151,7 +151,8 @@ fn ops_issues(path: &str, value: Option<&Value>) -> Vec<String> {
                 .chain(length.map(|words| at(path, words)))
                 .collect()
         }
-        Some(Value::Object(_)) => vec![UNJUDGED.to_owned()],
+        // An object that carries a length is judged for it too.
+        Some(Value::Object(held)) if held.contains_key("length") => vec![UNJUDGED.to_owned()],
         other => vec![expected(path, "array", other)],
     }
 }
