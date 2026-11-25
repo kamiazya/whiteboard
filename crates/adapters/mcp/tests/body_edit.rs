@@ -291,8 +291,8 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         answered += 1;
         updated += usize::from(row["answer"].get("structuredContent").is_some());
     }
-    assert_eq!((answered, pending), (129, 0), "the recording's calls, answered and pending");
-    assert_eq!(updated, 25, "the calls answered with documents");
+    assert_eq!((answered, pending), (135, 0), "the recording's calls, answered and pending");
+    assert_eq!(updated, 26, "the calls answered with documents");
 }
 
 #[cfg(test)]
@@ -355,5 +355,5 @@ fn the_recording_reaches_both_modes() {
         assert!(proposed(id), "no call proposed under {id}");
     }
     let kept = rows.iter().filter(|row| row.get("record").is_some()).count();
-    assert!(kept >= 24, "calls that moved the record");
+    assert!(kept >= 25, "calls that moved the record");
 }

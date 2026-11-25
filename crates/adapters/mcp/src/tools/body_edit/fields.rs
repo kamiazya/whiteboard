@@ -6,7 +6,7 @@
 use serde_json::{Map, Value};
 use whiteboard_model::checks::is_js_space;
 
-use crate::tools::input::{Checked, Field, Kind, at, characters, expected, object_issues};
+use crate::tools::input::{Checked, Field, Kind, at, expected, object_issues};
 
 /// `ID_MAX_CHARS`, `OKF_ACTOR_MAX_CHARS`, `TEXT_ANCHOR_CONTEXT_MAX_CHARS`,
 /// `TEXT_ANCHOR_QUOTE_MAX_CHARS`, `MARKDOWN_MAX_CHARS` and the largest
@@ -82,15 +82,16 @@ fn not_a_string(path: &str, value: Option<&Value>, bounds: Bounds) -> Vec<String
     issues
 }
 
-/// A string within `bounds`: refused empty, and refused past its ceiling in
-/// characters or in UTF-16 units.
+/// A string within `bounds`: refused empty, and refused past its ceiling. The
+/// schemas count it twice, in characters and in UTF-16 units, and a character
+/// is never fewer than one unit, so the units are the bound that binds.
 fn string_issues(path: &str, value: Option<&Value>, bounds: Bounds) -> Vec<String> {
     let Some(Value::String(held)) = value else { return not_a_string(path, value, bounds) };
     if held.is_empty() {
         return too_small(path, bounds.floor, "string").into_iter().collect();
     }
     match bounds.ceiling {
-        Some((max, words)) if characters(held) > max || held.encode_utf16().count() > max => {
+        Some((max, words)) if held.encode_utf16().count() > max => {
             vec![at(path, words)]
         }
         _ => Vec::new(),

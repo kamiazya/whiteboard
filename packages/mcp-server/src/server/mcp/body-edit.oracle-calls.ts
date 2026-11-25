@@ -551,6 +551,21 @@ function lengthCalls(ids: Ids): Asked[] {
   }
   return [
     ['ops that are an empty string', base({ ops: '' })],
+    ['ops that are a string of astral characters', base({ ops: '\u{1F600}'.repeat(150) })],
+    ['ops that are a string of the most ops', base({ ops: 'o'.repeat(200) })],
+    [
+      'ops that are the most ops, none an object',
+      base({ ops: Array.from({ length: 200 }, () => 'x') }),
+    ],
+    [
+      'a proposal id that is an object of the longest length',
+      base({ proposalId: { length: 256 } }),
+    ],
+    ['a proposal id of the most characters', base({ proposalId: 'q'.repeat(256) })],
+    [
+      'a proposal id of too many units and few characters',
+      base({ proposalId: '\u{1F600}'.repeat(200) }),
+    ],
     ['ops that are a long string', base({ ops: 'o'.repeat(201) })],
     ['ops that are an object with a length', base({ ops: { length: 5 } })],
     ['ops that are an object with no length', base({ ops: {} })],
