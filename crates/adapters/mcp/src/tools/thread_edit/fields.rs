@@ -140,7 +140,9 @@ fn whole(path: &str, value: Option<&Value>, floor: bool) -> Vec<String> {
     match value {
         Some(Value::Number(held)) => {
             let n = held.as_f64().unwrap_or(f64::NAN);
-            if n.abs() > SAFE_INTEGER || (floor && n < 0.0 && n.fract() != 0.0) {
+            if n > SAFE_INTEGER {
+                vec![at(path, "Too big: expected int to be <=9007199254740991")]
+            } else if n < -SAFE_INTEGER {
                 vec![UNJUDGED.to_owned()]
             } else if n.fract() != 0.0 {
                 vec![expected(path, "int", value)]
@@ -183,12 +185,14 @@ const NODE_SET: Checked = Checked {
                 })
                 .collect()
         };
-        if ids.len() < 2 || ids.len() > NODES_MAX {
-            let words = if ids.len() < 2 {
-                "a node set names at least two nodes"
-            } else {
-                "a node set names more nodes than the 2000-node limit for one comment anchor, a whole canvas's worth"
-            };
+        let out_of_bounds = match ids.len() {
+            0..=1 => Some("a node set names at least two nodes"),
+            2..=NODES_MAX => None,
+            _ => Some(
+                "a node set names more nodes than the 2000-node limit for one comment anchor, a whole canvas's worth",
+            ),
+        };
+        if let Some(words) = out_of_bounds {
             return if each(ids).is_empty() {
                 vec![at(path, words)]
             } else {

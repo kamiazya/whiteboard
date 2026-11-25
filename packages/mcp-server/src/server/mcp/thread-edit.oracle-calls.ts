@@ -380,6 +380,7 @@ function invalidCalls(ids: Ids): Asked[] {
     ...shapeCalls(base),
     ...anchorShapeCalls(base),
     ...faultCalls(base),
+    ...limitCalls(base),
   ]
 }
 
@@ -492,6 +493,31 @@ function faultCalls(base: Message): Asked[] {
     ['an author with a carriage return inside', one({ ...add(doc, 'x'), author: 'a\rb' })],
     ['an author with a line feed inside', one({ ...add(doc, 'x'), author: 'a\nb' })],
     ['an author with a no-break space around it', one({ ...add(doc, 'x'), author: '\u00a0a' })],
+  ]
+}
+
+/** Values on either side of what an anchor's numbers and strings may be. */
+function limitCalls(base: Message): Asked[] {
+  const anchored = (anchor: unknown): Message => ({
+    ...base,
+    ops: [{ op: 'thread.add', anchor, body: 'x' }],
+  })
+  const point = (more: Message): Message => anchored({ kind: 'spatial', x: 0, y: 0, ...more })
+  const emoji = (count: number) => '\u{1F600}'.repeat(count)
+  return [
+    ['a point at the largest safe integer', point({ x: 9007199254740991 })],
+    ['a point past the largest safe integer', point({ x: 9007199254740992 })],
+    ['a point far past the safe range', point({ y: 1e300 })],
+    ['a point at the smallest safe integer', point({ x: -9007199254740991 })],
+    ['a region of nothing', point({ width: 0, height: 0 })],
+    ['a region of a fraction', point({ width: 0.5, height: 1 })],
+    ['a region of a negative fraction', point({ width: -0.5, height: 1 })],
+    ['a node set of 2000', point({ nodeIds: Array.from({ length: 2000 }, (_, at) => `n${at}`) })],
+    ['a node set of 2', point({ nodeIds: ['a', 'b'] })],
+    ['a context of 32 characters', anchored(quote('why', 1, 4, { prefix: 'p'.repeat(32) }))],
+    ['a context of 16 emoji, 32 units', anchored(quote('why', 1, 4, { suffix: emoji(16) }))],
+    ['a context of 17 emoji, 34 units', anchored(quote('why', 1, 4, { suffix: emoji(17) }))],
+    ['a context of 33 characters', anchored(quote('why', 1, 4, { prefix: 'p'.repeat(33) }))],
   ]
 }
 

@@ -307,6 +307,6 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         edited += usize::from(row["answer"]["structuredContent"]["threads"].is_array());
         told += usize::from(row["activity"].as_array().is_some_and(|told| !told.is_empty()));
     }
-    assert_eq!((answered, pending), (175, 4), "the recording's calls, answered and pending");
-    assert_eq!((edited, told), (50, 11), "the calls that edited, and those that told a page");
+    assert_eq!((answered, pending), (188, 4), "the recording's calls, answered and pending");
+    assert_eq!((edited, told), (52, 11), "the calls that edited, and those that told a page");
 }
