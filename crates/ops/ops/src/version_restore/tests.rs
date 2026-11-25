@@ -13,7 +13,7 @@ use whiteboard_port_fakes::{
     FixedCaller, FixedClock, KeyedLock, MemoryRecordStore, MemoryRegistry, MemoryVersionStore,
     RecordingNotifier, RecordingObserver, SeqIdMint, block_on,
 };
-use whiteboard_ports::{MaybeSend, OperatorKind, SavedVersion, VersionOperator};
+use whiteboard_ports::{DocumentMoved, MaybeSend, OperatorKind, SavedVersion, VersionOperator};
 
 /// An observer whose answer never comes, standing for a keeper slow enough
 /// that the client cancels while the restore waits on it.
@@ -21,6 +21,10 @@ struct Stalled;
 
 impl WriteObserver for Stalled {
     fn document_written(&self, _: &DocumentWritten) -> impl Future<Output = ()> + MaybeSend {
+        std::future::pending()
+    }
+
+    fn document_moved(&self, _: &DocumentMoved) -> impl Future<Output = ()> + MaybeSend {
         std::future::pending()
     }
 }

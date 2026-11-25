@@ -26,5 +26,5 @@ pub use memory_record_store::{MemoryRecordStore, Merge};
 pub use memory_registry::MemoryRegistry;
 pub use memory_version_store::MemoryVersionStore;
 pub use recording_notifier::RecordingNotifier;
-pub use recording_observer::RecordingObserver;
+pub use recording_observer::{RecordingObserver, Told};
 pub use seq_id_mint::SeqIdMint;

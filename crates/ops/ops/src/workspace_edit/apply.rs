@@ -4,13 +4,14 @@
 //! created, and what is not answered yet left pending.
 
 use whiteboard_api_contracts::Refusal;
+use whiteboard_ports::DocumentMoved;
 use whiteboard_workspace_index::display_name::js_trim;
 use whiteboard_workspace_index::{
     MoveDocument, SetDocumentName, SetFolderName, list_documents, move_document,
     resolve_document_by_id, set_document_name_of, set_folder_name_of,
 };
 
-use super::{AppliedOp, Batch, Halt, WorkspaceOp, create, follow, refused};
+use super::{AppliedOp, Batch, Halt, Told, WorkspaceOp, create, follow, refused};
 use crate::Ports;
 
 /// The op applied, or why the batch stops at it.
@@ -66,7 +67,7 @@ fn not_found(batch: &Batch<'_>, document_id: &str) -> Halt {
 /// rename, when it names a name; a name refused after the move leaves the
 /// move standing, as the TypeScript's does. The path the document holds after.
 fn moved(
-    batch: &Batch<'_>,
+    batch: &mut Batch<'_>,
     document_id: &str,
     to: Option<&str>,
     name: Option<&str>,
@@ -91,7 +92,7 @@ fn moved(
 
 /// `wbDocumentMove`: the listing before the move, the move, and the follow
 /// pass, which this crate answers only when no document names what moved.
-fn moved_to(batch: &Batch<'_>, document_id: &str, to: &str) -> Result<String, Halt> {
+fn moved_to(batch: &mut Batch<'_>, document_id: &str, to: &str) -> Result<String, Halt> {
     let before = list_documents(&batch.record).map_err(|_| Halt::Pending)?;
     let Some(entry) = before.iter().find(|entry| entry.document_id == document_id) else {
         return Err(not_found(batch, document_id));
@@ -104,5 +105,10 @@ fn moved_to(batch: &Batch<'_>, document_id: &str, to: &str) -> Result<String, Ha
     if follow::rewrites_any(&batch.record, &before, &entry.path)? {
         return Err(Halt::Pending);
     }
+    batch.told.push(Told::Moved(DocumentMoved {
+        workspace_id: batch.workspace_id.to_owned(),
+        from: entry.path.clone(),
+        to: to.to_owned(),
+    }));
     Ok(to.to_owned())
 }

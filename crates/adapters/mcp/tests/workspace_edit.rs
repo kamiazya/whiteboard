@@ -26,9 +26,9 @@ use whiteboard_model::encoding::base64_to_bytes;
 use whiteboard_ops::Ports;
 use whiteboard_port_fakes::{
     FixedCaller, FixedClock, KeyedLock, MemoryRecordStore, MemoryRegistry, MemoryVersionStore,
-    RecordingNotifier, RecordingObserver, SeqIdMint, block_on,
+    RecordingNotifier, RecordingObserver, SeqIdMint, Told, block_on,
 };
-use whiteboard_ports::{WorkspaceEntry, WorkspaceRecordStore};
+use whiteboard_ports::{DocumentMoved, DocumentWritten, WorkspaceEntry, WorkspaceRecordStore};
 
 const CASES: &str =
     include_str!("../../../../packages/mcp-server/src/server/mcp/oracle/workspace-edit.jsonl");
@@ -295,4 +295,60 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
     }
     assert_eq!((answered, pending), (91, 13), "the recording's calls, answered and pending");
     assert_eq!((moved, refused), (26, 65), "the calls that moved the record, and those refused");
+}
+
+#[cfg(test)]
+fn edit(ports: &Fakes, ops: Value) -> Value {
+    let identity =
+        Identity { name: "whiteboard".into(), version: "0".into(), instructions: String::new() };
+    let server = Server::new(identity, OpsCatalogue::new(ports));
+    ports.mint.draw_from(0);
+    let message = json!({
+        "jsonrpc": "2.0", "id": 0, "method": "tools/call",
+        "params": { "name": "wb_workspace_edit", "arguments": { "workspaceId": W, "ops": ops } }
+    });
+    block_on(server.handle(&message)).expect("an answer")
+}
+
+/// A pending checkpoint is keyed by path, so a document moved after it was
+/// written must be told to the keeper as moved, after the write and in the
+/// batch's order: told the write alone, the keeper would checkpoint a path
+/// nothing holds any more (the TypeScript index calls `checkpointAfterMove`
+/// on every move it performs).
+#[test]
+fn a_document_moved_after_it_is_written_is_told_moved_after_the_write() {
+    let mut lines = CASES.lines();
+    let record: Value = serde_json::from_str(lines.next().expect("a record")).expect("JSON");
+    let probe = fakes(&record);
+    let created =
+        edit(&probe, json!([{ "op": "document.create", "kind": "spatial", "path": "fresh" }]));
+    let id = created["result"]["structuredContent"]["results"][0]["documentId"]
+        .as_str()
+        .expect("a minted id")
+        .to_owned();
+    let ports = fakes(&record);
+    let answer = edit(
+        &ports,
+        json!([
+            { "op": "document.create", "kind": "spatial", "path": "fresh" },
+            { "op": "document.move", "documentId": id, "path": "moved/fresh" },
+        ]),
+    );
+    assert_eq!(answer["result"]["structuredContent"]["applied"], json!(2), "{answer}");
+    let told: Vec<Told> = ports.observer.take_told();
+    assert_eq!(
+        told,
+        vec![
+            Told::Written(DocumentWritten {
+                workspace_id: W.into(),
+                document_id: id.clone(),
+                path: "fresh".into(),
+            }),
+            Told::Moved(DocumentMoved {
+                workspace_id: W.into(),
+                from: "fresh".into(),
+                to: "moved/fresh".into(),
+            }),
+        ],
+    );
 }

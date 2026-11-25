@@ -24,7 +24,7 @@ mod refused;
 use whiteboard_api_contracts::Refusal;
 use whiteboard_crdt::ExportMode;
 use whiteboard_ports::{
-    DocumentWritten, IdMint, WorkspaceLock, WorkspaceRecordStore, WriteObserver,
+    DocumentMoved, DocumentWritten, IdMint, WorkspaceLock, WorkspaceRecordStore, WriteObserver,
 };
 use whiteboard_workspace_index::WorkspaceRecord;
 
@@ -111,12 +111,20 @@ impl From<Refusal> for Halt {
     }
 }
 
-/// The batch so far: the record's copy it writes to, and the documents whose
-/// content it wrote, to be announced once stored.
+/// What the batch tells the keeper once it is stored, in the order its ops
+/// did it: a move told before the write that preceded it would hand on a
+/// checkpoint the write then files again under the old path.
+enum Told {
+    Written(DocumentWritten),
+    Moved(DocumentMoved),
+}
+
+/// The batch so far: the record's copy it writes to, and what it did that
+/// the keeper is told once stored.
 struct Batch<'a> {
     workspace_id: &'a str,
     record: WorkspaceRecord,
-    written: Vec<DocumentWritten>,
+    told: Vec<Told>,
 }
 
 impl Operation for WorkspaceEdit {
@@ -169,7 +177,7 @@ async fn edit<P: Ports>(
         return Ok(WorkspaceEditAnswer::Pending);
     };
     let from = record.doc().oplog_vv();
-    let mut batch = Batch { workspace_id, record, written: Vec::new() };
+    let mut batch = Batch { workspace_id, record, told: Vec::new() };
     let mut results = Vec::with_capacity(ops.len());
     for (index, op) in ops.iter().enumerate() {
         match apply::apply(ports, &mut batch, op) {
@@ -209,7 +217,7 @@ fn sentence_without_stop(text: &str) -> &str {
 }
 
 /// What the batch wrote, appended to the stored record when it wrote
-/// anything, and the documents whose content it wrote announced. `false`
+/// anything, and what it did told, in order. `false`
 /// when the copy's operations cannot be exported.
 async fn store<P: Ports>(
     ports: &P,
@@ -222,8 +230,11 @@ async fn store<P: Ports>(
         let Ok(update) = doc.export(ExportMode::updates(from)) else { return Ok(false) };
         ports.records().append(batch.workspace_id, &update).await.map_err(|e| Refusal::from(&e))?;
     }
-    for written in &batch.written {
-        ports.observer().document_written(written).await;
+    for told in &batch.told {
+        match told {
+            Told::Written(written) => ports.observer().document_written(written).await,
+            Told::Moved(moved) => ports.observer().document_moved(moved).await,
+        }
     }
     Ok(true)
 }

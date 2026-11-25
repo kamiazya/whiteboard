@@ -9,7 +9,7 @@ use whiteboard_ports::{Clock, DocumentWritten, IdMint};
 use whiteboard_workspace_index::display_name::js_trim;
 use whiteboard_workspace_index::{CreateDocument, WorkspaceRecord, create_document};
 
-use super::{Batch, Halt, refused};
+use super::{Batch, Halt, Told, refused};
 use crate::Ports;
 use crate::document_save::save_batch;
 
@@ -40,11 +40,11 @@ pub(super) fn spatial<P: Ports>(
     let created = create_document(&batch.record, &input, &mut mint, now_ms).map_err(refused::of)?;
     let entry = created.value;
     fill(ports, &batch.record, &entry.document_id, now_ms)?;
-    batch.written.push(DocumentWritten {
+    batch.told.push(Told::Written(DocumentWritten {
         workspace_id: batch.workspace_id.to_owned(),
         document_id: entry.document_id.clone(),
         path: entry.path.clone(),
-    });
+    }));
     Ok((entry.document_id, entry.path))
 }
 
