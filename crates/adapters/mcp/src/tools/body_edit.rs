@@ -60,7 +60,7 @@ impl Binding for BodyEdit {
             },
             proposal_id: text(arguments.get("proposalId")),
             author: text(arguments.get("author")),
-            ops: ops.map(|ops| ops.iter().filter_map(op_of).collect()).unwrap_or_default(),
+            ops: ops.map(|ops| ops.iter().map(op_of).collect()).unwrap_or_default(),
         }
     }
 
@@ -82,21 +82,23 @@ fn text(value: Option<&Value>) -> Option<String> {
     value.and_then(Value::as_str).map(str::to_owned)
 }
 
-/// One op as the operation reads it, a member the judgement has passed.
-fn op_of(op: &Value) -> Option<BodyReplace> {
-    let anchor = op.get("anchor")?;
-    let quote = anchor.get("quote")?;
-    Some(BodyReplace {
-        id: text(op.get("id"))?,
+/// One op as the operation reads it: a member the judgement has passed, so
+/// none is missing.
+fn op_of(op: &Value) -> BodyReplace {
+    let anchor = op.get("anchor").unwrap_or(&Value::Null);
+    let quote = anchor.get("quote").unwrap_or(&Value::Null);
+    let number = |key: &str| anchor.get(key).and_then(Value::as_f64).unwrap_or_default();
+    BodyReplace {
+        id: text(op.get("id")).unwrap_or_default(),
         node_id: text(anchor.get("nodeId")),
         prefix: text(quote.get("prefix")),
-        exact: text(quote.get("exact"))?,
+        exact: text(quote.get("exact")).unwrap_or_default(),
         suffix: text(quote.get("suffix")),
-        start: anchor.get("start")?.as_f64()?,
-        end: anchor.get("end")?.as_f64()?,
-        text: text(op.get("text"))?,
-        assumed: text(op.get("assumed"))?,
-    })
+        start: number("start"),
+        end: number("end"),
+        text: text(op.get("text")).unwrap_or_default(),
+        assumed: text(op.get("assumed")).unwrap_or_default(),
+    }
 }
 
 /// `ops`: an array of one to 200 passages, each judged in turn; an array past
@@ -137,5 +139,19 @@ fn op_issues(path: &str, op: &Value) -> Vec<String> {
     match op {
         Value::Object(members) => object_issues(path, OP_FIELDS, members),
         _ => vec![expected(path, "object", Some(op))],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+    use whiteboard_ops::BodyEditPending;
+
+    #[test]
+    fn a_call_left_pending_has_no_answer_to_write() {
+        let pending = BodyEditAnswer::Pending(BodyEditPending::Declined);
+        assert!(BodyEdit::output(&pending).is_none());
     }
 }
