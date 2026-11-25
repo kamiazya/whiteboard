@@ -63,13 +63,13 @@ import {
 import { NamelessLinkifyTargetError } from './tools/linkify-mentions.js'
 import { refuseAgainstLibrary } from './tools/tag-library.js'
 import { ThreadEditError } from './tools/thread-edit-error.js'
-import { DocumentMoveNeedsTargetError, WorkspaceEditError } from './tools/workspace-edit-error.js'
 import {
   RestoreTargetExistsError,
   SubtreeNeedsWorkspaceVersionError,
   SubtreeTakesNoTargetError,
   VersionNotFoundError,
 } from './tools/version-restore.js'
+import { DocumentMoveNeedsTargetError, WorkspaceEditError } from './tools/workspace-edit-error.js'
 import { TooManyVersionsError } from './versions/version-refusal.js'
 
 const contract = JSON.parse(
