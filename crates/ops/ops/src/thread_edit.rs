@@ -165,13 +165,16 @@ fn content_of(hosted: Hosted<'_>, kind: Option<&str>) -> Result<Content, Halt> {
         kind.iter().map(|kind| ("kind", Value::String((*kind).to_owned()))).collect();
     let read = hosted.read(QueryName::DocumentContent, &asked)?;
     let undecided = || Halt::Pending(ThreadEditPending::Undecided);
-    match (field(&read, "kind"), field(&read, "body"), field(&read, "canvas")) {
-        (Some(Value::String(kind)), Some(Value::String(body)), _) if kind == "markdown" => {
-            Ok(Content::Note(body.clone()))
-        }
-        (Some(Value::String(kind)), _, Some(canvas)) if kind == "spatial" => {
-            canvas_of(canvas).map(|canvas| Content::Board(Board::of(&canvas))).ok_or_else(undecided)
-        }
+    let Some(Value::String(kind)) = field(&read, "kind") else { return Err(undecided()) };
+    match kind.as_str() {
+        "markdown" => match field(&read, "body") {
+            Some(Value::String(body)) => Ok(Content::Note(body.clone())),
+            _ => Err(undecided()),
+        },
+        "spatial" => field(&read, "canvas")
+            .and_then(canvas_of)
+            .map(|canvas| Content::Board(Board::of(&canvas)))
+            .ok_or_else(undecided),
         _ => Err(undecided()),
     }
 }
