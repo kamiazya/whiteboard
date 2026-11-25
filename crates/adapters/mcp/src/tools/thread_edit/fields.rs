@@ -276,9 +276,7 @@ pub(super) const ANCHOR: Checked = Checked { issues: anchor_issues, aborts: None
 
 fn anchor_issues(path: &str, value: Option<&Value>) -> Vec<String> {
     let Some(Value::Object(anchor)) = value else {
-        return match value {
-            other => vec![expected(path, "object", other)],
-        };
+        return vec![expected(path, "object", value)];
     };
     let (fields, refines): (&[Field], Refinements) =
         match anchor.get("kind").and_then(Value::as_str) {
