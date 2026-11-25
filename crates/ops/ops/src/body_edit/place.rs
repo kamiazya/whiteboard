@@ -11,6 +11,7 @@ use whiteboard_model::text_anchor::{TextAnchor, TextQuote, resolve_text_anchor};
 
 use super::BodyReplace;
 use crate::content::field;
+use crate::js_offset::offset;
 use crate::text_refusal::phrase;
 
 /// `MARKDOWN_MAX_CHARS`: a body longer than this is refused when an edit
@@ -27,12 +28,6 @@ pub(super) struct Placed {
     anchor: TextAnchor,
     start: usize,
     end: usize,
-}
-
-/// `Number.MAX_SAFE_INTEGER` offsets are whole doubles, which a native index
-/// holds up to its own width and no further.
-fn offset(number: f64) -> usize {
-    format!("{number}").parse().unwrap_or(usize::MAX)
 }
 
 /// An index as the double a stored offset is.

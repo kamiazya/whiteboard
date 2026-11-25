@@ -91,6 +91,7 @@ fn an_anchor_naming_a_node_is_refused_with_the_node_quoted() {
 #[test]
 fn offsets_are_whole_doubles_a_native_index_holds() {
     assert_eq!(offset(0.0), 0);
+    assert_eq!(offset(-0.0), 0);
     assert_eq!(offset(262_144.0), 262_144);
     assert_eq!(offset(-1.0), usize::MAX);
     assert_eq!(offset(f64::NAN), usize::MAX);

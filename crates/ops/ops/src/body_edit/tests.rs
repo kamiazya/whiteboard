@@ -162,12 +162,23 @@ fn asking(
     }
 }
 
+/// Nothing was kept: no update reached the store, and the record reads back as
+/// it was held. Silence from the observer alone would not show it, since a
+/// write can be appended without being announced.
+#[cfg(test)]
+fn kept_nothing(fakes: &Fakes, held: &[u8]) {
+    assert!(fakes.records.appended(W).is_empty(), "no update reached the store");
+    let stored = block_on(fakes.records.load(W)).expect("a load").expect("a record");
+    assert_eq!(stored, held, "the stored record is unchanged");
+}
+
 #[test]
 fn a_keeper_that_cannot_keep_the_write_refuses_and_announces_nothing() {
     let fakes = fakes(MemoryRecordStore::new().merging_with(refusing).holding(W, snapshot()));
     let refusal = run(&fakes, on("list", "alpha", "A", BodyEditMode::Apply)).expect_err("refused");
     assert_eq!(refusal.code(), "corrupt_stored_data");
     assert!(fakes.observer.take().is_empty());
+    kept_nothing(&fakes, &snapshot());
 }
 
 #[test]
@@ -197,10 +208,11 @@ fn snapshot_with_a_list_root(name: &str) -> Vec<u8> {
 #[test]
 fn a_document_the_sync_declines_is_left_pending_and_keeps_nothing() {
     let held = snapshot_with_a_list_root("list");
-    let fakes = fakes(MemoryRecordStore::new().merging_with(merging).holding(W, held));
+    let fakes = fakes(MemoryRecordStore::new().merging_with(merging).holding(W, held.clone()));
     for mode in [BodyEditMode::Apply, BodyEditMode::Propose] {
         let answer = run(&fakes, on("list", "alpha", "A", mode)).expect("an answer");
         assert_eq!(answer, BodyEditAnswer::Pending(BodyEditPending::Declined));
+        kept_nothing(&fakes, &held);
     }
     assert!(fakes.observer.take().is_empty());
 }
@@ -246,12 +258,13 @@ fn a_proposal_past_the_ceiling_is_refused_through_the_whole_call_and_writes_noth
     let limit =
         "the limit of 1000 open proposed changes for one document; adopt or dismiss some first";
     let held = snapshot_holding_open_changes(1000);
-    let fakes = fakes(MemoryRecordStore::new().merging_with(merging).holding(W, held));
+    let fakes = fakes(MemoryRecordStore::new().merging_with(merging).holding(W, held.clone()));
     let draft = "Intro line. The plan is simple. Outro line.\n";
     let mut input = asking("draft", (draft, "Intro"), "Start", BodyEditMode::Propose);
     let refusal = run(&fakes, input.clone()).expect_err("refused");
     assert_eq!(refusal, Refusal::OpenChangesCeiling { open: 1001, limit: limit.to_owned() });
     assert!(fakes.observer.take().is_empty(), "nothing was kept, so nothing is announced");
+    kept_nothing(&fakes, &held);
     input.mode = Some(BodyEditMode::Apply);
     assert!(matches!(run(&fakes, input), Ok(BodyEditAnswer::Edited(_))), "applying adds no change");
 }
