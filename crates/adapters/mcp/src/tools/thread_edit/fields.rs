@@ -95,7 +95,7 @@ pub(super) const BODY: Checked = Checked {
 };
 
 /// An actor: `okfActorInputSchema`, a non-blank single-line string.
-pub(super) const AUTHOR: Checked = Checked {
+pub(crate) const AUTHOR: Checked = Checked {
     issues: |path, value| {
         optional(value, |held| {
             let words = "an actor is longer than the 256-character limit";

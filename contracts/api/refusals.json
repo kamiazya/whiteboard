@@ -2412,6 +2412,40 @@
       "exampleText": "ops[1] (thread.resolve) could not be applied: thread \"t1\" is not on this document. Nothing was written.",
       "surfaces": ["mcp-tools"],
       "source": "ThreadEditError"
+    },
+    {
+      "name": "DocumentMoveNeedsTarget",
+      "code": "document_move_needs_target",
+      "status": 400,
+      "description": "A `document.move` op naming neither a path to move the document to nor a name to rename it to.",
+      "message": "a move needs a `path` to move it, a `name` to rename it, or both",
+      "params": {},
+      "example": {},
+      "exampleText": "a move needs a `path` to move it, a `name` to rename it, or both",
+      "surfaces": ["mcp-tools"],
+      "source": "DocumentMoveNeedsTargetError"
+    },
+    {
+      "name": "WorkspaceEditOpRefused",
+      "code": "workspace_edit_op_refused",
+      "status": 400,
+      "description": "One op of a `wb_workspace_edit` batch that could not be applied. A batch spans documents with no transaction over them, so the ops before it stand and the ops after it were not run.",
+      "message": "ops[{opIndex}] ({op}) could not be applied: {detail}. {applied} op(s) before it were applied and stand; ops after it were not run. Resume from this index rather than resending the batch.",
+      "params": {
+        "opIndex": "integer",
+        "op": "string",
+        "detail": "string",
+        "applied": "integer"
+      },
+      "example": {
+        "opIndex": 2,
+        "op": "document.move",
+        "detail": "Document not found: d1 in workspace w1",
+        "applied": 2
+      },
+      "exampleText": "ops[2] (document.move) could not be applied: Document not found: d1 in workspace w1. 2 op(s) before it were applied and stand; ops after it were not run. Resume from this index rather than resending the batch.",
+      "surfaces": ["mcp-tools"],
+      "source": "WorkspaceEditError"
     }
   ]
 }

@@ -55,6 +55,7 @@ mod version_list;
 mod version_restore;
 mod version_save;
 mod viewport_set;
+mod workspace_edit;
 
 pub use address::{
     WorkspaceAddress, parse_workspace_address, resolve_workspace, with_resolved_workspace,
@@ -93,3 +94,7 @@ pub use version_save::{SavedDocumentVersion, VersionSave, VersionSaveInput, Vers
 pub use viewport_set::{ViewportSet, ViewportSetAnswer};
 /// The facet vocabulary a listing is filtered by, as the engine names it.
 pub use whiteboard_facet_engine::plugin_manifest::{AssetKind, FacetTarget};
+pub use workspace_edit::{
+    AppliedOp, WorkspaceEdit, WorkspaceEditAnswer, WorkspaceEditInput, WorkspaceEditOutput,
+    WorkspaceOp,
+};

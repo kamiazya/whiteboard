@@ -1,5 +1,4 @@
 import {
-  describeThrown,
   documentIdSchema,
   documentNameSchema,
   documentPathSchema,
@@ -23,56 +22,13 @@ import { type WbDocumentMoveResult, wbDocumentMove } from './document-move.js'
 import { createDocumentSetOperation } from './document-set.js'
 import { reportedFaultText } from './errors.js'
 import { workspaceAddressArgSchema } from './workspace-address-arg.js'
-
-/** A `document.move` that names neither where to move nor what to rename to. */
-class DocumentMoveNeedsTargetError extends Error {
-  constructor() {
-    super('a move needs a `path` to move it, a `name` to rename it, or both')
-    this.name = 'DocumentMoveNeedsTargetError'
-  }
-}
+import { DocumentMoveNeedsTargetError, WorkspaceEditError } from './workspace-edit-error.js'
 
 /** A `folder.rename` against a keeper whose index keeps no folders to name. */
 class FoldersNotNamedError extends Error {
   constructor() {
     super('This keeper does not name folders')
     this.name = 'FoldersNotNamedError'
-  }
-}
-
-/**
- * Thrown when one op in a batch cannot apply.
- *
- * Deliberately NOT `wb_canvas_edit`'s "Nothing was written". That tool edits
- * ONE document, so its whole batch is one load and one save and it can
- * honestly promise all-or-nothing. A workspace batch spans documents, and
- * each document is its own Loro doc with its own snapshot — so the ops
- * before the failure have already been saved and there is no transaction to
- * roll them back. Claiming otherwise would be a lie a caller acts on: they
- * would retry the whole batch and create the first documents twice.
- *
- * A `detail` that already ends in a full stop (an index's refusal reads as a
- * sentence) is joined without doubling it.
- *
- * `opIndex` and the applied count are in the MESSAGE as well as on the
- * class, because only `.message` survives the MCP error path and a caller
- * repairing a rejected batch needs to know where to resume.
- */
-class WorkspaceEditError extends Error {
-  constructor(
-    readonly opIndex: number,
-    readonly op: string,
-    readonly applied: number,
-    cause: unknown,
-  ) {
-    super(
-      `ops[${opIndex}] (${op}) could not be applied: ${describeThrown(cause).replace(/\.$/, '')}. ` +
-        `${applied} op(s) before it were applied and stand; ops after it were not run. ` +
-        'Resume from this index rather than resending the batch.',
-      // Kept so a surface that must not quote a fault can see what it quotes.
-      { cause },
-    )
-    this.name = 'WorkspaceEditError'
   }
 }
 

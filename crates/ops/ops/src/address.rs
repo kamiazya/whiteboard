@@ -80,12 +80,29 @@ pub async fn resolve_workspace<P: Ports>(
 /// The advice-bearing refusal of a read for a workspace nothing answers to,
 /// naming the workspaces the caller may see when the keeper says which.
 pub(crate) async fn unknown_workspace<P: Ports>(ports: &P, handle: String) -> Refusal {
-    match ports.caller().known_workspace_handles().await {
-        Ok(Some(known)) if !known.is_empty() => {
+    unknown_workspace_for(ports, handle, false).await
+}
+
+/// [`unknown_workspace`], advising a call that `creates` a document to pass
+/// `createWorkspace` instead (`WorkspaceNotFoundForCallerError`'s intent).
+pub(crate) async fn unknown_workspace_for<P: Ports>(
+    ports: &P,
+    handle: String,
+    creates: bool,
+) -> Refusal {
+    let known = match ports.caller().known_workspace_handles().await {
+        Ok(known) => known.filter(|known| !known.is_empty()),
+        Err(error) => return Refusal::from(&error),
+    };
+    match (known, creates) {
+        (Some(known), false) => {
             Refusal::WorkspaceNotFoundForCallerReadKnown { known, workspace_id: handle }
         }
-        Ok(_) => Refusal::WorkspaceNotFoundForCallerRead { workspace_id: handle },
-        Err(error) => Refusal::from(&error),
+        (None, false) => Refusal::WorkspaceNotFoundForCallerRead { workspace_id: handle },
+        (Some(known), true) => {
+            Refusal::WorkspaceNotFoundForCallerCreateKnown { known, workspace_id: handle }
+        }
+        (None, true) => Refusal::WorkspaceNotFoundForCallerCreate { workspace_id: handle },
     }
 }
 
@@ -122,7 +139,7 @@ where
 /// ponytail: the refusals whose text an operation here can fill with the id,
 /// listed by hand; a variant joins as an operation answers it, or a mapping
 /// generated over every refusal's text replaces the list when one is worth it.
-fn in_callers_words(refusal: Refusal, workspace_id: &str, handle: &str) -> Refusal {
+pub(crate) fn in_callers_words(refusal: Refusal, workspace_id: &str, handle: &str) -> Refusal {
     let said = |text: String| text.replace(workspace_id, handle);
     match refusal {
         Refusal::WorkspaceNotFoundForCallerRead { workspace_id } => {
@@ -143,6 +160,9 @@ fn in_callers_words(refusal: Refusal, workspace_id: &str, handle: &str) -> Refus
         }
         Refusal::StoredDocumentUnsupportedVersion { message } => {
             Refusal::StoredDocumentUnsupportedVersion { message: said(message) }
+        }
+        Refusal::WorkspaceEditOpRefused { op_index, op, applied, detail } => {
+            Refusal::WorkspaceEditOpRefused { op_index, op, applied, detail: said(detail) }
         }
         other => other,
     }

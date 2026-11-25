@@ -689,4 +689,23 @@ export const RestoredDocumentIdMissing = (targetPath: string) =>
 export const ThreadEditOpRefused = (opIndex: number, op: string, detail: string) =>
   `ops[${opIndex}] (${op}) could not be applied: ${detail}. Nothing was written.`
 
+/**
+ * A `document.move` op naming neither a path to move the document to nor a name to rename it
+ * to.
+ */
+export const DocumentMoveNeedsTarget = () =>
+  'a move needs a `path` to move it, a `name` to rename it, or both'
+
+/**
+ * One op of a `wb_workspace_edit` batch that could not be applied. A batch spans documents
+ * with no transaction over them, so the ops before it stand and the ops after it were not run.
+ */
+export const WorkspaceEditOpRefused = (
+  opIndex: number,
+  op: string,
+  detail: string,
+  applied: number,
+) =>
+  `ops[${opIndex}] (${op}) could not be applied: ${detail}. ${applied} op(s) before it were applied and stand; ops after it were not run. Resume from this index rather than resending the batch.`
+
 export * from './refusal-codes.js'

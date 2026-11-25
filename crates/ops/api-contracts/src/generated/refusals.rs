@@ -610,6 +610,17 @@ refusals! {
     ThreadEditOpRefused { detail: String, op: String, op_index: u64 }
         => code::THREAD_EDIT_OP_REFUSED, 400, format!("ops[{op_index}] ({op}) could not be applied: {detail}. Nothing was written.");
     example { detail: "thread \"t1\" is not on this document".to_owned(), op: "thread.resolve".to_owned(), op_index: 1 };
+    /// A `document.move` op naming neither a path to move the document to nor a name to rename
+    /// it to.
+    DocumentMoveNeedsTarget
+        => code::DOCUMENT_MOVE_NEEDS_TARGET, 400, "a move needs a `path` to move it, a `name` to rename it, or both".to_owned();
+    example;
+    /// One op of a `wb_workspace_edit` batch that could not be applied. A batch spans documents
+    /// with no transaction over them, so the ops before it stand and the ops after it were not
+    /// run.
+    WorkspaceEditOpRefused { applied: u64, detail: String, op: String, op_index: u64 }
+        => code::WORKSPACE_EDIT_OP_REFUSED, 400, format!("ops[{op_index}] ({op}) could not be applied: {detail}. {applied} op(s) before it were applied and stand; ops after it were not run. Resume from this index rather than resending the batch.");
+    example { applied: 2, detail: "Document not found: d1 in workspace w1".to_owned(), op: "document.move".to_owned(), op_index: 2 };
 }
 
 /// Every code a refusal carries, as a constant.
@@ -677,6 +688,8 @@ pub mod code {
     pub const INTERNAL_ERROR: &str = "internal_error";
     pub const VERSION_NOT_FOUND: &str = "version_not_found";
     pub const THREAD_EDIT_OP_REFUSED: &str = "thread_edit_op_refused";
+    pub const DOCUMENT_MOVE_NEEDS_TARGET: &str = "document_move_needs_target";
+    pub const WORKSPACE_EDIT_OP_REFUSED: &str = "workspace_edit_op_refused";
 }
 
 /// Every code, once, in the order the contract first names it.
@@ -744,6 +757,8 @@ pub const CODES: &[&str] = &[
     code::INTERNAL_ERROR,
     code::VERSION_NOT_FOUND,
     code::THREAD_EDIT_OP_REFUSED,
+    code::DOCUMENT_MOVE_NEEDS_TARGET,
+    code::WORKSPACE_EDIT_OP_REFUSED,
 ];
 
 /// The codes a keeper refuses a sync write with.

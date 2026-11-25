@@ -24,6 +24,12 @@ impl SeqIdMint {
     pub fn one_peer(peer: u64) -> Self {
         Self { next_peer: AtomicU64::new(peer), step: 0, next_byte: AtomicU64::new(0) }
     }
+
+    /// Restarts the bytes at `next`, as a recording that starts each call's
+    /// draws at its own position does.
+    pub fn draw_from(&self, next: u64) {
+        self.next_byte.store(next, Ordering::SeqCst);
+    }
 }
 
 impl IdMint for SeqIdMint {
@@ -51,6 +57,14 @@ mod tests {
     fn one_peer_answers_the_same_id_every_time() {
         let mint = SeqIdMint::one_peer(42);
         assert_eq!([mint.peer_id(), mint.peer_id(), mint.peer_id()], [42, 42, 42]);
+    }
+
+    #[test]
+    fn bytes_restart_where_they_are_told_to() {
+        let mint = SeqIdMint::new(0);
+        mint.random_bytes(5);
+        mint.draw_from(300);
+        assert_eq!(mint.random_bytes(2), vec![44, 45]);
     }
 
     #[test]

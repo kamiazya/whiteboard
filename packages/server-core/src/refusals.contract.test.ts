@@ -63,6 +63,7 @@ import {
 import { NamelessLinkifyTargetError } from './tools/linkify-mentions.js'
 import { refuseAgainstLibrary } from './tools/tag-library.js'
 import { ThreadEditError } from './tools/thread-edit-error.js'
+import { DocumentMoveNeedsTargetError, WorkspaceEditError } from './tools/workspace-edit-error.js'
 import {
   RestoreTargetExistsError,
   SubtreeNeedsWorkspaceVersionError,
@@ -440,6 +441,9 @@ const FACTORIES: Factories = {
   InvalidRestoreTargetPath: (p) => new InvalidRestoreTargetPathError(p.targetPath),
   RestoredDocumentIdMissing: (p) => new RestoredDocumentIdMissingError(p.targetPath),
   ThreadEditOpRefused: (p) => new ThreadEditError(p.opIndex, p.op, p.detail),
+  DocumentMoveNeedsTarget: () => new DocumentMoveNeedsTargetError(),
+  WorkspaceEditOpRefused: (p) =>
+    new WorkspaceEditError(p.opIndex, p.op, p.applied, new Error(p.detail)),
 }
 
 describe('the refusal contract and the TypeScript that raises it', () => {
