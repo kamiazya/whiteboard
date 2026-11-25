@@ -140,11 +140,18 @@ fn ops_issues(path: &str, value: Option<&Value>) -> Vec<String> {
             .enumerate()
             .flat_map(|(position, op)| op_issues(&joined(path, &position.to_string()), op))
             .collect(),
-        // A string is judged for a length it may carry too, and so is an object.
-        Some(Value::String(text)) if (1..=OPS_MAX).contains(&text.chars().count()) => {
-            vec![expected(path, "array", value)]
+        // A string is no array, and is judged for the length it has as one.
+        Some(Value::String(text)) => {
+            let length = match text.chars().count() {
+                0 => Some(NO_OPS),
+                1..=OPS_MAX => None,
+                _ => Some(TOO_MANY_OPS),
+            };
+            std::iter::once(expected(path, "array", value))
+                .chain(length.map(|words| at(path, words)))
+                .collect()
         }
-        Some(Value::String(_) | Value::Object(_)) => vec![UNJUDGED.to_owned()],
+        Some(Value::Object(_)) => vec![UNJUDGED.to_owned()],
         other => vec![expected(path, "array", other)],
     }
 }

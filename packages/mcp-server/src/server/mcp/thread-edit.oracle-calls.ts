@@ -481,6 +481,17 @@ function faultCalls(base: Message): Asked[] {
       'a fault in an op of the second place',
       { ...base, ops: [add(doc, 'x'), { op: 'thread.resolve' }] },
     ],
+    ['an empty string for the ops', { ...base, ops: '' }],
+    ['a string of 201 characters for the ops', { ...base, ops: 's'.repeat(201) }],
+    ['a string of 200 characters for the ops', { ...base, ops: 's'.repeat(200) }],
+    ['exactly 200 ops', { ...base, ops: Array.from({ length: 200 }, () => resolve('nope')) }],
+    ['a body of 2049 emoji, which is 4098 units', one({ ...add(doc, '\u{1F600}'.repeat(2049)) })],
+    ['a body of 2048 emoji, which is 4096 units', one({ ...add(doc, '\u{1F600}'.repeat(2048)) })],
+    ['an author with a space before it', one({ ...add(doc, 'x'), author: ' a' })],
+    ['an author with a space after it', one({ ...add(doc, 'x'), author: 'a ' })],
+    ['an author with a carriage return inside', one({ ...add(doc, 'x'), author: 'a\rb' })],
+    ['an author with a line feed inside', one({ ...add(doc, 'x'), author: 'a\nb' })],
+    ['an author with a no-break space around it', one({ ...add(doc, 'x'), author: '\u00a0a' })],
   ]
 }
 
