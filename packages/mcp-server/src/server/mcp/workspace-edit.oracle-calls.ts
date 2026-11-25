@@ -91,6 +91,7 @@ function invalidCalls(ids: Ids): Asked[] {
     ['two faults in one op', edit([move('x', { name: 3 })])],
     ['a fault in each of two ops', edit([move('x', { name: 'a' }), folder('shelf', '/')])],
     ['a body with no document id', edit([{ op: 'document.set', markdown: 'x' }])],
+    ['a body op with no body', edit([{ op: 'document.set', documentId: ids.beta }])],
     ['a number for a body', edit([{ op: 'document.set', documentId: ids.beta, markdown: 1 }])],
     [
       'a number for a create body',

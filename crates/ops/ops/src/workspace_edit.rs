@@ -71,12 +71,13 @@ pub struct WorkspaceEditInput {
     pub ops: Vec<WorkspaceOp>,
 }
 
-/// One applied op: its discriminator, and the document and path it reports.
+/// One applied op: its discriminator, the document it reports (a folder's
+/// names none) and the path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppliedOp {
     pub op: &'static str,
     pub document_id: Option<String>,
-    pub path: Option<String>,
+    pub path: String,
 }
 
 /// The workspace the batch applied to, as its canonical id, and one row per

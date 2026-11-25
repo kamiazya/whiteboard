@@ -292,6 +292,6 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         answered += 1;
         refused += usize::from(row["answer"]["isError"] == json!(true));
     }
-    assert_eq!((answered, pending), (89, 12), "the recording's calls, answered and pending");
-    assert_eq!((moved, refused), (26, 63), "the calls that moved the record, and those refused");
+    assert_eq!((answered, pending), (90, 12), "the recording's calls, answered and pending");
+    assert_eq!((moved, refused), (26, 64), "the calls that moved the record, and those refused");
 }

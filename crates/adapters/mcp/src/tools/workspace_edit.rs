@@ -91,9 +91,7 @@ fn row(applied: &AppliedOp) -> Json {
     if let Some(document_id) = &applied.document_id {
         members.push(("documentId", Json::Text(document_id.clone())));
     }
-    if let Some(path) = &applied.path {
-        members.push(("path", Json::Text(path.clone())));
-    }
+    members.push(("path", Json::Text(applied.path.clone())));
     Json::Object(members)
 }
 
@@ -152,9 +150,9 @@ fn within_ops(length: usize) -> bool {
 }
 
 /// A discriminator, judged before the arm it picks.
-const fn picked(name: &'static str) -> Field {
-    Field { name, kind: Kind::Checked(Checked { issues: |_, _| Vec::new(), aborts: None }) }
-}
+const PICKED: Kind = Kind::Checked(Checked { issues: |_, _| Vec::new(), aborts: None });
+const OP: Field = Field { name: "op", kind: PICKED };
+const KIND: Field = Field { name: "kind", kind: PICKED };
 
 const DOCUMENT_ID: Field = Field {
     name: "documentId",
@@ -174,18 +172,18 @@ const NAME: Field =
     Field { name: "name", kind: Kind::Checked(Checked { issues: name_issues, aborts: None }) };
 
 const CREATE_MARKDOWN: &[Field] = &[
-    picked("op"),
+    OP,
     PATH,
-    picked("kind"),
+    KIND,
     NAME,
     Field {
         name: "markdown",
         kind: Kind::Checked(Checked { issues: markdown_issues, aborts: None }),
     },
 ];
-const CREATE_SPATIAL: &[Field] = &[picked("op"), PATH, picked("kind"), NAME];
+const CREATE_SPATIAL: &[Field] = &[OP, PATH, KIND, NAME];
 const SET: &[Field] = &[
-    picked("op"),
+    OP,
     DOCUMENT_ID,
     Field {
         name: "markdown",
@@ -199,14 +197,14 @@ const SET: &[Field] = &[
     },
 ];
 const MOVE: &[Field] = &[
-    picked("op"),
+    OP,
     DOCUMENT_ID,
     Field { name: "path", kind: Kind::Path { max: PATH_MAX, segments: SEGMENTS } },
     NAME,
 ];
-const DELETE: &[Field] = &[picked("op"), DOCUMENT_ID];
+const DELETE: &[Field] = &[OP, DOCUMENT_ID];
 const FOLDER: &[Field] = &[
-    picked("op"),
+    OP,
     PATH,
     Field {
         name: "name",

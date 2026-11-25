@@ -23,17 +23,17 @@ pub(super) fn apply<P: Ports>(
     match op {
         WorkspaceOp::CreateSpatial { path, name: given } => {
             let (document_id, path) = create::spatial(ports, batch, path, given.as_deref())?;
-            Ok(AppliedOp { op: name, document_id: Some(document_id), path: Some(path) })
+            Ok(AppliedOp { op: name, document_id: Some(document_id), path })
         }
         WorkspaceOp::Move { document_id, path, name: given } => {
             let path = moved(batch, document_id, path.as_deref(), given.as_deref())?;
-            Ok(AppliedOp { op: name, document_id: Some(document_id.clone()), path: Some(path) })
+            Ok(AppliedOp { op: name, document_id: Some(document_id.clone()), path })
         }
         WorkspaceOp::FolderRename { path, name: given } => {
             let input =
                 SetFolderName { workspace_id: batch.workspace_id, path, name: given.as_deref() };
             set_folder_name_of(&batch.record, &input).map_err(refused::of)?;
-            Ok(AppliedOp { op: name, document_id: None, path: Some(path.clone()) })
+            Ok(AppliedOp { op: name, document_id: None, path: path.clone() })
         }
         // A delete evacuates the document into a blob before it removes it,
         // and no port here holds blobs; an unknown document is refused first.
