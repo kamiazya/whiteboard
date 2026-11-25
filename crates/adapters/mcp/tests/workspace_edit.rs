@@ -34,11 +34,15 @@ const CASES: &str =
     include_str!("../../../../packages/mcp-server/src/server/mcp/oracle/workspace-edit.jsonl");
 const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
-/// The recorded calls this crate leaves pending, each for what it would
-/// write: a body (a markdown create, `document.set`), a delete (whose
-/// evacuation writes a blob no port here holds), a move whose references
-/// other documents follow, and a workspace the call would mint.
+/// The recorded calls this crate leaves pending: those that would write a
+/// body (a markdown create, `document.set`), a delete (whose evacuation
+/// writes a blob no port here holds), a move whose references other
+/// documents follow, or a workspace the call would mint; and arguments
+/// carrying a length the SDK judges beside their type, past a bound.
 const PENDING: &[&str] = &[
+    "an object with no length for the ops",
+    "an empty string for the ops",
+    "an object with a long length for a name",
     "a delete with descendants",
     "a referenced subtree move",
     "a referenced move",
@@ -288,6 +292,6 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         answered += 1;
         refused += usize::from(row["answer"]["isError"] == json!(true));
     }
-    assert_eq!((answered, pending), (86, 9), "the recording's calls, answered and pending");
-    assert_eq!((moved, refused), (26, 60), "the calls that moved the record, and those refused");
+    assert_eq!((answered, pending), (89, 12), "the recording's calls, answered and pending");
+    assert_eq!((moved, refused), (26, 63), "the calls that moved the record, and those refused");
 }

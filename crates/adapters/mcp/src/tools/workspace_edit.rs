@@ -237,11 +237,9 @@ fn op_issues(path: &str, op: &Value) -> Vec<String> {
 /// either in `too_long`.
 fn bounded(path: &str, value: Option<&Value>, max: usize, too_long: &str) -> Vec<String> {
     match value {
-        Some(Value::String(held))
-            if characters(held) > max || held.encode_utf16().count() > max =>
-        {
-            vec![at(path, too_long)]
-        }
+        // Past `max` UTF-16 units: a string past `max` characters is past it
+        // too, and Zod words both alike.
+        Some(Value::String(held)) if held.encode_utf16().count() > max => vec![at(path, too_long)],
         None | Some(Value::String(_)) => Vec::new(),
         // A list or an object carrying a length is judged for it as well,
         // in words no call recorded past the bound.
@@ -301,3 +299,6 @@ fn folder_name_refusal(name: &str) -> Option<&'static str> {
         None
     }
 }
+
+#[cfg(test)]
+mod tests;
