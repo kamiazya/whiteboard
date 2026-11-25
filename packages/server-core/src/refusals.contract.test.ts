@@ -52,7 +52,7 @@ import {
 } from './tools/errors.js'
 import { NamelessLinkifyTargetError } from './tools/linkify-mentions.js'
 import { refuseAgainstLibrary } from './tools/tag-library.js'
-import { ThreadEditError } from './tools/thread-edit.js'
+import { ThreadEditError } from './tools/thread-edit-error.js'
 import {
   RestoreTargetExistsError,
   SubtreeNeedsWorkspaceVersionError,

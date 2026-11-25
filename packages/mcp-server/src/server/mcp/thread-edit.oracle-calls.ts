@@ -3,19 +3,25 @@
  * is about. Held apart from the recorder so neither outgrows the file budget.
  */
 
-export const W = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
-export const C = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
-export const SEGMENT = 'notes'
-export const CROWD = 'crowd'
-export const NOTHING = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
+const NOTHING = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 
-export type Message = Record<string, unknown>
+type Message = Record<string, unknown>
 
 type Ids = Record<string, string>
 
-export type Asked = [string, Message | undefined]
+type Asked = [string, Message | undefined]
 
-const thread = (documentId: string | undefined, ops: Message[], workspaceId = W): Message => ({
+/**
+ * The workspaces the recording holds, by the id each is addressed with and the
+ * segment each is known by; set once from the record the calls are drawn for.
+ */
+const held = { main: '', crowd: '', segment: '', crowdSegment: '' }
+
+const thread = (
+  documentId: string | undefined,
+  ops: Message[],
+  workspaceId = held.main,
+): Message => ({
   workspaceId,
   documentId,
   ops,
@@ -92,6 +98,13 @@ function noteCalls(ids: Ids): Asked[] {
       'every op kind and a reopen in one batch',
       on([resolve('th-batch'), reply('t1', 'again'), resolve('th-batch', false), add(doc, 'e')]),
     ],
+  ]
+}
+
+/** Bodies at the edge of what a message may say, and what blank means. */
+function bodyCalls(ids: Ids): Asked[] {
+  const on = (ops: Message[]) => thread(ids.note, ops)
+  return [
     [
       'a body of quotes, newlines and escapes',
       on([add(doc, 'say "hi"\\n\n\tand \u0007 \u2028 \u{1F600} \u65e5\u672c')]),
@@ -247,19 +260,25 @@ function refusedCalls(ids: Ids): Asked[] {
     ],
     ['an empty quote', note([add(quote('', 0, 0), 'x')])],
     ['a good op then a bad one', board([add(doc, 'kept?'), resolve('nope')])],
+  ]
+}
+
+/** Documents and workspaces the operation cannot reach, or reads in a retired shape. */
+function missingCalls(ids: Ids): Asked[] {
+  return [
     ['a canvas in the retired elements list', thread(ids.elderly, [add(doc, 'x')])],
     ['comments in the retired plane', thread(ids.archive, [add(doc, 'x')])],
     ['a document nothing holds', thread(NOTHING, [add(doc, 'x')])],
-    ['a document nothing holds, by segment', thread(NOTHING, [add(doc, 'x')], SEGMENT)],
+    ['a document nothing holds, by segment', thread(NOTHING, [add(doc, 'x')], held.segment)],
     ['a workspace nothing answers to', thread(ids.note, [add(doc, 'x')], 'nope')],
-    ['another namespace', thread(ids.note, [add(doc, 'x')], `you/${SEGMENT}`)],
-    ['a document of another workspace', thread(ids.note, [add(doc, 'x')], CROWD)],
+    ['another namespace', thread(ids.note, [add(doc, 'x')], `you/${held.segment}`)],
+    ['a document of another workspace', thread(ids.note, [add(doc, 'x')], held.crowdSegment)],
   ]
 }
 
 /** The ceilings on open threads and on messages in one thread. */
 function ceilingCalls(crowded: Ids): Asked[] {
-  const at = (documentId: string | undefined, ops: Message[]) => thread(documentId, ops, C)
+  const at = (documentId: string | undefined, ops: Message[]) => thread(documentId, ops, held.crowd)
   return [
     ['a thread past the open ceiling', at(crowded.open500, [add(doc, 'x')])],
     [
@@ -314,12 +333,12 @@ function firstCalls(ids: Ids): Asked[] {
 
 /** Arguments the SDK refuses before the tool runs. */
 function invalidCalls(ids: Ids): Asked[] {
-  const base = { workspaceId: W, documentId: ids.note, ops: [add(doc, 'x')] }
+  const base = { workspaceId: held.main, documentId: ids.note, ops: [add(doc, 'x')] }
   const many = (count: number, op: Message): Message[] => Array.from({ length: count }, () => op)
   return [
     ['no arguments', undefined],
     ['empty arguments', {}],
-    ['no ops', { workspaceId: W, documentId: ids.note }],
+    ['no ops', { workspaceId: held.main, documentId: ids.note }],
     ['an empty list of ops', { ...base, ops: [] }],
     ['201 ops', { ...base, ops: many(201, resolve('nope')) }],
     ['201 unreadable ops', { ...base, ops: many(201, { op: 'nope' }) }],
@@ -359,14 +378,14 @@ function invalidCalls(ids: Ids): Asked[] {
       { ...base, ops: [{ ...resolve('t1'), resolved: 'yes' }] },
     ],
     ...shapeCalls(base),
+    ...anchorShapeCalls(base),
+    ...faultCalls(base),
   ]
 }
 
 /** Ops and anchors of the wrong shape, one fault at a time and then together. */
 function shapeCalls(base: Message): Asked[] {
   const one = (op: unknown): Message => ({ ...base, ops: [op] })
-  const anchored = (anchor: unknown): Message => one({ op: 'thread.add', anchor, body: 'x' })
-  const spatial = (more: Message): Message => ({ kind: 'spatial', x: 0, y: 0, ...more })
   return [
     ['a number for an op', one(5)],
     ['null for an op', one(null)],
@@ -391,6 +410,15 @@ function shapeCalls(base: Message): Asked[] {
     ],
     ['a number for a resolve thread id', one({ op: 'thread.resolve', threadId: 5 })],
     ['null for resolved', one({ ...resolve('t1'), resolved: null })],
+  ]
+}
+
+/** Anchors of the wrong shape. */
+function anchorShapeCalls(base: Message): Asked[] {
+  const one = (op: unknown): Message => ({ ...base, ops: [op] })
+  const anchored = (anchor: unknown): Message => one({ op: 'thread.add', anchor, body: 'x' })
+  const spatial = (more: Message): Message => ({ kind: 'spatial', x: 0, y: 0, ...more })
+  return [
     ['a string for the anchor', anchored('x')],
     ['null for the anchor', anchored(null)],
     ['no anchor', one({ op: 'thread.add', body: 'x' })],
@@ -429,6 +457,13 @@ function shapeCalls(base: Message): Asked[] {
     ['a missing end', anchored({ kind: 'text', quote: { exact: 'why' }, start: 0 })],
     ['an empty node id in a text anchor', anchored({ ...quote('why', 0, 3), nodeId: '' })],
     ['a number for a quote context', anchored(quote('why', 0, 3, { suffix: 5 }))],
+  ]
+}
+
+/** More than one fault in a call. */
+function faultCalls(base: Message): Asked[] {
+  const one = (op: unknown): Message => ({ ...base, ops: [op] })
+  return [
     ['two faults in one op', one({ op: 'thread.add', anchor: 3, body: '' })],
     [
       'a fault in each of two ops',
@@ -451,14 +486,19 @@ function shapeCalls(base: Message): Asked[] {
 
 /** The calls the recording answers, in order, by what each one is about. */
 export function calls(record: Message): Asked[] {
+  const [main = '', crowd = ''] = Object.keys(record.snapshots as Message)
+  const [segment = '', crowdSegment = ''] = record.known as string[]
+  Object.assign(held, { main, crowd, segment, crowdSegment })
   const ids = record.ids as Ids
   const crowded = record.crowded as Ids
   return [
     ...noteCalls(ids),
+    ...bodyCalls(ids),
     ...passageCalls(ids),
     ...boardCalls(ids),
     ...idCalls(ids),
     ...refusedCalls(ids),
+    ...missingCalls(ids),
     ...ceilingCalls(crowded),
     ...invalidCalls(ids),
     ...firstCalls(ids),

@@ -7,7 +7,7 @@ import { InMemoryTransport, type McpServer } from '@modelcontextprotocol/server'
 import { LoroDoc, LoroList, LoroMap, type LoroTree } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from '../routes/_test-helpers.js'
-import { C, CROWD, calls, type Message, SEGMENT, W } from './thread-edit.oracle-calls.js'
+import { calls } from './thread-edit.oracle-calls.js'
 
 /**
  * `wb_thread_edit` as the daemon answers it: the recording the Rust ops
@@ -34,9 +34,15 @@ import { C, CROWD, calls, type Message, SEGMENT, W } from './thread-edit.oracle-
  */
 const FIXTURE = new URL('./oracle/thread-edit.jsonl', import.meta.url)
 const RECORD = process.env.WHITEBOARD_RECORD_ORACLE === '1'
+const W = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+const C = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
+const SEGMENT = 'notes'
+const CROWD = 'crowd'
 const AT = '2026-11-24T12:00:00.000Z'
 const PEER = 4_242_424_242
 const MESSAGE_CEILING = 1000
+
+type Message = Record<string, unknown>
 
 const tmp = withTempDataDir('whiteboard-mcp-thread-edit-')
 
@@ -229,23 +235,8 @@ async function longThread(call: Call, documentId: string, threadId: string, mess
   }
 }
 
-async function buildRecord(): Promise<Message> {
-  const known = [SEGMENT, CROWD]
-  const deps = await freshDeps(known)
-  const call = await caller(deps)
-  const ids = idsOf(
-    await landed(call, 'wb_workspace_edit', {
-      workspaceId: W,
-      actor: 'claude-code/2.1',
-      ops: NOTES,
-    }),
-  )
-  await landed(call, 'wb_canvas_edit', {
-    workspaceId: W,
-    documentId: ids.board,
-    mode: 'apply',
-    ops: BOARD_OPS,
-  })
+/** The crowd workspace's documents at the ceilings, built through the tool. */
+async function buildCrowd(call: Call): Promise<Record<string, string>> {
   const crowded = idsOf(
     await landed(call, 'wb_workspace_edit', {
       workspaceId: C,
@@ -266,9 +257,19 @@ async function buildRecord(): Promise<Message> {
   }
   await longThread(call, crowded.deep ?? '', 'd', MESSAGE_CEILING - 1)
   await longThread(call, crowded.junk ?? '', 'j', MESSAGE_CEILING - 1)
-  // What no tool writes: a gap a peer's merged reply leaves, a stored message
-  // the schema refuses, a canvas in the retired elements list and comments in
-  // the retired plane.
+  return crowded
+}
+
+/**
+ * What no tool writes: a gap a peer's merged reply leaves, a stored message
+ * the schema refuses, a canvas in the retired elements list and comments in
+ * the retired plane.
+ */
+async function storeStrangeShapes(
+  call: Call,
+  ids: Record<string, string>,
+  crowded: Record<string, string>,
+): Promise<void> {
   await landed(call, 'wb_thread_edit', {
     workspaceId: W,
     documentId: ids.gap,
@@ -298,6 +299,27 @@ async function buildRecord(): Promise<Message> {
     const messages = (threads.get('j') as LoroMap).get('messages') as LoroMap
     messages.set('j-junk', { body: 42 })
   })
+}
+
+async function buildRecord(): Promise<Message> {
+  const known = [SEGMENT, CROWD]
+  const deps = await freshDeps(known)
+  const call = await caller(deps)
+  const ids = idsOf(
+    await landed(call, 'wb_workspace_edit', {
+      workspaceId: W,
+      actor: 'claude-code/2.1',
+      ops: NOTES,
+    }),
+  )
+  await landed(call, 'wb_canvas_edit', {
+    workspaceId: W,
+    documentId: ids.board,
+    mode: 'apply',
+    ops: BOARD_OPS,
+  })
+  const crowded = await buildCrowd(call)
+  await storeStrangeShapes(call, ids, crowded)
   const registry = (await deps.documentIndex.listWorkspaces()).filter(
     (row) => row.workspaceId === W || row.workspaceId === C,
   )
