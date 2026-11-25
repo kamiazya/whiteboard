@@ -682,4 +682,19 @@ export const InvalidRestoreTargetPath = (targetPath: string) => `invalid targetP
 export const RestoredDocumentIdMissing = (targetPath: string) =>
   `restored document has no id: ${targetPath}`
 
+/**
+ * One passage of a `wb_body_edit` call that cannot be applied to the body as it stands: its
+ * anchor, its assumption, its overlap with another passage or the body limit; the call is
+ * refused whole, so nothing of it was written.
+ */
+export const PassageNotApplicable = (changeId: string, detail: string) =>
+  `Passage ${changeId} does not apply: ${detail}`
+
+/**
+ * A proposal a tool would write that leaves the document holding more open proposed changes
+ * than it may, counted across every proposal it holds.
+ */
+export const OpenChangesCeiling = (open: number, limit: string) =>
+  `the document would hold ${open} open proposed changes, past ${limit}. Nothing was written.`
+
 export * from './refusal-codes.js'

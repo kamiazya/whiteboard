@@ -64,6 +64,8 @@ export const REFUSAL_CODE_INVALID_REQUEST = 'invalid_request'
 export const REFUSAL_CODE_DATABASE_BUSY = 'database_busy'
 export const REFUSAL_CODE_INTERNAL_ERROR = 'internal_error'
 export const REFUSAL_CODE_VERSION_NOT_FOUND = 'version_not_found'
+export const REFUSAL_CODE_PASSAGE_NOT_APPLICABLE = 'passage_not_applicable'
+export const REFUSAL_CODE_OPEN_CHANGES_CEILING = 'open_changes_ceiling'
 
 /** Every code a refusal carries, keyed by the camelCase of the code. */
 export const REFUSAL_CODES = {
@@ -129,6 +131,8 @@ export const REFUSAL_CODES = {
   databaseBusy: REFUSAL_CODE_DATABASE_BUSY,
   internalError: REFUSAL_CODE_INTERNAL_ERROR,
   versionNotFound: REFUSAL_CODE_VERSION_NOT_FOUND,
+  passageNotApplicable: REFUSAL_CODE_PASSAGE_NOT_APPLICABLE,
+  openChangesCeiling: REFUSAL_CODE_OPEN_CHANGES_CEILING,
 } as const
 
 /** A code a refusal carries. */

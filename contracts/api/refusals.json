@@ -2392,6 +2392,42 @@
       "exampleText": "restored document has no id: a/b",
       "surfaces": ["mcp-tools"],
       "source": "RestoredDocumentIdMissingError"
+    },
+    {
+      "name": "PassageNotApplicable",
+      "code": "passage_not_applicable",
+      "status": 409,
+      "description": "One passage of a `wb_body_edit` call that cannot be applied to the body as it stands: its anchor, its assumption, its overlap with another passage or the body limit; the call is refused whole, so nothing of it was written.",
+      "message": "Passage {changeId} does not apply: {detail}",
+      "params": {
+        "changeId": "string",
+        "detail": "string"
+      },
+      "example": {
+        "changeId": "c1",
+        "detail": "its passage is no longer in the body"
+      },
+      "exampleText": "Passage c1 does not apply: its passage is no longer in the body",
+      "surfaces": ["mcp-tools"],
+      "source": "PassageNotApplicableError"
+    },
+    {
+      "name": "OpenChangesCeiling",
+      "code": "open_changes_ceiling",
+      "status": 413,
+      "description": "A proposal a tool would write that leaves the document holding more open proposed changes than it may, counted across every proposal it holds.",
+      "message": "the document would hold {open} open proposed changes, past {limit}. Nothing was written.",
+      "params": {
+        "open": "integer",
+        "limit": "string"
+      },
+      "example": {
+        "open": 1001,
+        "limit": "the limit of 1000 open proposed changes for one document; adopt or dismiss some first"
+      },
+      "exampleText": "the document would hold 1001 open proposed changes, past the limit of 1000 open proposed changes for one document; adopt or dismiss some first. Nothing was written.",
+      "surfaces": ["mcp-tools"],
+      "source": "OpenChangesCeilingError"
     }
   ]
 }

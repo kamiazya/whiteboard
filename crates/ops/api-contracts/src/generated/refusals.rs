@@ -605,6 +605,17 @@ refusals! {
     RestoredDocumentIdMissing { target_path: String }
         => code::INTERNAL_ERROR, 500, format!("restored document has no id: {target_path}");
     example { target_path: "a/b".to_owned() };
+    /// One passage of a `wb_body_edit` call that cannot be applied to the body as it stands:
+    /// its anchor, its assumption, its overlap with another passage or the body limit; the call
+    /// is refused whole, so nothing of it was written.
+    PassageNotApplicable { change_id: String, detail: String }
+        => code::PASSAGE_NOT_APPLICABLE, 409, format!("Passage {change_id} does not apply: {detail}");
+    example { change_id: "c1".to_owned(), detail: "its passage is no longer in the body".to_owned() };
+    /// A proposal a tool would write that leaves the document holding more open proposed
+    /// changes than it may, counted across every proposal it holds.
+    OpenChangesCeiling { limit: String, open: u64 }
+        => code::OPEN_CHANGES_CEILING, 413, format!("the document would hold {open} open proposed changes, past {limit}. Nothing was written.");
+    example { limit: "the limit of 1000 open proposed changes for one document; adopt or dismiss some first".to_owned(), open: 1001 };
 }
 
 /// Every code a refusal carries, as a constant.
@@ -671,6 +682,8 @@ pub mod code {
     pub const DATABASE_BUSY: &str = "database_busy";
     pub const INTERNAL_ERROR: &str = "internal_error";
     pub const VERSION_NOT_FOUND: &str = "version_not_found";
+    pub const PASSAGE_NOT_APPLICABLE: &str = "passage_not_applicable";
+    pub const OPEN_CHANGES_CEILING: &str = "open_changes_ceiling";
 }
 
 /// Every code, once, in the order the contract first names it.
@@ -737,6 +750,8 @@ pub const CODES: &[&str] = &[
     code::DATABASE_BUSY,
     code::INTERNAL_ERROR,
     code::VERSION_NOT_FOUND,
+    code::PASSAGE_NOT_APPLICABLE,
+    code::OPEN_CHANGES_CEILING,
 ];
 
 /// The codes a keeper refuses a sync write with.

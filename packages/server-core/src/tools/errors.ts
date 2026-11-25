@@ -8,9 +8,11 @@ import {
   FacetWriteRejected,
   NodeLockedNothingWritten,
   NodeNotFound,
+  PassageNotApplicable,
   REFUSAL_CODE_EDGE_NOT_FOUND,
   REFUSAL_CODE_ELEMENT_LOCKED,
   REFUSAL_CODE_NODE_NOT_FOUND,
+  REFUSAL_CODE_PASSAGE_NOT_APPLICABLE,
   REFUSAL_CODE_TOO_MANY_TAGS,
   TooManyTagsOnElement,
 } from '@kamiazya/whiteboard-model'
@@ -122,11 +124,13 @@ export class FacetWriteRejectedError extends Error {
  * everything.
  */
 export class PassageNotApplicableError extends Error {
+  readonly code = REFUSAL_CODE_PASSAGE_NOT_APPLICABLE
+
   constructor(
     public readonly changeId: string,
     detail: string,
   ) {
-    super(`Passage ${changeId} does not apply: ${detail}`)
+    super(PassageNotApplicable(changeId, detail))
     this.name = 'PassageNotApplicableError'
   }
 }
