@@ -305,10 +305,11 @@ fn a_set_stored_past_the_bound_takes_a_change_that_does_not_grow_it() {
         .holding(W, snapshot_with_stored_tags(&id("note"), stored));
     let same_size =
         |change: TagChange| FacetSetInput { tags: Some(change), ..tagging(&[id("note")]) };
-    let renamed = TagChange { rename: vec![("t0".into(), "u0".into())], ..TagChange::default() };
-    assert!(matches!(run(&fakes, same_size(renamed)), Ok(FacetSetAnswer::Updated(_))));
-    let shrunk = TagChange { remove: vec!["t1".into()], ..TagChange::default() };
-    assert!(matches!(run(&fakes, same_size(shrunk)), Ok(FacetSetAnswer::Updated(_))));
+    let again = TagChange { add: vec!["t1".into()], ..TagChange::default() };
+    assert!(matches!(run(&fakes, same_size(again)), Ok(FacetSetAnswer::Updated(_))));
+    let swapped =
+        TagChange { add: vec!["t1".into()], remove: vec!["t2".into()], ..TagChange::default() };
+    assert!(matches!(run(&fakes, same_size(swapped)), Ok(FacetSetAnswer::Updated(_))));
     let grown = TagChange { add: vec!["more".into()], ..TagChange::default() };
     let refusal = run(&fakes, same_size(grown)).expect_err("a refusal");
     assert_eq!(

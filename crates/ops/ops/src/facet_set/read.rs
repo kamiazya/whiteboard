@@ -72,8 +72,11 @@ impl Doc<'_> {
 
     pub(super) fn kind(self) -> Result<Option<Kind>, Halt> {
         Ok(match defined(self.query(QueryName::DocumentKind)?) {
-            Some(Value::String(kind)) if kind == "spatial" => Some(Kind::Spatial),
-            Some(Value::String(kind)) if kind == "markdown" => Some(Kind::Markdown),
+            Some(Value::String(kind)) => match kind.as_str() {
+                "spatial" => Some(Kind::Spatial),
+                "markdown" => Some(Kind::Markdown),
+                _ => None,
+            },
             _ => None,
         })
     }
