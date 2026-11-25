@@ -43,6 +43,7 @@ const PENDING: &[&str] = &[
     "an object with no length for the ops",
     "an empty string for the ops",
     "an object with a long length for a name",
+    "a long list for a name",
     "a delete with descendants",
     "a referenced subtree move",
     "a referenced move",
@@ -292,6 +293,6 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         answered += 1;
         refused += usize::from(row["answer"]["isError"] == json!(true));
     }
-    assert_eq!((answered, pending), (90, 12), "the recording's calls, answered and pending");
-    assert_eq!((moved, refused), (26, 64), "the calls that moved the record, and those refused");
+    assert_eq!((answered, pending), (91, 13), "the recording's calls, answered and pending");
+    assert_eq!((moved, refused), (26, 65), "the calls that moved the record, and those refused");
 }

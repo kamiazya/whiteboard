@@ -92,6 +92,11 @@ function boundCalls(ids: Ids): Asked[] {
       edit([move('x', { name: '\u{1F600}'.repeat(200) })]),
     ],
     ['an object with a long length for a name', edit([move(ids.beta, { name: { length: 201 } })])],
+    [
+      'a long list for a name',
+      edit([move(ids.beta, { name: Array.from({ length: 201 }, () => 'n') })]),
+    ],
+    ['a folder name at its bound', edit([{ op: 'folder.rename', name: 'f'.repeat(200) }])],
     ['a path past its bound', edit([move(ids.beta, { path: 'p'.repeat(1025) })])],
     ['a folder name past its bound', edit([folder('shelf', 'f'.repeat(201))])],
     ['two faults in one op', edit([move('x', { name: 3 })])],
