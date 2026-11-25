@@ -233,8 +233,8 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         assert_eq!((&row["activity"], &row["written"]), (&json!([]), &json!([])), "{case}");
         assert_eq!(stored(ports), expected, "{case}: the stored record");
     }
-    assert_eq!((answered, pending), (20, 5), "the recording's calls, answered and pending");
-    assert_eq!(read, 5, "the calls answered with a board");
+    assert_eq!((answered, pending), (22, 5), "the recording's calls, answered and pending");
+    assert_eq!(read, 6, "the calls answered with a board");
 }
 
 #[cfg(test)]

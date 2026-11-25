@@ -26,7 +26,8 @@ import {
  * record (`snapshot`, kept as `W`) holding a note, a board with every kind of
  * node dressed and plain, locked and not, with edges and lines in every
  * shape, an empty board, a board one past each of the snapshot's caps, one
- * in a shape no tool writes any more and two whose facets hold several keys, the registry rows that address it, the
+ * in a shape no tool writes any more, two whose facets hold several keys and
+ * two whose own kind disagrees with their index row's, the registry rows that address it, the
  * caller's namespace, the handles a refusal may name, the ids of its
  * documents by name, and the scripting: `peer`, the replica every record the
  * daemon opens writes as, and `mint`, the one instant a write would be
@@ -186,11 +187,25 @@ function retire(copy: LoroDoc, documentId: string): void {
   elements.push({ id: 'e1', type: 'rectangle' })
 }
 
+/**
+ * What no tool writes: a document whose own envelope states a kind its index
+ * row does not, so a read shows which of the two it takes.
+ */
+function restate(copy: LoroDoc, documentId: string, kind: string): void {
+  const envelope = hostOf(copy, documentId).get('document') as LoroMap | undefined
+  if (envelope === undefined) throw new Error(`${documentId} holds no envelope`)
+  envelope.set('kind', kind)
+}
+
 async function buildRecord(): Promise<Message> {
   const known = [SEGMENT]
   const deps = await freshDeps(known)
   const ids = await populate(await caller(deps))
-  await editWorkspaceRecord(W, (copy) => retire(copy, ids.elderly ?? ''))
+  await editWorkspaceRecord(W, (copy) => {
+    retire(copy, ids.elderly ?? '')
+    restate(copy, ids.turned ?? '', 'markdown')
+    restate(copy, ids.relabelled ?? '', 'spatial')
+  })
   const record = await workspaceRecordCopy(W)
   const registry = (await deps.documentIndex.listWorkspaces()).filter(
     (row) => row.workspaceId === W,

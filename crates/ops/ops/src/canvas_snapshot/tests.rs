@@ -99,3 +99,42 @@ fn a_stopped_read_halts_as_it_stopped() {
         Halt::Refused(Refusal::RetiredStoredShape { found: "x".to_owned() })
     );
 }
+
+/// A board of `nodes` frames, `edges` edges and `lines` lines, nothing cut.
+fn sized(nodes: usize, edges: usize, lines: usize) -> CanvasSnapshotOutput {
+    let node = r#"{"id":"n","x":0,"y":0,"width":1,"height":1}"#;
+    let edge = r#"{"id":"e","from":{"node":"n"},"to":{"node":"n"}}"#;
+    let line = r#"{"id":"l","from":{"kind":"point","point":{"x":0,"y":0}},"to":{"kind":"point","point":{"x":1,"y":1}}}"#;
+    let many = |one: &str, n: usize| vec![one; n].join(",");
+    let text = format!(
+        r#"{{"nodes":[{}],"edges":[{}],"lines":[{}]}}"#,
+        many(node, nodes),
+        many(edge, edges),
+        many(line, lines)
+    );
+    board(&text).expect("a board")
+}
+
+#[test]
+fn each_list_is_truncated_past_its_own_cap_alone() {
+    let at_every_cap = sized(SNAPSHOT_MAX_NODES, SNAPSHOT_MAX_EDGES, SNAPSHOT_MAX_EDGES);
+    assert!(!at_every_cap.truncated, "a list at its cap is whole");
+    assert_eq!(at_every_cap.nodes.len(), SNAPSHOT_MAX_NODES);
+    for (nodes, edges, lines) in [
+        (SNAPSHOT_MAX_NODES + 1, 0, 0),
+        (0, SNAPSHOT_MAX_EDGES + 1, 0),
+        (0, 0, SNAPSHOT_MAX_EDGES + 1),
+    ] {
+        let past = sized(nodes, edges, lines);
+        assert!(past.truncated, "{nodes} nodes, {edges} edges, {lines} lines");
+        assert_eq!((past.node_count, past.edge_count, past.line_count), (nodes, edges, lines));
+        assert_eq!(
+            (past.nodes.len(), past.edges.len(), past.lines.len()),
+            (
+                nodes.min(SNAPSHOT_MAX_NODES),
+                edges.min(SNAPSHOT_MAX_EDGES),
+                lines.min(SNAPSHOT_MAX_EDGES)
+            )
+        );
+    }
+}

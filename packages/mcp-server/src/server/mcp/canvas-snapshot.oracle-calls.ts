@@ -24,6 +24,13 @@ export const DOCUMENTS: Message[] = [
   { op: 'document.create', path: 'elderly', kind: 'spatial' },
   { op: 'document.create', path: 'wide', kind: 'spatial' },
   { op: 'document.create', path: 'wide-ink', kind: 'spatial' },
+  { op: 'document.create', path: 'turned', kind: 'spatial' },
+  {
+    op: 'document.create',
+    path: 'relabelled',
+    kind: 'markdown',
+    markdown: '---\ntype: note\n---\nr\n',
+  },
 ]
 
 /** Exactly as many UTF-16 units as the snapshot keeps of a text. */
@@ -234,6 +241,8 @@ function refusals(ids: Ids): Asked[] {
     ],
     ['a board in a retired shape', of('elderly')],
     ['a board in a retired shape, its layout asked for', of('elderly', { layout: true })],
+    ['a board whose own kind says markdown', of('turned')],
+    ['a note whose own kind says spatial', of('relabelled')],
   ]
 }
 
