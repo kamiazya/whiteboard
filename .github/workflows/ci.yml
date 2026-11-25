@@ -1355,12 +1355,14 @@ jobs:
             crates/fuzz/regressions
           retention-days: 14
 
-  # The legs rust-mutants fans out to. A pull request is planned from the
-  # mutants its diff lists (cargo-mutants parses, it builds nothing), grouped
-  # by the tests that can observe them (the mutated package and the workspace
-  # members that depend on it) and sharded by group: none, or a scope that does
-  # not reach the job, runs no leg; any other event runs eight over the whole
-  # workspace. A list or workspace graph that cannot be read plans those eight.
+  # The legs rust-mutants fans out to. A pull request or a push to main is
+  # planned from the mutants its diff lists (cargo-mutants parses, it builds
+  # nothing), grouped by the tests that can observe them (the mutated package
+  # and the workspace members that depend on it) and sharded by group: none, or
+  # a scope that does not reach the job, runs no leg; a merge queue runs eight
+  # over the whole workspace. A list or workspace graph that cannot be read
+  # plans those eight, so the steps below install cargo-mutants on exactly the
+  # events the planner narrows (IN_DIFF_EVENTS).
   # The decision is `shardPlan` in tools/checks/src/rust-mutants-ledger.mjs.
   rust-mutants-plan:
     runs-on: ubuntu-24.04
@@ -1383,11 +1385,11 @@ jobs:
         run: node tools/checks/src/affected-cli.mjs job rust-mutants --event "$EVENT"
 
       - name: Rust toolchain (rust-toolchain.toml)
-        if: github.event_name == 'pull_request' && steps.scope.outputs.run != 'false'
+        if: (github.event_name == 'pull_request' || github.event_name == 'push') && steps.scope.outputs.run != 'false'
         run: rustup toolchain install
 
       - name: Restore cargo-mutants
-        if: github.event_name == 'pull_request' && steps.scope.outputs.run != 'false'
+        if: (github.event_name == 'pull_request' || github.event_name == 'push') && steps.scope.outputs.run != 'false'
         id: mutants-bin
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -1395,7 +1397,7 @@ jobs:
           key: cargo-mutants-27.1.0
 
       - name: cargo-mutants
-        if: github.event_name == 'pull_request' && steps.scope.outputs.run != 'false' && steps.mutants-bin.outputs.cache-hit != 'true'
+        if: (github.event_name == 'pull_request' || github.event_name == 'push') && steps.scope.outputs.run != 'false' && steps.mutants-bin.outputs.cache-hit != 'true'
         run: cargo install --locked cargo-mutants --version 27.1.0
 
       - name: Plan the legs
@@ -1489,9 +1491,10 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: node tools/checks/src/rust-mutants.mjs baseline
 
-      # A push to main judges the merged change the same way, against HEAD^1:
-      # the whole workspace still holds survivors nobody has classified, so a
-      # full run here would fail every merge on mutants it did not add.
+      # A push to main judges the merged change the same way, against HEAD^1
+      # and by the same per-crate test sets: the whole workspace still holds
+      # survivors nobody has classified, so a full run here would fail every
+      # merge on mutants it did not add.
       - name: Mutants in this change (${{ matrix.leg }})
         if: steps.scope.outputs.run == 'true'
         env:

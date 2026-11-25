@@ -17,6 +17,7 @@
 
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
 import { REPO_ROOT } from './scan-roots.js'
@@ -50,6 +51,12 @@ const previewLatest = parseYaml(read('.github/workflows/deploy-preview.yml')) as
 const nightly = parseYaml(read('.github/workflows/rust-fuzz-nightly.yml')) as Workflow
 const mutation = parseYaml(read('.github/workflows/mutation.yml')) as Workflow
 const sonarqube = parseYaml(read('.github/workflows/sonarqube.yml')) as Workflow
+
+// Loaded by URL as rust-mutants-ledger.test.ts loads it: tools/checks is a
+// workspace of its own, and a relative import across it is an escape.
+const { IN_DIFF_EVENTS } = (await import(
+  pathToFileURL(join(REPO_ROOT, 'tools/checks/src/rust-mutants-ledger.mjs')).href
+)) as { IN_DIFF_EVENTS: string[] }
 
 const RUST_JOBS = ['rust', 'rust-cross-target', 'rust-fuzz-pr', 'rust-mutants']
 const stepsOf = (workflow: Workflow, id: string): Step[] => workflow.jobs[id]?.steps ?? []
@@ -267,6 +274,24 @@ describe('the rust-mutants legs are planned from the diff and the plan cannot pl
     expect(scoped.length).toBeGreaterThan(0)
     for (const step of scoped) {
       expect(step.if, step.name).toContain("steps.scope.outputs.run != 'false'")
+    }
+  })
+
+  it('installs cargo-mutants on exactly the events the planner lists the diff for', () => {
+    // A plan without cargo-mutants cannot list the diff and falls back to the
+    // whole workspace, which is how a push to main stayed on the full set.
+    const before = plan.slice(0, planStep === undefined ? 0 : plan.indexOf(planStep))
+    const gated = before.filter((s) => s.if?.includes('github.event_name'))
+    expect(gated.map((s) => s.name)).toEqual([
+      'Rust toolchain (rust-toolchain.toml)',
+      'Restore cargo-mutants',
+      'cargo-mutants',
+    ])
+    for (const step of gated) {
+      const events = [...(step.if ?? '').matchAll(/github\.event_name == '([a-z_]+)'/g)].map(
+        (m) => m[1],
+      )
+      expect(events.sort(), step.name).toEqual([...IN_DIFF_EVENTS].sort())
     }
   })
 

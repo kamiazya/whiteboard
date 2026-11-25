@@ -69,6 +69,7 @@ pub mod code {
     pub const THREAD_EDIT_OP_REFUSED: &str = "thread_edit_op_refused";
     pub const DOCUMENT_MOVE_NEEDS_TARGET: &str = "document_move_needs_target";
     pub const WORKSPACE_EDIT_OP_REFUSED: &str = "workspace_edit_op_refused";
+    pub const NOT_A_SPATIAL_DOCUMENT: &str = "not_a_spatial_document";
 }
 
 /// Every code, once, in the order the contract first names it.
@@ -140,6 +141,7 @@ pub const CODES: &[&str] = &[
     code::THREAD_EDIT_OP_REFUSED,
     code::DOCUMENT_MOVE_NEEDS_TARGET,
     code::WORKSPACE_EDIT_OP_REFUSED,
+    code::NOT_A_SPATIAL_DOCUMENT,
 ];
 
 /// The codes a keeper refuses a sync write with.

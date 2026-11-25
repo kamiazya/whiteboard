@@ -38,6 +38,20 @@ pub(crate) fn field<'v>(value: &'v Value, key: &str) -> Option<&'v Value> {
     }
 }
 
+/// Whether an object of two keys or more is anywhere in the value: a free
+/// map (a facet payload) reaches the TypeScript in the order of npm loro's
+/// hash map, which a native build cannot know, so an answer spelling one is
+/// left pending rather than written in a guessed order.
+pub(crate) fn holds_wide_map(value: &Value) -> bool {
+    match value {
+        Value::Map(entries) => {
+            entries.len() > 1 || entries.iter().any(|(_, held)| holds_wide_map(held))
+        }
+        Value::Seq(items) => items.iter().any(holds_wide_map),
+        _ => false,
+    }
+}
+
 /// `answer` over one document's content and its own tags, the index row's
 /// kind asked for a document that records none.
 pub(crate) fn read_loaded<T>(

@@ -1,9 +1,9 @@
 //! The operation table: every operation this crate answers, as data.
 
 use crate::{
-    BodyEdit, DocumentGet, DocumentList, DocumentResolve, DocumentSearch, FacetList, FacetSet,
-    Operation, Row, ThreadEdit, VersionList, VersionRestore, VersionSave, ViewportSet,
-    WorkspaceEdit,
+    BodyEdit, CanvasSnapshot, DocumentGet, DocumentList, DocumentResolve, DocumentSearch,
+    FacetList, FacetSet, Operation, Row, ThreadEdit, VersionList, VersionRestore, VersionSave,
+    ViewportSet, WorkspaceEdit,
 };
 
 /// Visits each operation by type, so a caller reaches its `execute` and its
@@ -38,7 +38,8 @@ table!(
     ViewportSet,
     ThreadEdit,
     BodyEdit,
-    WorkspaceEdit
+    WorkspaceEdit,
+    CanvasSnapshot
 );
 
 #[cfg(test)]

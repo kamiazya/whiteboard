@@ -1,21 +1,7 @@
 import type { DocumentSession } from '../document-session.js'
 import { kindOf } from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
-
-/**
- * Thrown when a scene tool is pointed at a document whose kind says it is
- * not spatial. Without this, a markdown document — whose body lives outside
- * the nodes/edges containers — digested or rendered as an EMPTY scene with
- * no error, indistinguishable from a genuinely empty spatial canvas.
- */
-class NotASpatialDocumentError extends Error {
-  constructor(documentId: string, kind: string, toolName: string) {
-    super(
-      `Document ${documentId} is a ${kind} document; ${toolName} projects spatial scenes only. Read it with wb_document_get instead.`,
-    )
-    this.name = 'NotASpatialDocumentError'
-  }
-}
+import { NotASpatialDocumentError } from './not-a-spatial-document-error.js'
 
 /**
  * Refuses a document KNOWN to be markdown: the doc's own recorded kind
