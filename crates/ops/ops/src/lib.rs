@@ -47,6 +47,7 @@ mod document_save;
 mod document_search;
 mod facet_list;
 mod facet_set;
+mod js_offset;
 mod operation;
 mod ports;
 mod record;
