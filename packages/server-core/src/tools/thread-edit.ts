@@ -15,11 +15,13 @@ import {
   OPS_PER_CALL_MAX,
   okfActorInputSchema,
   placeTextAnchor,
+  REFUSAL_CODE_THREAD_EDIT_OP_REFUSED,
   type SpatialAnchor,
   type SpatialCanvas,
   type TextAnchor,
   THREAD_MAX_MESSAGES,
   THREAD_MESSAGES_LIMIT_PHRASE,
+  ThreadEditOpRefused,
   type documentEngine as wire,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -46,13 +48,15 @@ import { withWorkspaceWrite } from './write-lock.js'
  * working copy only after the last op has passed, and the snapshot is saved
  * once after that. A throw leaves the stored document exactly as it was.
  */
-class ThreadEditError extends Error {
+export class ThreadEditError extends Error {
+  readonly code = REFUSAL_CODE_THREAD_EDIT_OP_REFUSED
+
   constructor(
     readonly opIndex: number,
     readonly op: string,
     detail: string,
   ) {
-    super(`ops[${opIndex}] (${op}) could not be applied: ${detail}. Nothing was written.`)
+    super(ThreadEditOpRefused(opIndex, op, detail))
     this.name = 'ThreadEditError'
   }
 }

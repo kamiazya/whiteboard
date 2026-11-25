@@ -21,7 +21,8 @@ pub mod write_observer;
 
 pub use caller::{Caller, SINGLE_PERSON_NAMESPACE};
 pub use client_notifier::{
-    ClientNotifier, RestorePhase, RestoreProgress, ViewportMode, ViewportRequest,
+    AgentActivity, ClientNotifier, RestorePhase, RestoreProgress, Touched, ViewportMode,
+    ViewportRequest,
 };
 pub use clock::Clock;
 pub use error::{PortError, PortErrorKind, SnapshotReassemblyCode, StoredUnreadableCode};
