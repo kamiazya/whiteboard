@@ -17,6 +17,7 @@ mod facet_list;
 mod facet_set;
 mod input;
 mod json;
+mod thread_edit;
 mod version_list;
 mod version_restore;
 mod version_save;
@@ -24,8 +25,8 @@ mod viewport_set;
 
 use serde_json::{Map, Value, json};
 use whiteboard_ops::{
-    DocumentGet, DocumentList, DocumentSearch, FacetList, FacetSet, Operation, Ports, VersionList,
-    VersionRestore, VersionSave, ViewportSet, with_resolved_workspace,
+    DocumentGet, DocumentList, DocumentSearch, FacetList, FacetSet, Operation, Ports, ThreadEdit,
+    VersionList, VersionRestore, VersionSave, ViewportSet, with_resolved_workspace,
 };
 
 use crate::{ToolCatalogue, ToolError};
@@ -50,7 +51,7 @@ pub const PENDING_TOOLS: &[&str] = &[
 /// The pending tools a call already reaches: not listed, since most of what
 /// they do is not ported, but a call is judged and answered as far as the
 /// operation answers it, and the rest is `Tool <name> not found`.
-pub const PARTLY_BOUND_TOOLS: &[&str] = &["wb_facet_set", "wb_version_restore"];
+pub const PARTLY_BOUND_TOOLS: &[&str] = &["wb_facet_set", "wb_thread_edit", "wb_version_restore"];
 
 /// An operation as a tool: its name and contract, its input as the SDK
 /// judges it, and its output as the tool answers it.
@@ -69,6 +70,13 @@ trait Binding: Operation {
     /// The tool's answer, or `None` where the operation met what it does not
     /// answer yet, which the call answers as a pending tool is.
     fn output(output: &Self::Output) -> Option<Json>;
+
+    /// Whether the SDK's refusal of the arguments, as `INPUT` worded it,
+    /// holds a fault whose words this binding has no recording of: the call
+    /// is then answered as a pending tool, not refused in words guessed.
+    fn unjudged(_refusal: &str) -> bool {
+        false
+    }
 }
 
 /// The tools of the ops table, over one ports bundle.
@@ -110,6 +118,7 @@ impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
             FacetList::NAME => run::<FacetList, P>(&self.ports, arguments).await,
             DocumentSearch::NAME => run::<DocumentSearch, P>(&self.ports, arguments).await,
             ViewportSet::NAME => run::<ViewportSet, P>(&self.ports, arguments).await,
+            ThreadEdit::NAME => run::<ThreadEdit, P>(&self.ports, arguments).await,
             _ => Err(ToolError::NotFound),
         }
     }
@@ -132,7 +141,7 @@ async fn run<B: Binding, P: Ports>(
     let empty = Map::new();
     let arguments = arguments.unwrap_or(&empty);
     if let Some(text) = input::refusal(B::NAME, &B::INPUT, arguments) {
-        return Err(ToolError::Failed(text));
+        return Err(if B::unjudged(&text) { ToolError::NotFound } else { ToolError::Failed(text) });
     }
     let output = match arguments.get("workspaceId").and_then(Value::as_str) {
         Some(handle) => {

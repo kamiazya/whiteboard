@@ -605,6 +605,11 @@ refusals! {
     RestoredDocumentIdMissing { target_path: String }
         => code::INTERNAL_ERROR, 500, format!("restored document has no id: {target_path}");
     example { target_path: "a/b".to_owned() };
+    /// One op of a `wb_thread_edit` batch that cannot be applied to the document as it stands;
+    /// the batch is refused whole, so nothing of it was written.
+    ThreadEditOpRefused { detail: String, op: String, op_index: u64 }
+        => code::THREAD_EDIT_OP_REFUSED, 400, format!("ops[{op_index}] ({op}) could not be applied: {detail}. Nothing was written.");
+    example { detail: "thread \"t1\" is not on this document".to_owned(), op: "thread.resolve".to_owned(), op_index: 1 };
 }
 
 /// Every code a refusal carries, as a constant.
@@ -671,6 +676,7 @@ pub mod code {
     pub const DATABASE_BUSY: &str = "database_busy";
     pub const INTERNAL_ERROR: &str = "internal_error";
     pub const VERSION_NOT_FOUND: &str = "version_not_found";
+    pub const THREAD_EDIT_OP_REFUSED: &str = "thread_edit_op_refused";
 }
 
 /// Every code, once, in the order the contract first names it.
@@ -737,6 +743,7 @@ pub const CODES: &[&str] = &[
     code::DATABASE_BUSY,
     code::INTERNAL_ERROR,
     code::VERSION_NOT_FOUND,
+    code::THREAD_EDIT_OP_REFUSED,
 ];
 
 /// The codes a keeper refuses a sync write with.

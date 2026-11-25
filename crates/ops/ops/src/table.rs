@@ -2,7 +2,7 @@
 
 use crate::{
     DocumentGet, DocumentList, DocumentResolve, DocumentSearch, FacetList, FacetSet, Operation,
-    Row, VersionList, VersionRestore, VersionSave, ViewportSet,
+    Row, ThreadEdit, VersionList, VersionRestore, VersionSave, ViewportSet,
 };
 
 /// Visits each operation by type, so a caller reaches its `execute` and its
@@ -34,7 +34,8 @@ table!(
     FacetList,
     FacetSet,
     DocumentSearch,
-    ViewportSet
+    ViewportSet,
+    ThreadEdit
 );
 
 #[cfg(test)]

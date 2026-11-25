@@ -2392,6 +2392,26 @@
       "exampleText": "restored document has no id: a/b",
       "surfaces": ["mcp-tools"],
       "source": "RestoredDocumentIdMissingError"
+    },
+    {
+      "name": "ThreadEditOpRefused",
+      "code": "thread_edit_op_refused",
+      "status": 400,
+      "description": "One op of a `wb_thread_edit` batch that cannot be applied to the document as it stands; the batch is refused whole, so nothing of it was written.",
+      "message": "ops[{opIndex}] ({op}) could not be applied: {detail}. Nothing was written.",
+      "params": {
+        "opIndex": "integer",
+        "op": "string",
+        "detail": "string"
+      },
+      "example": {
+        "opIndex": 1,
+        "op": "thread.resolve",
+        "detail": "thread \"t1\" is not on this document"
+      },
+      "exampleText": "ops[1] (thread.resolve) could not be applied: thread \"t1\" is not on this document. Nothing was written.",
+      "surfaces": ["mcp-tools"],
+      "source": "ThreadEditError"
     }
   ]
 }

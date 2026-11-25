@@ -237,8 +237,22 @@ function fileOf(name) {
  * @param {number} testPackages
  */
 function mutantsPerLeg(memberCount, testPackages) {
-  return Math.ceil((MUTANTS_PER_SHARD * memberCount) / Math.max(1, testPackages))
+  return Math.min(
+    MAX_MUTANTS_PER_LEG,
+    Math.ceil((MUTANTS_PER_SHARD * memberCount) / Math.max(1, testPackages)),
+  )
 }
+
+/**
+ * The most mutants one leg judges, whatever the ratio above gives. The ratio
+ * reads a package count as a running time, and one package is not cheap when
+ * its own tests are slow: `whiteboard-mcp`, tested by itself alone, drew 121
+ * mutants onto one leg, each re-running byte-for-byte replays of recorded
+ * daemon calls (tens of seconds a mutant), and the leg ran past the job's
+ * 40-minute timeout. Forty keeps such a leg near twenty minutes at thirty
+ * seconds a mutant.
+ */
+const MAX_MUTANTS_PER_LEG = 40
 
 /**
  * One leg of the mutants job. `packages` is the package whose mutants it
