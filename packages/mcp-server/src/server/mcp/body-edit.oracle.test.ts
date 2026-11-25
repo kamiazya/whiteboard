@@ -7,7 +7,7 @@ import { InMemoryTransport, type McpServer } from '@modelcontextprotocol/server'
 import { LoroDoc, type LoroMap, type LoroTree } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from '../routes/_test-helpers.js'
-import { calls, heldChanges, seedOps } from './body-edit.oracle-calls.js'
+import { calls, heldChangesForTests, seedOpsForTests } from './body-edit.oracle-calls.js'
 
 /**
  * `wb_body_edit` as the daemon answers it: the recording the Rust ops layer's
@@ -143,7 +143,7 @@ async function populate(call: Call): Promise<Record<string, string>> {
   const created = await landed(call, 'wb_workspace_edit', {
     workspaceId: W,
     actor: 'claude-code/2.1',
-    ops: seedOps(),
+    ops: seedOpsForTests(),
   })
   const ids: Record<string, string> = {}
   for (const result of created.results as { path: string; documentId: string }[]) {
@@ -153,7 +153,7 @@ async function populate(call: Call): Promise<Record<string, string>> {
     workspaceId: W,
     documentId: ids.decided,
     proposalId: 'p1',
-    ops: heldChanges(),
+    ops: heldChangesForTests(),
   })
   return ids
 }

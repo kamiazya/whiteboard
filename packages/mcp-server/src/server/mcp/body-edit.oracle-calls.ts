@@ -35,21 +35,24 @@ const NOTES: Record<string, string> = {
 }
 
 /** The documents the record is built with: each note, and a board for the refusal of a kind. */
-export const seedOps = (): Message[] => [
-  ...Object.entries(NOTES).map(([path, body]) => ({
-    op: 'document.create',
-    path,
-    kind: 'markdown',
-    markdown: `${FRONT}${body}`,
-  })),
-  { op: 'document.create', path: 'plan', kind: 'spatial' },
-]
+export function seedOpsForTests(): Message[] {
+  return [
+    ...Object.entries(NOTES).map(([path, body]) => ({
+      op: 'document.create',
+      path,
+      kind: 'markdown',
+      markdown: `${FRONT}${body}`,
+    })),
+    { op: 'document.create', path: 'plan', kind: 'spatial' },
+  ]
+}
 
 /** The passages of `decided` a person has a verdict on, as one proposal's changes. */
-export const heldChanges = (): Message[] =>
-  ['alpha', 'beta', 'gamma'].map((exact, at) => ({
-    ...passage('decided', `old${at + 1}`, exact, { text: `${at}` }),
-  }))
+export function heldChangesForTests(): Message[] {
+  return ['alpha', 'beta', 'gamma'].map((exact, at) =>
+    passage('decided', `old${at + 1}`, exact, { text: `${at}` }),
+  )
+}
 
 const quote = (body: string, exact: string, nth = 0): { start: number; end: number } => {
   let start = -1
@@ -264,6 +267,12 @@ function applyRepeatCalls(ids: Ids): Asked[] {
         apply,
       ),
     ],
+  ]
+}
+
+function applyTouchCalls(ids: Ids): Asked[] {
+  const apply = { mode: 'apply' }
+  return [
     [
       'passages that merely touch',
       aimed(
@@ -478,6 +487,22 @@ function anchorFieldCalls(ids: Ids): Asked[] {
       withOp({ ...passage('essay', 'c1', 'again.'), assumed: 'a'.repeat(MARKDOWN_MAX_CHARS + 1) }),
     ],
     ['a negative end before a negative start', withOp(anchorOf({ start: -1, end: -5 }))],
+  ]
+}
+
+function quoteFieldCalls(ids: Ids): Asked[] {
+  const base = (more: Message = {}): Message => ({
+    workspaceId: W,
+    documentId: ids.essay,
+    ops: [passage('essay', 'c1', 'again.')],
+    ...more,
+  })
+  const withOp = (op: Message): Message => base({ ops: [op] })
+  const anchorOf = (more: Message): Message => {
+    const given = passage('essay', 'c1', 'again.')
+    return { ...given, anchor: { ...(given.anchor as Message), ...more } }
+  }
+  return [
     ['a fractional start after its end', withOp(anchorOf({ start: 1.5, end: 1 }))],
     [
       'a quote of nothing and a passage ending early',
@@ -544,11 +569,6 @@ function lengthCalls(ids: Ids): Asked[] {
     ops: [passage('essay', 'c1', 'again.')],
     ...more,
   })
-  const withOp = (op: Message): Message => base({ ops: [op] })
-  const anchorOf = (more: Message): Message => {
-    const given = passage('essay', 'c1', 'again.')
-    return { ...given, anchor: { ...(given.anchor as Message), ...more } }
-  }
   return [
     ['ops that are an empty string', base({ ops: '' })],
     ['ops that are a string of astral characters', base({ ops: '\u{1F600}'.repeat(150) })],
@@ -569,6 +589,22 @@ function lengthCalls(ids: Ids): Asked[] {
     ['ops that are a long string', base({ ops: 'o'.repeat(201) })],
     ['ops that are an object with a length', base({ ops: { length: 5 } })],
     ['ops that are an object with no length', base({ ops: {} })],
+  ]
+}
+
+function idLengthCalls(ids: Ids): Asked[] {
+  const base = (more: Message = {}): Message => ({
+    workspaceId: W,
+    documentId: ids.essay,
+    ops: [passage('essay', 'c1', 'again.')],
+    ...more,
+  })
+  const withOp = (op: Message): Message => base({ ops: [op] })
+  const anchorOf = (more: Message): Message => {
+    const given = passage('essay', 'c1', 'again.')
+    return { ...given, anchor: { ...(given.anchor as Message), ...more } }
+  }
+  return [
     ['a proposal id that is an empty array', base({ proposalId: [] })],
     ['a proposal id that is an array', base({ proposalId: ['a'] })],
     ['a proposal id that is an object with a length', base({ proposalId: { length: 0 } })],
@@ -582,6 +618,22 @@ function lengthCalls(ids: Ids): Asked[] {
       base({ proposalId: Array.from({ length: 300 }, () => 'a') }),
     ],
     ['a proposal id that is an object with a long length', base({ proposalId: { length: 300 } })],
+  ]
+}
+
+function textLengthCalls(ids: Ids): Asked[] {
+  const base = (more: Message = {}): Message => ({
+    workspaceId: W,
+    documentId: ids.essay,
+    ops: [passage('essay', 'c1', 'again.')],
+    ...more,
+  })
+  const withOp = (op: Message): Message => base({ ops: [op] })
+  const anchorOf = (more: Message): Message => {
+    const given = passage('essay', 'c1', 'again.')
+    return { ...given, anchor: { ...(given.anchor as Message), ...more } }
+  }
+  return [
     [
       'a context that is a long array',
       withOp(
@@ -647,11 +699,15 @@ export function calls(ids: Ids): Asked[] {
     ...limitCalls(ids),
     ...fieldCalls(ids),
     ...anchorFieldCalls(ids),
+    ...quoteFieldCalls(ids),
     ...textFieldCalls(ids),
     ...lengthCalls(ids),
+    ...idLengthCalls(ids),
+    ...textLengthCalls(ids),
     ...numberCalls(ids),
     ...applyCalls(ids),
     ...applyRepeatCalls(ids),
+    ...applyTouchCalls(ids),
     ...applyBatchCalls(ids),
     ...proposeCalls(ids),
     ...mintCalls(ids),

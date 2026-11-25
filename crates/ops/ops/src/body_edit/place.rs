@@ -95,7 +95,7 @@ impl Placed {
     }
 }
 
-/// Every op of the call paired with where `body` holds its passage, or the
+/// Every op of the call, with where `body` holds its passage, or the
 /// refusal naming the first that cannot be placed. `taken` are the ids of a
 /// proposal this call continues.
 pub(super) fn place_all(
