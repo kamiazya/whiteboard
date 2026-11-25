@@ -287,6 +287,10 @@ function applyBatchCalls(ids: Ids): Asked[] {
   const apply = { mode: 'apply' }
   return [
     [
+      'a passage replaced by itself writes nothing',
+      aimed(ids, 'touch', [passage('touch', 'c3', 'XY', { text: 'XY' })], apply),
+    ],
+    [
       'offsets counted in characters resolve by quote',
       aimed(
         ids,
@@ -532,6 +536,90 @@ function textFieldCalls(ids: Ids): Asked[] {
   ]
 }
 
+/** What the SDK words for a value no schema of this tool names a type for: a list or an object that carries a length. */
+function lengthCalls(ids: Ids): Asked[] {
+  const base = (more: Message = {}): Message => ({
+    workspaceId: W,
+    documentId: ids.essay,
+    ops: [passage('essay', 'c1', 'again.')],
+    ...more,
+  })
+  const withOp = (op: Message): Message => base({ ops: [op] })
+  const anchorOf = (more: Message): Message => {
+    const given = passage('essay', 'c1', 'again.')
+    return { ...given, anchor: { ...(given.anchor as Message), ...more } }
+  }
+  return [
+    ['ops that are an empty string', base({ ops: '' })],
+    ['ops that are a long string', base({ ops: 'o'.repeat(201) })],
+    ['ops that are an object with a length', base({ ops: { length: 5 } })],
+    ['ops that are an object with no length', base({ ops: {} })],
+    ['a proposal id that is an empty array', base({ proposalId: [] })],
+    ['a proposal id that is an array', base({ proposalId: ['a'] })],
+    ['a proposal id that is an object with a length', base({ proposalId: { length: 0 } })],
+    ['an author that is an array', base({ author: ['a'] })],
+    ['an author that is an object with a length', base({ author: { length: 300 } })],
+    ['an op id that is an array', withOp({ ...passage('essay', 'c1', 'again.'), id: [] })],
+    ['a node id that is an array', withOp(anchorOf({ nodeId: [] }))],
+    ['a context that is an array', withOp(anchorOf({ quote: { exact: 'again.', prefix: ['a'] } }))],
+    [
+      'a proposal id that is a long array',
+      base({ proposalId: Array.from({ length: 300 }, () => 'a') }),
+    ],
+    ['a proposal id that is an object with a long length', base({ proposalId: { length: 300 } })],
+    [
+      'a context that is a long array',
+      withOp(
+        anchorOf({ quote: { exact: 'again.', prefix: Array.from({ length: 40 }, () => 'a') } }),
+      ),
+    ],
+    [
+      'an exact that is an object with a long length',
+      withOp(anchorOf({ quote: { exact: { length: 2000 } } })),
+    ],
+    ['a node id that is an object with no length', withOp(anchorOf({ nodeId: { length: 0 } }))],
+    [
+      'a prior text that is an empty array',
+      withOp({ ...passage('essay', 'c1', 'again.'), assumed: [] }),
+    ],
+    ['an author that is an empty array', base({ author: [] })],
+    ['an exact that is an array', withOp(anchorOf({ quote: { exact: [] } }))],
+    [
+      'a prior text that is an array',
+      withOp({ ...passage('essay', 'c1', 'again.'), assumed: ['a'] }),
+    ],
+    [
+      'a prior text that is an object with a length',
+      withOp({ ...passage('essay', 'c1', 'again.'), assumed: { length: 300000 } }),
+    ],
+  ]
+}
+
+/** Numbers and refinements the SDK words in ways beside one another. */
+function numberCalls(ids: Ids): Asked[] {
+  const withOp = (op: Message): Message => ({
+    workspaceId: W,
+    documentId: ids.essay,
+    ops: [op],
+  })
+  const anchorOf = (more: Message): Message => {
+    const given = passage('essay', 'c1', 'again.')
+    return { ...given, anchor: { ...(given.anchor as Message), ...more } }
+  }
+  return [
+    ['a negative fractional start', withOp(anchorOf({ start: -1.5, end: 3 }))],
+    ['a start below the safe range', withOp(anchorOf({ start: -1e20, end: 3 }))],
+    ['an end below the safe range', withOp(anchorOf({ start: 0, end: -1e20 }))],
+    ['a start past the safe range and an end before it', withOp(anchorOf({ start: 1e20, end: 5 }))],
+    ['a stray key in an anchor that ends early', withOp(anchorOf({ extra: 1, start: 9, end: 3 }))],
+    [
+      'a stray key in a quote of an anchor that ends early',
+      withOp(anchorOf({ quote: { exact: 'again.', extra: 1 }, start: 9, end: 3 })),
+    ],
+    ['an end that is a string', withOp(anchorOf({ end: '9' }))],
+  ]
+}
+
 export function calls(ids: Ids): Asked[] {
   return [
     ...refusedCalls(ids),
@@ -540,6 +628,8 @@ export function calls(ids: Ids): Asked[] {
     ...fieldCalls(ids),
     ...anchorFieldCalls(ids),
     ...textFieldCalls(ids),
+    ...lengthCalls(ids),
+    ...numberCalls(ids),
     ...applyCalls(ids),
     ...applyRepeatCalls(ids),
     ...applyBatchCalls(ids),

@@ -10,6 +10,7 @@
 //! `structuredContent` and as its `JSON.stringify` text, or with the
 //! operation's refusal.
 
+mod body_edit;
 mod document_get;
 mod document_list;
 mod document_search;
@@ -24,8 +25,8 @@ mod viewport_set;
 
 use serde_json::{Map, Value, json};
 use whiteboard_ops::{
-    DocumentGet, DocumentList, DocumentSearch, FacetList, FacetSet, Operation, Ports, VersionList,
-    VersionRestore, VersionSave, ViewportSet, with_resolved_workspace,
+    BodyEdit, DocumentGet, DocumentList, DocumentSearch, FacetList, FacetSet, Operation, Ports,
+    VersionList, VersionRestore, VersionSave, ViewportSet, with_resolved_workspace,
 };
 
 use crate::{ToolCatalogue, ToolError};
@@ -37,7 +38,6 @@ use json::Json;
 /// list in the slice that binds its operation.
 pub const PENDING_TOOLS: &[&str] = &[
     "canvas_view",
-    "wb_body_edit",
     "wb_canvas_edit",
     "wb_canvas_snapshot",
     "wb_facet_set",
@@ -92,6 +92,7 @@ impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
             contract::<FacetList>(),
             contract::<DocumentSearch>(),
             contract::<ViewportSet>(),
+            contract::<BodyEdit>(),
         ]
     }
 
@@ -110,6 +111,7 @@ impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
             FacetList::NAME => run::<FacetList, P>(&self.ports, arguments).await,
             DocumentSearch::NAME => run::<DocumentSearch, P>(&self.ports, arguments).await,
             ViewportSet::NAME => run::<ViewportSet, P>(&self.ports, arguments).await,
+            BodyEdit::NAME => run::<BodyEdit, P>(&self.ports, arguments).await,
             _ => Err(ToolError::NotFound),
         }
     }

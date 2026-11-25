@@ -1,8 +1,8 @@
 //! The operation table: every operation this crate answers, as data.
 
 use crate::{
-    DocumentGet, DocumentList, DocumentResolve, DocumentSearch, FacetList, FacetSet, Operation,
-    Row, VersionList, VersionRestore, VersionSave, ViewportSet,
+    BodyEdit, DocumentGet, DocumentList, DocumentResolve, DocumentSearch, FacetList, FacetSet,
+    Operation, Row, VersionList, VersionRestore, VersionSave, ViewportSet,
 };
 
 /// Visits each operation by type, so a caller reaches its `execute` and its
@@ -34,7 +34,8 @@ table!(
     FacetList,
     FacetSet,
     DocumentSearch,
-    ViewportSet
+    ViewportSet,
+    BodyEdit
 );
 
 #[cfg(test)]
