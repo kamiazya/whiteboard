@@ -48,7 +48,7 @@ export const SKIPPABLE_JOBS = {
   'dependency-review':
     "job-level `if: github.event_name == 'pull_request'`: the action diffs the dependency graph between base and head, so it has no meaning on push to main or merge_group and skips there",
   'rust-mutants':
-    "job-level `if: needs.rust-mutants-plan.outputs.total != '0'`: a pull request whose diff lists no mutant is planned zero legs, and a matrix with no values is an error. The skip counts only when the plan job says zero (mutantsSkipProblems)",
+    "job-level `if: needs.rust-mutants-plan.outputs.total != '0'`: a pull request or push to main whose diff lists no mutant is planned zero legs, and a matrix with no values is an error. The skip counts only when the plan job says zero (mutantsSkipProblems)",
 }
 
 /** The job whose `total` output says how many legs `rust-mutants` was planned. */

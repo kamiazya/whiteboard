@@ -27,10 +27,11 @@
 // included, since a test in any other crate cannot call the mutated code; so
 // the edge crate is still judged by the wasm crate's replay of the TypeScript's
 // recorded answers, and a crate nothing depends on is judged by its own tests
-// alone. Unset, both are the whole workspace (`--workspace`,
-// `--test-workspace=true`), which is what `full`, a push to main, a schedule
-// and a plan that could not be read run. The baseline is skipped because the
-// job runs the same tests green in a step of its own first; a failing baseline
+// alone. A push to main is planned the same way. Unset, both are the whole
+// workspace (`--workspace`, `--test-workspace=true`), which is what `full`, a
+// merge queue, a schedule and a plan that could not be read run. The baseline
+// is skipped because the job runs the same tests green in a step of its own
+// first; a failing baseline
 // would otherwise read as every mutant caught. `--shard k/n`
 // (RUST_MUTANTS_SHARD) splits the list with identical arguments on every leg
 // of a group, dealt round-robin: the list is sorted by file, and a slice puts
@@ -55,6 +56,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   cargoShard,
+  IN_DIFF_EVENTS,
   ledgerEntries,
   ledgerProblems,
   mutantNames,
@@ -154,7 +156,8 @@ if (mode === 'plan') {
   const scopeRuns = process.env.SCOPE_RUNS !== 'false'
   let mutants = null
   let graph = null
-  if (event === 'pull_request' && scopeRuns) {
+  const inDiff = IN_DIFF_EVENTS.includes(event) && scopeRuns
+  if (inDiff) {
     try {
       mutants = inDiffMutants()
       graph = mutants === null || mutants.length === 0 ? null : members()
@@ -168,11 +171,11 @@ if (mode === 'plan') {
     `rust:mutants plan: ${mutants?.length ?? 'unknown'} mutants -> ${shards.map((l) => `[${l.leg}: ${l.packages || 'workspace'} / ${l.tests || 'workspace'}]`).join(' ')} (${lines[1]})\n`,
   )
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join('\n')}\n`)
-  // A pull request planned no leg still owes the ledger check the legs would
-  // have run first: a change to .cargo/mutants.toml alone, or one that only
-  // deletes Rust, lists no mutant, and a stale entry would otherwise surface
-  // on the next full run instead of here.
-  if (event === 'pull_request' && scopeRuns && shards.length === 0) checkLedger()
+  // A pull request or push planned no leg still owes the ledger check the legs
+  // would have run first: a change to .cargo/mutants.toml alone, or one that
+  // only deletes Rust, lists no mutant, and a stale entry would otherwise
+  // surface on the next full run instead of here.
+  if (inDiff && shards.length === 0) checkLedger()
   process.exit(0)
 }
 

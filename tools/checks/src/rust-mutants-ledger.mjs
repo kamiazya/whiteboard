@@ -263,16 +263,29 @@ const MAX_MUTANTS_PER_LEG = 40
  */
 
 /**
+ * The events whose legs are planned from the diff's mutants (shardPlan). ci.yml's
+ * `rust-mutants-plan` installs cargo-mutants on exactly these, since a plan
+ * without it cannot list the diff and falls back to the full set.
+ */
+export const IN_DIFF_EVENTS = ['pull_request', 'push']
+
+/**
  * The legs of the mutants job, or `[]` when no leg is owed.
  *
- * Only a pull request is narrowed. Every other event runs eight legs over the
- * whole workspace, so what main judges never depends on a count. On a pull
- * request the mutants the diff lists are grouped by package, each group judged
- * by the tests that can observe it (the package and its transitive reverse
- * dependents) and sharded by its own size, and it fails closed: a list or a workspace graph that
- * could not be read, or a mutant in no member, is the full set, not zero. Zero
- * legs is reserved for the two answers that say nothing can be judged: the
- * scope does not reach the job, or the diff lists no mutant.
+ * A pull request and a push to main (`IN_DIFF_EVENTS`) are narrowed alike:
+ * the mutants the diff lists are grouped by package, each group judged by the
+ * tests that can observe it (the package and its transitive reverse
+ * dependents) and sharded by its own size. Narrowing drops only tests that
+ * cannot observe the mutant, since no crate outside that set can call the
+ * mutated code. It does make what main judges depend on the count of listed mutants
+ * and on the workspace graph, so it fails closed: a list or a workspace graph
+ * that could not be read, or a mutant in no member, is the full set, not
+ * zero. A push is not judged by the whole workspace because every mutant then
+ * runs every test, which on main outlasted the 120 s timeout for mutants
+ * their own crate's tests catch at once. Every other event (a merge queue, a
+ * schedule, a dispatch) runs eight legs over the whole workspace. Zero legs
+ * is reserved for the two answers that say nothing can be judged: the scope
+ * does not reach the job, or the diff lists no mutant.
  * @param {{ event: string, scopeRuns: boolean, mutants: string[] | null, members: Member[] | null }} input
  * @returns {Leg[]}
  */
@@ -288,7 +301,7 @@ export function shardPlan({ event, scopeRuns, mutants, members }) {
         tests: '',
       }
     })
-  if (event !== 'pull_request') return full()
+  if (!IN_DIFF_EVENTS.includes(event)) return full()
   if (!scopeRuns) return []
   if (!Array.isArray(mutants)) return full()
   if (mutants.length === 0) return []

@@ -284,8 +284,30 @@ describe('the legs of a pull request', () => {
     }
   })
 
+  it('plans a push to main as it plans a pull request, judged by every crate that can observe it', () => {
+    // A push judged by the whole workspace runs every test per mutant, and on
+    // main that took past the 120 s timeout for mutants their own crate's
+    // tests catch at once.
+    const diff = [
+      ...mutantsIn('crates/core/edge/src/route.rs', 3),
+      mutant('crates/core/lonely/src/lib.rs'),
+    ]
+    const push = shardPlan({ event: 'push', scopeRuns: true, mutants: diff, members })
+    expect(push).toEqual(pr(diff))
+    expect(push.map((l) => [l.packages, l.tests])).toEqual([
+      ['edge', 'edge wasm'],
+      ['lonely', 'lonely'],
+    ])
+    expect(shardPlan({ event: 'push', scopeRuns: true, mutants: [], members })).toEqual([])
+    expect(shardPlan({ event: 'push', scopeRuns: true, mutants: null, members })).toHaveLength(
+      FULL_SET,
+    )
+    expect(
+      shardPlan({ event: 'push', scopeRuns: true, mutants: diff, members: null }),
+    ).toHaveLength(FULL_SET)
+  })
+
   it.each([
-    'push',
     'schedule',
     'merge_group',
     'workflow_dispatch',

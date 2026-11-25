@@ -144,15 +144,19 @@ steps and cache paths to the scripts.
   rust:mutants:pr` — `cargo mutants --in-diff` against the PR base, each
   mutant judged by its crate's tests plus every workspace crate that depends
   on it, dev-dependencies included (`rust-mutants-plan` plans legs per mutated
-  crate from `cargo metadata`, sized by mutant count; always eight over the
-  whole workspace, `--test-workspace=true`, elsewhere), after a separate green
+  crate from `cargo metadata`, sized by mutant count, for a pull request and
+  a push to main alike; eight over the whole workspace,
+  `--test-workspace=true`, for a merge queue or a plan that cannot read the
+  list or the graph), after a separate green
   run of that leg's tests — and a missed or
   timed-out mutant, or a failed baseline, fails it
   (`tools/checks/src/rust-mutants.mjs` reads the exit codes). A mutant no
   test can observe is ledgered in `.cargo/mutants.toml` with its reason above
   the entry; the script fails an entry that matches no mutant, and the entry
   count is pinned (`rust-mutants-ledger.mjs`, held by arch-lint). A push to
-  main judges the merged change in-diff the same way; `rust:mutants:full`
+  main judges the merged change in-diff, by the same per-crate test sets
+  (judged by the whole workspace, every mutant ran every test and outlasted
+  the 120 s timeout); `rust:mutants:full`
   (the whole workspace) is run by hand until its survivors are classified.
   The vendored markdown parser's files are left out of the in-diff run alone,
   by `.cargo/mutants-pr-exclude.txt` passed as `--exclude`: a config
