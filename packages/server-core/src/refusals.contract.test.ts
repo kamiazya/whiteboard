@@ -36,7 +36,7 @@ import {
   textBreachRefusal,
   UnreadableDocumentMetaError,
 } from './operations/sync-write-refusals.js'
-import { NotASpatialDocumentError } from './render/assert-spatial-document.js'
+import { NotASpatialDocumentError } from './render/not-a-spatial-document-error.js'
 import {
   DocumentNameConflictError,
   WorkspaceDocumentNotFoundError,

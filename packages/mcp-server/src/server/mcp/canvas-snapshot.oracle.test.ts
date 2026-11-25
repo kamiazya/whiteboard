@@ -8,13 +8,13 @@ import { LoroDoc, LoroList, type LoroMap, type LoroTree } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from '../routes/_test-helpers.js'
 import {
-  BOARD_LOCKS,
-  BOARD_OPS,
-  BOARD_TAGS,
+  boardLocksForTests,
+  boardOpsForTests,
+  boardTagsForTests,
   calls,
-  crowdedBatches,
-  DOCUMENTS,
-  WIDE_OPS,
+  crowdedBatchesForTests,
+  documentsForTests,
+  wideOpsForTests,
 } from './canvas-snapshot.oracle-calls.js'
 
 /**
@@ -155,7 +155,7 @@ async function populate(call: Call): Promise<Record<string, string>> {
   const created = await landed(call, 'wb_workspace_edit', {
     workspaceId: W,
     actor: 'claude-code/2.1',
-    ops: DOCUMENTS,
+    ops: documentsForTests,
   })
   const ids: Record<string, string> = {}
   for (const result of created.results as { path: string; documentId: string }[]) {
@@ -163,13 +163,13 @@ async function populate(call: Call): Promise<Record<string, string>> {
   }
   const edit = (documentId: string | undefined, ops: Message[]) =>
     landed(call, 'wb_canvas_edit', { workspaceId: W, documentId, mode: 'apply', ops })
-  await edit(ids.board, BOARD_OPS)
-  for (const more of BOARD_TAGS) {
+  await edit(ids.board, boardOpsForTests)
+  for (const more of boardTagsForTests) {
     await landed(call, 'wb_facet_set', { workspaceId: W, documentIds: [ids.board], ...more })
   }
-  await edit(ids.board, BOARD_LOCKS)
-  for (const batch of crowdedBatches()) await edit(ids.crowded, batch)
-  for (const [path, ops] of Object.entries(WIDE_OPS)) await edit(ids[path], ops)
+  await edit(ids.board, boardLocksForTests)
+  for (const batch of crowdedBatchesForTests()) await edit(ids.crowded, batch)
+  for (const [path, ops] of Object.entries(wideOpsForTests)) await edit(ids[path], ops)
   return ids
 }
 

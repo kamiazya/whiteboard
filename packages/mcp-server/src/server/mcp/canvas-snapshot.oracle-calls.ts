@@ -16,7 +16,7 @@ type Ids = Record<string, string>
 type Asked = [string, Message | undefined]
 
 /** The documents the record holds, created in one batch. */
-export const DOCUMENTS: Message[] = [
+export const documentsForTests: Message[] = [
   { op: 'document.create', path: 'note', kind: 'markdown', markdown: '---\ntype: note\n---\nb\n' },
   { op: 'document.create', path: 'board', kind: 'spatial' },
   { op: 'document.create', path: 'empty', kind: 'spatial' },
@@ -43,7 +43,7 @@ const AT_THE_CUT = 'k'.repeat(400)
 const ASTRAL = `${'\u{1F600}'.repeat(150)}${'a'.repeat(150)}`
 
 /** Every kind of node, dressed and not, and edges and lines in every shape. */
-export const BOARD_OPS: Message[] = [
+export const boardOpsForTests: Message[] = [
   {
     op: 'node.add',
     node: {
@@ -132,7 +132,7 @@ export const BOARD_OPS: Message[] = [
  * a payload object of two keys on a node, and a bucket of two facets on a
  * line.
  */
-export const WIDE_OPS: Record<string, Message[]> = {
+export const wideOpsForTests: Record<string, Message[]> = {
   wide: [
     {
       op: 'node.add',
@@ -160,21 +160,21 @@ export const WIDE_OPS: Record<string, Message[]> = {
 }
 
 /** The tags the board's elements carry, written through `wb_facet_set`. */
-export const BOARD_TAGS: Message[] = [
+export const boardTagsForTests: Message[] = [
   { nodeId: 'pad', tags: { add: ['health:ok', 'plain'] } },
   { edgeId: 'plain', tags: { add: ['wire'] } },
   { nodeId: 'zone', tags: { add: ['gone'] } },
   { nodeId: 'zone', tags: { remove: ['gone'] } },
 ]
 
-export const BOARD_LOCKS: Message[] = [
+export const boardLocksForTests: Message[] = [
   { op: 'node.lock', id: 'pad', locked: true },
   { op: 'node.lock', id: 'zone', locked: true },
   { op: 'edge.lock', id: 'fuels', locked: true },
 ]
 
 /** One past each cap: 301 nodes, 601 edges and 601 lines, in batches the edit tool takes. */
-export function crowdedBatches(): Message[][] {
+export function crowdedBatchesForTests(): Message[][] {
   const ops: Message[] = []
   for (let at = 0; at <= 300; at += 1) {
     ops.push({
