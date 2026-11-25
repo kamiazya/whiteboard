@@ -377,6 +377,13 @@ function invalidCalls(ids: Ids): Asked[] {
       'a resolved flag that is no boolean',
       { ...base, ops: [{ ...resolve('t1'), resolved: 'yes' }] },
     ],
+    ...shapeBatches(base),
+  ]
+}
+
+/** Every call that names a shape or a limit of the ops, in the order they are recorded. */
+function shapeBatches(base: Message): Asked[] {
+  return [
     ...shapeCalls(base),
     ...anchorShapeCalls(base),
     ...faultCalls(base),
