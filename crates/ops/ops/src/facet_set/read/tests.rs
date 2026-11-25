@@ -10,17 +10,17 @@ fn value(text: &str) -> Value {
     json::parse(text).expect("a value")
 }
 
-fn pending(halt: Halt) -> bool {
+fn pending(halt: &Halt) -> bool {
     matches!(halt, Halt::Pending(FacetSetPending::UndecidedRead))
 }
 
 #[test]
 fn an_answer_of_another_shape_is_a_read_left_undecided() {
-    assert!(pending(facets_of(value("[]")).expect_err("undecided")));
-    assert!(pending(core_of(value("3")).expect_err("undecided")));
-    assert!(pending(canvas_of(&value(r#"{"canvas":[]}"#)).expect_err("undecided")));
-    assert!(pending(canvas_of(&value("{}")).expect_err("undecided")));
-    assert!(pending(locks_of(value("{}")).expect_err("undecided")));
+    assert!(pending(&facets_of(value("[]")).expect_err("undecided")));
+    assert!(pending(&core_of(value("3")).expect_err("undecided")));
+    assert!(pending(&canvas_of(&value(r#"{"canvas":[]}"#)).expect_err("undecided")));
+    assert!(pending(&canvas_of(&value("{}")).expect_err("undecided")));
+    assert!(pending(&locks_of(value("{}")).expect_err("undecided")));
 }
 
 #[test]
@@ -44,7 +44,7 @@ fn a_fault_stops_the_call_as_the_reads_refuse() {
     let undecided = Halt::from(Fault::Stop(Stop::Pending(
         crate::document_get::Pending::UndecidedRead("d".to_owned()),
     )));
-    assert!(pending(undecided));
+    assert!(pending(&undecided));
     assert!(matches!(Halt::from(&PortError::InvalidTime), Halt::Refused(Refusal::InternalError)));
 }
 

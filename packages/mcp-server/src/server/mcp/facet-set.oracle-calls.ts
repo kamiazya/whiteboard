@@ -208,6 +208,10 @@ function refusedCalls1(ids: Ids): Asked[] {
       'a node of a note holding the retired list',
       { workspaceId: W, documentIds: [ids.oldnote], nodeId: 'pad', tags: { add: ['x'] } },
     ],
+    [
+      'an edge of a note holding the retired list',
+      { workspaceId: W, documentIds: [ids.oldnote], edgeId: 'fuels', tags: { add: ['x'] } },
+    ],
     ['an edge of a note', note({ edgeId: 'fuels', tags: { add: ['x'] } })],
     ['a node the board lacks', board({ nodeId: 'ghost', tags: { add: ['x'] } })],
     ['an edge the board lacks', board({ edgeId: 'ghost', tags: { add: ['x'] } })],
@@ -449,6 +453,10 @@ function libraryAddCalls(ids: Ids): Asked[] {
     [
       'a tag value the library does not admit',
       board({ nodeId: 'pad', tags: { add: ['region:asia'] } }),
+    ],
+    [
+      'a tag value the library does not admit on an edge',
+      board({ edgeId: 'fuels', tags: { add: ['region:asia'] } }),
     ],
     [
       'a second value under an exclusive key',

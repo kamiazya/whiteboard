@@ -344,6 +344,13 @@ fn a_kind_this_build_does_not_recognise_is_no_kind() {
         Refusal::NodeNotFound { document_id: id("second"), node_id: "pad".to_owned() },
         "a document stating no kind has no canvas, so no node"
     );
+    let at = FacetSetInput { edge_id: Some("pad".to_owned()), ..tagging(&[id("second")]) };
+    let refusal = run(&fakes, at).expect_err("a refusal");
+    assert_eq!(
+        refusal,
+        Refusal::EdgeNotFound { document_id: id("second"), edge_id: "pad".to_owned() },
+        "a document stating no kind has no canvas, so no edge"
+    );
 }
 
 #[test]
@@ -354,5 +361,11 @@ fn a_document_that_holds_no_content_reports_the_node_missing_not_a_fabricated_ki
     assert_eq!(
         refusal,
         Refusal::NodeNotFound { document_id: BARE.to_owned(), node_id: "pad".to_owned() }
+    );
+    let at = FacetSetInput { edge_id: Some("pad".to_owned()), ..tagging(&[BARE.to_owned()]) };
+    let refusal = run(&fakes, at).expect_err("a refusal");
+    assert_eq!(
+        refusal,
+        Refusal::EdgeNotFound { document_id: BARE.to_owned(), edge_id: "pad".to_owned() }
     );
 }
