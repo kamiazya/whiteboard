@@ -81,42 +81,61 @@ impl Doc<'_> {
     /// The extension facets stored on the document, in the order the engine
     /// answers them.
     pub(super) fn facets(self) -> Result<Map, Halt> {
-        match self.query(QueryName::Facets)? {
-            Value::Map(entries) => Ok(entries),
-            _ => Err(Halt::Pending(FacetSetPending::UndecidedRead)),
-        }
+        facets_of(self.query(QueryName::Facets)?)
     }
 
     /// The core facets of a markdown document's frontmatter, none when it
     /// holds none yet.
     pub(super) fn core(self) -> Result<Option<Map>, Halt> {
-        match defined(self.query(QueryName::CoreFacets)?) {
-            None => Ok(None),
-            Some(Value::Map(entries)) => Ok(Some(entries)),
-            Some(_) => Err(Halt::Pending(FacetSetPending::UndecidedRead)),
-        }
+        core_of(self.query(QueryName::CoreFacets)?)
     }
 
     /// The canvas the document holds.
     pub(super) fn canvas(self) -> Result<Map, Halt> {
-        match field(&self.query(QueryName::SpatialCanvas)?, "canvas") {
-            Some(Value::Map(canvas)) => Ok(canvas.clone()),
-            _ => Err(Halt::Pending(FacetSetPending::UndecidedRead)),
-        }
+        canvas_of(&self.query(QueryName::SpatialCanvas)?)
     }
 
     /// The ids of the nodes, or of the edges, a person has locked.
     pub(super) fn locks(self, query: QueryName) -> Result<Vec<String>, Halt> {
-        match self.query(query)? {
-            Value::Seq(ids) => Ok(ids
-                .into_iter()
-                .filter_map(|id| match id {
-                    Value::String(id) => Some(id),
-                    _ => None,
-                })
-                .collect()),
-            _ => Err(Halt::Pending(FacetSetPending::UndecidedRead)),
-        }
+        locks_of(self.query(query)?)
+    }
+}
+
+/// An answer the engine's contract does not hold is a read left undecided.
+const UNDECIDED: Halt = Halt::Pending(FacetSetPending::UndecidedRead);
+
+fn facets_of(answer: Value) -> Result<Map, Halt> {
+    match answer {
+        Value::Map(entries) => Ok(entries),
+        _ => Err(UNDECIDED),
+    }
+}
+
+fn core_of(answer: Value) -> Result<Option<Map>, Halt> {
+    match defined(answer) {
+        None => Ok(None),
+        Some(Value::Map(entries)) => Ok(Some(entries)),
+        Some(_) => Err(UNDECIDED),
+    }
+}
+
+fn canvas_of(answer: &Value) -> Result<Map, Halt> {
+    match field(answer, "canvas") {
+        Some(Value::Map(canvas)) => Ok(canvas.clone()),
+        _ => Err(UNDECIDED),
+    }
+}
+
+fn locks_of(answer: Value) -> Result<Vec<String>, Halt> {
+    match answer {
+        Value::Seq(ids) => Ok(ids
+            .into_iter()
+            .filter_map(|id| match id {
+                Value::String(id) => Some(id),
+                _ => None,
+            })
+            .collect()),
+        _ => Err(UNDECIDED),
     }
 }
 
@@ -146,3 +165,6 @@ pub(super) fn id_of(element: &Map) -> Option<&str> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests;

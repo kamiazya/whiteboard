@@ -198,8 +198,13 @@ fn tag_sets_after(
 ) -> Result<Vec<TagSet>, Halt> {
     let kind = doc.kind()?;
     Ok(match site_of(input, kind) {
-        Site::Node | Site::Edge if kind == Some(Kind::Spatial) => {
-            at_element(&doc.canvas()?, input, edit)
+        Site::Node if kind == Some(Kind::Spatial) => {
+            let id = input.node_id.as_deref().unwrap_or_default();
+            at_element(&doc.canvas()?, ("nodes", id, "node"), edit)
+        }
+        Site::Edge if kind == Some(Kind::Spatial) => {
+            let id = input.edge_id.as_deref().unwrap_or_default();
+            at_element(&doc.canvas()?, ("edges", id, "edge"), edit)
         }
         Site::Node | Site::Edge => Vec::new(),
         // A note asked for its canvas was refused by `kinds` already, so a
@@ -215,12 +220,11 @@ fn tag_sets_after(
     })
 }
 
-fn at_element(canvas: &Map, input: &FacetSetInput, edit: &TagEdit) -> Vec<TagSet> {
-    let (collection, id, noun) = match (&input.node_id, &input.edge_id) {
-        (Some(id), _) => ("nodes", id, "node"),
-        (None, Some(id)) => ("edges", id, "edge"),
-        (None, None) => return Vec::new(),
-    };
+fn at_element(
+    canvas: &Map,
+    (collection, id, noun): (&str, &str, &str),
+    edit: &TagEdit,
+) -> Vec<TagSet> {
     let Some(element) = elements(canvas, collection).into_iter().find(|e| id_of(e) == Some(id))
     else {
         return Vec::new();

@@ -97,3 +97,42 @@ fn only_a_facet_that_takes_a_stencil_and_is_written_asks_for_the_library() {
     assert!(!writes(r#"{"other.thing/v1":{"stencil":"x"}}"#));
     assert!(!writes("{}"));
 }
+
+#[test]
+fn every_class_of_issue_is_named_as_zod_names_it_and_a_list_place_is_its_index() {
+    let named: Vec<&str> = [
+        Code::InvalidType,
+        Code::TooSmall,
+        Code::TooBig,
+        Code::InvalidFormat,
+        Code::InvalidValue,
+        Code::UnrecognizedKeys,
+        Code::InvalidUnion,
+        Code::InvalidKey,
+        Code::Custom,
+    ]
+    .into_iter()
+    .map(code_name)
+    .collect();
+    assert_eq!(
+        named,
+        [
+            "invalid_type",
+            "too_small",
+            "too_big",
+            "invalid_format",
+            "invalid_value",
+            "unrecognized_keys",
+            "invalid_union",
+            "invalid_key",
+            "custom"
+        ]
+    );
+    let issue = Issue {
+        path: vec![PathStep::Key("a".into()), PathStep::Index(2), PathStep::Key("b".into())],
+        code: Code::TooSmall,
+        detail: whiteboard_facet_engine::schema::Detail::None,
+        continues: false,
+    };
+    assert_eq!(issue_list(&[issue]), "a.2.b: too_small");
+}

@@ -226,6 +226,10 @@ function refusedCalls2(ids: Ids): Asked[] {
       'a locked node, facets',
       board({ nodeId: 'vault', facets: { 'visual.shape/v0': { kind: 'hexagon' } } }),
     ],
+    [
+      'a rename reaching a locked edge',
+      board({ tags: { rename: [{ from: 'wire', to: 'cable' }] } }),
+    ],
     ['a locked edge', board({ edgeId: 'sealed', tags: { add: ['x'] } })],
     [
       'a rename reaching a locked node',
@@ -470,6 +474,14 @@ function libraryAddCalls(ids: Ids): Asked[] {
 function libraryRemovalCalls(ids: Ids): Asked[] {
   const board = (more: Message): Message => ({ workspaceId: W, documentIds: [ids.board], ...more })
   return [
+    [
+      'a rename through an unlocked board under the library',
+      {
+        workspaceId: W,
+        documentIds: [ids['loose-board']],
+        tags: { rename: [{ from: 'old', to: 'region:eu' }] },
+      },
+    ],
     ['a removal under the library', board({ nodeId: 'pad', tags: { remove: ['anything'] } })],
     [
       'a rename into a value the library does not admit',
@@ -525,6 +537,26 @@ function pendingCalls(ids: Ids): Asked[] {
   const board = (more: Message): Message => ({ workspaceId: W, documentIds: [ids.board], ...more })
   const note = (more: Message): Message => ({ workspaceId: W, documentIds: [ids.note], ...more })
   return [
+    [
+      'a tag on an edge of a board that is not locked',
+      { workspaceId: W, documentIds: [ids['loose-board']], edgeId: 'link', tags: { add: ['old'] } },
+    ],
+    [
+      'a rename reaching nodes and edges',
+      {
+        workspaceId: W,
+        documentIds: [ids['loose-board']],
+        tags: { rename: [{ from: 'old', to: 'older' }] },
+      },
+    ],
+    [
+      'a rename reaching nodes and edges under the library',
+      {
+        workspaceId: W,
+        documentIds: [ids['loose-board']],
+        tags: { rename: [{ from: 'older', to: 'region:us' }] },
+      },
+    ],
     ['a facet set to sit beside the stored one', note({ facets: { 'other.thing/v1': 2 } })],
     ['a tag beside two stored facets', note({ tags: { add: ['beside'] } })],
     [

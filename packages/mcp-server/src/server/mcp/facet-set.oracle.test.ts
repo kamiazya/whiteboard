@@ -177,6 +177,7 @@ const DOCUMENTS: Message[] = [
   },
   { op: 'document.create', path: 'board', kind: 'spatial' },
   { op: 'document.create', path: 'empty', kind: 'spatial' },
+  { op: 'document.create', path: 'loose-board', kind: 'spatial' },
   { op: 'document.create', path: 'elderly', kind: 'spatial' },
 ]
 
@@ -200,7 +201,7 @@ const TAGGED: Message[] = [
 /** The tool's tags on the board's locked vault and sealed edge, before they were locked. */
 const LOCKED_TAGS: Message[] = [
   { nodeId: 'vault', tags: { add: ['plain'] } },
-  { edgeId: 'sealed', tags: { add: ['plain'] } },
+  { edgeId: 'sealed', tags: { add: ['plain', 'wire'] } },
 ]
 
 async function populate(call: Call): Promise<Record<string, string>> {
@@ -219,6 +220,22 @@ async function populate(call: Call): Promise<Record<string, string>> {
     documentId: ids.board,
     mode: 'apply',
     ops: BOARD_OPS.filter((op) => !lockOps.includes(op)),
+  })
+  await landed(call, 'wb_canvas_edit', {
+    workspaceId: W,
+    documentId: ids['loose-board'],
+    mode: 'apply',
+    ops: [
+      { op: 'node.add', node: { id: 'one', type: 'text', text: 'One', x: 0, y: 0 } },
+      { op: 'node.add', node: { id: 'two', type: 'text', text: 'Two', x: 200, y: 0 } },
+      { op: 'edge.add', edge: { id: 'link', from: { node: 'one' }, to: { node: 'two' } } },
+    ],
+  })
+  await landed(call, 'wb_facet_set', {
+    workspaceId: W,
+    documentIds: [ids['loose-board']],
+    nodeId: 'one',
+    tags: { add: ['old'] },
   })
   for (const more of [...TAGGED, ...LOCKED_TAGS]) {
     await landed(call, 'wb_facet_set', { workspaceId: W, documentIds: [ids.board], ...more })
