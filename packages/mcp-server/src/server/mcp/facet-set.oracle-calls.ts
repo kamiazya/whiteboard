@@ -133,6 +133,22 @@ function boardCalls1(ids: Ids): Asked[] {
   ]
 }
 
+/** A rename beside, then reaching, a locked element whose stored tags repeat one. */
+function repeatedTagCalls(ids: Ids): Asked[] {
+  return ['dupes', 'dupes-edges'].flatMap((path): Asked[] => {
+    const element = path === 'dupes' ? 'node' : 'edge'
+    const rename = (from: string, to: string): Message => ({
+      workspaceId: W,
+      documentIds: [ids[path]],
+      tags: { rename: [{ from, to }] },
+    })
+    return [
+      [`a rename beside a locked ${element} holding a repeated tag`, rename('old', 'new')],
+      [`a rename reaching a locked ${element} holding a repeated tag`, rename('keep', 'kept')],
+    ]
+  })
+}
+
 function boardCalls2(ids: Ids): Asked[] {
   const board = (more: Message): Message => ({ workspaceId: W, documentIds: [ids.board], ...more })
   const node = (nodeId: string, more: Message) => board({ nodeId, ...more })
@@ -148,24 +164,7 @@ function boardCalls2(ids: Ids): Asked[] {
       'a rename on one node',
       node('tower', { tags: { rename: [{ from: 'health:failing', to: 'health:down' }] } }),
     ],
-    ...['dupes', 'dupes-edges'].flatMap((path): Asked[] => [
-      [
-        `a rename beside a locked ${path === 'dupes' ? 'node' : 'edge'} holding a repeated tag`,
-        {
-          workspaceId: W,
-          documentIds: [ids[path]],
-          tags: { rename: [{ from: 'old', to: 'new' }] },
-        },
-      ],
-      [
-        `a rename reaching a locked ${path === 'dupes' ? 'node' : 'edge'} holding a repeated tag`,
-        {
-          workspaceId: W,
-          documentIds: [ids[path]],
-          tags: { rename: [{ from: 'keep', to: 'kept' }] },
-        },
-      ],
-    ]),
+    ...repeatedTagCalls(ids),
     [
       'a rename that reaches nothing',
       board({ tags: { rename: [{ from: 'nothing', to: 'something' }] } }),

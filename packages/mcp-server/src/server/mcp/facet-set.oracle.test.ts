@@ -253,6 +253,18 @@ const LOCKED_TAGS: Message[] = [
   { edgeId: 'sealed', tags: { add: ['plain', 'wire'] } },
 ]
 
+/** The boards whose locked element stores a repeated tag, drawn, tagged, then locked. */
+async function seedRepeatedTags(call: Call, ids: Record<string, string>): Promise<void> {
+  for (const { path, ops, tags, locks } of DUPES) {
+    const documentId = ids[path]
+    await landed(call, 'wb_canvas_edit', { workspaceId: W, documentId, mode: 'apply', ops })
+    for (const more of tags) {
+      await landed(call, 'wb_facet_set', { workspaceId: W, documentIds: [documentId], ...more })
+    }
+    await landed(call, 'wb_canvas_edit', { workspaceId: W, documentId, mode: 'apply', ops: locks })
+  }
+}
+
 async function populate(call: Call): Promise<Record<string, string>> {
   const created = await landed(call, 'wb_workspace_edit', {
     workspaceId: W,
@@ -280,14 +292,7 @@ async function populate(call: Call): Promise<Record<string, string>> {
       { op: 'edge.add', edge: { id: 'link', from: { node: 'one' }, to: { node: 'two' } } },
     ],
   })
-  for (const { path, ops, tags, locks } of DUPES) {
-    const documentId = ids[path]
-    await landed(call, 'wb_canvas_edit', { workspaceId: W, documentId, mode: 'apply', ops })
-    for (const more of tags) {
-      await landed(call, 'wb_facet_set', { workspaceId: W, documentIds: [documentId], ...more })
-    }
-    await landed(call, 'wb_canvas_edit', { workspaceId: W, documentId, mode: 'apply', ops: locks })
-  }
+  await seedRepeatedTags(call, ids)
   await landed(call, 'wb_facet_set', {
     workspaceId: W,
     documentIds: [ids['loose-board']],
