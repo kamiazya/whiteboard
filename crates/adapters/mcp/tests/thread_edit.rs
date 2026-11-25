@@ -194,18 +194,39 @@ fn doubles(value: &Value) -> Value {
 }
 
 #[cfg(test)]
-/// The stored record of `workspace` as the recorder reads it back.
-fn stored(ports: &Fakes, workspace: &str) -> Value {
+/// The stored record of `workspace` as the recorder reads it back: its
+/// version vector and frontiers, and its value when `whole`. A call moves the
+/// record it addresses and no other, and a record that did not move has the
+/// version it had, so the value of the other is read only where it can differ.
+fn stored(ports: &Fakes, workspace: &str, whole: bool) -> Value {
     let held = block_on(ports.records.load(workspace)).expect("a load").expect("the record");
     let doc = import_bytes(&held).expect("a record");
     let pairs = |pairs: Vec<(String, i64)>| {
         Value::Array(pairs.into_iter().map(|(peer, counter)| json!([peer, counter])).collect())
     };
+    let value = if whole { as_json(&deep_value(&doc)) } else { Value::Null };
     doubles(&json!({
-        "value": as_json(&deep_value(&doc)),
+        "value": value,
         "version": pairs(version_pairs(&doc)),
         "frontiers": pairs(frontier_pairs(&doc)),
     }))
+}
+
+#[cfg(test)]
+/// Both records held to what they should be after `case`: the one the call
+/// addressed whole, the other by its version.
+fn held_to(ports: &Fakes, expected: &[Value; 2], addressed: usize, case: &str) {
+    for (at, workspace) in [W, C].into_iter().enumerate() {
+        let mut want = expected[at].clone();
+        if at != addressed {
+            want["value"] = Value::Null;
+        }
+        assert_eq!(
+            stored(ports, workspace, at == addressed),
+            want,
+            "{case}: the stored record of {workspace}"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -250,8 +271,8 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
     let ports = &held;
     let server = Server::new(identity, OpsCatalogue::new(ports));
     let mut expected = [doubles(&before["records"][W]), doubles(&before["records"][C])];
-    assert_eq!(stored(ports, W), expected[0], "the first record before any call");
-    assert_eq!(stored(ports, C), expected[1], "the second record before any call");
+    held_to(ports, &expected, 0, "before any call");
+    held_to(ports, &expected, 1, "before any call");
     let (mut answered, mut pending, mut edited, mut told) = (0, 0, 0, 0);
     for (id, line) in lines.enumerate() {
         let row: Value = serde_json::from_str(line).expect("a JSON row");
@@ -259,6 +280,10 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         let message =
             json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call", "params": row["params"] });
         let answer = block_on(server.handle(&message)).expect("an answer");
+        let addressed = usize::from(matches!(
+            row["params"]["arguments"]["workspaceId"].as_str(),
+            Some(C | "crowd")
+        ));
         if PENDING.contains(&case) {
             assert_eq!(
                 answer["error"]["message"],
@@ -267,8 +292,7 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
             );
             assert_eq!(activity(ports), json!([]), "{case}: a pending call told no page");
             assert_eq!(written(ports), json!([]), "{case}: a pending call reported no write");
-            assert_eq!(stored(ports, W), expected[0], "{case}: a pending call kept nothing");
-            assert_eq!(stored(ports, C), expected[1], "{case}: a pending call kept nothing");
+            held_to(ports, &expected, addressed, case);
             pending += 1;
             continue;
         }
@@ -278,8 +302,7 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         if let Some(moved) = row.get("record") {
             expected[usize::from(row["in"] == C)] = doubles(moved);
         }
-        assert_eq!(stored(ports, W), expected[0], "{case}: the first stored record");
-        assert_eq!(stored(ports, C), expected[1], "{case}: the second stored record");
+        held_to(ports, &expected, addressed, case);
         answered += 1;
         edited += usize::from(row["answer"]["structuredContent"]["threads"].is_array());
         told += usize::from(row["activity"].as_array().is_some_and(|told| !told.is_empty()));

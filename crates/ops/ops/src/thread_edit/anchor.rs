@@ -158,15 +158,11 @@ fn quoted_text<'a>(node_id: Option<&String>, content: &'a Content) -> Result<&'a
     }
 }
 
-/// `usize` of an offset a caller counted: a safe integer, so saturating where
-/// the target is narrower costs nothing a body that long could answer.
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "an offset is a non-negative safe integer; a usize narrower than it saturates, far past any body"
-)]
-const fn offset(n: f64) -> usize {
-    n as usize
+/// `usize` of an offset a caller counted: a non-negative safe integer, read
+/// through its digits, saturating where the target is narrower than it, which
+/// costs nothing a body that long could answer.
+fn offset(n: f64) -> usize {
+    format!("{n}").parse().unwrap_or(usize::MAX)
 }
 
 fn stored_passage(passage: &TextPassage, content: &Content) -> Result<Value, String> {
@@ -198,13 +194,10 @@ fn stored_passage(passage: &TextPassage, content: &Content) -> Result<Value, Str
     }
 }
 
-/// An offset into a body as the number it is stored as.
-#[expect(
-    clippy::cast_precision_loss,
-    reason = "an offset into a body is far below 2^53, so the double is exact"
-)]
-const fn to_number(at: usize) -> f64 {
-    at as f64
+/// An offset into a body as the number it is stored as: far below 2^53, and
+/// below `u32::MAX` for any body a write holds.
+fn to_number(at: usize) -> f64 {
+    f64::from(u32::try_from(at).unwrap_or(u32::MAX))
 }
 
 /// `JSON.stringify` of a well-formed string.
