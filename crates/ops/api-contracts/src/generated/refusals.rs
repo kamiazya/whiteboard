@@ -508,6 +508,44 @@ refusals! {
     FacetWriteRejected { facet_key: String, reason: String }
         => code::FACET_WRITE_REJECTED, 400, format!("facet \"{facet_key}\" rejected: {reason}");
     example { facet_key: "visual.shape/v1".to_owned(), reason: "bad payload".to_owned() };
+    /// A facet write naming neither tags nor facets, which a silent no-op would read as done.
+    FacetSetNeedsPayload
+        => code::FACET_SET_NEEDS_PAYLOAD, 400, "Nothing to set: pass `tags` (add/remove tags) or `facets` (extension facets), or both.".to_owned();
+    example;
+    /// A tag written to a markdown document that holds no OKF frontmatter yet to put it in.
+    DocumentHasNoFrontmatter { document_id: String }
+        => code::DOCUMENT_HAS_NO_FRONTMATTER, 409, format!("Document {document_id} has no OKF frontmatter to tag. Write its content first with wb_workspace_edit's document.set op (a markdown body starting with a --- frontmatter block), then tag it.");
+    example { document_id: "d1".to_owned() };
+    /// A node or edge named beside several documents, whose element ids are scoped to their own
+    /// document.
+    NodeTargetNeedsOneDocument { count: u64 }
+        => code::NODE_TARGET_NEEDS_ONE_DOCUMENT, 400, format!("nodeId names a node of ONE document, and {count} documentIds were given. Node ids are scoped to their own document, so the same nodeId in two documents is two unrelated nodes. Call once per document.");
+    example { count: 2 };
+    /// A write naming a node and an edge, when it lands on one element.
+    NodeAndEdgeTarget
+        => code::NODE_AND_EDGE_TARGET, 400, "nodeId targets a node and edgeId targets an edge; pass one or the other.".to_owned();
+    example;
+    /// A write naming an element and the canvas around it, when it lands on one.
+    NodeAndCanvasTarget
+        => code::NODE_AND_CANVAS_TARGET, 400, "nodeId targets one node and target: 'canvas' targets the canvas envelope; pass one or the other.".to_owned();
+    example;
+    /// A facet or tag write that would change a locked node, refused whole.
+    NodeLockedNothingWritten { id: String }
+        => code::ELEMENT_LOCKED, 409, format!("node \"{id}\" is locked; unlock it with a node.lock op first. Nothing was written.");
+    example { id: "n1".to_owned() };
+    /// A facet or tag write that would change a locked edge, refused whole.
+    EdgeLockedNothingWritten { id: String }
+        => code::ELEMENT_LOCKED, 409, format!("edge \"{id}\" is locked; unlock it with an edge.lock op first. Nothing was written.");
+    example { id: "e1".to_owned() };
+    /// A tag change that would leave a document, board, node or edge carrying more tags than
+    /// one may and more than it carries now.
+    TooManyTagsOnElement { count: u64, what: String }
+        => code::TOO_MANY_TAGS, 413, format!("{what} would carry {count} tags, past the 1024-tag limit for one document, board, node or edge. Nothing was written.");
+    example { count: 1025, what: "node n1".to_owned() };
+    /// A tool naming an edge the canvas does not hold.
+    EdgeNotFound { document_id: String, edge_id: String }
+        => code::EDGE_NOT_FOUND, 404, format!("edge not found: {edge_id} in document {document_id}");
+    example { document_id: "d1".to_owned(), edge_id: "e1".to_owned() };
     /// A search naming neither words nor a filter, in the tool's parameter names.
     SearchNeedsQueryOrFilter
         => code::SEARCH_NEEDS_QUERY_OR_FILTER, 400, "Nothing to search for: pass `query` (words to match), or `tags` / `kind` (a filter to answer alone), or both. To list every document, use wb_document_list.".to_owned();
@@ -618,6 +656,14 @@ pub mod code {
     pub const OKF_NOT_YAML_SAFE: &str = "okf_not_yaml_safe";
     pub const TAG_NOT_IN_LIBRARY: &str = "tag_not_in_library";
     pub const FACET_WRITE_REJECTED: &str = "facet_write_rejected";
+    pub const FACET_SET_NEEDS_PAYLOAD: &str = "facet_set_needs_payload";
+    pub const DOCUMENT_HAS_NO_FRONTMATTER: &str = "document_has_no_frontmatter";
+    pub const NODE_TARGET_NEEDS_ONE_DOCUMENT: &str = "node_target_needs_one_document";
+    pub const NODE_AND_EDGE_TARGET: &str = "node_and_edge_target";
+    pub const NODE_AND_CANVAS_TARGET: &str = "node_and_canvas_target";
+    pub const ELEMENT_LOCKED: &str = "element_locked";
+    pub const TOO_MANY_TAGS: &str = "too_many_tags";
+    pub const EDGE_NOT_FOUND: &str = "edge_not_found";
     pub const SEARCH_NEEDS_QUERY_OR_FILTER: &str = "search_needs_query_or_filter";
     pub const NAMELESS_LINK_TARGET: &str = "nameless_link_target";
     pub const INVALID_BODY: &str = "invalid_body";
@@ -676,6 +722,14 @@ pub const CODES: &[&str] = &[
     code::OKF_NOT_YAML_SAFE,
     code::TAG_NOT_IN_LIBRARY,
     code::FACET_WRITE_REJECTED,
+    code::FACET_SET_NEEDS_PAYLOAD,
+    code::DOCUMENT_HAS_NO_FRONTMATTER,
+    code::NODE_TARGET_NEEDS_ONE_DOCUMENT,
+    code::NODE_AND_EDGE_TARGET,
+    code::NODE_AND_CANVAS_TARGET,
+    code::ELEMENT_LOCKED,
+    code::TOO_MANY_TAGS,
+    code::EDGE_NOT_FOUND,
     code::SEARCH_NEEDS_QUERY_OR_FILTER,
     code::NAMELESS_LINK_TARGET,
     code::INVALID_BODY,

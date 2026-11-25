@@ -49,6 +49,27 @@ pub struct RestoreProgress {
     pub label: Option<String>,
 }
 
+/// What a write touched on a board, by element id: what a watching page
+/// outlines. A kind a write did not touch is empty.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Touched {
+    pub nodes: Vec<String>,
+    pub edges: Vec<String>,
+    pub lines: Vec<String>,
+    pub comments: Vec<String>,
+}
+
+/// An agent just changed a document a person may be watching: the
+/// "Agent editing" chip, and the outline over what was touched.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentActivity {
+    pub workspace_id: String,
+    pub document_id: String,
+    pub touched: Touched,
+    /// One short human-readable line, e.g. "changed 1".
+    pub summary: String,
+}
+
 /// The seam a tool reaches a page watching the same document through
 /// (server-core's `CanvasClientNotifier`). Nothing here fails: a keeper that
 /// could not reach a page answers as one that had none to reach.
@@ -66,4 +87,9 @@ pub trait ClientNotifier {
     /// `Started` sends `Complete` however the restore ends, so a page's editor
     /// is never left read-only.
     fn restore_progress(&self, event: &RestoreProgress);
+
+    /// Tells the pages `activity.document_id` is open in that an agent
+    /// changed it. Told after the write landed, so nothing awaited and
+    /// nothing fails: a write is never undone because nobody could be told.
+    fn agent_activity(&self, activity: &AgentActivity);
 }

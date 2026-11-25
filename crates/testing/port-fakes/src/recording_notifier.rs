@@ -2,7 +2,9 @@ use std::collections::BTreeSet;
 use std::future::{Future, ready};
 use std::sync::{Mutex, PoisonError};
 
-use whiteboard_ports::{ClientNotifier, MaybeSend, RestoreProgress, ViewportRequest};
+use whiteboard_ports::{
+    AgentActivity, ClientNotifier, MaybeSend, RestoreProgress, ViewportRequest,
+};
 
 /// Pages held open in memory: the documents a ready page watches, and every
 /// viewport request and restore event handed over, in order. With none
@@ -13,6 +15,7 @@ pub struct RecordingNotifier {
     watched: BTreeSet<(String, String)>,
     requests: Mutex<Vec<ViewportRequest>>,
     restores: Mutex<Vec<RestoreProgress>>,
+    activity: Mutex<Vec<AgentActivity>>,
 }
 
 impl RecordingNotifier {
@@ -33,6 +36,12 @@ impl RecordingNotifier {
     #[must_use]
     pub fn requests(&self) -> Vec<ViewportRequest> {
         self.requests.lock().unwrap_or_else(PoisonError::into_inner).clone()
+    }
+
+    /// Every agent activity told so far, leaving none behind.
+    #[must_use]
+    pub fn take_activity(&self) -> Vec<AgentActivity> {
+        std::mem::take(&mut *self.activity.lock().unwrap_or_else(PoisonError::into_inner))
     }
 
     /// Every restore event told so far, leaving none behind, so a test reads
@@ -56,12 +65,17 @@ impl ClientNotifier for RecordingNotifier {
     fn restore_progress(&self, event: &RestoreProgress) {
         self.restores.lock().unwrap_or_else(PoisonError::into_inner).push(event.clone());
     }
+
+    fn agent_activity(&self, activity: &AgentActivity) {
+        self.activity.lock().unwrap_or_else(PoisonError::into_inner).push(activity.clone());
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use whiteboard_ports::{
-        ClientNotifier, RestorePhase, RestoreProgress, ViewportMode, ViewportRequest,
+        AgentActivity, ClientNotifier, RestorePhase, RestoreProgress, Touched, ViewportMode,
+        ViewportRequest,
     };
 
     use super::RecordingNotifier;
@@ -98,6 +112,22 @@ mod tests {
 
     fn restore(path: &str, phase: RestorePhase) -> RestoreProgress {
         RestoreProgress { workspace_id: "w".into(), path: path.into(), phase, label: None }
+    }
+
+    #[test]
+    fn an_activity_told_is_kept_until_taken() {
+        let pages = RecordingNotifier::new();
+        let told = |summary: &str| AgentActivity {
+            workspace_id: "w".into(),
+            document_id: "d".into(),
+            touched: Touched::default(),
+            summary: summary.into(),
+        };
+        pages.agent_activity(&told("one"));
+        pages.agent_activity(&told("two"));
+        assert_eq!(pages.take_activity(), vec![told("one"), told("two")]);
+        assert!(pages.take_activity().is_empty());
+        assert!(pages.requests().is_empty(), "an activity is no viewport request");
     }
 
     #[test]

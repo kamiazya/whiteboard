@@ -2072,6 +2072,142 @@
       "source": "FacetWriteRejectedError"
     },
     {
+      "name": "FacetSetNeedsPayload",
+      "code": "facet_set_needs_payload",
+      "status": 400,
+      "description": "A facet write naming neither tags nor facets, which a silent no-op would read as done.",
+      "message": "Nothing to set: pass `tags` (add/remove tags) or `facets` (extension facets), or both.",
+      "params": {},
+      "example": {},
+      "exampleText": "Nothing to set: pass `tags` (add/remove tags) or `facets` (extension facets), or both.",
+      "surfaces": ["mcp-tools"],
+      "source": "FacetSetNeedsPayloadError"
+    },
+    {
+      "name": "DocumentHasNoFrontmatter",
+      "code": "document_has_no_frontmatter",
+      "status": 409,
+      "description": "A tag written to a markdown document that holds no OKF frontmatter yet to put it in.",
+      "message": "Document {documentId} has no OKF frontmatter to tag. Write its content first with wb_workspace_edit's document.set op (a markdown body starting with a --- frontmatter block), then tag it.",
+      "params": {
+        "documentId": "string"
+      },
+      "example": {
+        "documentId": "d1"
+      },
+      "exampleText": "Document d1 has no OKF frontmatter to tag. Write its content first with wb_workspace_edit's document.set op (a markdown body starting with a --- frontmatter block), then tag it.",
+      "surfaces": ["mcp-tools"],
+      "source": "DocumentHasNoFrontmatterError"
+    },
+    {
+      "name": "NodeTargetNeedsOneDocument",
+      "code": "node_target_needs_one_document",
+      "status": 400,
+      "description": "A node or edge named beside several documents, whose element ids are scoped to their own document.",
+      "message": "nodeId names a node of ONE document, and {count} documentIds were given. Node ids are scoped to their own document, so the same nodeId in two documents is two unrelated nodes. Call once per document.",
+      "params": {
+        "count": "integer"
+      },
+      "example": {
+        "count": 2
+      },
+      "exampleText": "nodeId names a node of ONE document, and 2 documentIds were given. Node ids are scoped to their own document, so the same nodeId in two documents is two unrelated nodes. Call once per document.",
+      "surfaces": ["mcp-tools"],
+      "source": "NodeTargetNeedsOneDocumentError"
+    },
+    {
+      "name": "NodeAndEdgeTarget",
+      "code": "node_and_edge_target",
+      "status": 400,
+      "description": "A write naming a node and an edge, when it lands on one element.",
+      "message": "nodeId targets a node and edgeId targets an edge; pass one or the other.",
+      "params": {},
+      "example": {},
+      "exampleText": "nodeId targets a node and edgeId targets an edge; pass one or the other.",
+      "surfaces": ["mcp-tools"],
+      "source": "NodeAndEdgeTargetError"
+    },
+    {
+      "name": "NodeAndCanvasTarget",
+      "code": "node_and_canvas_target",
+      "status": 400,
+      "description": "A write naming an element and the canvas around it, when it lands on one.",
+      "message": "nodeId targets one node and target: 'canvas' targets the canvas envelope; pass one or the other.",
+      "params": {},
+      "example": {},
+      "exampleText": "nodeId targets one node and target: 'canvas' targets the canvas envelope; pass one or the other.",
+      "surfaces": ["mcp-tools"],
+      "source": "NodeAndCanvasTargetError"
+    },
+    {
+      "name": "NodeLockedNothingWritten",
+      "code": "element_locked",
+      "status": 409,
+      "description": "A facet or tag write that would change a locked node, refused whole.",
+      "message": "node \"{id}\" is locked; unlock it with a node.lock op first. Nothing was written.",
+      "params": {
+        "id": "string"
+      },
+      "example": {
+        "id": "n1"
+      },
+      "exampleText": "node \"n1\" is locked; unlock it with a node.lock op first. Nothing was written.",
+      "surfaces": ["mcp-tools"],
+      "source": "ElementLockedError"
+    },
+    {
+      "name": "EdgeLockedNothingWritten",
+      "code": "element_locked",
+      "status": 409,
+      "description": "A facet or tag write that would change a locked edge, refused whole.",
+      "message": "edge \"{id}\" is locked; unlock it with an edge.lock op first. Nothing was written.",
+      "params": {
+        "id": "string"
+      },
+      "example": {
+        "id": "e1"
+      },
+      "exampleText": "edge \"e1\" is locked; unlock it with an edge.lock op first. Nothing was written.",
+      "surfaces": ["mcp-tools"],
+      "source": "ElementLockedError"
+    },
+    {
+      "name": "TooManyTagsOnElement",
+      "code": "too_many_tags",
+      "status": 413,
+      "description": "A tag change that would leave a document, board, node or edge carrying more tags than one may and more than it carries now.",
+      "message": "{what} would carry {count} tags, past the 1024-tag limit for one document, board, node or edge. Nothing was written.",
+      "params": {
+        "what": "string",
+        "count": "integer"
+      },
+      "example": {
+        "what": "node n1",
+        "count": 1025
+      },
+      "exampleText": "node n1 would carry 1025 tags, past the 1024-tag limit for one document, board, node or edge. Nothing was written.",
+      "surfaces": ["mcp-tools"],
+      "source": "TooManyTagsError"
+    },
+    {
+      "name": "EdgeNotFound",
+      "code": "edge_not_found",
+      "status": 404,
+      "description": "A tool naming an edge the canvas does not hold.",
+      "message": "edge not found: {edgeId} in document {documentId}",
+      "params": {
+        "edgeId": "string",
+        "documentId": "string"
+      },
+      "example": {
+        "edgeId": "e1",
+        "documentId": "d1"
+      },
+      "exampleText": "edge not found: e1 in document d1",
+      "surfaces": ["mcp-tools"],
+      "source": "EdgeNotFoundError"
+    },
+    {
       "name": "SearchNeedsQueryOrFilter",
       "code": "search_needs_query_or_filter",
       "status": 400,
