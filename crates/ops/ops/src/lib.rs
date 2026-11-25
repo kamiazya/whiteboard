@@ -39,6 +39,7 @@
 
 mod address;
 mod body_edit;
+mod canvas_snapshot;
 mod content;
 mod document_get;
 mod document_list;
@@ -66,6 +67,11 @@ pub use address::{
 pub use body_edit::{
     BodyEdit, BodyEditAnswer, BodyEditInput, BodyEditMode, BodyEditOutput, BodyEditPending,
     BodyReplace, MAX_PASSAGES,
+};
+pub use canvas_snapshot::{
+    CanvasSnapshot, CanvasSnapshotAnswer, CanvasSnapshotInput, CanvasSnapshotOutput,
+    SNAPSHOT_MAX_EDGES, SNAPSHOT_MAX_NODES, SNAPSHOT_TEXT_MAX_CHARS, Shown, SnapshotEdge,
+    SnapshotLine, SnapshotNode, SnapshotPending,
 };
 pub use document_get::{
     DocumentGet, DocumentGetAnswer, DocumentGetInput, DocumentGetOutput, FailedRead, Pending,

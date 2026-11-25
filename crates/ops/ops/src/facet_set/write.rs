@@ -8,6 +8,7 @@ use whiteboard_model::{Map, Value, enumeration_order};
 use whiteboard_ports::Touched;
 use whiteboard_workspace_index::WorkspaceRecord;
 
+use crate::content::holds_wide_map;
 use crate::document_save::{Declined, save_batch};
 
 use super::read::{Doc, Halt, Kind, elements, id_of, member};
@@ -104,17 +105,6 @@ fn order_unknown(stored: &[(String, Value)], payload: &Payload<'_>) -> bool {
     let replaced = |key: &String| payload.sets.iter().any(|(set, _)| set == key);
     surviving.len() > 1
         || surviving.iter().any(|(key, value)| !replaced(key) && holds_wide_map(value))
-}
-
-/// Whether an object of two keys or more is anywhere in the value.
-fn holds_wide_map(value: &Value) -> bool {
-    match value {
-        Value::Map(entries) => {
-            entries.len() > 1 || entries.iter().any(|(_, held)| holds_wide_map(held))
-        }
-        Value::Seq(items) => items.iter().any(holds_wide_map),
-        _ => false,
-    }
 }
 
 /// [`merged`] over what is stored, or the call left pending when the order of

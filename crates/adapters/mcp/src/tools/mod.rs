@@ -11,6 +11,7 @@
 //! operation's refusal.
 
 mod body_edit;
+mod canvas_snapshot;
 mod document_get;
 mod document_list;
 mod document_search;
@@ -27,9 +28,9 @@ mod workspace_edit;
 
 use serde_json::{Map, Value, json};
 use whiteboard_ops::{
-    BodyEdit, DocumentGet, DocumentList, DocumentSearch, FacetList, FacetSet, Operation, Ports,
-    ThreadEdit, VersionList, VersionRestore, VersionSave, ViewportSet, WorkspaceEdit,
-    with_resolved_workspace,
+    BodyEdit, CanvasSnapshot, DocumentGet, DocumentList, DocumentSearch, FacetList, FacetSet,
+    Operation, Ports, ThreadEdit, VersionList, VersionRestore, VersionSave, ViewportSet,
+    WorkspaceEdit, with_resolved_workspace,
 };
 
 use crate::{ToolCatalogue, ToolError};
@@ -53,8 +54,13 @@ pub const PENDING_TOOLS: &[&str] = &[
 /// The pending tools a call already reaches: not listed, since most of what
 /// they do is not ported, but a call is judged and answered as far as the
 /// operation answers it, and the rest is `Tool <name> not found`.
-pub const PARTLY_BOUND_TOOLS: &[&str] =
-    &["wb_facet_set", "wb_thread_edit", "wb_version_restore", "wb_workspace_edit"];
+pub const PARTLY_BOUND_TOOLS: &[&str] = &[
+    "wb_canvas_snapshot",
+    "wb_facet_set",
+    "wb_thread_edit",
+    "wb_version_restore",
+    "wb_workspace_edit",
+];
 
 /// An operation as a tool: its name and contract, its input as the SDK
 /// judges it, and its output as the tool answers it.
@@ -129,6 +135,7 @@ impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
             BodyEdit::NAME => run::<BodyEdit, P>(&self.ports, arguments).await,
             ThreadEdit::NAME => run::<ThreadEdit, P>(&self.ports, arguments).await,
             WorkspaceEdit::NAME => run::<WorkspaceEdit, P>(&self.ports, arguments).await,
+            CanvasSnapshot::NAME => run::<CanvasSnapshot, P>(&self.ports, arguments).await,
             _ => Err(ToolError::NotFound),
         }
     }
