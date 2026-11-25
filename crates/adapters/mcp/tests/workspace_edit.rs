@@ -298,7 +298,7 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
 }
 
 #[cfg(test)]
-fn edit(ports: &Fakes, ops: Value) -> Value {
+fn edit(ports: &Fakes, ops: &Value) -> Value {
     let identity =
         Identity { name: "whiteboard".into(), version: "0".into(), instructions: String::new() };
     let server = Server::new(identity, OpsCatalogue::new(ports));
@@ -321,7 +321,7 @@ fn a_document_moved_after_it_is_written_is_told_moved_after_the_write() {
     let record: Value = serde_json::from_str(lines.next().expect("a record")).expect("JSON");
     let probe = fakes(&record);
     let created =
-        edit(&probe, json!([{ "op": "document.create", "kind": "spatial", "path": "fresh" }]));
+        edit(&probe, &json!([{ "op": "document.create", "kind": "spatial", "path": "fresh" }]));
     let id = created["result"]["structuredContent"]["results"][0]["documentId"]
         .as_str()
         .expect("a minted id")
@@ -329,7 +329,7 @@ fn a_document_moved_after_it_is_written_is_told_moved_after_the_write() {
     let ports = fakes(&record);
     let answer = edit(
         &ports,
-        json!([
+        &json!([
             { "op": "document.create", "kind": "spatial", "path": "fresh" },
             { "op": "document.move", "documentId": id, "path": "moved/fresh" },
         ]),
