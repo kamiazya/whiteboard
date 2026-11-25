@@ -6,11 +6,14 @@
 //! and `port_error` maps what a port answers to the refusal it travels as.
 
 mod port_error;
+#[path = "generated/refusal_codes.rs"]
+mod refusal_codes;
 mod refusal_text;
 #[path = "generated/refusals.rs"]
 mod refusals;
 
-pub use refusals::{CODES, Refusal, SYNC_WRITE_CODES, VERSION_CODES, code};
+pub use refusal_codes::{CODES, SYNC_WRITE_CODES, VERSION_CODES, code};
+pub use refusals::Refusal;
 
 #[cfg(test)]
 mod contract_tests;

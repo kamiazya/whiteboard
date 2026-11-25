@@ -93,7 +93,9 @@ fn rust_message(e: &Checked<'_>) -> String {
     format!("format!({}{rest})", rust_literal(&format))
 }
 
-fn rust_codes(out: &mut String, entries: &[Checked<'_>]) {
+/// The codes' own file: every code a refusal carries, and the lists of them.
+pub(super) fn rust_codes(entries: &[Checked<'_>]) -> String {
+    let mut out = header(SOURCE);
     out.push_str("\n/// Every code a refusal carries, as a constant.\npub mod code {\n");
     for code in distinct_codes(entries) {
         let _ = writeln!(
@@ -126,6 +128,7 @@ fn rust_codes(out: &mut String, entries: &[Checked<'_>]) {
             names(&family_codes(entries, family))
         );
     }
+    out
 }
 
 /// The macro the rows are written through: one row per refusal is the table,
@@ -211,14 +214,13 @@ fn rust_row(out: &mut String, e: &Checked<'_>) {
 
 pub(super) fn rust(entries: &[Checked<'_>]) -> String {
     let mut out = header(SOURCE);
-    out.push_str("\nuse std::fmt;\n");
+    out.push_str("\nuse std::fmt;\n\nuse crate::refusal_codes::code;\n");
     out.push_str(TABLE_MACRO);
     out.push_str("\nrefusals! {\n");
     for e in entries {
         rust_row(&mut out, e);
     }
     out.push_str("}\n");
-    rust_codes(&mut out, entries);
     out.push_str(
         "\nimpl fmt::Display for Refusal {\n    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {\n        f.write_str(&self.message())\n    }\n}\n",
     )

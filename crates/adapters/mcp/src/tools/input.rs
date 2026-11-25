@@ -285,7 +285,12 @@ fn sized_issues(path: &str, (min, max): (usize, usize), value: Option<&Value>) -
 /// An optional document path: its length as `sized_issues` judges it, then
 /// its segments, which Zod judges after a length issue too, since neither
 /// aborts; a value that is no string is judged for its length alone.
-fn path_issues(path: &str, max: usize, segments: &Refined, value: Option<&Value>) -> Vec<String> {
+pub(crate) fn path_issues(
+    path: &str,
+    max: usize,
+    segments: &Refined,
+    value: Option<&Value>,
+) -> Vec<String> {
     let Some(given) = value else { return Vec::new() };
     let mut issues = sized_issues(path, (1, max), Some(given));
     if let Value::String(text) = given

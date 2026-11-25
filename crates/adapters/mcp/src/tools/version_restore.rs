@@ -18,7 +18,7 @@ const ID_MAX: usize = 256;
 const PATH_MAX: usize = 1024;
 
 /// `DOCUMENT_PATH_SEGMENT_PATTERN` on every segment.
-fn path_segments(path: &str) -> bool {
+pub(super) fn path_segments(path: &str) -> bool {
     path.split('/').all(|segment| {
         let bytes = segment.as_bytes();
         let ends = |b: Option<&u8>| b.is_some_and(u8::is_ascii_alphanumeric);

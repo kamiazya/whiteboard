@@ -22,7 +22,7 @@ use super::document_list::WORKSPACE_ADDRESS;
 use super::input::{Checked, Field, Input, Kind, Refined, at, expected, joined, object_issues};
 use super::json::Json;
 
-pub(super) use fields::UNJUDGED;
+pub(super) use fields::{AUTHOR, UNJUDGED};
 
 /// `OPS_PER_CALL_MAX`.
 const OPS_MAX: usize = 200;

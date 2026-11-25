@@ -23,11 +23,13 @@ mod version_list;
 mod version_restore;
 mod version_save;
 mod viewport_set;
+mod workspace_edit;
 
 use serde_json::{Map, Value, json};
 use whiteboard_ops::{
     BodyEdit, DocumentGet, DocumentList, DocumentSearch, FacetList, FacetSet, Operation, Ports,
-    ThreadEdit, VersionList, VersionRestore, VersionSave, ViewportSet, with_resolved_workspace,
+    ThreadEdit, VersionList, VersionRestore, VersionSave, ViewportSet, WorkspaceEdit,
+    with_resolved_workspace,
 };
 
 use crate::{ToolCatalogue, ToolError};
@@ -51,7 +53,8 @@ pub const PENDING_TOOLS: &[&str] = &[
 /// The pending tools a call already reaches: not listed, since most of what
 /// they do is not ported, but a call is judged and answered as far as the
 /// operation answers it, and the rest is `Tool <name> not found`.
-pub const PARTLY_BOUND_TOOLS: &[&str] = &["wb_facet_set", "wb_thread_edit", "wb_version_restore"];
+pub const PARTLY_BOUND_TOOLS: &[&str] =
+    &["wb_facet_set", "wb_thread_edit", "wb_version_restore", "wb_workspace_edit"];
 
 /// An operation as a tool: its name and contract, its input as the SDK
 /// judges it, and its output as the tool answers it.
@@ -60,6 +63,10 @@ trait Binding: Operation {
     /// The contract file's text: the tool as `tools/list` publishes it.
     const CONTRACT: &str;
     const INPUT: Input;
+    /// Whether the operation resolves the `workspaceId` address itself, as a
+    /// tool whose refusal of an unknown workspace depends on the call does:
+    /// the address then reaches it as the caller typed it.
+    const RESOLVES_ITS_WORKSPACE: bool = false;
 
     /// The operation's input from arguments `INPUT` has passed, its workspace
     /// the canonical id the `workspaceId` address resolved to, or `None`
@@ -121,6 +128,7 @@ impl<P: Ports> ToolCatalogue for OpsCatalogue<P> {
             ViewportSet::NAME => run::<ViewportSet, P>(&self.ports, arguments).await,
             BodyEdit::NAME => run::<BodyEdit, P>(&self.ports, arguments).await,
             ThreadEdit::NAME => run::<ThreadEdit, P>(&self.ports, arguments).await,
+            WorkspaceEdit::NAME => run::<WorkspaceEdit, P>(&self.ports, arguments).await,
             _ => Err(ToolError::NotFound),
         }
     }
@@ -134,8 +142,9 @@ fn contract<B: Binding>() -> Value {
 
 /// One call: the SDK's judgement of the arguments (absent: an empty object),
 /// the `workspaceId` address resolved as server-core's tool record resolves
-/// it when the arguments name one (`INPUT` has held it to be a string), the
-/// operation, and the result the tool wrapper answers.
+/// it when the arguments name one (`INPUT` has held it to be a string) and
+/// the operation does not resolve it itself, the operation, and the result
+/// the tool wrapper answers.
 async fn run<B: Binding, P: Ports>(
     ports: &P,
     arguments: Option<&Map<String, Value>>,
@@ -145,7 +154,8 @@ async fn run<B: Binding, P: Ports>(
     if let Some(text) = input::refusal(B::NAME, &B::INPUT, arguments) {
         return Err(if B::unjudged(&text) { ToolError::NotFound } else { ToolError::Failed(text) });
     }
-    let output = match arguments.get("workspaceId").and_then(Value::as_str) {
+    let address = arguments.get("workspaceId").and_then(Value::as_str);
+    let output = match address.filter(|_| !B::RESOLVES_ITS_WORKSPACE) {
         Some(handle) => {
             with_resolved_workspace(ports, handle, |workspace_id| {
                 B::execute(ports, B::input(arguments, Some(workspace_id)))
