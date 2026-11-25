@@ -179,10 +179,7 @@ fn stored_passage(passage: &TextPassage, content: &Content) -> Result<Value, Str
         end: offset(passage.end),
     };
     match resolve_text_anchor(&units, &asked) {
-        // Offsets that already select the quote are kept as the caller wrote them.
-        Some(placed) if placed.start == asked.start && placed.end == asked.end => {
-            Ok(text_value(passage, passage.start, passage.end))
-        }
+        // Offsets that already select the quote are the ones it is found at.
         Some(placed) => Ok(text_value(passage, to_number(placed.start), to_number(placed.end))),
         None => {
             let place = passage
