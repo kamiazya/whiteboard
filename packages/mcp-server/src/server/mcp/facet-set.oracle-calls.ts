@@ -148,6 +148,24 @@ function boardCalls2(ids: Ids): Asked[] {
       'a rename on one node',
       node('tower', { tags: { rename: [{ from: 'health:failing', to: 'health:down' }] } }),
     ],
+    ...['dupes', 'dupes-edges'].flatMap((path): Asked[] => [
+      [
+        `a rename beside a locked ${path === 'dupes' ? 'node' : 'edge'} holding a repeated tag`,
+        {
+          workspaceId: W,
+          documentIds: [ids[path]],
+          tags: { rename: [{ from: 'old', to: 'new' }] },
+        },
+      ],
+      [
+        `a rename reaching a locked ${path === 'dupes' ? 'node' : 'edge'} holding a repeated tag`,
+        {
+          workspaceId: W,
+          documentIds: [ids[path]],
+          tags: { rename: [{ from: 'keep', to: 'kept' }] },
+        },
+      ],
+    ]),
     [
       'a rename that reaches nothing',
       board({ tags: { rename: [{ from: 'nothing', to: 'something' }] } }),
@@ -472,8 +490,12 @@ function libraryAddCalls(ids: Ids): Asked[] {
       { workspaceId: W, documentIds: [ids.second], tags: { add: ['region:asia'] } },
     ],
     [
+      'a board given a value the library admits',
+      { workspaceId: W, documentIds: [ids.empty], tags: { add: ['health:ok'] } },
+    ],
+    [
       'a batch refused on its second document',
-      { workspaceId: W, documentIds: [ids.second, ids.board], tags: { add: ['region:asia'] } },
+      { workspaceId: W, documentIds: [ids.second, ids.empty], tags: { add: ['health:failing'] } },
     ],
     ['a plain tag against the library', board({ nodeId: 'pad', tags: { add: ['anything'] } })],
   ]
@@ -510,8 +532,39 @@ function libraryRemovalCalls(ids: Ids): Asked[] {
   ]
 }
 
+/** One document named twice: each pass is judged against the stored record, and applied to what the last left. */
+function libraryRepeatCalls(ids: Ids): Asked[] {
+  const phased = (more: Message): Message => ({
+    workspaceId: W,
+    documentIds: [ids.phased, ids.phased],
+    ...more,
+  })
+  return [
+    [
+      'one rename of a document named twice',
+      {
+        workspaceId: W,
+        documentIds: [ids['phased-once'], ids['phased-once']],
+        tags: { rename: [{ from: 'region:eu', to: 'region:us' }] },
+      },
+    ],
+    [
+      'chained renames of a document named twice',
+      phased({
+        tags: {
+          rename: [
+            { from: 'region:eu', to: 'region:us' },
+            { from: 'region:us', to: 'region:asia' },
+          ],
+        },
+      }),
+    ],
+    ['the phased note read back', phased({ tags: { add: ['readback'] } })],
+  ]
+}
+
 function libraryCalls(ids: Ids): Asked[] {
-  return [...libraryAddCalls(ids), ...libraryRemovalCalls(ids)]
+  return [...libraryAddCalls(ids), ...libraryRemovalCalls(ids), ...libraryRepeatCalls(ids)]
 }
 
 /** Builds the tag library document through the tool, as a caller would. */

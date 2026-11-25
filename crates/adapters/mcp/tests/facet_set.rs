@@ -262,7 +262,8 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
                 json!("Tool wb_facet_set not found"),
                 "{case} is pending"
             );
-            let _ = (ports.notifier.take_activity(), ports.observer.take());
+            assert_eq!(activity(ports), json!([]), "{case}: a pending call told no page");
+            assert_eq!(written(ports), json!([]), "{case}: a pending call reported no write");
             assert_eq!(stored(ports), expected, "{case}: a pending call writes nothing");
             pending += 1;
             continue;
@@ -277,8 +278,8 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         answered += 1;
         updated += usize::from(row["answer"].get("structuredContent").is_some());
     }
-    assert_eq!((answered, pending), (157, 6), "the recording's calls, answered and pending");
-    assert_eq!(updated, 57, "the calls answered with documents");
+    assert_eq!((answered, pending), (165, 6), "the recording's calls, answered and pending");
+    assert_eq!(updated, 62, "the calls answered with documents");
 }
 
 #[cfg(test)]

@@ -179,6 +179,20 @@ const DOCUMENTS: Message[] = [
   { op: 'document.create', path: 'empty', kind: 'spatial' },
   { op: 'document.create', path: 'loose-board', kind: 'spatial' },
   { op: 'document.create', path: 'elderly', kind: 'spatial' },
+  { op: 'document.create', path: 'dupes', kind: 'spatial' },
+  { op: 'document.create', path: 'dupes-edges', kind: 'spatial' },
+  {
+    op: 'document.create',
+    path: 'phased',
+    kind: 'markdown',
+    markdown: '---\ntype: note\ntags:\n  - region:eu\n---\np\n',
+  },
+  {
+    op: 'document.create',
+    path: 'phased-once',
+    kind: 'markdown',
+    markdown: '---\ntype: note\ntags:\n  - region:eu\n---\nq\n',
+  },
 ]
 
 const BOARD_OPS: Message[] = [
@@ -196,6 +210,41 @@ const TAGGED: Message[] = [
   { nodeId: 'pad', tags: { add: ['health:ok', 'plain'] } },
   { nodeId: 'tower', tags: { add: ['health:failing'] } },
   { edgeId: 'fuels', tags: { add: ['plain'] } },
+]
+
+/**
+ * Two boards whose locked elements are tagged through the tool and then given a
+ * repeat in the stored list (`repeatTags`): one holds it on a node, the other
+ * on an edge, so a rename's rewrite of it changes one root of the document and
+ * not two.
+ */
+const DUPES: { path: string; ops: Message[]; tags: Message[]; locks: Message[] }[] = [
+  {
+    path: 'dupes',
+    ops: [
+      { op: 'node.add', node: { id: 'held', type: 'text', text: 'H', x: 0, y: 0 } },
+      { op: 'node.add', node: { id: 'free', type: 'text', text: 'F', x: 200, y: 0 } },
+    ],
+    tags: [
+      { nodeId: 'held', tags: { add: ['keep'] } },
+      { nodeId: 'free', tags: { add: ['old'] } },
+    ],
+    locks: [{ op: 'node.lock', id: 'held', locked: true }],
+  },
+  {
+    path: 'dupes-edges',
+    ops: [
+      { op: 'node.add', node: { id: 'a', type: 'text', text: 'A', x: 0, y: 0 } },
+      { op: 'node.add', node: { id: 'b', type: 'text', text: 'B', x: 200, y: 0 } },
+      { op: 'edge.add', edge: { id: 'tied', from: { node: 'a' }, to: { node: 'b' } } },
+      { op: 'edge.add', edge: { id: 'free', from: { node: 'b' }, to: { node: 'a' } } },
+    ],
+    tags: [
+      { edgeId: 'tied', tags: { add: ['keep'] } },
+      { edgeId: 'free', tags: { add: ['old'] } },
+    ],
+    locks: [{ op: 'edge.lock', id: 'tied', locked: true }],
+  },
 ]
 
 /** The tool's tags on the board's locked vault and sealed edge, before they were locked. */
@@ -231,6 +280,14 @@ async function populate(call: Call): Promise<Record<string, string>> {
       { op: 'edge.add', edge: { id: 'link', from: { node: 'one' }, to: { node: 'two' } } },
     ],
   })
+  for (const { path, ops, tags, locks } of DUPES) {
+    const documentId = ids[path]
+    await landed(call, 'wb_canvas_edit', { workspaceId: W, documentId, mode: 'apply', ops })
+    for (const more of tags) {
+      await landed(call, 'wb_facet_set', { workspaceId: W, documentIds: [documentId], ...more })
+    }
+    await landed(call, 'wb_canvas_edit', { workspaceId: W, documentId, mode: 'apply', ops: locks })
+  }
   await landed(call, 'wb_facet_set', {
     workspaceId: W,
     documentIds: [ids['loose-board']],
@@ -265,11 +322,26 @@ function retire(copy: LoroDoc, ids: Record<string, string>): void {
   }
 }
 
+/** What the tool never writes: a stored tag list holding one tag twice. */
+function repeatTags(
+  copy: LoroDoc,
+  documentId: string,
+  collection: 'nodes' | 'edges',
+  id: string,
+): void {
+  const held = hostOf(copy, documentId).get(collection) as LoroMap
+  held.set(id, { ...(held.get(id) as object), tags: ['keep', 'keep'] })
+}
+
 async function buildRecord(): Promise<Message> {
   const known = [SEGMENT]
   const deps = await freshDeps(known)
   const ids = await populate(await caller(deps))
-  await editWorkspaceRecord(W, (copy) => retire(copy, ids))
+  await editWorkspaceRecord(W, (copy) => {
+    retire(copy, ids)
+    repeatTags(copy, ids.dupes ?? '', 'nodes', 'held')
+    repeatTags(copy, ids['dupes-edges'] ?? '', 'edges', 'tied')
+  })
   const record = await workspaceRecordCopy(W)
   const registry = (await deps.documentIndex.listWorkspaces()).filter(
     (row) => row.workspaceId === W,
