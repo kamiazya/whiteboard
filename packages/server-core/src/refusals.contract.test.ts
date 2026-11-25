@@ -51,6 +51,7 @@ import {
   ElementLockedError,
   FacetWriteRejectedError,
   NodeNotFoundError,
+  PassageNotApplicableError,
   TooManyTagsError,
 } from './tools/errors.js'
 import {
@@ -61,6 +62,7 @@ import {
   NodeTargetNeedsOneDocumentError,
 } from './tools/facet-set.js'
 import { NamelessLinkifyTargetError } from './tools/linkify-mentions.js'
+import { refuseOpenChangeGrowth } from './tools/open-annotation-ceilings.js'
 import { refuseAgainstLibrary } from './tools/tag-library.js'
 import { ThreadEditError } from './tools/thread-edit-error.js'
 import {
@@ -104,6 +106,31 @@ const textOf = (error: Error) => error.message
 // The example's fields are held to the entry's params by the run below, which builds every class from them.
 type Params = Record<string, any>
 type Factories = Record<string, (p: Params) => Error>
+
+/**
+ * The refusal of a proposal that takes the document to `open` open changes,
+ * raised by the check that owns it: `held` carries one fewer, so one more
+ * change is the one past the bound.
+ */
+function ceilingRefusal(open: number): Error {
+  const change = (id: string) => ({
+    id,
+    status: 'open' as const,
+    op: 'body.replace' as const,
+    anchor: { kind: 'text' as const, quote: { exact: 'a' }, start: 0, end: 1 },
+    text: 'b',
+    assumed: 'a',
+  })
+  const held = [
+    { id: 'p1', changes: Array.from({ length: open - 1 }, (_, at) => change(`h${at}`)) },
+  ]
+  try {
+    refuseOpenChangeGrowth(held, { id: 'p2', changes: [change('new')] })
+  } catch (error) {
+    return error as Error
+  }
+  throw new Error(`${open} open changes is not past the ceiling`)
+}
 
 const FACTORIES: Factories = {
   MarkdownRunUpdate: (p) =>
@@ -377,6 +404,8 @@ const FACTORIES: Factories = {
   NodeLockedNothingWritten: (p) => new ElementLockedError('node', p.id),
   EdgeLockedNothingWritten: (p) => new ElementLockedError('edge', p.id),
   TooManyTagsOnElement: (p) => new TooManyTagsError(p.what, p.count),
+  PassageNotApplicable: (p) => new PassageNotApplicableError(p.changeId, p.detail),
+  OpenChangesCeiling: (p) => ceilingRefusal(p.open),
   WorkspaceNotFoundForCallerRead: (p) => new WorkspaceNotFoundForCallerError(p.workspaceId, 'read'),
   WorkspaceNotFoundForCallerReadKnown: (p) =>
     new WorkspaceNotFoundForCallerError(p.workspaceId, 'read', p.known),

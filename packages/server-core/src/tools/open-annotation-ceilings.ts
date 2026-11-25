@@ -4,9 +4,11 @@ import {
   growsPast,
   OPEN_CHANGES_LIMIT_PHRASE,
   OPEN_THREADS_LIMIT_PHRASE,
+  OpenChangesCeiling,
   openChangeCount,
   openChangesOnceWritten,
   type Proposal,
+  REFUSAL_CODE_OPEN_CHANGES_CEILING,
 } from '@kamiazya/whiteboard-model'
 
 /**
@@ -26,10 +28,10 @@ export function openThreadsRefusal(before: number, after: number): string | unde
  * pass where one large one would not.
  */
 class OpenChangesCeilingError extends Error {
+  readonly code = REFUSAL_CODE_OPEN_CHANGES_CEILING
+
   constructor(readonly open: number) {
-    super(
-      `the document would hold ${open} open proposed changes, past ${OPEN_CHANGES_LIMIT_PHRASE}. Nothing was written.`,
-    )
+    super(OpenChangesCeiling(open, OPEN_CHANGES_LIMIT_PHRASE))
     this.name = 'OpenChangesCeilingError'
   }
 }
