@@ -178,17 +178,15 @@ fn stored_passage(passage: &TextPassage, content: &Content) -> Result<Value, Str
         start: offset(passage.start),
         end: offset(passage.end),
     };
-    match resolve_text_anchor(&units, &asked) {
-        // Offsets that already select the quote are the ones it is found at.
-        Some(placed) => Ok(text_value(passage, to_number(placed.start), to_number(placed.end))),
-        None => {
-            let place = passage
-                .node_id
-                .as_ref()
-                .map_or_else(|| "body".to_owned(), |id| format!("text of node \"{id}\""));
-            Err(format!("the passage {} is not in the {place}", json_quote(&passage.exact)))
-        }
+    // Offsets that already select the quote are the ones it is found at.
+    if let Some(placed) = resolve_text_anchor(&units, &asked) {
+        return Ok(text_value(passage, to_number(placed.start), to_number(placed.end)));
     }
+    let place = passage
+        .node_id
+        .as_ref()
+        .map_or_else(|| "body".to_owned(), |id| format!("text of node \"{id}\""));
+    Err(format!("the passage {} is not in the {place}", json_quote(&passage.exact)))
 }
 
 /// An offset into a body as the number it is stored as: far below 2^53, and
