@@ -49,6 +49,14 @@ export const REFUSAL_CODE_OKF_PARSE_FAILED = 'okf_parse_failed'
 export const REFUSAL_CODE_OKF_NOT_YAML_SAFE = 'okf_not_yaml_safe'
 export const REFUSAL_CODE_TAG_NOT_IN_LIBRARY = 'tag_not_in_library'
 export const REFUSAL_CODE_FACET_WRITE_REJECTED = 'facet_write_rejected'
+export const REFUSAL_CODE_FACET_SET_NEEDS_PAYLOAD = 'facet_set_needs_payload'
+export const REFUSAL_CODE_DOCUMENT_HAS_NO_FRONTMATTER = 'document_has_no_frontmatter'
+export const REFUSAL_CODE_NODE_TARGET_NEEDS_ONE_DOCUMENT = 'node_target_needs_one_document'
+export const REFUSAL_CODE_NODE_AND_EDGE_TARGET = 'node_and_edge_target'
+export const REFUSAL_CODE_NODE_AND_CANVAS_TARGET = 'node_and_canvas_target'
+export const REFUSAL_CODE_ELEMENT_LOCKED = 'element_locked'
+export const REFUSAL_CODE_TOO_MANY_TAGS = 'too_many_tags'
+export const REFUSAL_CODE_EDGE_NOT_FOUND = 'edge_not_found'
 export const REFUSAL_CODE_SEARCH_NEEDS_QUERY_OR_FILTER = 'search_needs_query_or_filter'
 export const REFUSAL_CODE_NAMELESS_LINK_TARGET = 'nameless_link_target'
 export const REFUSAL_CODE_INVALID_BODY = 'invalid_body'
@@ -107,6 +115,14 @@ export const REFUSAL_CODES = {
   okfNotYamlSafe: REFUSAL_CODE_OKF_NOT_YAML_SAFE,
   tagNotInLibrary: REFUSAL_CODE_TAG_NOT_IN_LIBRARY,
   facetWriteRejected: REFUSAL_CODE_FACET_WRITE_REJECTED,
+  facetSetNeedsPayload: REFUSAL_CODE_FACET_SET_NEEDS_PAYLOAD,
+  documentHasNoFrontmatter: REFUSAL_CODE_DOCUMENT_HAS_NO_FRONTMATTER,
+  nodeTargetNeedsOneDocument: REFUSAL_CODE_NODE_TARGET_NEEDS_ONE_DOCUMENT,
+  nodeAndEdgeTarget: REFUSAL_CODE_NODE_AND_EDGE_TARGET,
+  nodeAndCanvasTarget: REFUSAL_CODE_NODE_AND_CANVAS_TARGET,
+  elementLocked: REFUSAL_CODE_ELEMENT_LOCKED,
+  tooManyTags: REFUSAL_CODE_TOO_MANY_TAGS,
+  edgeNotFound: REFUSAL_CODE_EDGE_NOT_FOUND,
   searchNeedsQueryOrFilter: REFUSAL_CODE_SEARCH_NEEDS_QUERY_OR_FILTER,
   namelessLinkTarget: REFUSAL_CODE_NAMELESS_LINK_TARGET,
   invalidBody: REFUSAL_CODE_INVALID_BODY,

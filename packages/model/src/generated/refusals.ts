@@ -575,6 +575,48 @@ export const TagExclusive = (
 export const FacetWriteRejected = (facetKey: string, reason: string) =>
   `facet "${facetKey}" rejected: ${reason}`
 
+/** A facet write naming neither tags nor facets, which a silent no-op would read as done. */
+export const FacetSetNeedsPayload = () =>
+  'Nothing to set: pass `tags` (add/remove tags) or `facets` (extension facets), or both.'
+
+/** A tag written to a markdown document that holds no OKF frontmatter yet to put it in. */
+export const DocumentHasNoFrontmatter = (documentId: string) =>
+  `Document ${documentId} has no OKF frontmatter to tag. Write its content first with wb_workspace_edit's document.set op (a markdown body starting with a --- frontmatter block), then tag it.`
+
+/**
+ * A node or edge named beside several documents, whose element ids are scoped to their own
+ * document.
+ */
+export const NodeTargetNeedsOneDocument = (count: number) =>
+  `nodeId names a node of ONE document, and ${count} documentIds were given. Node ids are scoped to their own document, so the same nodeId in two documents is two unrelated nodes. Call once per document.`
+
+/** A write naming a node and an edge, when it lands on one element. */
+export const NodeAndEdgeTarget = () =>
+  'nodeId targets a node and edgeId targets an edge; pass one or the other.'
+
+/** A write naming an element and the canvas around it, when it lands on one. */
+export const NodeAndCanvasTarget = () =>
+  "nodeId targets one node and target: 'canvas' targets the canvas envelope; pass one or the other."
+
+/** A facet or tag write that would change a locked node, refused whole. */
+export const NodeLockedNothingWritten = (id: string) =>
+  `node "${id}" is locked; unlock it with a node.lock op first. Nothing was written.`
+
+/** A facet or tag write that would change a locked edge, refused whole. */
+export const EdgeLockedNothingWritten = (id: string) =>
+  `edge "${id}" is locked; unlock it with an edge.lock op first. Nothing was written.`
+
+/**
+ * A tag change that would leave a document, board, node or edge carrying more tags than one
+ * may and more than it carries now.
+ */
+export const TooManyTagsOnElement = (what: string, count: number) =>
+  `${what} would carry ${count} tags, past the 1024-tag limit for one document, board, node or edge. Nothing was written.`
+
+/** A tool naming an edge the canvas does not hold. */
+export const EdgeNotFound = (edgeId: string, documentId: string) =>
+  `edge not found: ${edgeId} in document ${documentId}`
+
 /** A search naming neither words nor a filter, in the tool's parameter names. */
 export const SearchNeedsQueryOrFilter = () =>
   'Nothing to search for: pass `query` (words to match), or `tags` / `kind` (a filter to answer alone), or both. To list every document, use wb_document_list.'

@@ -44,6 +44,7 @@ mod document_list;
 mod document_resolve;
 mod document_search;
 mod facet_list;
+mod facet_set;
 mod operation;
 mod ports;
 mod record;
@@ -72,6 +73,10 @@ pub use document_search::{
 pub use facet_list::{
     AssetEntry, DeclaredKey, DeclaredValue, FacetEntry, FacetList, FacetListAnswer, FacetListInput,
     FacetListOutput, TagInUse, WorkspaceTags,
+};
+pub use facet_set::{
+    FacetSet, FacetSetAnswer, FacetSetInput, FacetSetOutput, FacetSetPending, MAX_DOCUMENTS,
+    TagChange, UpdatedDocument,
 };
 pub use operation::{Contract, Method, Operation, Route, Row};
 pub use ports::Ports;
