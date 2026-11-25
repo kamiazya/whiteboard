@@ -190,7 +190,11 @@ function quietCalls(ids: Ids): Asked[] {
   ]
 }
 
-/** Calls whose daemon answer writes what a replay may leave pending: last. */
+/**
+ * Calls whose daemon answer writes what a replay may leave pending: last. A
+ * delete that lands is not among them: the trash blob it evacuates the
+ * document into is a snapshot whose digest differs from run to run.
+ */
 function writingCalls(ids: Ids): Asked[] {
   return [
     ['a markdown create', edit([{ op: 'document.create', path: 'note2', kind: 'markdown' }])],
@@ -208,7 +212,6 @@ function writingCalls(ids: Ids): Asked[] {
     ],
     ['a referenced move', edit([move(ids.alpha, { path: 'alpha2' })])],
     ['a referenced subtree move', edit([move(ids['folder/child'], { path: 'folder/kid' })])],
-    ['a delete', edit([{ op: 'document.delete', documentId: ids.other }])],
     ['a delete with descendants', edit([{ op: 'document.delete', documentId: ids.deep }])],
     ['a minted workspace', { workspaceId: 'fresh-ws', createWorkspace: true, ops: [spatial('x')] }],
   ]

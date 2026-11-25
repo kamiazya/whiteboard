@@ -40,7 +40,6 @@ const W: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 /// other documents follow, and a workspace the call would mint.
 const PENDING: &[&str] = &[
     "a delete with descendants",
-    "a delete",
     "a referenced subtree move",
     "a referenced move",
     "a rename then a body",
@@ -289,6 +288,6 @@ fn every_recorded_call_is_answered_as_the_daemon_answered_it() {
         answered += 1;
         refused += usize::from(row["answer"]["isError"] == json!(true));
     }
-    assert_eq!((answered, pending), (86, 10), "the recording's calls, answered and pending");
+    assert_eq!((answered, pending), (86, 9), "the recording's calls, answered and pending");
     assert_eq!((moved, refused), (26, 60), "the calls that moved the record, and those refused");
 }
