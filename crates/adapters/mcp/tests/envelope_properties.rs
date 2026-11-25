@@ -45,7 +45,7 @@ fn invalid(value: impl Strategy<Value = Value>) -> impl Strategy<Value = Part> {
 
 fn jsonrpc() -> impl Strategy<Value = Part> {
     prop_oneof![
-        3 => valid(Just(json!("2.0"))),
+        8 => valid(Just(json!("2.0"))),
         1 => invalid(prop_oneof![Just(json!("1.0")), Just(json!(2)), Just(json!(null))]),
         1 => Just((None, false)),
     ]
@@ -55,8 +55,8 @@ const MAX_SAFE: i64 = 9_007_199_254_740_991;
 
 fn id() -> impl Strategy<Value = Part> {
     prop_oneof![
-        2 => valid("[a-z0-9]{0,4}".prop_map(Value::from)),
-        2 => valid((-MAX_SAFE..=MAX_SAFE).prop_map(Value::from)),
+        4 => valid("[a-z0-9]{0,4}".prop_map(Value::from)),
+        4 => valid((-MAX_SAFE..=MAX_SAFE).prop_map(Value::from)),
         1 => invalid(prop_oneof![
             Just(json!(null)),
             Just(json!(true)),
@@ -73,7 +73,7 @@ fn method() -> impl Strategy<Value = Part> {
     let names =
         ["ping", "initialize", "tools/list", "tools/call", "logging/setLevel", "no/such", ""];
     prop_oneof![
-        4 => valid(prop::sample::select(names.to_vec()).prop_map(Value::from)),
+        8 => valid(prop::sample::select(names.to_vec()).prop_map(Value::from)),
         1 => invalid(prop_oneof![Just(json!(1)), Just(json!(null)), Just(json!(["ping"]))]),
         1 => Just((None, false)),
     ]
@@ -81,8 +81,8 @@ fn method() -> impl Strategy<Value = Part> {
 
 fn params() -> impl Strategy<Value = Part> {
     prop_oneof![
-        2 => Just((None, true)),
-        2 => valid(prop_oneof![
+        3 => Just((None, true)),
+        3 => valid(prop_oneof![
             Just(json!({})),
             Just(json!({ "level": "info", "name": "x" })),
             Just(json!({ "_meta": { "progressToken": 3, "x": [] } })),
@@ -99,9 +99,12 @@ fn params() -> impl Strategy<Value = Part> {
 }
 
 fn extra() -> impl Strategy<Value = Part> {
-    prop_oneof![4 => Just((None, true)), 1 => invalid(Just(json!(0)))]
+    prop_oneof![8 => Just((None, true)), 1 => invalid(Just(json!(0)))]
 }
 
+/// Each part is weighted so a whole message is a request on about two draws
+/// in five (0.8 x 0.8 x 0.8 x 6/7 x 8/9), about 78 of 200, far above the floor
+/// of 20; at one draw in six the floor failed about once in three hundred runs.
 #[test]
 fn a_message_is_answered_exactly_when_it_is_a_request() {
     let server = Server::new(
