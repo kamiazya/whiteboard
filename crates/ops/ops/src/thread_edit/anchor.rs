@@ -160,9 +160,10 @@ fn quoted_text<'a>(node_id: Option<&String>, content: &'a Content) -> Result<&'a
 
 /// `usize` of an offset a caller counted: a non-negative safe integer, read
 /// through its digits, saturating where the target is narrower than it, which
-/// costs nothing a body that long could answer.
+/// costs nothing a body that long could answer. `-0` is JavaScript's `0`,
+/// whose digits Rust writes `-0`, so it is read as the zero it equals.
 fn offset(n: f64) -> usize {
-    format!("{n}").parse().unwrap_or(usize::MAX)
+    format!("{}", n + 0.0).parse().unwrap_or(usize::MAX)
 }
 
 fn stored_passage(passage: &TextPassage, content: &Content) -> Result<Value, String> {
@@ -220,4 +221,22 @@ pub(super) fn json_quote(text: &str) -> String {
     }
     out.push('"');
     out
+}
+
+#[cfg(test)]
+mod offset_tests {
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    use super::offset;
+
+    /// JavaScript reads `-0` as the offset `0` (`-0 === 0`, and Zod's
+    /// non-negative integer admits it), so a JSON `-0` or `-0.0` counts from
+    /// the start of the body rather than saturating.
+    #[test]
+    fn a_negative_zero_offset_is_the_start() {
+        assert_eq!(offset(-0.0), 0);
+        assert_eq!(offset(0.0), 0);
+        assert_eq!(offset(4.0), 4);
+    }
 }
