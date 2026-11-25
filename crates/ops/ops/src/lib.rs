@@ -38,13 +38,16 @@
 //!   release — which lands with the first operation that writes the record.
 
 mod address;
+mod body_edit;
 mod content;
 mod document_get;
 mod document_list;
 mod document_resolve;
+mod document_save;
 mod document_search;
 mod facet_list;
 mod facet_set;
+mod js_offset;
 mod operation;
 mod ports;
 mod record;
@@ -59,6 +62,10 @@ mod workspace_edit;
 
 pub use address::{
     WorkspaceAddress, parse_workspace_address, resolve_workspace, with_resolved_workspace,
+};
+pub use body_edit::{
+    BodyEdit, BodyEditAnswer, BodyEditInput, BodyEditMode, BodyEditOutput, BodyEditPending,
+    BodyReplace, MAX_PASSAGES,
 };
 pub use document_get::{
     DocumentGet, DocumentGetAnswer, DocumentGetInput, DocumentGetOutput, FailedRead, Pending,
