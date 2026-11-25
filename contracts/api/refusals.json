@@ -2482,6 +2482,26 @@
       "exampleText": "ops[2] (document.move) could not be applied: Document not found: d1 in workspace w1. 2 op(s) before it were applied and stand; ops after it were not run. Resume from this index rather than resending the batch.",
       "surfaces": ["mcp-tools"],
       "source": "WorkspaceEditError"
+    },
+    {
+      "name": "NotASpatialDocument",
+      "code": "not_a_spatial_document",
+      "status": 409,
+      "description": "A scene tool pointed at a document known to be markdown, which has no scene to project; `toolName` is the tool asked.",
+      "message": "Document {documentId} is a {kind} document; {toolName} projects spatial scenes only. Read it with wb_document_get instead.",
+      "params": {
+        "documentId": "string",
+        "kind": "string",
+        "toolName": "string"
+      },
+      "example": {
+        "documentId": "d1",
+        "kind": "markdown",
+        "toolName": "wb_canvas_snapshot"
+      },
+      "exampleText": "Document d1 is a markdown document; wb_canvas_snapshot projects spatial scenes only. Read it with wb_document_get instead.",
+      "surfaces": ["mcp-tools"],
+      "source": "NotASpatialDocumentError"
     }
   ]
 }

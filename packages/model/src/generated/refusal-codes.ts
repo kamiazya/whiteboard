@@ -69,6 +69,7 @@ export const REFUSAL_CODE_OPEN_CHANGES_CEILING = 'open_changes_ceiling'
 export const REFUSAL_CODE_THREAD_EDIT_OP_REFUSED = 'thread_edit_op_refused'
 export const REFUSAL_CODE_DOCUMENT_MOVE_NEEDS_TARGET = 'document_move_needs_target'
 export const REFUSAL_CODE_WORKSPACE_EDIT_OP_REFUSED = 'workspace_edit_op_refused'
+export const REFUSAL_CODE_NOT_A_SPATIAL_DOCUMENT = 'not_a_spatial_document'
 
 /** Every code a refusal carries, keyed by the camelCase of the code. */
 export const REFUSAL_CODES = {
@@ -139,6 +140,7 @@ export const REFUSAL_CODES = {
   threadEditOpRefused: REFUSAL_CODE_THREAD_EDIT_OP_REFUSED,
   documentMoveNeedsTarget: REFUSAL_CODE_DOCUMENT_MOVE_NEEDS_TARGET,
   workspaceEditOpRefused: REFUSAL_CODE_WORKSPACE_EDIT_OP_REFUSED,
+  notASpatialDocument: REFUSAL_CODE_NOT_A_SPATIAL_DOCUMENT,
 } as const
 
 /** A code a refusal carries. */

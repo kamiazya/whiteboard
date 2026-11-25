@@ -723,4 +723,11 @@ export const WorkspaceEditOpRefused = (
 ) =>
   `ops[${opIndex}] (${op}) could not be applied: ${detail}. ${applied} op(s) before it were applied and stand; ops after it were not run. Resume from this index rather than resending the batch.`
 
+/**
+ * A scene tool pointed at a document known to be markdown, which has no scene to project;
+ * `toolName` is the tool asked.
+ */
+export const NotASpatialDocument = (documentId: string, kind: string, toolName: string) =>
+  `Document ${documentId} is a ${kind} document; ${toolName} projects spatial scenes only. Read it with wb_document_get instead.`
+
 export * from './refusal-codes.js'

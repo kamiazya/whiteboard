@@ -1,3 +1,7 @@
+import {
+  NotASpatialDocument,
+  REFUSAL_CODE_NOT_A_SPATIAL_DOCUMENT,
+} from '@kamiazya/whiteboard-model'
 import type { DocumentSession } from '../document-session.js'
 import { kindOf } from '../document-session-reads.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -8,11 +12,11 @@ import type { ServerDeps } from '../server-deps.js'
  * the nodes/edges containers — digested or rendered as an EMPTY scene with
  * no error, indistinguishable from a genuinely empty spatial canvas.
  */
-class NotASpatialDocumentError extends Error {
+export class NotASpatialDocumentError extends Error {
+  readonly code = REFUSAL_CODE_NOT_A_SPATIAL_DOCUMENT
+
   constructor(documentId: string, kind: string, toolName: string) {
-    super(
-      `Document ${documentId} is a ${kind} document; ${toolName} projects spatial scenes only. Read it with wb_document_get instead.`,
-    )
+    super(NotASpatialDocument(documentId, kind, toolName))
     this.name = 'NotASpatialDocumentError'
   }
 }

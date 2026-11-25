@@ -36,6 +36,7 @@ import {
   textBreachRefusal,
   UnreadableDocumentMetaError,
 } from './operations/sync-write-refusals.js'
+import { NotASpatialDocumentError } from './render/assert-spatial-document.js'
 import {
   DocumentNameConflictError,
   WorkspaceDocumentNotFoundError,
@@ -473,6 +474,7 @@ const FACTORIES: Factories = {
   DocumentMoveNeedsTarget: () => new DocumentMoveNeedsTargetError(),
   WorkspaceEditOpRefused: (p) =>
     new WorkspaceEditError(p.opIndex, p.op, p.applied, new Error(p.detail)),
+  NotASpatialDocument: (p) => new NotASpatialDocumentError(p.documentId, p.kind, p.toolName),
 }
 
 describe('the refusal contract and the TypeScript that raises it', () => {

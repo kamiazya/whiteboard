@@ -634,6 +634,11 @@ refusals! {
     WorkspaceEditOpRefused { applied: u64, detail: String, op: String, op_index: u64 }
         => code::WORKSPACE_EDIT_OP_REFUSED, 400, format!("ops[{op_index}] ({op}) could not be applied: {detail}. {applied} op(s) before it were applied and stand; ops after it were not run. Resume from this index rather than resending the batch.");
     example { applied: 2, detail: "Document not found: d1 in workspace w1".to_owned(), op: "document.move".to_owned(), op_index: 2 };
+    /// A scene tool pointed at a document known to be markdown, which has no scene to project;
+    /// `toolName` is the tool asked.
+    NotASpatialDocument { document_id: String, kind: String, tool_name: String }
+        => code::NOT_A_SPATIAL_DOCUMENT, 409, format!("Document {document_id} is a {kind} document; {tool_name} projects spatial scenes only. Read it with wb_document_get instead.");
+    example { document_id: "d1".to_owned(), kind: "markdown".to_owned(), tool_name: "wb_canvas_snapshot".to_owned() };
 }
 
 impl fmt::Display for Refusal {
