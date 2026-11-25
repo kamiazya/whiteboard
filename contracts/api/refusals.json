@@ -2261,7 +2261,7 @@
       "name": "ThreadEditOpRefused",
       "code": "thread_edit_op_refused",
       "status": 400,
-      "description": "One op of a wb_thread_edit batch that cannot be applied to the document as it stands; the batch is refused whole, so nothing of it was written.",
+      "description": "One op of a `wb_thread_edit` batch that cannot be applied to the document as it stands; the batch is refused whole, so nothing of it was written.",
       "message": "ops[{opIndex}] ({op}) could not be applied: {detail}. Nothing was written.",
       "params": {
         "opIndex": "integer",

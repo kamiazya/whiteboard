@@ -49,6 +49,7 @@ mod ports;
 mod record;
 mod table;
 mod text_refusal;
+mod thread_edit;
 mod version_list;
 mod version_restore;
 mod version_save;
@@ -75,6 +76,10 @@ pub use facet_list::{
 pub use operation::{Contract, Method, Operation, Route, Row};
 pub use ports::Ports;
 pub use table::{OPERATIONS, Visit, each_operation};
+pub use thread_edit::{
+    SpatialAnchor, TextPassage, ThreadAnchor, ThreadEdit, ThreadEditAnswer, ThreadEditInput,
+    ThreadEditOutput, ThreadEditPending, ThreadOp, is_js_space,
+};
 pub use version_list::{VersionList, VersionListInput, VersionListOutput};
 pub use version_restore::{
     RestorePending, VersionRestore, VersionRestoreAnswer, VersionRestoreInput, VersionRestored,

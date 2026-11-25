@@ -567,7 +567,7 @@ refusals! {
     RestoredDocumentIdMissing { target_path: String }
         => code::INTERNAL_ERROR, 500, format!("restored document has no id: {target_path}");
     example { target_path: "a/b".to_owned() };
-    /// One op of a wb_thread_edit batch that cannot be applied to the document as it stands;
+    /// One op of a `wb_thread_edit` batch that cannot be applied to the document as it stands;
     /// the batch is refused whole, so nothing of it was written.
     ThreadEditOpRefused { detail: String, op: String, op_index: u64 }
         => code::THREAD_EDIT_OP_REFUSED, 400, format!("ops[{op_index}] ({op}) could not be applied: {detail}. Nothing was written.");

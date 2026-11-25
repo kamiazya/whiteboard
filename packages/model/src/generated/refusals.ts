@@ -641,7 +641,7 @@ export const RestoredDocumentIdMissing = (targetPath: string) =>
   `restored document has no id: ${targetPath}`
 
 /**
- * One op of a wb_thread_edit batch that cannot be applied to the document as it stands; the
+ * One op of a `wb_thread_edit` batch that cannot be applied to the document as it stands; the
  * batch is refused whole, so nothing of it was written.
  */
 export const ThreadEditOpRefused = (opIndex: number, op: string, detail: string) =>
