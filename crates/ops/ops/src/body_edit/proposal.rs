@@ -39,10 +39,11 @@ pub(super) fn change_ids(proposal: &Value) -> Vec<String> {
     changes(proposal).iter().filter_map(|change| text(change, "id")).map(str::to_owned).collect()
 }
 
-/// The first `p<n>` no stored proposal holds.
+/// The first `p<n>` no stored proposal holds: one of the first `held.len() + 1`,
+/// since that many names cannot all be taken by `held.len()` proposals.
 fn mint(held: &[Value]) -> String {
     let taken: HashSet<&str> = held.iter().filter_map(|proposal| text(proposal, "id")).collect();
-    (1_u32..=u32::MAX)
+    (1..=held.len().saturating_add(1))
         .map(|n| format!("p{n}"))
         .find(|candidate| !taken.contains(candidate.as_str()))
         .unwrap_or_default()
