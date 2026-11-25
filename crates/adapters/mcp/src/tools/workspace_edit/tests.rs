@@ -32,8 +32,10 @@ fn each_op_reaches_the_operation_as_its_own_arm() {
 
 #[test]
 fn a_body_is_refused_past_the_markdown_bound_and_not_at_it() {
-    let at_bound = json!("x".repeat(MARKDOWN_MAX));
-    let past = json!("x".repeat(MARKDOWN_MAX + 1));
+    // `MARKDOWN_MAX_CHARS`, written out so the test does not read the bound
+    // it holds.
+    let at_bound = json!("x".repeat(262_144));
+    let past = json!("x".repeat(262_145));
     assert!(markdown_issues("ops.0.markdown", Some(&at_bound)).is_empty());
     assert_eq!(
         markdown_issues("ops.0.markdown", Some(&past)),
