@@ -114,7 +114,7 @@ fn threads_of(copy: &whiteboard_crdt::LoroDoc, kind: Option<&str>) -> Result<Vec
     ask(QueryName::ThreadMessageCounts, None)?;
     match ask(QueryName::Annotations, None)?.value {
         Value::Map(mut entries) => match entries.pop() {
-            Some((key, Value::Seq(threads))) if key == "ok" => Ok(threads),
+            Some((_, Value::Seq(threads))) => Ok(threads),
             _ => Err(UNDECIDED),
         },
         _ => Err(UNDECIDED),
