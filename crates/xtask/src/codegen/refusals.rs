@@ -24,7 +24,7 @@ mod rust_emit;
 use super::caps::rust_int;
 use super::emit::{header, within_width};
 use super::refusal_template::{Filter, Piece, Ty, is_camel, parse_template, render, strings};
-use rust_emit::rust;
+use rust_emit::{rust, rust_codes};
 
 pub(super) const SOURCE: &str = "contracts/api/refusals.json";
 const TS_TARGET: &str = "packages/model/src/generated/refusals.ts";
@@ -33,6 +33,9 @@ const TS_TARGET: &str = "packages/model/src/generated/refusals.ts";
 const TS_CODES_TARGET: &str = "packages/model/src/generated/refusal-codes.ts";
 /// A refusal with a `module` goes to that package's own `src/generated/refusals.ts`.
 const RUST_TARGET: &str = "crates/ops/api-contracts/src/generated/refusals.rs";
+/// The codes the Rust refusals carry, a file of their own as the TypeScript's
+/// are, so the table of sentences can grow without carrying them.
+const RUST_CODES_TARGET: &str = "crates/ops/api-contracts/src/generated/refusal_codes.rs";
 
 const STATUSES: &[u16] = &[400, 404, 409, 413, 500, 503];
 const FAMILIES: &[&str] = &["sync-write", "version"];
@@ -654,6 +657,7 @@ pub(super) fn generate(text: &str) -> Result<Vec<(String, String, bool)>, Vec<St
         files.push((target, text, false));
     }
     files.push((RUST_TARGET.to_owned(), rust(&entries), true));
+    files.push((RUST_CODES_TARGET.to_owned(), rust_codes(&entries), true));
     Ok(files)
 }
 

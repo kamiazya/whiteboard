@@ -49,10 +49,11 @@ const CONTRACT: &str = r#"{
 }"#;
 
 /// The TypeScript the contract generates, every file in order as one text,
-/// and the Rust.
+/// and the Rust, its files likewise.
 fn files(text: &str) -> Result<(String, String), Vec<String>> {
     let mut out = generate(text)?;
-    let rust = out.pop().map(|file| file.1).unwrap_or_default();
+    let rust_from = out.iter().position(|file| file.2).unwrap_or(out.len());
+    let rust = out.drain(rust_from..).map(|file| file.1).collect();
     Ok((out.into_iter().map(|file| file.1).collect(), rust))
 }
 
@@ -86,9 +87,17 @@ fn the_codes_are_a_file_of_their_own_that_the_sentences_re_export() {
             "packages/model/src/generated/refusals.ts",
             "packages/model/src/generated/refusal-codes.ts",
             "crates/ops/api-contracts/src/generated/refusals.rs",
+            "crates/ops/api-contracts/src/generated/refusal_codes.rs",
         ]
     );
     let (sentences, codes) = (&all[0].1, &all[1].1);
+    let (rust, rust_codes) = (&all[2].1, &all[3].1);
+    assert!(rust.contains("use crate::refusal_codes::code;"), "{rust}");
+    assert!(!rust.contains("pub mod code"), "{rust}");
+    assert!(rust_codes.starts_with("// @generated"), "{rust_codes}");
+    assert!(rust_codes.contains("pub const PLAIN_THING: &str = \"plain_thing\";"), "{rust_codes}");
+    assert!(rust_codes.contains("pub const CODES: &[&str]"), "{rust_codes}");
+    assert!(!rust_codes.contains("Refusal"), "{rust_codes}");
     assert!(sentences.ends_with("\nexport * from './refusal-codes.js'\n"), "{sentences}");
     assert!(!sentences.contains("REFUSAL_CODE"), "{sentences}");
     assert!(codes.starts_with("// @generated"), "{codes}");
@@ -548,6 +557,7 @@ fn a_refusal_with_a_module_is_generated_into_that_packages_own_file() {
             "packages/model/src/generated/refusal-codes.ts",
             "packages/loro-adapter/src/generated/refusals.ts",
             "crates/ops/api-contracts/src/generated/refusals.rs",
+            "crates/ops/api-contracts/src/generated/refusal_codes.rs",
         ]
     );
     let (main, module) = (&all[0].1, &all[2].1);
@@ -626,15 +636,18 @@ const AWKWARD: &str = r#"{
 #[test]
 fn the_rust_half_of_an_awkward_contract_compiles_and_says_what_the_contract_pins() {
     let all = generate(AWKWARD).unwrap();
-    let rust = &all.last().unwrap().1;
+    let [.., (_, rust, _), (_, codes, _)] = all.as_slice() else { panic!("no Rust half") };
     let dir = std::env::temp_dir().join(format!("xtask-refusals-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("generated.rs"), rust).unwrap();
+    std::fs::write(dir.join("generated_codes.rs"), codes).unwrap();
     let text = concat!(env!("CARGO_MANIFEST_DIR"), "/../ops/api-contracts/src/refusal_text.rs");
     let text = rust_literal(text);
     let main = format!(
         r#"#[path = {text}]
 mod refusal_text;
+#[path = "generated_codes.rs"]
+mod refusal_codes;
 #[path = "generated.rs"]
 mod refusals;
 use refusals::Refusal;

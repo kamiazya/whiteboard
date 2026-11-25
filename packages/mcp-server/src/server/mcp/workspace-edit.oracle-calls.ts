@@ -70,6 +70,12 @@ function invalidCalls(ids: Ids): Asked[] {
     ['a body on a spatial create', edit([spatial('x', { markdown: 'body' })])],
     ['a create with no path', edit([{ op: 'document.create', kind: 'spatial' }])],
     ['a delete with a stray key', edit([{ op: 'document.delete', documentId: ids.beta, x: 1 }])],
+  ]
+}
+
+/** Arguments the SDK refuses for a bound, a length, or more than one fault. */
+function boundCalls(ids: Ids): Asked[] {
+  return [
     ['more ops than a call takes', edit(Array.from({ length: 201 }, () => folder('shelf')))],
     ['an object with a length for the ops', edit({ length: 1 })],
     ['an object with no length for the ops', edit({ length: 0 })],
@@ -238,6 +244,7 @@ export function calls(record: Message): Asked[] {
   const ids = record.ids as Ids
   return [
     ...invalidCalls(ids),
+    ...boundCalls(ids),
     ...addressCalls(),
     ...folderCalls(),
     ...moveCalls(ids),
