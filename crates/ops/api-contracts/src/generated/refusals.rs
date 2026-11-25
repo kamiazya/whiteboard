@@ -616,6 +616,11 @@ refusals! {
     OpenChangesCeiling { limit: String, open: u64 }
         => code::OPEN_CHANGES_CEILING, 413, format!("the document would hold {open} open proposed changes, past {limit}. Nothing was written.");
     example { limit: "the limit of 1000 open proposed changes for one document; adopt or dismiss some first".to_owned(), open: 1001 };
+    /// One op of a `wb_thread_edit` batch that cannot be applied to the document as it stands;
+    /// the batch is refused whole, so nothing of it was written.
+    ThreadEditOpRefused { detail: String, op: String, op_index: u64 }
+        => code::THREAD_EDIT_OP_REFUSED, 400, format!("ops[{op_index}] ({op}) could not be applied: {detail}. Nothing was written.");
+    example { detail: "thread \"t1\" is not on this document".to_owned(), op: "thread.resolve".to_owned(), op_index: 1 };
 }
 
 /// Every code a refusal carries, as a constant.
@@ -684,6 +689,7 @@ pub mod code {
     pub const VERSION_NOT_FOUND: &str = "version_not_found";
     pub const PASSAGE_NOT_APPLICABLE: &str = "passage_not_applicable";
     pub const OPEN_CHANGES_CEILING: &str = "open_changes_ceiling";
+    pub const THREAD_EDIT_OP_REFUSED: &str = "thread_edit_op_refused";
 }
 
 /// Every code, once, in the order the contract first names it.
@@ -752,6 +758,7 @@ pub const CODES: &[&str] = &[
     code::VERSION_NOT_FOUND,
     code::PASSAGE_NOT_APPLICABLE,
     code::OPEN_CHANGES_CEILING,
+    code::THREAD_EDIT_OP_REFUSED,
 ];
 
 /// The codes a keeper refuses a sync write with.

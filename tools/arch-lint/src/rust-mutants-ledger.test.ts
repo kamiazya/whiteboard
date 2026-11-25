@@ -220,9 +220,27 @@ describe('the legs of a pull request', () => {
     ])
   })
 
+  it('gives no leg more mutants than the ceiling, however few tests judge them', () => {
+    // 40 members: one tested by itself alone would run 240 a leg by the ratio,
+    // which is how 121 of `whiteboard-mcp`'s mutants landed on one leg and ran
+    // past the job's 40-minute timeout.
+    const many = graph(
+      Object.fromEntries(Array.from({ length: 40 }, (_, n) => [`m${n}`, { dir: `crates/m${n}` }])),
+    )
+    expect(pr(mutantsIn('crates/m0/src/lib.rs', 40), true, many).map((l) => l.shard)).toEqual([
+      '1/1',
+    ])
+    expect(pr(mutantsIn('crates/m0/src/lib.rs', 121), true, many).map((l) => l.shard)).toEqual([
+      '1/4',
+      '2/4',
+      '3/4',
+      '4/4',
+    ])
+  })
+
   it('gives a group judged by fewer tests more mutants per leg than one judged by all', () => {
     // 8 members: a group tested by all of them runs 6 a leg, one tested by a
-    // single member 48.
+    // single member 40 (the ratio's 48, held to the ceiling).
     const wide = graph({
       base: { dir: 'crates/base' },
       ...Object.fromEntries(
@@ -233,10 +251,10 @@ describe('the legs of a pull request', () => {
       '1/2',
       '2/2',
     ])
-    expect(pr(mutantsIn('crates/u1/src/lib.rs', 48), true, wide).map((l) => l.shard)).toEqual([
+    expect(pr(mutantsIn('crates/u1/src/lib.rs', 40), true, wide).map((l) => l.shard)).toEqual([
       '1/1',
     ])
-    expect(pr(mutantsIn('crates/u1/src/lib.rs', 49), true, wide).map((l) => l.shard)).toEqual([
+    expect(pr(mutantsIn('crates/u1/src/lib.rs', 41), true, wide).map((l) => l.shard)).toEqual([
       '1/2',
       '2/2',
     ])

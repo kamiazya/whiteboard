@@ -622,6 +622,11 @@ function numberCalls(ids: Ids): Asked[] {
     return { ...given, anchor: { ...(given.anchor as Message), ...more } }
   }
   return [
+    [
+      'a start on the upper safe limit',
+      withOp(anchorOf({ start: 9007199254740991, end: 9007199254740991 })),
+    ],
+    ['a start on the lower safe limit', withOp(anchorOf({ start: -9007199254740991, end: 0 }))],
     ['a negative fractional start', withOp(anchorOf({ start: -1.5, end: 3 }))],
     ['a start below the safe range', withOp(anchorOf({ start: -1e20, end: 3 }))],
     ['an end below the safe range', withOp(anchorOf({ start: 0, end: -1e20 }))],

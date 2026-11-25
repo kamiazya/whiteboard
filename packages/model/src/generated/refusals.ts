@@ -697,4 +697,11 @@ export const PassageNotApplicable = (changeId: string, detail: string) =>
 export const OpenChangesCeiling = (open: number, limit: string) =>
   `the document would hold ${open} open proposed changes, past ${limit}. Nothing was written.`
 
+/**
+ * One op of a `wb_thread_edit` batch that cannot be applied to the document as it stands; the
+ * batch is refused whole, so nothing of it was written.
+ */
+export const ThreadEditOpRefused = (opIndex: number, op: string, detail: string) =>
+  `ops[${opIndex}] (${op}) could not be applied: ${detail}. Nothing was written.`
+
 export * from './refusal-codes.js'

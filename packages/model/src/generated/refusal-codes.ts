@@ -66,6 +66,7 @@ export const REFUSAL_CODE_INTERNAL_ERROR = 'internal_error'
 export const REFUSAL_CODE_VERSION_NOT_FOUND = 'version_not_found'
 export const REFUSAL_CODE_PASSAGE_NOT_APPLICABLE = 'passage_not_applicable'
 export const REFUSAL_CODE_OPEN_CHANGES_CEILING = 'open_changes_ceiling'
+export const REFUSAL_CODE_THREAD_EDIT_OP_REFUSED = 'thread_edit_op_refused'
 
 /** Every code a refusal carries, keyed by the camelCase of the code. */
 export const REFUSAL_CODES = {
@@ -133,6 +134,7 @@ export const REFUSAL_CODES = {
   versionNotFound: REFUSAL_CODE_VERSION_NOT_FOUND,
   passageNotApplicable: REFUSAL_CODE_PASSAGE_NOT_APPLICABLE,
   openChangesCeiling: REFUSAL_CODE_OPEN_CHANGES_CEILING,
+  threadEditOpRefused: REFUSAL_CODE_THREAD_EDIT_OP_REFUSED,
 } as const
 
 /** A code a refusal carries. */
